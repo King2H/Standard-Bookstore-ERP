@@ -19,6 +19,8 @@
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Frontend | React + TypeScript | 18 / 5 |
+| Styling | Tailwind CSS | 3 |
+| UI Components | shadcn/ui (Radix UI + Tailwind) | latest |
 | UI State | TanStack Query + TanStack Table | latest |
 | Forms | React Hook Form + Zod | latest |
 | Charts | Recharts | latest |
