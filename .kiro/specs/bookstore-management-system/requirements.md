@@ -62,7 +62,8 @@ The system is a single-tenant deployment serving one business with multiple phys
 | Actor | Responsibility |
 |-------|---------------|
 | Outbox_Poller | Polls the `outbox` table and publishes domain events to BullMQ; runs continuously |
-| Notification_Worker | Consumes notification jobs from BullMQ and delivers email/SMS via external provider |
+| Notification_Worker | Consumes outbound notification jobs from BullMQ and delivers email/SMS via external provider (SendGrid/Twilio) |
+| InApp_Notification_Worker | Consumes internal notification jobs from BullMQ, writes to `in_app_notifications` table, and pushes to connected SSE clients |
 | Report_Worker | Executes async report generation jobs queued by the API |
 | Loyalty_Worker | Processes loyalty point accrual after Transaction completion |
 | Installment_Checker | Daily cron that scans `installments` for overdue records and updates their status |
@@ -91,7 +92,8 @@ The system is a single-tenant deployment serving one business with multiple phys
   Purchasor ────────────►│  Procurement, Suppliers, POs          │
                         │                                       │
                         │  [Outbox_Poller] ──────────────────►  │──► BullMQ
-                        │  [Notification_Worker] ◄──────────────│◄── BullMQ
+                        │  [Notification_Worker] ◄──────────────│◄── BullMQ (outbound: email/SMS)
+                        │  [InApp_Notification_Worker] ◄────────│◄── BullMQ (internal: SSE push)
                         │  [Report_Worker] ◄────────────────────│◄── BullMQ
                         │  [Loyalty_Worker] ◄───────────────────│◄── BullMQ
                         │  [Installment_Checker] (cron)         │
@@ -503,6 +505,8 @@ The client SHOULD retry up to 3 times with a fresh version read before surfacing
 - **Store_Credit**: A monetary balance held on a Customer's account, usable as a payment method in Transactions.
 - **Outbox**: An append-only relay table used to guarantee domain event delivery without blocking the originating write.
 - **Idempotency_Key**: A client-supplied UUID v4 used to deduplicate financial write requests within a 24-hour window.
+- **In_App_Notification**: A real-time internal alert delivered to a Staff member's browser session via Server-Sent Events (SSE), used for approval requests, job completions, and entity-level alerts.
+- **SSE (Server-Sent Events)**: A unidirectional HTTP streaming mechanism used to push real-time in-app notifications from the server to the browser without polling.
 
 ---
 
@@ -1323,6 +1327,43 @@ GET /api/reports/jobs/:jobId
 3. WHEN a customer notification is triggered (order status change, payment reminder, low-stock alert), THE System SHALL deliver it via an asynchronous message queue; delivery failure SHALL NOT block the originating operation.
 4. WHEN a Transaction is completed and the Loyalty_Program is enabled, THE System SHALL process loyalty point accrual asynchronously via the Outbox to avoid blocking the POS receipt response.
 5. THE System SHALL write Audit_Log entries asynchronously via the Outbox pattern, ensuring guaranteed delivery without blocking the originating write operation; Outbox entries older than 7 days with `status='published'` SHALL be purged by a nightly cleanup job.
+
+---
+
+### Requirement 27: In-App Notifications (Real-Time Internal Alerts via SSE)
+
+**User Story:** As a Staff member, I want to receive real-time in-app alerts for approval requests, job completions, and entity-level events, so that I can act immediately without polling or refreshing.
+
+#### Acceptance Criteria
+
+1. THE System SHALL maintain an `in_app_notifications` table storing: recipient Staff ID, notification type, title, body, reference entity type and ID, `is_read` flag, and `created_at` timestamp.
+
+2. THE System SHALL expose a `GET /api/notifications/stream` SSE endpoint; WHEN an authenticated Staff member connects, THE System SHALL keep the connection open and push new `In_App_Notification` events to that client in real time.
+
+3. WHEN an internal event requiring Staff attention occurs, THE System SHALL insert a row into the `in_app_notifications` table and push the notification to all connected SSE clients matching the recipient Staff ID. Triggering events include:
+   - PO approval required (Purchasor creates PO above Manager approval threshold)
+   - Return authorization required (return window exceeded, awaiting Manager approval)
+   - Over-receipt confirmation required (PO receipt quantity exceeds ordered)
+   - Async report ready or failed
+   - Low-stock alert for assigned locations
+   - Installment payment overdue
+   - Order status changed (for the fulfilling Staff member)
+   - Exchange order accepted or settled
+
+4. THE System SHALL expose `GET /api/notifications` to retrieve paginated unread and recent notifications for the authenticated Staff member, and `PUT /api/notifications/:id/read` to mark a notification as read.
+
+5. WHEN a Staff member's session ends or the SSE connection drops, THE System SHALL close the SSE stream gracefully; undelivered notifications SHALL remain in `in_app_notifications` and be retrievable via `GET /api/notifications` on reconnect.
+
+6. THE System SHALL NOT block any originating operation on SSE delivery failure; in-app notification delivery is best-effort for the push channel, with the `in_app_notifications` table as the durable fallback.
+
+7. THE System SHALL distinguish between in-app notifications (SSE, internal) and outbound notifications (email/SMS, external); each has its own worker and delivery channel; a single event MAY trigger both.
+
+#### Constraints
+
+- `in_app_notifications` table: no FK constraint on `staff_id` (allows retention after staff deactivation)
+- SSE connections are stateless per request; the server maintains an in-memory registry of active SSE response streams keyed by `staff_id`
+- SSE heartbeat: server sends a comment ping every 30 seconds to keep the connection alive through proxies
+- Idempotency-Key: not required for notification read/unread actions
 
 ---
 

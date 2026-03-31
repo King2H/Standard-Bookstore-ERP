@@ -946,11 +946,52 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - Apply to: `POST /api/transactions/:id/complete`, `POST /api/orders`, `POST /api/orders/:id/confirm|fulfill|payments|installment-plan`, `POST /api/returns`, `POST /api/exchange-orders/:id/settle`
     - _Requirements: 20.5, 23.5_
 
+  - [ ] H1.7 Create DB migration: in_app_notifications table
+    - `in_app_notifications (id BIGSERIAL PK, staff_id INTEGER NOT NULL, notification_type TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, entity_type TEXT, entity_id TEXT, is_read BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`
+    - Index on `(staff_id, is_read, created_at DESC)`
+    - No FK on `staff_id` — notifications retained after staff deactivation
+    - _Requirements: 27.1_
+
+  - [ ] H1.8 Implement lib/sseRegistry.ts and SSE endpoint
+    - `lib/sseRegistry.ts` — in-memory `Map<staffId, Set<Response>>`; `register(staffId, res)` adds client and auto-removes on `res.on('close')`; `push(staffId, event)` writes `data: {json}\n\n` to all active connections for that staff
+    - `routes/notifications.ts` — `GET /api/notifications/stream`: set headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`); call `sseRegistry.register(staffId, res)`; send heartbeat `": ping\n\n"` every 30s via `setInterval`; clear interval on close
+    - `GET /api/notifications` — paginated list of `in_app_notifications` for authenticated staff; filter by `?isRead=false`
+    - `PUT /api/notifications/:id/read` — UPDATE `is_read = true` WHERE `id=$1 AND staff_id=$staffId`
+    - `PUT /api/notifications/read-all` — UPDATE `is_read = true` WHERE `staff_id=$staffId AND is_read = false`
+    - _Requirements: 27.2, 27.4, 27.5_
+
+  - [ ] H1.9 Implement InApp Notification Worker and Redis pub/sub for horizontal scaling
+    - `workers/inAppNotifications.ts` — consumes `inapp-notifications` queue; INSERT into `in_app_notifications`; publish to Redis pub/sub channel `inapp:{staffId}` with the notification payload
+    - Update `lib/sseRegistry.ts` — subscribe to Redis `inapp:{staffId}` on each API server instance; on message received: call `sseRegistry.push(staffId, payload)` to push to local SSE connections
+    - This ensures SSE push works correctly when API servers are horizontally scaled (staff may be connected to a different instance than the one processing the job)
+    - _Requirements: 27.2, 27.6, 27.7_
+
+  - [ ] H1.10 Update Outbox Poller to route inapp events to inapp-notifications queue
+    - Add routing rules for: `POApprovalRequired`, `ReturnAuthRequired`, `OverReceiptConfirmRequired`, `ReportReady`, `ReportFailed`, `InstallmentOverdue`, `OrderStatusChanged`, `ExchangeSettled`, `InventoryAdjusted`, `ReconciliationImportCompleted`
+    - Each event routes to `inapp-notifications` queue (and optionally `notifications` for outbound email/SMS where applicable)
+    - _Requirements: 27.3_
+
+  - [ ] H1.11 Implement React SSE client hook and notification bell UI
+    - `hooks/useNotifications.ts` — opens `EventSource('/api/notifications/stream')`; on message: appends to local notification list; auto-reconnects on error with exponential backoff
+    - Notification bell component: badge showing unread count; dropdown listing recent notifications; click navigates to referenced entity; mark-as-read on click; mark-all-read button
+    - _Requirements: 27.2, 27.4_
+
+  - [ ] H1.12 Write integration tests for SSE notification flow
+    - Test: InApp worker inserts notification row + pushes to SSE stream
+    - Test: `GET /api/notifications` returns unread notifications
+    - Test: `PUT /api/notifications/:id/read` marks as read
+    - Test: SSE heartbeat sent every 30s
+    - Test: disconnected client does not block notification delivery
+    - _Requirements: 27_
+
   **Definition of Done:**
   - Outbox poller running; audit log entries written asynchronously
   - Loyalty accrual no longer blocks POS completion response
   - Idempotency prevents duplicate financial records on retry
   - Dead-letter queue visible in Admin UI
+  - SSE stream delivers in-app notifications in real time
+  - Notifications persisted in DB and retrievable on reconnect
+  - Notification bell shows unread count; mark-as-read works
 
 ---
 

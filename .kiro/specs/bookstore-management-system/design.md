@@ -242,6 +242,25 @@ CREATE TABLE idempotency_keys (
   expires_at       TIMESTAMPTZ NOT NULL DEFAULT now() + INTERVAL '24 hours'
 );
 CREATE INDEX ON idempotency_keys (expires_at);
+
+-- ─────────────────────────────────────────────
+-- IN-APP NOTIFICATIONS (SSE durable store)
+-- ─────────────────────────────────────────────
+CREATE TABLE in_app_notifications (
+  id              BIGSERIAL PRIMARY KEY,
+  staff_id        INTEGER      NOT NULL,   -- recipient; no FK (retained after deactivation)
+  notification_type TEXT       NOT NULL,   -- PO_APPROVAL_REQUIRED | RETURN_AUTH_REQUIRED |
+                                           -- OVER_RECEIPT_CONFIRM | REPORT_READY | REPORT_FAILED |
+                                           -- LOW_STOCK | INSTALLMENT_OVERDUE | ORDER_STATUS_CHANGED |
+                                           -- EXCHANGE_SETTLED
+  title           TEXT         NOT NULL,
+  body            TEXT         NOT NULL,
+  entity_type     TEXT,                    -- e.g. 'purchase_order', 'order', 'report_job'
+  entity_id       TEXT,                    -- ID of the referenced entity
+  is_read         BOOLEAN      NOT NULL DEFAULT false,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX ON in_app_notifications (staff_id, is_read, created_at DESC);
 ```
 
 ### 3.3 Config Tables — Slice 1 (Requirement 1)
@@ -1215,6 +1234,71 @@ GET /api/dashboard
     Cache: Redis 60s TTL per branchId
 ```
 
+### 6.9 In-App Notification Endpoints (SSE)
+
+```
+GET /api/notifications/stream
+    Role: Any authenticated
+    Headers: Accept: text/event-stream
+    Behavior: Opens a persistent SSE connection; server pushes events as:
+              data: {"id":1,"type":"PO_APPROVAL_REQUIRED","title":"...","body":"...","entityType":"purchase_order","entityId":"42"}
+    Heartbeat: server sends ": ping" comment every 30s to keep connection alive through proxies
+    On disconnect: server removes client from SSE registry; client reconnects automatically
+
+GET /api/notifications
+    Role: Any authenticated
+    ?isRead=false&page&pageSize
+    Response: paginated { items: [{ id, type, title, body, entityType, entityId, isRead, createdAt }] }
+
+PUT /api/notifications/:id/read
+    Role: Any authenticated
+    Response: { id, isRead: true }
+
+PUT /api/notifications/read-all
+    Role: Any authenticated
+    Response: { updated: number }
+```
+
+### 6.10 SSE Architecture
+
+```
+Browser (React)                    API Server                    InApp Worker
+     │                                  │                              │
+     │── GET /api/notifications/stream ─►│                              │
+     │                                  │ Register SSEResponse          │
+     │                                  │ in sseRegistry[staffId]       │
+     │                                  │                              │
+     │                                  │◄── BullMQ inapp-notifications ─│
+     │                                  │    job: { staffId, payload }  │
+     │                                  │                              │
+     │                                  │ INSERT in_app_notifications   │
+     │                                  │ Lookup sseRegistry[staffId]   │
+     │◄── data: { notification } ───────│ res.write(sseEvent)           │
+     │                                  │                              │
+     │── PUT /api/notifications/:id/read►│                              │
+     │◄── { isRead: true } ─────────────│                              │
+```
+
+**SSE Registry** (`lib/sseRegistry.ts`):
+```typescript
+// In-memory map: staffId → Set of active SSE response objects
+const registry = new Map<number, Set<Response>>();
+
+export function register(staffId: number, res: Response): void {
+  if (!registry.has(staffId)) registry.set(staffId, new Set());
+  registry.get(staffId)!.add(res);
+  res.on('close', () => { registry.get(staffId)?.delete(res); });
+}
+
+export function push(staffId: number, event: object): void {
+  registry.get(staffId)?.forEach(res => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  });
+}
+```
+
+Note: the SSE registry is in-process. In a horizontally scaled deployment (multiple API server instances), a staff member's SSE connection may land on a different instance than the one processing the BullMQ job. To handle this, the InApp worker publishes to a Redis pub/sub channel (`inapp:{staffId}`); each API server subscribes and pushes to its local SSE connections for that `staffId`.
+
 ---
 
 ## 7. Asynchronous Processing
@@ -1243,7 +1327,8 @@ Workers MUST be idempotent — if the poller crashes after publishing but before
 
 | Queue | Producer | Consumer | Retry | DLQ after |
 |-------|----------|----------|-------|-----------|
-| `notifications` | Outbox Poller | Notification Worker | 3× exp backoff | 3 failures |
+| `notifications` | Outbox Poller | Notification Worker (outbound: email/SMS) | 3× exp backoff | 3 failures |
+| `inapp-notifications` | Outbox Poller | InApp Notification Worker (SSE push + DB write) | 3× exp backoff | 3 failures |
 | `report-generation` | API (async report request) | Report Worker | 1× | 1 failure |
 | `loyalty-accrual` | Outbox Poller (TransactionCompleted) | Loyalty Worker | 3× exp backoff | 3 failures |
 | `audit-log-writes` | Outbox Poller (all events) | Audit Log Writer | 5× exp backoff | 5 failures |
@@ -1254,15 +1339,38 @@ Workers MUST be idempotent — if the poller crashes after publishing but before
 
 **Outbox Poller** (`workers/outboxPoller.ts`)
 - Polls every 1s with `SKIP LOCKED`
-- Routes events to correct BullMQ queue by `event_type`
+- Routes events to correct BullMQ queue by `event_type`:
+
+| event_type | BullMQ Queue | Notes |
+|------------|-------------|-------|
+| `TransactionCompleted` | `loyalty-accrual` + `audit-log-writes` + `notifications` | loyalty async; outbound receipt email optional |
+| `InventoryAdjusted` | `inapp-notifications` + `audit-log-writes` | low-stock alert to Manager/Stock_Clerk |
+| `OrderStatusChanged` | `inapp-notifications` + `notifications` + `audit-log-writes` | in-app to fulfilling staff; email/SMS to customer |
+| `PaymentReceived` | `audit-log-writes` | balance update already sync |
+| `ExchangeSettled` | `inapp-notifications` + `audit-log-writes` | in-app to Manager |
+| `POApprovalRequired` | `inapp-notifications` | in-app to Manager/Admin |
+| `ReturnAuthRequired` | `inapp-notifications` | in-app to Manager |
+| `OverReceiptConfirmRequired` | `inapp-notifications` | in-app to Manager |
+| `ReportReady` | `inapp-notifications` + `notifications` | in-app + optional email |
+| `InstallmentOverdue` | `inapp-notifications` + `notifications` | in-app to Finance_Officer; email/SMS to customer |
+| `ReconciliationImportCompleted` | `inapp-notifications` | in-app to Finance_Officer/Manager |
+
 - Marks entries `published` after successful enqueue
 - Marks entries `failed` after 5 consecutive publish errors
 
 **Notification Worker** (`workers/notifications.ts`)
-- Consumes `notifications` queue
+- Consumes `notifications` queue — outbound email/SMS only
 - Calls Email/SMS provider (SendGrid/Twilio)
 - Retries 3× with exponential backoff (1s, 2s, 4s)
 - Moves to dead-letter after 3 failures; logs failure with job details
+
+**InApp Notification Worker** (`workers/inAppNotifications.ts`)
+- Consumes `inapp-notifications` queue — internal real-time alerts only
+- Inserts a row into `in_app_notifications` table (durable store)
+- Looks up active SSE connections for the recipient `staff_id` from the in-memory SSE registry
+- If a connection exists: pushes the event as an SSE `data:` message immediately
+- If no connection: notification is persisted in DB only; client retrieves on next `GET /api/notifications`
+- Retries 3× on DB insert failure; SSE push failure is non-retryable (best-effort)
 
 **Report Worker** (`workers/reportGenerator.ts`)
 - Consumes `report-generation` queue
