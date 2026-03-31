@@ -1,0 +1,46 @@
+# ─── Node.js ───────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# ─── Build outputs ─────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# ─── Environment & secrets ─────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── OS files ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editor / IDE ──────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Test coverage ─────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Docker ────────────────────────────────────────────────
+# Keep docker-compose files tracked; ignore local overrides
+docker-compose.override.yml
+
+# ─── Logs ──────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Kiro internal (keep specs, exclude session state) ─────
+.kiro/settings/
+.kiro/hooks/
