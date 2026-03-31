@@ -285,6 +285,54 @@ CREATE TABLE branch_config (
 );
 ```
 
+**Seed — system_config defaults (inserted in initial migration):**
+
+```sql
+INSERT INTO system_config (key, value, updated_by) VALUES
+  ('base_currency',                   '"USD"',                                    1),
+  ('tax_rate',                        '0.10',                                     1),
+  ('fiscal_year_start_month',         '1',                                        1),
+  ('max_line_discount_pct',           '{"Sales":10,"Manager":25,"Admin":50}',     1),
+  ('max_transaction_discount_pct',    '20',                                       1),
+  ('discount_approval_threshold_pct', '15',                                       1),
+  ('reorder_point_default',           '5',                                        1),
+  ('allow_negative_stock',            'false',                                    1),
+  ('po_approval_threshold',           '1000.00',                                  1),
+  ('default_supplier_lead_time_days', '7',                                        1),
+  ('return_window_days',              '30',                                       1),
+  ('max_return_value_without_auth',   '500.00',                                   1),
+  ('refund_method_after_window',      '"any"',                                    1),
+  ('min_deposit_pct',                 '20',                                       1),
+  ('max_installments',                '12',                                       1),
+  ('installment_grace_period_days',   '0',                                        1),
+  ('loyalty_accrual_rate',            '0.01',                                     1),
+  ('loyalty_redemption_rate',         '1.0',                                      1),
+  ('loyalty_min_transaction_amount',  '0.00',                                     1),
+  ('exchange_cash_adjustment_allowed','true',                                     1),
+  ('notification_prefs',              '{}',                                       1);
+```
+
+**config.service.ts — typed helper methods (all call `getEffectiveConfig` internally, cached in Redis `cfg:{branchId}:{key}` TTL 5min):**
+
+```typescript
+getEffectiveConfig(branchId: number, key: string): Promise<any>
+getMaxLineDiscountPct(branchId: number, role: string): Promise<number>
+getDiscountApprovalThresholdPct(branchId: number): Promise<number>
+getPOApprovalThreshold(): Promise<number>
+getReturnWindowDays(branchId: number): Promise<number>
+getMaxReturnValueWithoutAuth(): Promise<number>
+getRefundMethodAfterWindow(): Promise<'any' | 'store_credit_only'>
+getMinDepositPct(branchId: number): Promise<number>
+getMaxInstallments(): Promise<number>
+getInstallmentGracePeriodDays(): Promise<number>
+getAllowedPaymentMethods(branchId: number): Promise<string[]>
+getLoyaltyAccrualRate(): Promise<number>
+getLoyaltyRedemptionRate(): Promise<number>
+getLoyaltyMinTransactionAmount(): Promise<number>
+isNegativeStockAllowed(): Promise<boolean>
+isExchangeCashAdjustmentAllowed(): Promise<boolean>
+```
+
 ### 3.4 Auth Tables — Slice 2 (Requirement 2)
 
 ```sql
@@ -485,8 +533,8 @@ CREATE TABLE purchase_orders (
   supplier_id     INTEGER NOT NULL REFERENCES suppliers(id),
   branch_id       INTEGER NOT NULL REFERENCES branches(id),
   location_id     INTEGER NOT NULL REFERENCES locations(id),
-  status          TEXT    NOT NULL DEFAULT 'Pending'
-                    CHECK (status IN ('Pending','In_Progress','Closed','Cancelled')),
+  status          TEXT    NOT NULL DEFAULT 'PendingApproval'
+                    CHECK (status IN ('PendingApproval','Pending','In_Progress','Closed','Cancelled')),
   bank_account_id INTEGER REFERENCES bank_accounts(id),
   notes           TEXT,
   created_by      INTEGER NOT NULL,
@@ -1114,7 +1162,44 @@ POST /api/auth/logout
   Effect:   Revokes current refresh token; clears cookie
 ```
 
-### 6.4 Inventory Endpoints
+### 6.4 Config Endpoints
+
+```
+GET  /api/config/system
+     Role: Super_Admin, Admin, Manager (read)
+     Response: [{ key, value, updatedAt }]  -- all system_config rows
+
+GET  /api/config/system/:key
+     Role: Super_Admin, Admin, Manager
+     Response: { key, value }
+
+PUT  /api/config/system/:key
+     Role: Super_Admin only
+     Body:     { value }
+     Response: { key, value, updatedAt }
+     Errors:   403 FORBIDDEN | 400 INVALID_CONFIG_VALUE
+
+GET  /api/config/branches/:branchId
+     Role: Super_Admin, Admin, Manager (own branch)
+     Response: [{ key, effectiveValue, source: 'branch'|'system' }]
+               -- merged view: branch overrides + system defaults
+
+GET  /api/config/branches/:branchId/:key
+     Role: Super_Admin, Admin, Manager (own branch)
+     Response: { key, effectiveValue, source }
+
+PUT  /api/config/branches/:branchId/:key
+     Role: Super_Admin, Admin, Manager (own branch)
+     Body:     { value }
+     Response: { key, value, updatedAt }
+     Errors:   403 FORBIDDEN | 400 INVALID_CONFIG_VALUE
+
+DELETE /api/config/branches/:branchId/:key
+     Role: Super_Admin, Admin
+     Effect:   Removes branch override; key falls back to system default
+```
+
+### 6.5 Inventory Endpoints
 
 ```
 GET  /api/inventory
@@ -1135,7 +1220,7 @@ POST /api/inventory/transfer
      Errors:   409 VERSION_CONFLICT | 422 INSUFFICIENT_STOCK
 ```
 
-### 6.5 POS Endpoints
+### 6.6 POS Endpoints
 
 ```
 POST /api/transactions
@@ -1164,7 +1249,7 @@ POST /api/transactions/:id/void
      Errors:   409 ALREADY_COMPLETED
 ```
 
-### 6.6 Order Endpoints
+### 6.7 Order Endpoints
 
 ```
 POST /api/orders
@@ -1203,7 +1288,7 @@ POST /api/orders/:id/refunds
      Errors:   422 EXCEEDS_PAYMENT_AMOUNT
 ```
 
-### 6.7 Returns Endpoint
+### 6.8 Returns Endpoint
 
 ```
 POST /api/returns
@@ -1215,7 +1300,7 @@ POST /api/returns
                422 ALREADY_RETURNED | 422 INVALID_TRANSACTION_REFERENCE
 ```
 
-### 6.8 Report Endpoints
+### 6.9 Report Endpoints
 
 ```
 GET /api/reports/:type
@@ -1236,7 +1321,7 @@ GET /api/dashboard
     Cache: Redis 60s TTL per branchId
 ```
 
-### 6.9 In-App Notification Endpoints (SSE)
+### 6.10 In-App Notification Endpoints (SSE)
 
 ```
 GET /api/notifications/stream
@@ -1261,7 +1346,7 @@ PUT /api/notifications/read-all
     Response: { updated: number }
 ```
 
-### 6.10 SSE Architecture
+### 6.11 SSE Architecture
 
 ```
 Browser (React)                    API Server                    InApp Worker
@@ -1957,3 +2042,15 @@ Tag format: `// Feature: bookstore-management-system, Property N: <text>`
 | 52 | Outbox: every committed outbox entry eventually published; none stuck in pending | Req 26.5 |
 | 53 | Rate limit: >10 failed logins per IP per 15 min → 429; resets after window | Req 21.7 |
 | 54 | Audit tamper detection: modified entry signature mismatch detected and alerted | Req 21.12 |
+| 55 | Line discount capped at role's max_line_discount_pct; exceeding returns 422 | Req 1.4 |
+| 56 | Transaction discount capped at max_transaction_discount_pct; exceeding returns 422 | Req 1.5 |
+| 57 | PO total > po_approval_threshold sets status=PendingApproval; ≤ threshold sets Pending | Req 1.10 |
+| 58 | Installments count ≤ max_installments; exceeding returns 422 | Req 1.16 |
+| 59 | Installment not marked overdue until grace_period_days after due_date | Req 1.17 |
+| 60 | Loyalty points not accrued when transaction.total < loyalty_min_transaction_amount | Req 1.21 |
+| 61 | Exchange cash adjustment rejected when exchange_cash_adjustment_allowed=false | Req 1.22 |
+| 62 | Negative stock blocked when allow_negative_stock=false; allowed when true | Req 1.9 |
+| 63 | Return value > max_return_value_without_auth requires manager auth regardless of window | Req 1.13 |
+| 64 | Out-of-window refund method restricted to store_credit when refund_method_after_window=store_credit_only | Req 1.14 |
+| 65 | SSE: in-app notification delivered to connected client within 5s of outbox publish | Req 27.2 |
+| 66 | SSE: notification persisted in in_app_notifications even when no client connected | Req 27.5 |

@@ -187,46 +187,66 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 1. Configure System Settings (Tax, Currency, Defaults)
-  > Establish the system-wide and branch-level configuration that all other modules depend on.
-  > _Slice 1 = Requirement 1 | Design: design.md §3.3_
+- [ ] 1. Configure System Settings (Business Rules, Discounts, Procurement, Returns, Payments, Loyalty, Exchange)
+  > Establish all system-wide and branch-level business rule configurations that every other module depends on. This is the single source of truth for operational policy.
+  > _Slice 1 = Requirement 1 | Design: design.md §3.3, §6.4_
 
-  - [ ] 1.1 Create DB migration: system_config and branch_config
+  - [ ] 1.1 Create DB migration: system_config and branch_config with full seed data
     - `system_config (key TEXT PK, value JSONB NOT NULL, updated_by INTEGER NOT NULL, updated_at TIMESTAMPTZ DEFAULT now())`
     - `branch_config (branch_id INTEGER REFERENCES branches(id), key TEXT, value JSONB NOT NULL, updated_by INTEGER NOT NULL, updated_at TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (branch_id, key))`
-    - Seed: insert system defaults — `base_currency: 'USD'`, `tax_rate: 0.10`, `reorder_point_default: 5`, `return_window_days: 30`, `min_deposit_pct: 20`, `loyalty_accrual_rate: 0.01`
+    - Seed all 21 system_config defaults as defined in design.md §3.3 (base_currency, tax_rate, fiscal_year_start_month, max_line_discount_pct, max_transaction_discount_pct, discount_approval_threshold_pct, reorder_point_default, allow_negative_stock, po_approval_threshold, default_supplier_lead_time_days, return_window_days, max_return_value_without_auth, refund_method_after_window, min_deposit_pct, max_installments, installment_grace_period_days, loyalty_accrual_rate, loyalty_redemption_rate, loyalty_min_transaction_amount, exchange_cash_adjustment_allowed, notification_prefs)
     - _Requirements: 1_
 
-  - [ ] 1.2 Implement config.service.ts
-    - `getEffectiveConfig(branchId, key)` — SELECT from branch_config; if no row: SELECT from system_config; return value
-    - `setSystemConfig(key, value, staffCtx)` — UPDATE system_config; INSERT audit_logs; 403 if not Admin
-    - `setBranchConfig(branchId, key, value, staffCtx)` — UPSERT branch_config; INSERT audit_logs; 403 if not Admin
-    - Note: Redis caching for config added in Phase 4
-    - _Requirements: 1.2, 1.5, 1.6, 1.7_
+  - [ ] 1.2 Implement config.service.ts with all typed helpers
+    - `getEffectiveConfig(branchId, key)` — SELECT from branch_config; fallback to system_config; cache in Redis `cfg:{branchId}:{key}` TTL 5min; invalidate on write
+    - `setSystemConfig(key, value, staffCtx)` — validate value type against key schema; UPDATE system_config; INSERT outbox; invalidate Redis; 403 if not Super_Admin
+    - `setBranchConfig(branchId, key, value, staffCtx)` — UPSERT branch_config; INSERT outbox; invalidate Redis; 403 if not Super_Admin/Admin/Manager (own branch)
+    - `deleteBranchConfig(branchId, key, staffCtx)` — DELETE branch_config row; key falls back to system default; INSERT outbox
+    - Implement all typed helpers: `getMaxLineDiscountPct`, `getDiscountApprovalThresholdPct`, `getPOApprovalThreshold`, `getReturnWindowDays`, `getMaxReturnValueWithoutAuth`, `getRefundMethodAfterWindow`, `getMinDepositPct`, `getMaxInstallments`, `getInstallmentGracePeriodDays`, `getAllowedPaymentMethods`, `getLoyaltyAccrualRate`, `getLoyaltyRedemptionRate`, `getLoyaltyMinTransactionAmount`, `isNegativeStockAllowed`, `isExchangeCashAdjustmentAllowed`
+    - _Requirements: 1.24, 1.25, 1.26_
 
   - [ ] 1.3 Implement config API routes
-    - `GET /api/config/system` — Admin only; returns all system_config keys
-    - `PUT /api/config/system/:key` — Admin only; calls setSystemConfig; 403 for non-Admin
-    - `GET /api/config/branches/:branchId` — Admin only; returns effective config (branch overrides merged with system defaults)
-    - `PUT /api/config/branches/:branchId/:key` — Admin only; calls setBranchConfig
-    - _Requirements: 1.7_
+    - `GET /api/config/system` — Super_Admin/Admin/Manager; returns all system_config rows
+    - `PUT /api/config/system/:key` — Super_Admin only; 403 for all other roles
+    - `GET /api/config/branches/:branchId` — Super_Admin/Admin/Manager (own branch); returns merged effective config with `source` field
+    - `PUT /api/config/branches/:branchId/:key` — Super_Admin/Admin/Manager (own branch)
+    - `DELETE /api/config/branches/:branchId/:key` — Super_Admin/Admin; removes branch override
+    - _Requirements: 1.26_
 
-  - [ ] 1.4 Implement Settings UI page
-    - Settings page at `/settings` with two tabs: System Defaults and Branch Overrides
-    - System Defaults tab: typed form fields for each config key (number inputs, currency select)
-    - Branch Overrides tab: branch selector + per-key override form; shows effective value with source label ("branch" or "system default")
-    - TanStack Query hooks: `useSystemConfig`, `useBranchConfig`, `useUpdateSystemConfig`, `useUpdateBranchConfig`
+  - [ ] 1.4 Implement Settings UI page (grouped by domain)
+    - Settings page at `/settings` with tabs: **General** (currency, tax, fiscal year) | **Discounts** (max line %, max transaction %, approval threshold) | **Inventory** (reorder point, negative stock) | **Procurement** (PO approval threshold, default lead time) | **Returns** (window, max value, refund method) | **Payments** (min deposit, max installments, grace period, allowed methods) | **Loyalty** (accrual rate, redemption rate, min transaction) | **Exchange** (cash adjustment allowed) | **Notifications**
+    - Each tab: system default form + branch override panel (branch selector, per-key override, source indicator showing "branch" or "system default")
+    - Super_Admin sees system defaults as editable; Admin/Manager see branch overrides only
+    - TanStack Query hooks: `useSystemConfig`, `useBranchConfig`, `useUpdateSystemConfig`, `useUpdateBranchConfig`, `useDeleteBranchConfig`
     - _Requirements: 1_
 
   - [ ] 1.5 Write integration tests for config service
-    - Branch override returns branch value when set; returns system default when not set
-    - Non-Admin PUT returns 403; Admin PUT succeeds and audit log entry created
-    - _Requirements: 1.5, 1.6, 1.7_
+    - Branch override returns branch value; absent key returns system default
+    - Super_Admin can write system config; Admin gets 403 on system config write
+    - Admin can write branch config for own branch; Manager gets 403 on other branch
+    - Delete branch override restores system default
+    - All writes produce audit log entries
+    - Typed helpers return correct parsed values (number, boolean, string[], JSONB)
+    - _Requirements: 1.24, 1.25, 1.26_
+
+  - [ ]* 1.6 Write property-based tests for config-driven business rules (Properties 55–64)
+    - **Property 55:** Line discount capped at role's max_line_discount_pct — `Validates: Req 1.4`
+    - **Property 56:** Transaction discount capped at max_transaction_discount_pct — `Validates: Req 1.5`
+    - **Property 57:** PO total > po_approval_threshold → status=PendingApproval — `Validates: Req 1.10`
+    - **Property 58:** Installments count ≤ max_installments — `Validates: Req 1.16`
+    - **Property 59:** Installment not overdue until grace_period_days after due_date — `Validates: Req 1.17`
+    - **Property 60:** Loyalty not accrued when total < loyalty_min_transaction_amount — `Validates: Req 1.21`
+    - **Property 61:** Exchange cash adjustment rejected when exchange_cash_adjustment_allowed=false — `Validates: Req 1.22`
+    - **Property 62:** Negative stock blocked when allow_negative_stock=false — `Validates: Req 1.9`
+    - **Property 63:** Return value > max_return_value_without_auth requires manager auth — `Validates: Req 1.13`
+    - **Property 64:** Out-of-window refund restricted to store_credit when refund_method_after_window=store_credit_only — `Validates: Req 1.14`
 
   **Definition of Done:**
-  - `GET /api/config/branches/:id` returns merged effective config
-  - Branch override takes precedence over system default
-  - Non-Admin write returns 403
+  - All 21 system_config defaults seeded and readable
+  - `GET /api/config/branches/:id` returns merged effective config with source labels
+  - Branch override takes precedence; delete restores system default
+  - Role restrictions enforced (Super_Admin for system, Admin/Manager for branch)
+  - All typed helpers callable by other services (POS, procurement, returns, payments, loyalty)
   - Audit log entry created on every config write
 
 ---
@@ -413,7 +433,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
   - [ ] 7.2 Implement inventory.service.ts
     - `initializeInventory(bookId, locationId)` — INSERT inventory (quantity=0, version=0) ON CONFLICT DO NOTHING
-    - `adjust(bookId, locationId, delta, reasonCode, version, staffCtx)` — validate reasonCode IN ('damage','loss','return','correction'); `UPDATE inventory SET quantity=quantity+$delta, version=version+1 WHERE book_id=$1 AND location_id=$2 AND version=$3`; if 0 rows: re-read to distinguish VERSION_CONFLICT vs INSUFFICIENT_STOCK; INSERT inventory_history; INSERT audit_logs; if new quantity <= reorder_point: log low-stock warning (queue notification added Phase 4)
+    - `adjust(bookId, locationId, delta, reasonCode, version, staffCtx)` — validate reasonCode IN ('damage','loss','return','correction'); if delta < 0 AND !config.isNegativeStockAllowed(): check current quantity + delta >= 0 (422 INSUFFICIENT_STOCK); `UPDATE inventory SET quantity=quantity+$delta, version=version+1 WHERE book_id=$1 AND location_id=$2 AND version=$3`; if 0 rows: re-read to distinguish VERSION_CONFLICT vs INSUFFICIENT_STOCK; INSERT inventory_history; INSERT audit_logs; if new quantity <= reorder_point: INSERT outbox(InventoryAdjusted) for low-stock alert
     - `transfer(bookId, fromLocationId, toLocationId, quantity, fromVersion, staffCtx)` — BEGIN REPEATABLE READ; SELECT inventory WHERE book_id=$1 AND location_id=$from FOR UPDATE; check quantity >= requested (422 INSUFFICIENT_STOCK); UPDATE source (version check → 409 VERSION_CONFLICT on 0 rows); UPDATE destination (version+1); INSERT inventory_history (TRANSFER_OUT + TRANSFER_IN); INSERT audit_logs; COMMIT
     - `getLowStock(branchId)` — SELECT via partial index WHERE quantity <= reorder_point
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8_
@@ -507,30 +527,32 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
   > _Concurrency: Optimistic locking on inventory during PO receipt — see design.md §5.1_
 
   - [ ] 9.1 Create DB migration: purchase_orders, po_line_items, po_receipts
-    - `purchase_orders (id SERIAL PK, po_number TEXT UNIQUE NOT NULL, supplier_id INTEGER REFERENCES suppliers(id), branch_id INTEGER REFERENCES branches(id), location_id INTEGER REFERENCES locations(id), status TEXT DEFAULT 'Pending' CHECK (status IN ('Pending','In_Progress','Closed','Cancelled')), bank_account_id INTEGER REFERENCES bank_accounts(id), notes TEXT, created_by INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`
+    - `purchase_orders (id SERIAL PK, po_number TEXT UNIQUE NOT NULL, supplier_id INTEGER REFERENCES suppliers(id), branch_id INTEGER REFERENCES branches(id), location_id INTEGER REFERENCES locations(id), status TEXT DEFAULT 'PendingApproval' CHECK (status IN ('PendingApproval','Pending','In_Progress','Closed','Cancelled')), bank_account_id INTEGER REFERENCES bank_accounts(id), notes TEXT, created_by INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`
     - Indexes: `(supplier_id, status)`, `(branch_id, status)`
     - `po_line_items (id SERIAL PK, po_id INTEGER REFERENCES purchase_orders(id), book_id INTEGER REFERENCES books(id), qty_ordered INTEGER NOT NULL CHECK (qty_ordered > 0), qty_received INTEGER NOT NULL DEFAULT 0, unit_price NUMERIC(14,2) NOT NULL)` + index on `po_id`
     - `po_receipts (id BIGSERIAL PK, po_id INTEGER REFERENCES purchase_orders(id), line_item_id INTEGER REFERENCES po_line_items(id), qty_received INTEGER NOT NULL, over_receipt BOOLEAN DEFAULT false, confirmed_by INTEGER, received_by INTEGER NOT NULL, received_at TIMESTAMPTZ DEFAULT now())`
     - _Requirements: 9_
 
   - [ ] 9.2 Implement procurement.service.ts
-    - `create(data, staffCtx)` — validate supplier is_active; validate each book is_active; generate unique po_number (`PO-{YYYYMMDD}-{seq}`); INSERT purchase_orders + po_line_items; INSERT audit_logs; restricted to `Purchasor` and `Manager` roles
-    - `cancel(poId, staffCtx)` — validate status='Pending'; UPDATE status='Cancelled'; INSERT audit_logs; 409 INVALID_STATE_TRANSITION for other statuses
-    - `receive(poId, lineItemId, qtyReceived, confirm, staffCtx)` — if `qty_received + qtyReceived > qty_ordered` AND `!confirm`: return `202 { requiresConfirmation: true, overReceiptQty }`; else: BEGIN; UPDATE po_line_items.qty_received; UPDATE inventory (optimistic lock — version check); INSERT po_receipts; INSERT inventory_history (PO_RECEIPT); if all lines fully received: UPDATE status='Closed'; else if status='Pending': UPDATE status='In_Progress'; INSERT audit_logs; COMMIT
+    - `create(data, staffCtx)` — validate supplier is_active; validate each book is_active; generate unique po_number (`PO-{YYYYMMDD}-{seq}`); compute PO total = SUM(qty × unit_price); if PO total > config.getPOApprovalThreshold(): set status='PendingApproval' and INSERT outbox(POApprovalRequired) to notify Manager/Admin; else set status='Pending'; INSERT purchase_orders + po_line_items; INSERT audit_logs; restricted to `Purchasor` and `Manager` roles
+    - `approve(poId, staffCtx)` — validate status='PendingApproval'; UPDATE status='Pending'; INSERT audit_logs; restricted to `Manager` and `Admin` roles; 409 INVALID_STATE_TRANSITION for other statuses
+    - `cancel(poId, staffCtx)` — validate status IN ('PendingApproval','Pending'); UPDATE status='Cancelled'; INSERT audit_logs; 409 INVALID_STATE_TRANSITION for other statuses
+    - `receive(poId, lineItemId, qtyReceived, confirm, staffCtx)` — validate status='Pending' or 'In_Progress' (409 if PendingApproval — must be approved first); if `qty_received + qtyReceived > qty_ordered` AND `!confirm`: return `202 { requiresConfirmation: true, overReceiptQty }`; else: BEGIN; UPDATE po_line_items.qty_received; UPDATE inventory (optimistic lock — version check); INSERT po_receipts; INSERT inventory_history (PO_RECEIPT); if all lines fully received: UPDATE status='Closed'; else if status='Pending': UPDATE status='In_Progress'; INSERT audit_logs; COMMIT; restricted to `Stock_Clerk` and `Manager` roles (not `Purchasor`)
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9_
 
   - [ ] 9.3 Implement procurement API routes
-    - `GET /api/purchase-orders` — Admin/Manager; paginated; filter by supplier/branch/status
-    - `POST /api/purchase-orders` — Admin/Manager; calls create
-    - `GET /api/purchase-orders/:id` — Admin/Manager; includes line items + receipts
-    - `PUT /api/purchase-orders/:id` — Admin/Manager; update notes (Pending only)
-    - `POST /api/purchase-orders/:id/cancel` — Admin/Manager
-    - `POST /api/purchase-orders/:id/receive` — Admin/Manager; body: `{ lineItemId, qtyReceived, confirm? }`; 202 on over-receipt
+    - `GET /api/purchase-orders` — Purchasor/Manager/Admin; paginated; filter by supplier/branch/status
+    - `POST /api/purchase-orders` — Purchasor/Manager; calls create
+    - `GET /api/purchase-orders/:id` — Purchasor/Manager/Admin; includes line items + receipts
+    - `PUT /api/purchase-orders/:id` — Purchasor/Manager; update notes (PendingApproval or Pending only)
+    - `POST /api/purchase-orders/:id/approve` — Manager/Admin; calls approve; 403 for Purchasor
+    - `POST /api/purchase-orders/:id/cancel` — Purchasor/Manager/Admin
+    - `POST /api/purchase-orders/:id/receive` — Stock_Clerk/Manager only (not Purchasor); body: `{ lineItemId, qtyReceived, confirm? }`; 202 on over-receipt; 409 if status='PendingApproval'
     - _Requirements: 9.10_
 
-  - [ ] 9.4 Implement PO list, Create form, and Receive stock UI
-    - PO list: DataTable with po_number, supplier, branch, status badge, created_at
-    - Create PO form: supplier select, branch/location selects, line item builder (book search + qty + unit_price)
+  - [ ] 9.4 Implement PO list, Create form, Approve, and Receive stock UI
+    - PO list: DataTable with po_number, supplier, branch, status badge (PendingApproval highlighted), created_at; filter by status
+    - Create PO form: supplier select, branch/location selects, line item builder (book search + qty + unit_price); shows computed total and approval threshold warning if total exceeds threshold
     - Receive stock form: per-line qty_received input; over-receipt confirmation modal
     - TanStack Query hooks: `usePurchaseOrders`, `useCreatePO`, `useCancelPO`, `useReceivePO`
     - _Requirements: 9_
@@ -566,7 +588,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `deactivate(id, staffCtx)` — UPDATE is_active=false; INSERT audit_logs
     - `search(query)` — match via email_lookup or phone_lookup; decrypt for display
     - `adjustStoreCredit(id, delta, reason, referenceId, client)` — UPDATE customers SET store_credit=store_credit+$delta, version=version+1 WHERE id=$1 AND version=$v AND store_credit+$delta >= 0; if 0 rows: 422 INSUFFICIENT_STORE_CREDIT or 409 VERSION_CONFLICT; INSERT store_credit_history
-    - Note: loyalty accrual is async (Phase 4); for now, loyalty_points updated synchronously in POS completion
+    - Note: loyalty accrual is async (Phase 4 Task H1); for now, loyalty_points updated synchronously in POS completion using config.getLoyaltyAccrualRate() and config.getLoyaltyMinTransactionAmount()
     - _Requirements: 10.1, 10.2, 10.4, 10.5, 10.9_
 
   - [ ] 10.3 Implement customer API routes
@@ -613,9 +635,9 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
   - [ ] 11.2 Implement pos.service.ts
     - `createDraft(branchId, locationId, customerId, staffCtx)` — validate branch is_active; get effective tax rate via config.service; INSERT transactions (status='draft', tax_rate=effectiveTaxRate); INSERT audit_logs; restricted to `Sales` and `Manager` roles
-    - `addLine(txId, bookId, quantity, discountAmount, discountReason, staffCtx)` — validate book is_active (422 BOOK_INACTIVE); get effective price via catalog.service.getEffectivePrice; validate discountReason if discountAmount > 0 (400 DISCOUNT_REASON_REQUIRED); INSERT transaction_line_items; recalculate subtotal/tax_amount/total on transaction
+    - `addLine(txId, bookId, quantity, discountAmount, discountReason, staffCtx)` — validate book is_active (422 BOOK_INACTIVE); get effective price via catalog.service.getEffectivePrice; if discountAmount > 0: validate discountReason non-empty (400 DISCOUNT_REASON_REQUIRED); validate discountAmount <= config.getMaxLineDiscountPct(branchId, role) × unitPrice (422 DISCOUNT_EXCEEDS_ROLE_LIMIT); if discountAmount > config.getDiscountApprovalThresholdPct × unitPrice: set line flag `requires_approval=true`; INSERT transaction_line_items; recalculate subtotal/tax_amount/total on transaction
     - `removeLine(txId, lineId, staffCtx)` — DELETE transaction_line_items; recalculate totals
-    - `complete(txId, payments, managerOverride, staffCtx)` — BEGIN REPEATABLE READ; SELECT transactions WHERE id=$1 FOR UPDATE; validate status='draft' (409 ALREADY_COMPLETED); validate SUM(payments.amount) = transaction.total (422 PAYMENT_SUM_MISMATCH); validate bank_account_id for bank_transfer payments (422 INVALID_BANK_ACCOUNT); validate store_credit balance if method='store_credit'; validate loyalty_points balance if method='loyalty_points'; SELECT inventory FOR UPDATE for all line items; check each quantity >= line.quantity (422 INSUFFICIENT_STOCK or require managerOverride); UPDATE inventory (optimistic version check → 409 VERSION_CONFLICT on 0 rows); INSERT transaction_payments; UPDATE transactions SET status='completed', completed_at=now(); INSERT inventory_history (SALE entries); if customer and loyalty_program enabled: UPDATE customers.loyalty_points + INSERT loyalty_history (synchronous for now); INSERT audit_logs; COMMIT
+    - `complete(txId, payments, managerOverride, staffCtx)` — BEGIN REPEATABLE READ; SELECT transactions WHERE id=$1 FOR UPDATE; validate status='draft' (409 ALREADY_COMPLETED); validate SUM(payments.amount) = transaction.total (422 PAYMENT_SUM_MISMATCH); validate bank_account_id for bank_transfer payments (422 INVALID_BANK_ACCOUNT); validate store_credit balance if method='store_credit'; validate loyalty_points balance if method='loyalty_points'; validate allowed_payment_methods config for each method (422 PAYMENT_METHOD_NOT_ALLOWED); SELECT inventory FOR UPDATE for all line items; check each quantity >= line.quantity — if isNegativeStockAllowed()=false: 422 INSUFFICIENT_STOCK unless managerOverride; UPDATE inventory (optimistic version check → 409 VERSION_CONFLICT on 0 rows); INSERT transaction_payments; UPDATE transactions SET status='completed', completed_at=now(); INSERT inventory_history (SALE entries); if customer and loyalty_program enabled and transaction.total >= getLoyaltyMinTransactionAmount(): UPDATE customers.loyalty_points + INSERT loyalty_history (synchronous for now); INSERT audit_logs; COMMIT
     - `void(txId, reason, staffCtx)` — validate status='draft' (409 ALREADY_COMPLETED); UPDATE status='voided'; INSERT audit_logs
     - _Requirements: 11.1–11.13_
 
@@ -685,7 +707,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - _Requirements: 12_
 
   - [ ] 12.2 Implement returns.service.ts
-    - `processReturn(data, staffCtx)` — validate original_tx_id references completed transaction (422 INVALID_TRANSACTION_REFERENCE); get return_window_days via config.service; if `now() > completed_at + return_window_days` AND no manager_auth_id: 403 RETURN_WINDOW_EXCEEDED; for each line: compute sum of previously returned qty for that tx_line_id; if sum + new qty > original qty: 422 QUANTITY_EXCEEDS_ORIGINAL; BEGIN; INSERT returns + return_line_items; UPDATE inventory (increment at receiving location); if refundMethod='store_credit': adjustStoreCredit + INSERT store_credit_history; if refundMethod='bank_transfer': validate bank_account_id; INSERT refunds; INSERT audit_logs; COMMIT
+    - `processReturn(data, staffCtx)` — validate original_tx_id references completed transaction (422 INVALID_TRANSACTION_REFERENCE); get return_window_days via config.getReturnWindowDays(branchId); if `now() > completed_at + return_window_days` AND no manager_auth_id: 403 RETURN_WINDOW_EXCEEDED; compute total refund value; if refund value > config.getMaxReturnValueWithoutAuth() AND no manager_auth_id: 403 RETURN_VALUE_EXCEEDS_LIMIT; if out-of-window AND config.getRefundMethodAfterWindow() = 'store_credit_only' AND refundMethod != 'store_credit': 422 REFUND_METHOD_NOT_ALLOWED_AFTER_WINDOW; for each line: compute sum of previously returned qty; if sum + new qty > original qty: 422 QUANTITY_EXCEEDS_ORIGINAL; BEGIN; INSERT returns + return_line_items; UPDATE inventory (increment at receiving location); if refundMethod='store_credit': adjustStoreCredit + INSERT store_credit_history; if refundMethod='bank_transfer': validate bank_account_id; INSERT refunds; INSERT audit_logs; COMMIT
     - _Requirements: 12.1–12.8_
 
   - [ ] 12.3 Implement returns API routes + UI
@@ -764,8 +786,8 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - _Requirements: 14_
 
   - [ ] 14.2 Implement payments.service.ts
-    - `recordPayment(orderId, method, amount, bankAccountId, staffCtx)` — BEGIN; SELECT orders FOR UPDATE; compute outstanding = total - SUM(payments) + SUM(refunds); if amount > outstanding: 422 EXCEEDS_OUTSTANDING_BALANCE; validate bank_account_id for bank_transfer; INSERT order_payments; INSERT audit_logs; COMMIT
-    - `createInstallmentPlan(orderId, depositAmount, installments, staffCtx)` — validate depositAmount >= order.total × min_deposit_pct/100 (422 DEPOSIT_BELOW_MINIMUM); validate SUM(installments.amount) = order.total - depositAmount (422 INSTALLMENT_SUM_MISMATCH); INSERT installment_plans + installments; INSERT audit_logs
+    - `recordPayment(orderId, method, amount, bankAccountId, staffCtx)` — BEGIN; SELECT orders FOR UPDATE; compute outstanding = total - SUM(payments) + SUM(refunds); if amount > outstanding: 422 EXCEEDS_OUTSTANDING_BALANCE; validate method in config.getAllowedPaymentMethods(branchId) (422 PAYMENT_METHOD_NOT_ALLOWED); validate bank_account_id for bank_transfer; INSERT order_payments; INSERT audit_logs; COMMIT
+    - `createInstallmentPlan(orderId, depositAmount, installments, staffCtx)` — validate depositAmount >= order.total × config.getMinDepositPct(branchId)/100 (422 DEPOSIT_BELOW_MINIMUM); validate installments.length <= config.getMaxInstallments() (422 EXCEEDS_MAX_INSTALLMENTS); validate SUM(installments.amount) = order.total - depositAmount (422 INSTALLMENT_SUM_MISMATCH); INSERT installment_plans + installments (status='pending'); INSERT audit_logs
     - `recordRefund(orderId, paymentId, amount, method, bankAccountId, reason, staffCtx)` — validate amount <= order_payments.amount (422 EXCEEDS_PAYMENT_AMOUNT); INSERT order_refunds; if method='store_credit': adjustStoreCredit; INSERT audit_logs
     - `getBalance(orderId)` — SELECT order.total - SUM(payments) + SUM(refunds)
     - _Requirements: 14.1–14.11_
@@ -809,7 +831,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
   - [ ] 15.2 Implement exchange.service.ts
     - `createMerchant(data, staffCtx)` — INSERT merchants; INSERT audit_logs; 409 DUPLICATE_MERCHANT_NAME
     - `createAgreement(merchantId, data, staffCtx)` — validate merchant is_active; INSERT exchange_agreements; INSERT audit_logs
-    - `createExchangeOrder(data, staffCtx)` — validate agreement is_active; validate all books is_active; compute trade_value_offered = SUM(offered lines); compute trade_value_requested = SUM(requested lines); adjustment_amount = ABS(offered - requested); INSERT exchange_orders + exchange_order_lines; INSERT audit_logs
+    - `createExchangeOrder(data, staffCtx)` — validate agreement is_active; validate all books is_active; compute trade_value_offered = SUM(offered lines); compute trade_value_requested = SUM(requested lines); adjustment_amount = ABS(offered - requested); if adjustment_amount > 0 AND data.adjustment_type = 'cash' AND !config.isExchangeCashAdjustmentAllowed(): 422 CASH_ADJUSTMENT_NOT_ALLOWED (must use store_credit); INSERT exchange_orders + exchange_order_lines; INSERT audit_logs
     - `accept(orderId, staffCtx)` — validate status='Pending'; UPDATE status='Accepted'; INSERT audit_logs; 409 INVALID_STATE_TRANSITION
     - `settle(orderId, staffCtx)` — BEGIN REPEATABLE READ; SELECT exchange_orders FOR UPDATE; validate status='Accepted'; SELECT inventory FOR UPDATE for all offered books at src_location; check each quantity >= line quantity (422 INSUFFICIENT_STOCK); UPDATE inventory (optimistic version check) for offered books (decrement) and requested books (increment); INSERT inventory_history (EXCHANGE_OUT, EXCHANGE_IN); UPDATE status='Settled'; INSERT audit_logs; COMMIT
     - `cancel(orderId, staffCtx)` — validate status IN ('Pending','Accepted'); UPDATE status='Cancelled'; INSERT audit_logs; 409 INVALID_STATE_TRANSITION
@@ -878,13 +900,13 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - _Requirements: 26.5_
 
   - [ ] 17.5 Implement Loyalty Worker (async loyalty accrual)
-    - `workers/loyaltyAccrual.ts` — consumes `loyalty-accrual` queue; check if accrual already recorded for transaction_ref (idempotent); compute `floor(transaction.total × accrual_rate)` via config.service; UPDATE customers.loyalty_points with optimistic locking; INSERT loyalty_history; retry 3× exp backoff; DLQ after 3 failures
+    - `workers/loyaltyAccrual.ts` — consumes `loyalty-accrual` queue; check if accrual already recorded for transaction_ref (idempotent); fetch `loyalty_accrual_rate` and `loyalty_min_transaction_amount` via config.service; if transaction.total < loyalty_min_transaction_amount: skip accrual; else compute `floor(transaction.total × loyalty_accrual_rate)` points; UPDATE customers.loyalty_points with optimistic locking; INSERT loyalty_history; retry 3× exp backoff; DLQ after 3 failures
     - Refactor pos.service.ts: remove synchronous loyalty update; emit `TransactionCompleted` outbox event instead
     - _Requirements: 10.6, 26.4_
 
   - [ ] 17.6 Implement Notification Worker and Installment Checker cron
     - `workers/notifications.ts` — consumes `notifications` queue; calls Email/SMS provider (configurable via `NOTIFICATION_PROVIDER_URL`); circuit breaker (50% error threshold, 30s reset); retry 3× exp backoff (1s, 2s, 4s); move to dead-letter after 3 failures
-    - `workers/installmentChecker.ts` — daily cron at 00:00 UTC; `UPDATE installments SET status='overdue' WHERE due_date < now() AND status IN ('pending','partial') AND paid_amount < amount`; for each updated row: INSERT outbox payment reminder notification
+    - `workers/installmentChecker.ts` — daily cron at 00:00 UTC; fetch `installment_grace_period_days` from config; `UPDATE installments SET status='overdue' WHERE due_date + grace_period_days < now() AND status IN ('pending','partial') AND paid_amount < amount`; for each updated row: INSERT outbox payment reminder notification (inapp + outbound)
     - _Requirements: 14.7, 25.3, 26.3_
 
   - [ ] 17.7 Implement idempotency for financial endpoints
@@ -935,7 +957,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - _Requirements: 26.5_
 
   - [ ] H1.5 Implement Loyalty Worker, Notification Worker, Installment Checker
-    - `workers/loyaltyAccrual.ts` — consumes `loyalty-accrual` queue; idempotent; optimistic lock on customers; retry 3× exp backoff; DLQ after 3 failures
+    - `workers/loyaltyAccrual.ts` — consumes `loyalty-accrual` queue; idempotent; fetch `loyalty_accrual_rate`, `loyalty_min_transaction_amount`, and `loyalty_redemption_rate` via config.service; skip if transaction.total < min_transaction_amount; compute `floor(total × accrual_rate)` points; optimistic lock on customers; INSERT loyalty_history; retry 3× exp backoff; DLQ after 3 failures
     - `workers/notifications.ts` — consumes `notifications` queue; circuit breaker; retry 3× exp backoff; DLQ after 3 failures
     - `workers/installmentChecker.ts` — daily cron 00:00 UTC; UPDATE overdue installments; enqueue payment reminders
     - _Requirements: 10.6, 14.7, 25.3, 26.3, 26.4_

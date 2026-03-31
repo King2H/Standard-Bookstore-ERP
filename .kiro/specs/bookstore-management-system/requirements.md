@@ -214,16 +214,19 @@ The system is a single-tenant deployment serving one business with multiple phys
 
 | State | Description |
 |-------|-------------|
-| `Pending` | Created; awaiting receipt |
+| `PendingApproval` | Created; total exceeds `po_approval_threshold`; awaiting Manager/Admin approval |
+| `Pending` | Approved (or below threshold); awaiting receipt |
 | `In_Progress` | Partial receipt recorded |
 | `Closed` | All line items fully received OR manually closed by Manager |
-| `Cancelled` | Cancelled from Pending only |
+| `Cancelled` | Cancelled from PendingApproval or Pending only |
 
 **Allowed Transitions:**
 
 | From | To | Trigger | Actor |
 |------|----|---------|-------|
-| `Pending` | `In_Progress` | First partial receipt recorded | Manager |
+| `PendingApproval` | `Pending` | Manager/Admin approves PO | Manager, Admin |
+| `PendingApproval` | `Cancelled` | Explicit cancel or rejection | Manager, Admin |
+| `Pending` | `In_Progress` | First partial receipt recorded | Manager, Stock_Clerk |
 | `Pending` | `Cancelled` | Explicit cancel | Manager |
 | `In_Progress` | `Closed` | All lines fully received | System (automatic) |
 | `In_Progress` | `Closed` | Manual close by Manager | Manager |
@@ -512,22 +515,98 @@ The client SHOULD retry up to 3 times with a fresh version read before surfacing
 
 ### Requirement 1: Configuration & System Settings
 
-**User Story:** As an Admin, I want to configure system-wide and branch-level settings, so that the System behaves according to business rules before any operational data is created.
+**User Story:** As a Super_Admin or Admin, I want to configure system-wide and branch-level business rules, so that all operational modules behave consistently according to policy without requiring code changes.
 
 #### Acceptance Criteria
 
-1. THE System SHALL store a base currency value at the system level; this value MUST be set before any financial record is created.
-2. THE System SHALL store a tax rate at the system level and allow it to be overridden by a Branch-level tax rate; the Branch-level value takes precedence when both are present.
-3. THE System SHALL store system-wide defaults for: reorder point threshold (integer, units), return window duration (integer, days), minimum deposit percentage (NUMERIC(5,2), 0–100), and Loyalty_Program accrual rate (NUMERIC(8,6), points per currency unit).
-4. THE System SHALL store notification preferences (low-stock alerts, payment reminders, order status changes) per Branch as a JSONB configuration value.
-5. WHEN a Branch-level configuration key is absent, THE System SHALL return the system-wide default value for that key in all effective-config lookups.
-6. WHEN an Admin saves a Configuration change, THE System SHALL insert a row into the Outbox within the same DB transaction, containing: previous value, new value, Staff actor ID, timestamp, and Branch context (if applicable); the Outbox_Poller SHALL subsequently write the Audit_Log entry.
-7. THE System SHALL reject any Configuration write request from a Staff account whose Role is not Admin, returning `403 FORBIDDEN`.
+**1.1 — General / Financial**
+
+1. THE System SHALL store a `base_currency` value at the system level; this value MUST be set before any financial record is created.
+2. THE System SHALL store a `tax_rate` (NUMERIC(6,4)) at the system level and allow it to be overridden at the Branch level; the Branch-level value takes precedence when both are present.
+3. THE System SHALL store a `fiscal_year_start_month` (INTEGER 1–12) at the system level to anchor reporting periods.
+
+**1.2 — Discount Rules**
+
+4. THE System SHALL store a `max_line_discount_pct` (NUMERIC(5,2), 0–100) per Role at the system level, defining the maximum discount a Staff member of that Role may apply to a single line item without manager approval.
+5. THE System SHALL store a `max_transaction_discount_pct` (NUMERIC(5,2), 0–100) at the system level, defining the maximum total transaction-level discount allowed.
+6. THE System SHALL store a `discount_approval_threshold_pct` (NUMERIC(5,2)) at the system level; any discount exceeding this threshold SHALL require explicit Manager-level confirmation before the Transaction can be completed.
+7. THE System SHALL allow Branch-level overrides for `max_line_discount_pct` and `max_transaction_discount_pct`.
+
+**1.3 — Inventory**
+
+8. THE System SHALL store a `reorder_point_default` (INTEGER, units) at the system level as the fallback reorder threshold for any Location that has not set its own reorder point.
+9. THE System SHALL store an `allow_negative_stock` (BOOLEAN, default false) flag at the system level; when false, any operation that would reduce stock below zero SHALL be blocked unless a Manager-level override is explicitly confirmed.
+
+**1.4 — Procurement**
+
+10. THE System SHALL store a `po_approval_threshold` (NUMERIC(14,2)) at the system level; any PO whose total value exceeds this amount SHALL require explicit Admin or Manager approval before it can be submitted to a Supplier.
+11. THE System SHALL store a `default_supplier_lead_time_days` (INTEGER) at the system level as the fallback lead time when a Supplier record does not specify one.
+
+**1.5 — Returns & Refunds**
+
+12. THE System SHALL store a `return_window_days` (INTEGER) at the system level; returns requested after this window SHALL require Manager-level authorization.
+13. THE System SHALL store a `max_return_value_without_auth` (NUMERIC(14,2)) at the system level; returns whose refund value exceeds this amount SHALL require Manager-level authorization regardless of the return window.
+14. THE System SHALL store a `refund_method_after_window` (TEXT: `any` | `store_credit_only`) at the system level; when set to `store_credit_only`, refunds on out-of-window returns SHALL only be issued as Store_Credit.
+
+**1.6 — Payments & Installments**
+
+15. THE System SHALL store a `min_deposit_pct` (NUMERIC(5,2), 0–100) at the system level as the minimum deposit percentage required when creating an Installment_Plan.
+16. THE System SHALL store a `max_installments` (INTEGER) at the system level, defining the maximum number of installments allowed in a single Installment_Plan.
+17. THE System SHALL store an `installment_grace_period_days` (INTEGER) at the system level; an installment SHALL not be marked `overdue` until this many days after its `due_date` have elapsed.
+18. THE System SHALL store `allowed_payment_methods` (TEXT[]) per Branch, defining which payment methods are permitted at that Branch; any payment method not in this list SHALL be rejected with `422 PAYMENT_METHOD_NOT_ALLOWED`.
+
+**1.7 — Loyalty Program**
+
+19. THE System SHALL store a `loyalty_accrual_rate` (NUMERIC(8,6), points per currency unit) at the system level.
+20. THE System SHALL store a `loyalty_redemption_rate` (NUMERIC(8,6), currency units per point) at the system level; this value defines how much monetary value one loyalty point is worth at redemption (default: 1 point = 1 base currency unit).
+21. THE System SHALL store a `loyalty_min_transaction_amount` (NUMERIC(14,2)) at the system level; Transactions below this amount SHALL NOT accrue loyalty points.
+
+**1.8 — Merchant Exchange**
+
+22. THE System SHALL store an `exchange_cash_adjustment_allowed` (BOOLEAN) at the system level; when false, any trade value difference on an Exchange_Order SHALL only be settled as Store_Credit, not cash.
+
+**1.9 — Notifications**
+
+23. THE System SHALL store notification preferences (low-stock alerts, payment reminders, order status changes, PO approval requests, installment overdue alerts) per Branch as a JSONB configuration value.
+
+**1.10 — General Rules**
+
+24. WHEN a Branch-level configuration key is absent, THE System SHALL return the system-wide default value for that key in all effective-config lookups.
+25. WHEN a Super_Admin or Admin saves a Configuration change, THE System SHALL insert a row into the Outbox within the same DB transaction, containing: config key, previous value, new value, Staff actor ID, timestamp, and Branch context (if applicable); the Outbox_Poller SHALL subsequently write the Audit_Log entry.
+26. THE System SHALL restrict system-level Configuration writes to Staff with the `Super_Admin` Role; Branch-level Configuration writes are additionally permitted for `Admin` and `Manager` Roles within their assigned scope.
+
+#### Config Key Reference
+
+| Key | Type | Scope | Default | Description |
+|-----|------|-------|---------|-------------|
+| `base_currency` | TEXT | System | — | ISO 4217 currency code (e.g. USD) |
+| `tax_rate` | NUMERIC(6,4) | System / Branch | 0 | Default tax rate (0–1) |
+| `fiscal_year_start_month` | INTEGER | System | 1 | Month number (1=Jan) |
+| `max_line_discount_pct` | JSONB (per role) | System / Branch | {} | Max line discount % per role |
+| `max_transaction_discount_pct` | NUMERIC(5,2) | System / Branch | 100 | Max transaction discount % |
+| `discount_approval_threshold_pct` | NUMERIC(5,2) | System | 20 | Discount % requiring manager approval |
+| `reorder_point_default` | INTEGER | System | 5 | Default reorder threshold (units) |
+| `allow_negative_stock` | BOOLEAN | System | false | Allow stock to go below zero |
+| `po_approval_threshold` | NUMERIC(14,2) | System | 0 | PO value requiring approval |
+| `default_supplier_lead_time_days` | INTEGER | System | 7 | Fallback supplier lead time |
+| `return_window_days` | INTEGER | System / Branch | 30 | Days within which returns are allowed |
+| `max_return_value_without_auth` | NUMERIC(14,2) | System | 500 | Max refund without manager auth |
+| `refund_method_after_window` | TEXT | System | `any` | `any` or `store_credit_only` |
+| `min_deposit_pct` | NUMERIC(5,2) | System / Branch | 20 | Min installment deposit % |
+| `max_installments` | INTEGER | System | 12 | Max installments per plan |
+| `installment_grace_period_days` | INTEGER | System | 0 | Days before overdue status set |
+| `allowed_payment_methods` | TEXT[] | Branch | all | Permitted payment methods |
+| `loyalty_accrual_rate` | NUMERIC(8,6) | System | 0.01 | Points earned per currency unit |
+| `loyalty_redemption_rate` | NUMERIC(8,6) | System | 1.0 | Currency value per point |
+| `loyalty_min_transaction_amount` | NUMERIC(14,2) | System | 0 | Min transaction to earn points |
+| `exchange_cash_adjustment_allowed` | BOOLEAN | System | true | Allow cash settlement on exchange |
+| `notification_prefs` | JSONB | Branch | {} | Per-event notification toggles |
 
 #### Constraints
 
-- `system_config.key`: no uniqueness constraint beyond PRIMARY KEY
+- `system_config.key`: PRIMARY KEY (TEXT)
 - `branch_config.(branch_id, key)`: composite PRIMARY KEY
+- All monetary config values stored as NUMERIC(14,2); no floating-point types
 - No locking strategy required (low-contention single-row updates)
 - Idempotency-Key: not required for configuration writes
 
@@ -742,8 +821,8 @@ The client SHOULD retry up to 3 times with a fresh version read before surfacing
 
 #### Acceptance Criteria
 
-1. WHEN a `Purchasor` or `Manager` creates a PO, THE System SHALL persist: Supplier ID, one or more line items (Book ID, `qty_ordered`, `unit_price`), target Branch ID, target Location ID, and optional `bank_account_id`; THE System SHALL assign a unique `po_number` and set `status = 'Pending'`.
-2. WHEN a PO is submitted, THE System SHALL assign a unique `po_number` (system-generated) and set `status = 'Pending'`.
+1. WHEN a `Purchasor` or `Manager` creates a PO, THE System SHALL persist: Supplier ID, one or more line items (Book ID, `qty_ordered`, `unit_price`), target Branch ID, target Location ID, and optional `bank_account_id`; THE System SHALL assign a unique `po_number`.
+2. WHEN a PO is submitted and its total value (SUM of `qty_ordered × unit_price`) is less than or equal to `config.po_approval_threshold`, THE System SHALL set `status = 'Pending'`; WHEN the total exceeds the threshold, THE System SHALL set `status = 'PendingApproval'` and enqueue an in-app notification to the Manager/Admin for approval before the PO can be submitted to the Supplier.
 3. WHEN a Manager cancels a PO in `Pending` status, THE System SHALL set `status = 'Cancelled'` and insert a row into the Outbox; cancellation of a PO in any other status SHALL be rejected with `409 INVALID_STATE_TRANSITION`.
 4. WHEN stock is received against a PO line item, THE System SHALL increment `inventory.quantity` at the target Location by the received quantity and insert a row into `po_receipts` and `inventory_history`, all within the same DB transaction.
 5. THE System SHALL allow partial receipts against a PO; after a partial receipt, THE System SHALL set `status = 'In_Progress'` if not already set; the PO remains `In_Progress` until all line items are fully received or the PO is manually closed.
@@ -773,7 +852,7 @@ The client SHOULD retry up to 3 times with a fresh version read before surfacing
 3. THE System SHALL maintain a complete purchase history per Customer by linking each Transaction (`customer_id`) and Order (`customer_id`) to the Customer record; anonymous Transactions (null `customer_id`) are permitted.
 4. WHEN a Customer profile is deactivated, THE System SHALL set `is_active = false` and reject any subsequent request to create a Transaction or Order referencing that Customer with `422 CUSTOMER_INACTIVE`, while retaining all historical records.
 5. THE System SHALL maintain a `store_credit` balance (NUMERIC(10,2), CHECK >= 0) per Customer; any operation that would reduce `store_credit` below 0 SHALL be rejected with `422 INSUFFICIENT_STORE_CREDIT`.
-6. WHERE the Loyalty_Program is enabled (system config `loyalty_accrual_rate > 0`), WHEN a Transaction is completed, THE System SHALL enqueue a loyalty accrual event in the Outbox; the Loyalty_Worker SHALL add `floor(transaction.total × accrual_rate)` points to the Customer's `loyalty_points` balance.
+6. WHERE the Loyalty_Program is enabled (system config `loyalty_accrual_rate > 0`), WHEN a Transaction is completed and `transaction.total >= loyalty_min_transaction_amount`, THE System SHALL enqueue a loyalty accrual event in the Outbox; the Loyalty_Worker SHALL add `floor(transaction.total × loyalty_accrual_rate)` points to the Customer's `loyalty_points` balance, using `loyalty_redemption_rate` to convert points to monetary value at redemption.
 7. WHERE the Loyalty_Program is enabled, WHEN a Transaction payment with `method = 'loyalty_points'` is submitted, THE System SHALL validate that the Customer's `loyalty_points` balance is sufficient; if insufficient, THE System SHALL reject the payment with `422 INSUFFICIENT_LOYALTY_POINTS`.
 8. WHERE the Loyalty_Program is enabled, WHEN points are accrued or redeemed, THE System SHALL insert a row into `loyalty_history` within the same DB transaction as the balance update, recording: delta, balance_after, reason, transaction reference, and timestamp.
 9. WHEN a Customer profile is created, updated, or deactivated, THE System SHALL insert a row into the Outbox within the same DB transaction; the Outbox_Poller SHALL subsequently write the Audit_Log entry.
@@ -831,7 +910,7 @@ The client SHOULD retry up to 3 times with a fresh version read before surfacing
 4. WHEN a refund is issued, THE System SHALL accept one of the following methods: `original` (proportional to original payment methods), `store_credit`, or `bank_transfer` (from an active Bank_Account of the current Branch); the selected method and reason SHALL be persisted in the `refunds` table.
 5. WHEN a refund is issued as `store_credit`, THE System SHALL atomically increase `customer.store_credit` and insert a row into `store_credit_history` within the same DB transaction as the `refunds` insert.
 6. WHEN a partial refund is issued against a specific payment record, THE System SHALL validate that `refund.amount <= original payment amount for that record`; if exceeded, THE System SHALL return `422 EXCEEDS_PAYMENT_AMOUNT`.
-7. WHEN a return is requested for a Transaction where `now() > transaction.completed_at + return_window_days`, THE System SHALL require a `manager_auth_id` referencing an active Manager Staff account; if absent, THE System SHALL return `403 RETURN_WINDOW_EXCEEDED`; the authorization SHALL be recorded in the `returns.manager_auth_id` field and in the Audit_Log.
+7. WHEN a return is requested for a Transaction where `now() > transaction.completed_at + config.return_window_days`, THE System SHALL require a `manager_auth_id` referencing an active Manager Staff account; if absent, THE System SHALL return `403 RETURN_WINDOW_EXCEEDED`; the authorization SHALL be recorded in the `returns.manager_auth_id` field and in the Audit_Log. Additionally, if the total refund value exceeds `config.max_return_value_without_auth`, the same Manager authorization is required regardless of the return window.
 8. WHEN a return line item is submitted, THE System SHALL validate that the sum of all previously returned quantities for that `tx_line_id` plus the new return quantity does not exceed the original `transaction_line_items.quantity`; if exceeded, THE System SHALL return `422 QUANTITY_EXCEEDS_ORIGINAL`.
 
 #### Constraints
@@ -875,10 +954,10 @@ The client SHOULD retry up to 3 times with a fresh version read before surfacing
 
 1. THE System SHALL track the outstanding balance per Order as: `order.total − SUM(order_payments.amount) + SUM(order_refunds.amount)`; this value MUST never be negative.
 2. WHEN a Manager creates an Installment_Plan for an Order, THE System SHALL persist: deposit amount, and one or more installments each with a `due_date` and `amount`; THE System SHALL set each installment's initial `status = 'pending'`.
-3. WHEN an Installment_Plan is created, THE System SHALL validate: (a) `deposit_amount >= order.total × min_deposit_pct / 100`; if not, return `422 DEPOSIT_BELOW_MINIMUM`; (b) `SUM(installments.amount) = order.total − deposit_amount`; if not, return `422 INSTALLMENT_SUM_MISMATCH`.
+3. WHEN an Installment_Plan is created, THE System SHALL validate: (a) `deposit_amount >= order.total × config.min_deposit_pct / 100`; if not, return `422 DEPOSIT_BELOW_MINIMUM`; (b) `installments.length <= config.max_installments`; if not, return `422 EXCEEDS_MAX_INSTALLMENTS`; (c) `SUM(installments.amount) = order.total − deposit_amount`; if not, return `422 INSTALLMENT_SUM_MISMATCH`.
 4. THE System SHALL accept all payment methods defined in Requirement 11 (AC5) for both Order payments and individual installment payments.
 5. WHEN a bank transfer is used for an Order or installment payment, THE System SHALL require a `bank_account_id` referencing an active Bank_Account belonging to the current Branch; if absent or invalid, THE System SHALL return `422 INVALID_BANK_ACCOUNT`.
-6. THE System SHALL enforce configurable payment method combination rules per Branch (stored in `branch_config`); requests violating the configured rules SHALL be rejected with `422 PAYMENT_METHOD_NOT_ALLOWED`.
+6. THE System SHALL enforce the `allowed_payment_methods` configuration per Branch (stored in `branch_config`); requests using a payment method not in the Branch's allowed list SHALL be rejected with `422 PAYMENT_METHOD_NOT_ALLOWED`.
 7. WHEN a scheduled installment's `due_date` is reached and `paid_amount < amount`, THE System SHALL enqueue a payment reminder notification event in the Outbox for delivery by the Notification_Worker.
 8. WHEN a partial refund is issued against a specific `order_payments` record, THE System SHALL validate that `refund.amount <= order_payments.amount`; if exceeded, THE System SHALL return `422 EXCEEDS_PAYMENT_AMOUNT`.
 9. WHEN a payment is submitted that would cause the outstanding balance to go below 0, THE System SHALL reject the payment with `422 EXCEEDS_OUTSTANDING_BALANCE`.
