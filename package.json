@@ -1,0 +1,26 @@
+{
+  "name": "bookstore-management-system",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev:api": "dotenv -e .env -- tsx watch apps/api/src/server.ts",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "test": "npm run test --workspace=apps/api",
+    "lint": "eslint apps/api/src apps/web/src packages/shared/src --ext .ts,.tsx",
+    "format": "prettier --write \"apps/**/*.{ts,tsx}\" \"packages/**/*.ts\""
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5",
+    "dotenv-cli": "^7.4.2",
+    "tsx": "^4.11.0"
+  }
+}

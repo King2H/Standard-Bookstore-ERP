@@ -4,9 +4,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase: Spec Complete — Ready for Implementation**
-
-All three spec documents are finalized and consistent. No code has been written yet.
+**Phase: Phase 0 Complete — Implementation In Progress**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -16,76 +14,91 @@ All three spec documents are finalized and consistent. No code has been written 
 
 ---
 
-## What's Been Specified
+## Implementation Progress
 
-### Domain Coverage (17 Vertical Slices)
+### Phase 0 — System Validation ✅ COMPLETE
 
-| Slice | Domain |
-|-------|--------|
-| 1 | Configuration & System Settings |
-| 2 | Staff & Access Control |
-| 3 | Branch Management |
-| 4 | Bank Account Management & Reconciliation |
-| 5 | Location Management |
-| 6 | Catalog Management |
-| 7 | Inventory Management |
-| 8 | Supplier Management |
-| 9 | Procurement & Purchase Orders |
-| 10 | Customer Management |
-| 11 | Point of Sale — Transactions |
-| 12 | Returns & Refunds |
-| 13 | Order Management |
-| 14 | Payment Management & Installments |
-| 15 | Merchant Exchange (In-Kind Trading) |
-| 16 | Reporting & Analytics |
-| 17 | UI & Data Presentation |
+**Task 0A — Bootstrap Minimal Infrastructure** ✅
+- Monorepo: `apps/api` (Node.js 20 + TypeScript 5 + Express 5), `apps/web` (React 18 + Vite + Tailwind), `packages/shared`
+- Docker Compose: API + PostgreSQL 16
+- node-pg-migrate with `.cjs` migration files (required for ESM monorepo)
+- DB migrations: `audit_logs`, `staff`, `staff_branch_roles`, `refresh_tokens`, `branches`
+- Express middleware: JWT auth, RBAC (`requireRole`), branch context, request ID, structured JSON logging, error handler
+- `GET /health` endpoint
+- Vitest + Supertest integration test infrastructure
 
-### Roles (7)
+**Task 0B — Auth + Branch Management (First Vertical Slice)** ✅
+- Full JWT authentication: login (branch dropdown), logout, token refresh
+- 7-role RBAC: `Super_Admin`, `Admin`, `Manager`, `Finance_Officer`, `Stock_Clerk`, `Sales`, `Purchasor`
+- Staff management: create, deactivate, reactivate, branch-role assignment (full replace)
+- Branch management: create, update, deactivate, reactivate, delete (with dependency guard)
+- Audit log: all write actions recorded with staff, role, entity, branch context
+- Audit Log viewer UI: real-time (3s polling), expandable details, entity filter
+- Toast notifications for all CRUD actions
+- Role-based UI: nav items and action buttons hidden based on JWT role
 
-`Super_Admin` · `Admin` · `Manager` · `Finance_Officer` · `Stock_Clerk` · `Sales` · `Purchasor`
+**Seed credentials (local dev):**
+- `superadmin` / `password` / Branch: Main Branch (role: Super_Admin)
+- `admin` / `password` / Branch: Main Branch (role: Admin)
 
-### Tech Stack
+---
+
+## Domain Coverage (17 Vertical Slices)
+
+| Slice | Domain | Status |
+|-------|--------|--------|
+| 0 | Infrastructure | ✅ Done |
+| 2+3 | Staff & Auth + Branch | ✅ Done |
+| 1 | Configuration & System Settings | ⬜ Next |
+| 4 | Bank Account Management | ⬜ Pending |
+| 5 | Location Management | ⬜ Pending |
+| 6 | Catalog Management | ⬜ Pending |
+| 7 | Inventory Management | ⬜ Pending |
+| 8–15 | Operations + Financial Flows | ⬜ Pending |
+| 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
+
+---
+
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18 + TypeScript + Vite |
 | Styling | Tailwind CSS + shadcn/ui |
 | State / Data | TanStack Query + TanStack Table |
-| Charts | Recharts |
 | Forms | React Hook Form + Zod |
 | Backend | Node.js 20 + Express 5 + TypeScript |
 | Database | PostgreSQL 16 (raw `pg` driver) |
-| Cache / Queue | Redis 7 + BullMQ |
+| Cache / Queue | Redis 7 + BullMQ (Phase 4) |
 | Auth | JWT (15 min) + httpOnly refresh cookie (7 days) |
-| Real-time | Server-Sent Events (SSE) for in-app notifications |
-| Logging | Pino (structured JSON) |
-| Metrics | Prometheus (prom-client) |
-| Tracing | OpenTelemetry |
+| Logging | Structured JSON (console → Pino in Phase 4) |
 | Container | Docker + Docker Compose |
-| Reverse Proxy | Nginx |
-
-### Key Design Decisions
-
-- **Modular monolith** — single deployment, domain-separated modules, outbox pattern for async decoupling
-- **Vertical slicing** — each implementation task delivers DB → service → API → UI end-to-end
-- **CQRS** — writes to primary PostgreSQL, reads (reports, dashboard) to read replica
-- **Optimistic locking** on inventory; pessimistic locking on payments and order confirmation
-- **Outbox pattern** — guaranteed audit log and event delivery without blocking writes
-- **SSE** — real-time in-app notifications for approvals, alerts, and job completions
-- **21 configurable business rules** — discounts, PO approval thresholds, return policies, loyalty rates, installment limits, and more
 
 ---
 
-## Implementation Roadmap
+## Running Locally
 
-Tasks are organized into 4 phases + hardening:
+```bash
+# 1. Install dependencies
+npm install
 
-| Phase | Focus | Tasks |
-|-------|-------|-------|
-| Phase 0 | System validation (auth + branch working) | 0A, 0B |
-| Phase 1 | Core master data (config, bank accounts, locations, catalog, inventory) | 1, 4–7 |
-| Phase 2 | Operations (suppliers, procurement, customers, POS) | 8–11 |
-| Phase 3 | Financial flows (returns, orders, payments, exchange) | 12–15 |
-| Phase 4 | Reporting, UI, async infra, security, observability, CI/CD | 16–17, H1–H4 |
+# 2. Start PostgreSQL (Docker)
+docker compose up -d postgres
 
-To start implementation, open `.kiro/specs/bookstore-management-system/tasks.md` and begin with **Task 0A**.
+# 3. Run migrations (from apps/api)
+cd apps/api && npm run migrate
+
+# 4. Start API dev server (from root)
+npm run dev:api
+
+# 5. Start web dev server (from root, separate terminal)
+npm run dev:web
+```
+
+Open `http://localhost:5173` — login with `superadmin` / `password` / Main Branch.
+
+## Running Tests
+
+```bash
+cd apps/api && npm test
+```

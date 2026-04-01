@@ -52,35 +52,35 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 0A. Bootstrap Minimal Infrastructure
+- [x] 0A. Bootstrap Minimal Infrastructure
   > Set up the bare minimum to run a working API with a database. No Redis, no queues, no observability yet.
   > _Design: Slice 0 (cross-cutting infrastructure) | Requirements: 18, 19, 20, 21, 22, 23, 24_
 
-  - [ ] 0A.1 Initialize monorepo project structure
+  - [x] 0A.1 Initialize monorepo project structure
     - Create `apps/api` (Node.js 20 + TypeScript 5 + Express 5) and `apps/web` (React 18 + TypeScript 5 + Vite)
     - Configure `tsconfig.json` strict mode for both apps; shared `packages/shared` for types
     - Set up ESLint + Prettier with shared config across workspaces
     - _Requirements: 18, 19_
 
-  - [ ] 0A.2 Configure minimal Docker Compose (API + PostgreSQL only)
+  - [x] 0A.2 Configure minimal Docker Compose (API + PostgreSQL only)
     - Services: `api` (Node.js), `postgres` (PostgreSQL 16)
     - Mount `apps/api/src/db/migrations/` as volume for migration runs
     - Configure `.env.example` with: `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV`
     - _Requirements: 19, 20_
 
-  - [ ] 0A.3 Set up node-pg-migrate and DB connection pool
+  - [x] 0A.3 Set up node-pg-migrate and DB connection pool
     - Create `apps/api/src/db/migrations/` directory with `database.json`
     - Implement `apps/api/src/db/index.ts` — single `pg.Pool` connecting to `DATABASE_URL`
     - Add `npm run migrate` script; verify connection on startup with a health log
     - _Requirements: 24_
 
-  - [ ] 0A.4 Create base DB migration: audit_logs table (simplified — no partitioning yet)
+  - [x] 0A.4 Create base DB migration: audit_logs table (simplified — no partitioning yet)
     - `audit_logs (id BIGSERIAL PK, staff_id INTEGER, staff_role TEXT, action TEXT, entity_type TEXT, entity_id TEXT, branch_id INTEGER, meta JSONB, created_at TIMESTAMPTZ DEFAULT now())`
     - Indexes: `(entity_type, entity_id)`, `(staff_id)`, `(created_at)`
     - Note: partitioning added in Phase 4; this is the functional schema
     - _Requirements: 2.4_
 
-  - [ ] 0A.5 Implement Express app skeleton with essential middleware
+  - [x] 0A.5 Implement Express app skeleton with essential middleware
     - `app.ts` — Express app factory with: JSON body parser, request ID header injection, structured console logging (JSON format, includes requestId + method + path + statusCode + durationMs), global error handler (returns `{ error, message, requestId, timestamp }`)
     - `middleware/auth.ts` — JWT verify → `req.staff`; 401 on missing/expired/invalid token
     - `middleware/rbac.ts` — `requireRole(...roles)` factory; 403 FORBIDDEN on role mismatch
@@ -88,7 +88,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `GET /health` — returns `{ status: 'ok', db: 'ok'|'error' }`; 200/503
     - _Requirements: 2.5, 22.1_
 
-  - [ ] 0A.6 Set up Vitest + Supertest integration test infrastructure
+  - [x] 0A.6 Set up Vitest + Supertest integration test infrastructure
     - Configure `vitest.config.ts` with integration test setup (real DB, test transactions)
     - Create `tests/helpers/testDb.ts` — wraps each test in a transaction that rolls back after
     - Create `tests/helpers/testApp.ts` — returns configured Express app for Supertest
@@ -104,23 +104,23 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 0B. Authenticate Staff and Manage Branches (First Working Vertical Slice)
+- [x] 0B. Authenticate Staff and Manage Branches (First Working Vertical Slice)
   > First real business flow: create a staff member, assign a role, log in, create a branch. Validates auth + RBAC + one entity end-to-end.
   > _Design: Slice 2 (Staff & Access Control) + Slice 3 (Branch Management) | Requirements: 2, 3_
 
-  - [ ] 0B.1 Create DB migration: staff, staff_branch_roles, refresh_tokens
+  - [x] 0B.1 Create DB migration: staff, staff_branch_roles, refresh_tokens
     - `staff (id SERIAL PK, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, full_name TEXT NOT NULL, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now())`
     - `staff_branch_roles (staff_id INTEGER REFERENCES staff(id), branch_id INTEGER, role TEXT CHECK (role IN ('Super_Admin','Admin','Manager','Finance_Officer','Stock_Clerk','Sales','Purchasor')), PRIMARY KEY (staff_id, branch_id))`
     - `refresh_tokens (id BIGSERIAL PK, staff_id INTEGER REFERENCES staff(id), token_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, revoked BOOLEAN DEFAULT false)` + index on `(staff_id, revoked)`
     - Seed: insert one Super_Admin and one Admin staff record with known credentials for local dev
     - _Requirements: 2_
 
-  - [ ] 0B.2 Create DB migration: branches
+  - [x] 0B.2 Create DB migration: branches
     - `branches (id SERIAL PK, name TEXT UNIQUE NOT NULL, address TEXT NOT NULL, contact_info JSONB NOT NULL, operating_hours JSONB NOT NULL, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now())`
     - Seed: insert one default branch for local dev testing
     - _Requirements: 3_
 
-  - [ ] 0B.3 Implement auth.service.ts
+  - [x] 0B.3 Implement auth.service.ts
     - `login(username, password, branchId)` — SELECT staff by username; bcrypt.compare (cost 12); validate is_active; validate branchId in staff_branch_roles; sign 15min JWT `{ staffId, role, branchId }`; generate refresh token; store bcrypt hash in refresh_tokens; return `{ accessToken }`
     - `logout(staffId, tokenHash)` — UPDATE refresh_tokens SET revoked=true WHERE staff_id=$1 AND token_hash=$2
     - `refresh(cookieToken)` — SELECT non-revoked token; bcrypt.compare; issue new JWT
@@ -130,42 +130,45 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `assignRoles(staffId, roles[])` — UPSERT staff_branch_roles; INSERT audit_logs; validate role IN ('Super_Admin','Admin','Manager','Finance_Officer','Stock_Clerk','Sales','Purchasor')
     - _Requirements: 2.1, 2.2, 2.3, 2.6, 2.8, 2.9_
 
-  - [ ] 0B.4 Implement branch.service.ts
+  - [x] 0B.4 Implement branch.service.ts
     - `create(data, staffCtx)` — INSERT branches; INSERT audit_logs; 409 DUPLICATE_BRANCH_NAME on unique violation
     - `update(id, data, staffCtx)` — UPDATE branches; INSERT audit_logs
     - `deactivate(id, staffCtx)` — UPDATE branches SET is_active=false; INSERT audit_logs
     - `delete(id, staffCtx)` — check for blocking dependencies (locations, staff_branch_roles, open orders); if any: 409 DEPENDENCY_CONFLICT `{ blockingDependencies: [{ type, count }] }`; else DELETE + INSERT audit_logs
     - _Requirements: 3.1, 3.2, 3.3, 3.5, 3.6_
 
-  - [ ] 0B.5 Implement auth + staff API routes
+  - [x] 0B.5 Implement auth + staff API routes
     - `POST /api/auth/login` — body: `{ username, password, branchId }`; sets httpOnly SameSite=Strict refresh cookie; response: `{ accessToken, expiresIn: 900 }`; errors: 401 INVALID_CREDENTIALS, 403 ACCOUNT_INACTIVE
     - `POST /api/auth/logout` — revokes refresh token; clears cookie
     - `POST /api/auth/refresh` — reads cookie; issues new accessToken; 401 TOKEN_EXPIRED/TOKEN_REVOKED
-    - `GET /api/staff` — Admin only; paginated list with branch-role assignments
-    - `POST /api/staff` — Admin only; calls createStaff; 409 DUPLICATE_USERNAME
-    - `PUT /api/staff/:id` — Admin only; update full_name
-    - `POST /api/staff/:id/deactivate` — Admin only
-    - `POST /api/staff/:id/reactivate` — Admin only
-    - `PUT /api/staff/:id/roles` — Admin only; body: `[{ branchId, role }]`
+    - `GET /api/staff` — Super_Admin/Admin/Manager; paginated list with branch-role assignments; Manager sees own-branch staff only
+    - `POST /api/staff` — Super_Admin/Admin; calls createStaff; 409 DUPLICATE_USERNAME
+    - `PUT /api/staff/:id` — Super_Admin/Admin; update full_name + audit log
+    - `POST /api/staff/:id/deactivate` — Super_Admin/Admin; cannot deactivate self; cannot deactivate last Super_Admin
+    - `POST /api/staff/:id/reactivate` — Super_Admin/Admin
+    - `PUT /api/staff/:id/roles` — Super_Admin/Admin/Manager; full replace (delete + insert); Manager cannot assign Super_Admin role
     - _Requirements: 2.5, 2.7_
+    - _Note: GET /api/branches/public (no auth) added for login page branch dropdown_
 
-  - [ ] 0B.6 Implement branch API routes
+  - [x] 0B.6 Implement branch API routes
+    - `GET /api/branches/public` — no auth; returns active branches for login page dropdown
     - `GET /api/branches` — any authenticated; paginated; filter by `is_active`
-    - `POST /api/branches` — Admin/Manager; calls create; 403 for other roles
+    - `POST /api/branches` — Super_Admin/Admin/Manager; calls create; 403 for other roles
     - `GET /api/branches/:id` — any authenticated
-    - `PUT /api/branches/:id` — Admin/Manager
-    - `POST /api/branches/:id/deactivate` — Admin/Manager
-    - `DELETE /api/branches/:id` — Admin/Manager; 409 DEPENDENCY_CONFLICT with dependency list
+    - `PUT /api/branches/:id` — Super_Admin/Admin/Manager
+    - `POST /api/branches/:id/deactivate` — Super_Admin/Admin/Manager
+    - `POST /api/branches/:id/reactivate` — Super_Admin/Admin/Manager (added for completeness)
+    - `DELETE /api/branches/:id` — Super_Admin/Admin; 409 DEPENDENCY_CONFLICT with dependency list
     - _Requirements: 3.7_
 
-  - [ ] 0B.7 Implement Login page and Staff + Branch management UI
+  - [x] 0B.7 Implement Login page and Staff + Branch management UI
     - Login page: username/password/branchId form (React Hook Form + Zod); stores accessToken in memory (not localStorage); auto-refresh on 401; handles 401/403
     - Staff list page: table with username, full_name, is_active, roles per branch; create/edit/deactivate/reactivate actions
     - Branch list page: table with name, address, is_active; create/edit/deactivate/delete actions; dependency error display
     - TanStack Query hooks: `useLogin`, `useLogout`, `useStaffList`, `useCreateStaff`, `useBranchList`, `useCreateBranch`, `useUpdateBranch`, `useDeactivateBranch`
     - _Requirements: 2, 3_
 
-  - [ ] 0B.8 Write integration tests for auth and branch flows
+  - [x] 0B.8 Write integration tests for auth and branch flows
     - Auth: login success, login with wrong password (401), login with inactive account (403), token refresh, logout + refresh rejected
     - RBAC: Sales attempting Admin-only endpoint (403), correct role succeeds
     - Branch: create branch (Admin), duplicate name (409), deactivate branch, delete with dependencies (409), delete clean branch (200)

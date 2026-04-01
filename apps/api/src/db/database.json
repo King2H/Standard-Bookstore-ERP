@@ -1,0 +1,13 @@
+{
+  "defaultEnv": "default",
+  "default": {
+    "url": {
+      "ENV": "DATABASE_URL"
+    },
+    "dir": "src/db/migrations",
+    "driver": "pg",
+    "migrationsTable": "pgmigrations",
+    "decamelize": true,
+    "tsconfig": "tsconfig.json"
+  }
+}

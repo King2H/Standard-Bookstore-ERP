@@ -44,3 +44,15 @@ logs/
 # ─── Kiro internal (keep specs, exclude session state) ─────
 .kiro/settings/
 .kiro/hooks/
+
+# ─── TypeScript compiled output ────────────────────────────
+*.tsbuildinfo
+apps/api/dist/
+apps/web/dist/
+
+# ─── Vite cache ────────────────────────────────────────────
+.vite/
+apps/web/.vite/
+
+# ─── Test artifacts ────────────────────────────────────────
+apps/api/coverage/

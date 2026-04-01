@@ -1,0 +1,41 @@
+{
+  "name": "@bms/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "migrate": "dotenv -e ../../.env -- node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
+    "migrate:down": "dotenv -e ../../.env -- node-pg-migrate down --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
+    "migrate:create": "dotenv -e ../../.env -- node-pg-migrate create --migrations-dir src/db/migrations",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "express": "^5.0.1",
+    "pg": "^8.11.5",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "zod": "^3.23.8",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.4.5",
+    "cookie-parser": "^1.4.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/pg": "^8.11.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/bcrypt": "^5.0.2",
+    "@types/uuid": "^9.0.8",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/node": "^20.12.12",
+    "node-pg-migrate": "^7.3.2",
+    "dotenv-cli": "^7.4.2",
+    "tsx": "^4.11.0",
+    "vitest": "^1.6.0",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.2"
+  }
+}
