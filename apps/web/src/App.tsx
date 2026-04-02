@@ -4,18 +4,17 @@ import LoginPage from './pages/LoginPage.js';
 import BranchesPage from './pages/BranchesPage.js';
 import StaffPage from './pages/StaffPage.js';
 import AuditLogPage from './pages/AuditLogPage.js';
+import SettingsPage from './pages/SettingsPage.js';
 import { ToastProvider } from './components/Toast.js';
 import { ThemeProvider } from './lib/theme.js';
 import Layout from './components/Layout.js';
 import { getAccessToken } from './lib/api.js';
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1 },
-  },
+  defaultOptions: { queries: { retry: 1 } },
 });
 
-type Page = 'branches' | 'staff' | 'audit-log';
+type Page = 'branches' | 'staff' | 'audit-log' | 'settings';
 type Role = 'Super_Admin' | 'Admin' | 'Manager' | 'Finance_Officer' | 'Stock_Clerk' | 'Sales' | 'Purchasor';
 
 function parseRoleFromToken(): Role | null {
@@ -61,6 +60,7 @@ export default function App() {
               {currentPage === 'branches' && <BranchesPage userRole={userRole ?? undefined} />}
               {currentPage === 'staff' && <StaffPage />}
               {currentPage === 'audit-log' && <AuditLogPage />}
+              {currentPage === 'settings' && <SettingsPage userRole={userRole ?? undefined} />}
             </Layout>
           )}
         </ToastProvider>

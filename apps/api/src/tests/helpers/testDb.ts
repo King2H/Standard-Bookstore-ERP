@@ -3,7 +3,6 @@ import { PoolClient } from 'pg';
 
 /**
  * Wraps a test in a DB transaction that is always rolled back.
- * This ensures test isolation without needing to truncate tables.
  */
 export async function withTestTransaction<T>(
   fn: (client: PoolClient) => Promise<T>,
@@ -23,21 +22,49 @@ export async function withTestTransaction<T>(
 }
 
 /**
- * Cleans specific tables between tests when transaction rollback isn't sufficient.
+ * Deletes test staff rows (and their dependent rows) by username prefix.
+ * NEVER truncates — seed data (superadmin, admin, Main Branch) is preserved.
  */
-export async function cleanTables(...tables: string[]): Promise<void> {
-  const client = await db.connect();
-  try {
-    // Disable FK checks temporarily, truncate, re-enable
-    await client.query('BEGIN');
-    for (const table of tables) {
-      await client.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE`);
-    }
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+export async function cleanTestStaff(usernamePrefix: string): Promise<void> {
+  await db.query(
+    `DELETE FROM refresh_tokens WHERE staff_id IN (
+       SELECT id FROM staff WHERE username LIKE $1
+     )`,
+    [`${usernamePrefix}%`],
+  );
+  await db.query(
+    `DELETE FROM staff_branch_roles WHERE staff_id IN (
+       SELECT id FROM staff WHERE username LIKE $1
+     )`,
+    [`${usernamePrefix}%`],
+  );
+  await db.query(`DELETE FROM staff WHERE username LIKE $1`, [`${usernamePrefix}%`]);
+}
+
+/**
+ * Deletes test branches by name prefix, along with their dependent rows.
+ * NEVER truncates — the seeded "Main Branch" is preserved.
+ */
+export async function cleanTestBranches(namePrefix: string): Promise<void> {
+  // Remove staff_branch_roles referencing these branches first
+  await db.query(
+    `DELETE FROM staff_branch_roles WHERE branch_id IN (
+       SELECT id FROM branches WHERE name LIKE $1
+     )`,
+    [`${namePrefix}%`],
+  );
+  await db.query(
+    `DELETE FROM branch_config WHERE branch_id IN (
+       SELECT id FROM branches WHERE name LIKE $1
+     )`,
+    [`${namePrefix}%`],
+  );
+  await db.query(`DELETE FROM branches WHERE name LIKE $1`, [`${namePrefix}%`]);
+}
+
+/**
+ * Cleans branch_config rows for a specific branch id.
+ */
+export async function cleanBranchConfig(branchId: number): Promise<void> {
+  await db.query(`DELETE FROM branch_config WHERE branch_id = $1`, [branchId]);
 }

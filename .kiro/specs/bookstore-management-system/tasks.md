@@ -190,17 +190,17 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 1. Configure System Settings (Business Rules, Discounts, Procurement, Returns, Payments, Loyalty, Exchange)
+- [x] 1. Configure System Settings (Business Rules, Discounts, Procurement, Returns, Payments, Loyalty, Exchange)
   > Establish all system-wide and branch-level business rule configurations that every other module depends on. This is the single source of truth for operational policy.
   > _Slice 1 = Requirement 1 | Design: design.md §3.3, §6.4_
 
-  - [ ] 1.1 Create DB migration: system_config and branch_config with full seed data
+  - [x] 1.1 Create DB migration: system_config and branch_config with full seed data
     - `system_config (key TEXT PK, value JSONB NOT NULL, updated_by INTEGER NOT NULL, updated_at TIMESTAMPTZ DEFAULT now())`
     - `branch_config (branch_id INTEGER REFERENCES branches(id), key TEXT, value JSONB NOT NULL, updated_by INTEGER NOT NULL, updated_at TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (branch_id, key))`
     - Seed all 21 system_config defaults as defined in design.md §3.3 (base_currency, tax_rate, fiscal_year_start_month, max_line_discount_pct, max_transaction_discount_pct, discount_approval_threshold_pct, reorder_point_default, allow_negative_stock, po_approval_threshold, default_supplier_lead_time_days, return_window_days, max_return_value_without_auth, refund_method_after_window, min_deposit_pct, max_installments, installment_grace_period_days, loyalty_accrual_rate, loyalty_redemption_rate, loyalty_min_transaction_amount, exchange_cash_adjustment_allowed, notification_prefs)
     - _Requirements: 1_
 
-  - [ ] 1.2 Implement config.service.ts with all typed helpers
+  - [x] 1.2 Implement config.service.ts with all typed helpers
     - `getEffectiveConfig(branchId, key)` — SELECT from branch_config; fallback to system_config; cache in Redis `cfg:{branchId}:{key}` TTL 5min; invalidate on write
     - `setSystemConfig(key, value, staffCtx)` — validate value type against key schema; UPDATE system_config; INSERT outbox; invalidate Redis; 403 if not Super_Admin
     - `setBranchConfig(branchId, key, value, staffCtx)` — UPSERT branch_config; INSERT outbox; invalidate Redis; 403 if not Super_Admin/Admin/Manager (own branch)
@@ -208,7 +208,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - Implement all typed helpers: `getMaxLineDiscountPct`, `getDiscountApprovalThresholdPct`, `getPOApprovalThreshold`, `getReturnWindowDays`, `getMaxReturnValueWithoutAuth`, `getRefundMethodAfterWindow`, `getMinDepositPct`, `getMaxInstallments`, `getInstallmentGracePeriodDays`, `getAllowedPaymentMethods`, `getLoyaltyAccrualRate`, `getLoyaltyRedemptionRate`, `getLoyaltyMinTransactionAmount`, `isNegativeStockAllowed`, `isExchangeCashAdjustmentAllowed`
     - _Requirements: 1.24, 1.25, 1.26_
 
-  - [ ] 1.3 Implement config API routes
+  - [x] 1.3 Implement config API routes
     - `GET /api/config/system` — Super_Admin/Admin/Manager; returns all system_config rows
     - `PUT /api/config/system/:key` — Super_Admin only; 403 for all other roles
     - `GET /api/config/branches/:branchId` — Super_Admin/Admin/Manager (own branch); returns merged effective config with `source` field
@@ -216,14 +216,14 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `DELETE /api/config/branches/:branchId/:key` — Super_Admin/Admin; removes branch override
     - _Requirements: 1.26_
 
-  - [ ] 1.4 Implement Settings UI page (grouped by domain)
+  - [x] 1.4 Implement Settings UI page (grouped by domain)
     - Settings page at `/settings` with tabs: **General** (currency, tax, fiscal year) | **Discounts** (max line %, max transaction %, approval threshold) | **Inventory** (reorder point, negative stock) | **Procurement** (PO approval threshold, default lead time) | **Returns** (window, max value, refund method) | **Payments** (min deposit, max installments, grace period, allowed methods) | **Loyalty** (accrual rate, redemption rate, min transaction) | **Exchange** (cash adjustment allowed) | **Notifications**
     - Each tab: system default form + branch override panel (branch selector, per-key override, source indicator showing "branch" or "system default")
     - Super_Admin sees system defaults as editable; Admin/Manager see branch overrides only
     - TanStack Query hooks: `useSystemConfig`, `useBranchConfig`, `useUpdateSystemConfig`, `useUpdateBranchConfig`, `useDeleteBranchConfig`
     - _Requirements: 1_
 
-  - [ ] 1.5 Write integration tests for config service
+  - [x] 1.5 Write integration tests for config service
     - Branch override returns branch value; absent key returns system default
     - Super_Admin can write system config; Admin gets 403 on system config write
     - Admin can write branch config for own branch; Manager gets 403 on other branch

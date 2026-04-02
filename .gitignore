@@ -56,3 +56,7 @@ apps/web/.vite/
 
 # ─── Test artifacts ────────────────────────────────────────
 apps/api/coverage/
+
+# ─── Scripts output ────────────────────────────────────────
+# reseed.mjs is tracked; exclude any generated output files
+apps/api/scripts/*.log

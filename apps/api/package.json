@@ -11,7 +11,8 @@
     "migrate:down": "dotenv -e ../../.env -- node-pg-migrate down --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
     "migrate:create": "dotenv -e ../../.env -- node-pg-migrate create --migrations-dir src/db/migrations",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "reseed": "node scripts/reseed.mjs"
   },
   "dependencies": {
     "express": "^5.0.1",

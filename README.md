@@ -4,13 +4,13 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase: Phase 0 Complete — Dark/Light Mode UI Polished**
+**Phase: Phase 1 In Progress — Slice 1 (Configuration & Settings) Complete**
 
 | Document | Status | Location |
 |----------|--------|----------|
 | Requirements | ✅ Complete | `.kiro/specs/bookstore-management-system/requirements.md` |
 | Design | ✅ Complete | `.kiro/specs/bookstore-management-system/design.md` |
-| Tasks | ✅ Complete | `.kiro/specs/bookstore-management-system/tasks.md` |
+| Tasks | ✅ In Progress | `.kiro/specs/bookstore-management-system/tasks.md` |
 
 ---
 
@@ -25,7 +25,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 - DB migrations: `audit_logs`, `staff`, `staff_branch_roles`, `refresh_tokens`, `branches`
 - Express middleware: JWT auth, RBAC (`requireRole`), branch context, request ID, structured JSON logging, error handler
 - `GET /health` endpoint
-- Vitest + Supertest integration test infrastructure
+- Vitest + Supertest integration test infrastructure (prefix-based cleanup — seed data never touched)
 
 **Task 0B — Auth + Branch Management (First Vertical Slice)** ✅
 - Full JWT authentication: login (branch dropdown), logout, token refresh
@@ -49,14 +49,28 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ---
 
+### Phase 1 — Core Business Foundation 🔄 IN PROGRESS
+
+**Task 1 — Configuration & System Settings** ✅
+- DB migration: `system_config` (key/value, system-wide) + `branch_config` (per-branch overrides)
+- 21 system defaults seeded: currency, tax, discounts, inventory, procurement, returns, payments, loyalty, exchange, notifications
+- `config.service.ts`: `getEffectiveConfig` (branch → system fallback), `setSystemConfig`, `setBranchConfig`, `deleteBranchConfig`
+- 15 typed helper methods for use by future service modules (`getPOApprovalThreshold`, `getLoyaltyAccrualRate`, `isNegativeStockAllowed`, etc.)
+- API routes: `GET/PUT /api/config/system`, `GET/PUT/DELETE /api/config/branches/:branchId/:key`
+- RBAC: Super_Admin only for system config writes; Admin/Manager for branch overrides
+- Settings UI: 9-tab page (General, Discounts, Inventory, Procurement, Returns, Payments, Loyalty, Exchange, Notifications) with side-by-side system defaults + branch overrides panels, inline editing, source badges
+- 13 integration tests — all passing; seed data preserved
+
+---
+
 ## Domain Coverage (17 Vertical Slices)
 
 | Slice | Domain | Status |
 |-------|--------|--------|
 | 0 | Infrastructure | ✅ Done |
 | 2+3 | Staff & Auth + Branch | ✅ Done |
-| 1 | Configuration & System Settings | ⬜ Next |
-| 4 | Bank Account Management | ⬜ Pending |
+| 1 | Configuration & System Settings | ✅ Done |
+| 4 | Bank Account Management | ⬜ Next |
 | 5 | Location Management | ⬜ Pending |
 | 6 | Catalog Management | ⬜ Pending |
 | 7 | Inventory Management | ⬜ Pending |
@@ -71,6 +85,8 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 standard-book-store-erp/
 ├── apps/
 │   ├── api/                          # Express API (Node.js 20 + TypeScript)
+│   │   ├── scripts/
+│   │   │   └── reseed.mjs            # Restores seed data if wiped (npm run reseed)
 │   │   ├── src/
 │   │   │   ├── db/
 │   │   │   │   ├── index.ts          # pg.Pool singleton + checkDbConnection()
@@ -78,7 +94,8 @@ standard-book-store-erp/
 │   │   │   │   └── migrations/       # .cjs migration files (ESM-safe)
 │   │   │   │       ├── 1700000001_create_audit_logs.cjs
 │   │   │   │       ├── 1700000002_create_staff_auth.cjs
-│   │   │   │       └── 1700000003_create_branches.cjs
+│   │   │   │       ├── 1700000003_create_branches.cjs
+│   │   │   │       └── 1700000004_create_config.cjs   ← Slice 1
 │   │   │   ├── lib/
 │   │   │   │   └── errors.ts         # AppError class + error code constants
 │   │   │   ├── middleware/
@@ -92,9 +109,12 @@ standard-book-store-erp/
 │   │   │   │   ├── auth/
 │   │   │   │   │   ├── auth.service.ts   # login, logout, refresh, createStaff, assignRoles
 │   │   │   │   │   └── auth.routes.ts    # POST /auth/login|logout|refresh, GET/POST /staff
-│   │   │   │   └── branch/
-│   │   │   │       ├── branch.service.ts # create, update, deactivate, reactivate, delete
-│   │   │   │       └── branch.routes.ts  # GET/POST/PUT/DELETE /branches
+│   │   │   │   ├── branch/
+│   │   │   │   │   ├── branch.service.ts # create, update, deactivate, reactivate, delete
+│   │   │   │   │   └── branch.routes.ts  # GET/POST/PUT/DELETE /branches
+│   │   │   │   └── config/               ← Slice 1
+│   │   │   │       ├── config.service.ts # getEffectiveConfig, set/delete system+branch config, typed helpers
+│   │   │   │       └── config.routes.ts  # GET/PUT /config/system, GET/PUT/DELETE /config/branches/:id/:key
 │   │   │   ├── routes/
 │   │   │   │   └── auditLogs.ts      # GET /audit-logs (paginated, filtered)
 │   │   │   ├── types/
@@ -102,10 +122,11 @@ standard-book-store-erp/
 │   │   │   ├── tests/
 │   │   │   │   ├── auth.test.ts      # Auth + staff integration tests
 │   │   │   │   ├── branch.test.ts    # Branch CRUD integration tests
+│   │   │   │   ├── config.test.ts    # Config system + branch override tests  ← Slice 1
 │   │   │   │   ├── health.test.ts    # Health endpoint test
 │   │   │   │   ├── setup.ts          # Global test setup
 │   │   │   │   └── helpers/
-│   │   │   │       ├── testDb.ts     # Transaction-wrapped test DB
+│   │   │   │       ├── testDb.ts     # Prefix-based cleanup (seed data preserved)
 │   │   │   │       ├── testApp.ts    # Supertest app factory
 │   │   │   │       └── seed.ts       # createTestStaff, createTestBranch
 │   │   │   ├── app.ts                # Express app factory (middleware stack)
@@ -127,7 +148,8 @@ standard-book-store-erp/
 │       │   │   ├── LoginPage.tsx     # Animated login with branch dropdown
 │       │   │   ├── BranchesPage.tsx  # Branch CRUD table
 │       │   │   ├── StaffPage.tsx     # Staff CRUD + inline role editor
-│       │   │   └── AuditLogPage.tsx  # Real-time audit log (3s polling)
+│       │   │   ├── AuditLogPage.tsx  # Real-time audit log (3s polling)
+│       │   │   └── SettingsPage.tsx  # Config settings (9 tabs, system + branch)  ← Slice 1
 │       │   ├── App.tsx               # Root: ThemeProvider → Layout → pages
 │       │   ├── main.tsx              # React entry point
 │       │   └── index.css             # Tailwind base + dark mode scrollbar
@@ -213,6 +235,21 @@ Logout → POST /api/auth/logout
     → accessToken cleared from memory
 ```
 
+### Config Lookup Flow (Slice 1)
+
+```
+Any service needing a business rule
+    │
+    ├─ getEffectiveConfig(branchId, key)
+    │   ├─ SELECT FROM branch_config WHERE branch_id = $1 AND key = $2
+    │   │   → found: return branch override value
+    │   └─ fallback: SELECT FROM system_config WHERE key = $1
+    │       → return system default
+    │
+    └─ Typed helpers (e.g. getPOApprovalThreshold, getLoyaltyAccrualRate)
+        → parse and return typed value for use in business logic
+```
+
 ---
 
 ## Tech Stack
@@ -258,6 +295,18 @@ Open `http://localhost:5173` — login with `superadmin` / `password` / Main Bra
 cd apps/api && npm test
 ```
 
+> Tests use prefix-based cleanup (`auth_test_*`, `branch_test_*`, etc.) — seed data (Main Branch, superadmin, admin) is never touched.
+
+## Restoring Seed Data
+
+If seed data is ever lost (e.g. after a DB reset):
+
+```bash
+cd apps/api && npm run reseed
+```
+
+This restores Main Branch, superadmin, admin, and all 21 system_config defaults.
+
 ---
 
 ## Environment Variables
@@ -270,3 +319,49 @@ Copy `.env.example` to `.env` and fill in:
 | `JWT_SECRET` | Secret for signing JWTs | any long random string |
 | `NODE_ENV` | Environment | `development` |
 | `PORT` | API port (optional) | `3000` |
+
+---
+
+## API Reference (Implemented Endpoints)
+
+### Auth
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/login` | None | Login; returns accessToken + sets refresh cookie |
+| POST | `/api/auth/logout` | Bearer | Revoke refresh token |
+| POST | `/api/auth/refresh` | Cookie | Issue new accessToken |
+
+### Staff
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/api/staff` | Admin+ | List staff with branch-role assignments |
+| POST | `/api/staff` | Admin+ | Create staff account |
+| PUT | `/api/staff/:id` | Admin+ | Update full name |
+| POST | `/api/staff/:id/deactivate` | Admin+ | Deactivate (revokes tokens) |
+| POST | `/api/staff/:id/reactivate` | Admin+ | Reactivate |
+| PUT | `/api/staff/:id/roles` | Admin+ | Full replace branch-role assignments |
+
+### Branches
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/branches/public` | None | Active branches for login dropdown |
+| GET | `/api/branches` | Any | Paginated branch list |
+| POST | `/api/branches` | Admin+ | Create branch |
+| PUT | `/api/branches/:id` | Admin+ | Update branch |
+| POST | `/api/branches/:id/deactivate` | Admin+ | Deactivate |
+| POST | `/api/branches/:id/reactivate` | Admin+ | Reactivate |
+| DELETE | `/api/branches/:id` | Admin+ | Delete (409 if dependencies exist) |
+
+### Configuration (Slice 1)
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/api/config/system` | Admin+ | All 21 system config keys |
+| PUT | `/api/config/system/:key` | Super_Admin | Update system default |
+| GET | `/api/config/branches/:branchId` | Admin+ | Merged effective config with source labels |
+| PUT | `/api/config/branches/:branchId/:key` | Admin+ | Set branch override |
+| DELETE | `/api/config/branches/:branchId/:key` | Admin+ | Remove branch override (restores system default) |
+
+### Audit Log
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/api/audit-logs` | Admin+ | Paginated audit log; filter by entityType |
