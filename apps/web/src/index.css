@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 transition-colors duration-300;
+  }
+
+  .dark body {
+    @apply bg-gray-950 text-white;
+  }
+
+  /* Smooth scrollbar in dark mode */
+  .dark ::-webkit-scrollbar {
+    @apply bg-gray-900;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+
+  /* Select element dark mode fix */
+  .dark select option {
+    @apply bg-gray-800 text-white;
+  }
+}

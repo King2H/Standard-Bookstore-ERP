@@ -20,6 +20,18 @@ export function useToast() {
 
 let nextId = 0;
 
+const TOAST_STYLES: Record<ToastType, string> = {
+  success: 'bg-green-600 dark:bg-green-700 text-white',
+  error:   'bg-red-600 dark:bg-red-700 text-white',
+  info:    'bg-blue-600 dark:bg-blue-700 text-white',
+};
+
+const TOAST_ICONS: Record<ToastType, string> = {
+  success: '✓',
+  error:   '✕',
+  info:    'ℹ',
+};
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -34,24 +46,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      {/* Toast container */}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className={`flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-fade-in ${
-              toast.type === 'success' ? 'bg-green-600 text-white' :
-              toast.type === 'error' ? 'bg-red-600 text-white' :
-              'bg-blue-600 text-white'
-            }`}
+            className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-fade-in ${TOAST_STYLES[toast.type]}`}
           >
-            <span className="text-lg leading-none">
-              {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
-            </span>
+            <span className="text-lg leading-none">{TOAST_ICONS[toast.type]}</span>
             <span className="flex-1">{toast.message}</span>
             <button
               onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-              className="opacity-70 hover:opacity-100 leading-none"
+              className="opacity-70 hover:opacity-100 leading-none transition-opacity"
             >
               ✕
             </button>
