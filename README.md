@@ -4,7 +4,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase: Phase 1 In Progress — Slice 1 (Configuration & Settings) Complete**
+**Phase: Phase 1 In Progress — Slice 4 (Bank Account Management) Complete**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -61,6 +61,15 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 - Settings UI: 9-tab page (General, Discounts, Inventory, Procurement, Returns, Payments, Loyalty, Exchange, Notifications) with side-by-side system defaults + branch overrides panels, inline editing, source badges
 - 13 integration tests — all passing; seed data preserved
 
+**Task 4 — Bank Account Management** ✅
+- `lib/encryption.ts`: AES-256-GCM column encryption (`encrypt`, `decrypt`, `maskLast4`) — key from `COLUMN_ENCRYPTION_KEY` env var
+- DB migration: `bank_accounts` (encrypted account_number + IBAN) + `bank_reconciliation` tables
+- `bankAccount.service.ts`: create (encrypts at rest), update (re-encrypts if changed), deactivate, list (always masked), `validateBankAccountForBranch` (used by future POS/Orders), `importReconciliation` (batch, full rollback on error), `clearEntry` (409 if already cleared)
+- API routes: 7 endpoints under `/api/branches/:branchId/bank-accounts` and `/api/branches/:branchId/reconciliation`
+- RBAC: Admin/Manager/Finance_Officer read; Admin/Manager write; Finance_Officer reconcile
+- Bank Accounts UI: two-panel layout — accounts table + reconciliation panel, branch selector, create form, deactivate, import, clear entries, status filter, pagination
+- 10 integration tests — all passing; account numbers verified encrypted at rest
+
 ---
 
 ## Domain Coverage (17 Vertical Slices)
@@ -70,8 +79,8 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 0 | Infrastructure | ✅ Done |
 | 2+3 | Staff & Auth + Branch | ✅ Done |
 | 1 | Configuration & System Settings | ✅ Done |
-| 4 | Bank Account Management | ⬜ Next |
-| 5 | Location Management | ⬜ Pending |
+| 4 | Bank Account Management | ✅ Done |
+| 5 | Location Management | ⬜ Next |
 | 6 | Catalog Management | ⬜ Pending |
 | 7 | Inventory Management | ⬜ Pending |
 | 8–15 | Operations + Financial Flows | ⬜ Pending |
@@ -95,9 +104,11 @@ standard-book-store-erp/
 │   │   │   │       ├── 1700000001_create_audit_logs.cjs
 │   │   │   │       ├── 1700000002_create_staff_auth.cjs
 │   │   │   │       ├── 1700000003_create_branches.cjs
-│   │   │   │       └── 1700000004_create_config.cjs   ← Slice 1
+│   │   │   │       ├── 1700000004_create_config.cjs       ← Slice 1
+│   │   │   │       └── 1700000005_create_bank_accounts.cjs ← Slice 4
 │   │   │   ├── lib/
-│   │   │   │   └── errors.ts         # AppError class + error code constants
+│   │   │   │   ├── errors.ts         # AppError class + error code constants
+│   │   │   │   └── encryption.ts     # AES-256-GCM encrypt/decrypt/maskLast4  ← Slice 4
 │   │   │   ├── middleware/
 │   │   │   │   ├── auth.ts           # JWT verify → req.staff
 │   │   │   │   ├── rbac.ts           # requireRole(...roles) factory
@@ -115,6 +126,9 @@ standard-book-store-erp/
 │   │   │   │   └── config/               ← Slice 1
 │   │   │   │       ├── config.service.ts # getEffectiveConfig, set/delete system+branch config, typed helpers
 │   │   │   │       └── config.routes.ts  # GET/PUT /config/system, GET/PUT/DELETE /config/branches/:id/:key
+│   │   │   │   └── bankAccount/          ← Slice 4
+│   │   │   │       ├── bankAccount.service.ts # create/update/deactivate, import reconciliation, clearEntry
+│   │   │   │       └── bankAccount.routes.ts  # GET/POST/PUT /branches/:id/bank-accounts + /reconciliation
 │   │   │   ├── routes/
 │   │   │   │   └── auditLogs.ts      # GET /audit-logs (paginated, filtered)
 │   │   │   ├── types/
@@ -123,6 +137,7 @@ standard-book-store-erp/
 │   │   │   │   ├── auth.test.ts      # Auth + staff integration tests
 │   │   │   │   ├── branch.test.ts    # Branch CRUD integration tests
 │   │   │   │   ├── config.test.ts    # Config system + branch override tests  ← Slice 1
+│   │   │   │   ├── bankAccount.test.ts # Bank account CRUD + encryption + reconciliation ← Slice 4
 │   │   │   │   ├── health.test.ts    # Health endpoint test
 │   │   │   │   ├── setup.ts          # Global test setup
 │   │   │   │   └── helpers/
@@ -149,7 +164,8 @@ standard-book-store-erp/
 │       │   │   ├── BranchesPage.tsx  # Branch CRUD table
 │       │   │   ├── StaffPage.tsx     # Staff CRUD + inline role editor
 │       │   │   ├── AuditLogPage.tsx  # Real-time audit log (3s polling)
-│       │   │   └── SettingsPage.tsx  # Config settings (9 tabs, system + branch)  ← Slice 1
+│       │   │   ├── SettingsPage.tsx  # Config settings (9 tabs, system + branch)  ← Slice 1
+│       │   │   └── BankAccountsPage.tsx # Bank accounts + reconciliation UI  ← Slice 4
 │       │   ├── App.tsx               # Root: ThemeProvider → Layout → pages
 │       │   ├── main.tsx              # React entry point
 │       │   └── index.css             # Tailwind base + dark mode scrollbar
@@ -319,6 +335,7 @@ Copy `.env.example` to `.env` and fill in:
 | `JWT_SECRET` | Secret for signing JWTs | any long random string |
 | `NODE_ENV` | Environment | `development` |
 | `PORT` | API port (optional) | `3000` |
+| `COLUMN_ENCRYPTION_KEY` | 64-char hex key for AES-256-GCM column encryption | generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 
 ---
 
@@ -365,3 +382,15 @@ Copy `.env.example` to `.env` and fill in:
 | Method | Path | Roles | Description |
 |--------|------|-------|-------------|
 | GET | `/api/audit-logs` | Admin+ | Paginated audit log; filter by entityType |
+
+### Bank Accounts (Slice 4)
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/api/branches/:branchId/bank-accounts` | Admin+, Finance_Officer | List accounts (masked numbers) |
+| POST | `/api/branches/:branchId/bank-accounts` | Admin, Manager | Create account (encrypts at rest) |
+| GET | `/api/branches/:branchId/bank-accounts/:id` | Admin+, Finance_Officer | Get single account |
+| PUT | `/api/branches/:branchId/bank-accounts/:id` | Admin, Manager | Update account |
+| POST | `/api/branches/:branchId/bank-accounts/:id/deactivate` | Admin, Manager | Deactivate |
+| GET | `/api/branches/:branchId/reconciliation` | Admin+, Finance_Officer | List reconciliation entries |
+| POST | `/api/branches/:branchId/reconciliation/import` | Admin+, Finance_Officer | Import rows (batch, full rollback on error) |
+| PUT | `/api/branches/:branchId/reconciliation/:entryId` | Admin+, Finance_Officer | Clear entry (409 if already cleared) |

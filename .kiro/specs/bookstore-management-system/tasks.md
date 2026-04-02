@@ -254,17 +254,21 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 4. Manage Bank Accounts per Branch (Create, Encrypt, Deactivate)
+- [x] 4. Manage Bank Accounts per Branch (Create, Encrypt, Deactivate)
   > Register branch bank accounts with encrypted details. Required before any bank transfer payment can be recorded.
   > _Slice 4 = Requirement 4 | Design: design.md §3.6, §8.5_
 
-  - [ ] 4.1 Implement lib/encryption.ts (AES-256-GCM column encryption)
-    - `encrypt(plaintext: string): string` — IV + auth tag + ciphertext as base64
-    - `decrypt(ciphertext: string): string`
-    - Load key from `COLUMN_ENCRYPTION_KEY` env var (32-byte hex); throw on startup if missing
-    - _Requirements: 21.3_
+  - [x] 4.1 Implement lib/encryption.ts (AES-256-GCM column encryption)
 
-  - [ ] 4.2 Create DB migration: bank_accounts, bank_reconciliation
+  - [x] 4.2 Create DB migration: bank_accounts, bank_reconciliation
+
+  - [x] 4.3 Implement bankAccount.service.ts
+
+  - [x] 4.4 Implement bank account API routes
+
+  - [x] 4.5 Implement Bank Accounts list and Reconciliation UI
+
+  - [x] 4.6 Write integration tests for bank account service
     - `bank_accounts (id SERIAL PK, branch_id INTEGER REFERENCES branches(id), account_name TEXT NOT NULL, bank_name TEXT NOT NULL, account_number TEXT NOT NULL, iban TEXT, currency TEXT NOT NULL, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now())` + index on `(branch_id, is_active)`
     - `bank_reconciliation (id BIGSERIAL PK, bank_account_id INTEGER REFERENCES bank_accounts(id), payment_ref_id BIGINT, refund_ref_id BIGINT, amount NUMERIC(14,2) NOT NULL, direction TEXT NOT NULL CHECK (direction IN ('in','out')), status TEXT DEFAULT 'uncleared' CHECK (status IN ('uncleared','cleared','unmatched')), statement_date DATE, notes TEXT, created_at TIMESTAMPTZ DEFAULT now())` + index on `(bank_account_id, status)`
     - _Requirements: 4_

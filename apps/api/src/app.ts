@@ -8,6 +8,7 @@ import auditLogsRouter from './routes/auditLogs.js';
 import authRouter from './modules/auth/auth.routes.js';
 import branchRouter from './modules/branch/branch.routes.js';
 import configRouter from './modules/config/config.routes.js';
+import bankAccountRouter from './modules/bankAccount/bankAccount.routes.js';
 
 export function createApp() {
   const app = express();
@@ -23,6 +24,7 @@ export function createApp() {
   app.use('/api', authRouter);
   app.use('/api', branchRouter);
   app.use('/api', configRouter);
+  app.use('/api', bankAccountRouter);
   app.use('/api', auditLogsRouter);
 
   // 404 handler

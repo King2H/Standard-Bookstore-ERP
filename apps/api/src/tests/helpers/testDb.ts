@@ -68,3 +68,16 @@ export async function cleanTestBranches(namePrefix: string): Promise<void> {
 export async function cleanBranchConfig(branchId: number): Promise<void> {
   await db.query(`DELETE FROM branch_config WHERE branch_id = $1`, [branchId]);
 }
+
+/**
+ * Cleans bank_accounts and bank_reconciliation rows for a specific branch.
+ */
+export async function cleanBankAccounts(branchId: number): Promise<void> {
+  await db.query(
+    `DELETE FROM bank_reconciliation WHERE bank_account_id IN (
+       SELECT id FROM bank_accounts WHERE branch_id = $1
+     )`,
+    [branchId],
+  );
+  await db.query(`DELETE FROM bank_accounts WHERE branch_id = $1`, [branchId]);
+}
