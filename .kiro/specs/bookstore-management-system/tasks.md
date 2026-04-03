@@ -175,6 +175,20 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - Seed data used in all tests via `testDb` helper
     - _Requirements: 2, 3_
 
+  - [x] 0B.9 Implement Staff Profile + Security (self-service, all roles; admin security controls) ✅
+    - `GET /api/staff/me` — any role; returns own profile with security fields (mustChangePassword, lastLoginAt, passwordChangedAt, isLocked)
+    - `PUT /api/staff/me/password` — any role; verifies current password, enforces complexity, clears must_change_password flag, sets password_changed_at
+    - `GET /api/staff/:id` — Admin+; full staff detail including security status
+    - `POST /api/staff/:id/reset-password` — Admin+; sets temp password, forces must_change_password=true, revokes all tokens
+    - `POST /api/staff/:id/unlock` — Admin+; clears lockout and resets failed attempt counter
+    - Migration `1700000006_staff_security`: adds failed_login_attempts, locked_until, must_change_password, last_login_at, password_changed_at to staff table
+    - Login enforces account lockout after N failed attempts (configurable via system_config), resets on success, tracks last_login_at
+    - 3 new system_config security keys: max_failed_login_attempts (5), account_lockout_minutes (30), password_expiry_days (0)
+    - ProfilePage: avatar, account details, last login, password changed date, branch-role badges, must-change-password warning banner, password change form with confirm + complexity validation
+    - StaffPage: 🔒 Locked and ⚠ Must reset status badges; unlock icon button (shown when locked); reset-password icon button
+    - SettingsPage: new Security tab with the 3 policy keys
+    - _Requirements: 2 (RBAC matrix: all roles R on own profile; Admin security controls)_
+
   **Definition of Done:**
   - `POST /api/auth/login` returns a valid JWT
   - `GET /api/branches` returns 401 without token, 200 with valid token

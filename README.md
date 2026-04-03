@@ -4,7 +4,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase: Phase 1 In Progress — Slice 4 (Bank Account Management) Complete**
+**Phase: Phase 1 In Progress — Slice 4 (Bank Account Management) + Staff Security Complete**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -70,6 +70,20 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 - Bank Accounts UI: two-panel layout — accounts table + reconciliation panel, branch selector, create form, deactivate, import, clear entries, status filter, pagination
 - 10 integration tests — all passing; account numbers verified encrypted at rest
 
+**Staff Profile & Security** ✅
+- DB migration `1700000006_staff_security`: adds `failed_login_attempts`, `locked_until`, `must_change_password`, `last_login_at`, `password_changed_at` to `staff` table
+- 3 new system_config security policy keys: `max_failed_login_attempts` (5), `account_lockout_minutes` (30), `password_expiry_days` (0)
+- Login enforces account lockout after N failed attempts, resets counter on success, tracks `last_login_at`
+- `GET /api/staff/me` — any role; own profile with security fields
+- `PUT /api/staff/me/password` — any role; verifies current password, enforces complexity, clears `must_change_password`
+- `GET /api/staff/:id` — Admin+; full staff detail including security status
+- `POST /api/staff/:id/reset-password` — Admin+; sets temp password, forces `must_change_password=true`, revokes all tokens
+- `POST /api/staff/:id/unlock` — Admin+; clears lockout, resets failed attempt counter
+- ProfilePage: avatar, account details, last login, password changed date, branch-role badges, must-change-password warning banner, password change form
+- StaffPage: 🔒 Locked and ⚠ Must reset status badges; unlock and reset-password icon buttons
+- SettingsPage: Security tab with the 3 policy keys
+- 9 integration tests — all passing
+
 ---
 
 ## Domain Coverage (17 Vertical Slices)
@@ -105,7 +119,8 @@ standard-book-store-erp/
 │   │   │   │       ├── 1700000002_create_staff_auth.cjs
 │   │   │   │       ├── 1700000003_create_branches.cjs
 │   │   │   │       ├── 1700000004_create_config.cjs       ← Slice 1
-│   │   │   │       └── 1700000005_create_bank_accounts.cjs ← Slice 4
+│   │   │   │       ├── 1700000005_create_bank_accounts.cjs ← Slice 4
+│   │   │   │       └── 1700000006_staff_security.cjs       ← Staff security
 │   │   │   ├── lib/
 │   │   │   │   ├── errors.ts         # AppError class + error code constants
 │   │   │   │   └── encryption.ts     # AES-256-GCM encrypt/decrypt/maskLast4  ← Slice 4
@@ -353,10 +368,15 @@ Copy `.env.example` to `.env` and fill in:
 |--------|------|-------|-------------|
 | GET | `/api/staff` | Admin+ | List staff with branch-role assignments |
 | POST | `/api/staff` | Admin+ | Create staff account |
+| GET | `/api/staff/me` | Any | Own profile (security fields included) |
+| PUT | `/api/staff/me/password` | Any | Change own password (clears must_change_password) |
+| GET | `/api/staff/:id` | Admin+ | Full staff detail including security status |
 | PUT | `/api/staff/:id` | Admin+ | Update full name |
 | POST | `/api/staff/:id/deactivate` | Admin+ | Deactivate (revokes tokens) |
 | POST | `/api/staff/:id/reactivate` | Admin+ | Reactivate |
 | PUT | `/api/staff/:id/roles` | Admin+ | Full replace branch-role assignments |
+| POST | `/api/staff/:id/reset-password` | Admin+ | Set temp password + force must_change_password |
+| POST | `/api/staff/:id/unlock` | Admin+ | Clear lockout + reset failed attempt counter |
 
 ### Branches
 | Method | Path | Auth | Description |

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { api, getAccessToken } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 
-interface StaffRole { branchId: number; role: string }
+interface StaffRole { branchId: number; branchName?: string; role: string }
 interface StaffMember {
   id: number;
   username: string;
@@ -14,6 +14,10 @@ interface StaffMember {
   isActive: boolean;
   createdAt: string;
   roles: StaffRole[];
+  failedLoginAttempts?: number;
+  lockedUntil?: string | null;
+  mustChangePassword?: boolean;
+  lastLoginAt?: string | null;
 }
 interface Branch { id: number; name: string; isActive: boolean }
 
@@ -95,6 +99,25 @@ export default function StaffPage() {
       showToast('Branch & role assignments updated');
     },
     onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to update assignments', 'error'); },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ id, temporaryPassword }: { id: number; temporaryPassword: string }) =>
+      api.post(`/staff/${id}/reset-password`, { temporaryPassword }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      showToast('Password reset. Staff must change password on next login.');
+    },
+    onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to reset password', 'error'); },
+  });
+
+  const unlockMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/staff/${id}/unlock`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      showToast('Account unlocked');
+    },
+    onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to unlock account', 'error'); },
   });
 
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<CreateForm>({
@@ -232,13 +255,14 @@ export default function StaffPage() {
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{staff.username}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{staff.fullName}</td>
 
+                  {/* Branch column */}
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {staff.roles.map((r, i) => {
-                        const branch = branches.find(b => b.id === r.branchId);
+                        const displayName = r.branchName ?? `Branch ${r.branchId}`;
                         return (
                           <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                            {branch?.name ?? `Branch ${r.branchId}`}
+                            {displayName}
                           </span>
                         );
                       })}
@@ -265,13 +289,25 @@ export default function StaffPage() {
                   </td>
 
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      staff.isActive
-                        ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                    }`}>
-                      {staff.isActive ? 'Active' : 'Inactive'}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        staff.isActive
+                          ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                      }`}>
+                        {staff.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      {staff.lockedUntil && new Date(staff.lockedUntil) > new Date() && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400">
+                          🔒 Locked
+                        </span>
+                      )}
+                      {staff.mustChangePassword && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400">
+                          ⚠ Must reset
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   <td className="px-4 py-3">
@@ -285,6 +321,29 @@ export default function StaffPage() {
                           </svg>
                         </button>
                       )}
+                      {/* Unlock button — shown when account is locked */}
+                      {staff.lockedUntil && new Date(staff.lockedUntil) > new Date() && (
+                        <button type="button" title="Unlock account"
+                          onClick={() => unlockMutation.mutate(staff.id)}
+                          disabled={unlockMutation.isPending}
+                          className="text-gray-400 dark:text-gray-500 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors disabled:opacity-40">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      )}
+                      {/* Reset password button */}
+                      <button type="button" title="Reset password (staff must change on next login)"
+                        onClick={() => {
+                          const tmp = prompt(`Set temporary password for ${staff.username} (min 10 chars, upper+lower+digit+special):`);
+                          if (tmp) resetPasswordMutation.mutate({ id: staff.id, temporaryPassword: tmp });
+                        }}
+                        disabled={resetPasswordMutation.isPending}
+                        className="text-gray-400 dark:text-gray-500 hover:text-orange-600 dark:hover:text-orange-400 transition-colors disabled:opacity-40">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                      </button>
                       {staff.isActive ? (
                         <button type="button" title="Deactivate staff"
                           onClick={() => deactivateMutation.mutate(staff.id)}

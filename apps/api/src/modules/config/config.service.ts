@@ -42,6 +42,10 @@ const CONFIG_SCHEMA: Record<string, { type: 'string' | 'number' | 'boolean' | 'j
   exchange_cash_adjustment_allowed: { type: 'boolean' },
   notification_prefs:               { type: 'jsonb' },
   allowed_payment_methods:          { type: 'jsonb' },
+  // Security policy keys (added in migration 1700000006)
+  max_failed_login_attempts:        { type: 'number' },
+  account_lockout_minutes:          { type: 'number' },
+  password_expiry_days:             { type: 'number' },
 };
 
 function validateConfigValue(key: string, value: unknown): void {

@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import bcrypt from 'bcrypt';
 import * as authService from './auth.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
@@ -49,7 +50,7 @@ router.post('/auth/login', async (req: Request, res: Response, next: NextFunctio
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn });
+    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn, mustChangePassword: result.mustChangePassword });
   } catch (err) {
     next(err);
   }
@@ -86,6 +87,117 @@ router.post('/auth/refresh', async (req: Request, res: Response, next: NextFunct
   }
 });
 
+// ── GET /api/staff/me ─────────────────────────────────────────────────────────
+// Any authenticated staff member can view their own profile
+
+router.get(
+  '/staff/me',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const staffId = req.staff!.staffId;
+
+      const result = await db.query(
+        `SELECT s.id, s.username, s.full_name, s.is_active, s.created_at,
+                s.must_change_password, s.last_login_at, s.password_changed_at,
+                s.failed_login_attempts, s.locked_until,
+                COALESCE(json_agg(
+                  json_build_object('branchId', sbr.branch_id, 'branchName', b.name, 'role', sbr.role)
+                ) FILTER (WHERE sbr.staff_id IS NOT NULL), '[]') AS roles
+         FROM staff s
+         LEFT JOIN staff_branch_roles sbr ON sbr.staff_id = s.id
+         LEFT JOIN branches b ON b.id = sbr.branch_id
+         WHERE s.id = $1
+         GROUP BY s.id`,
+        [staffId],
+      );
+
+      if (result.rows.length === 0) {
+        return next(new ValidationError('Staff not found'));
+      }
+
+      const r = result.rows[0];
+      res.json({
+        id: r.id,
+        username: r.username,
+        fullName: r.full_name,
+        isActive: r.is_active,
+        createdAt: r.created_at,
+        mustChangePassword: r.must_change_password,
+        lastLoginAt: r.last_login_at,
+        passwordChangedAt: r.password_changed_at,
+        isLocked: r.locked_until && new Date(r.locked_until) > new Date(),
+        roles: r.roles,
+        currentRole: req.staff!.role,
+        currentBranchId: req.staff!.branchId,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── PUT /api/staff/me/password ────────────────────────────────────────────────
+// Any authenticated staff member can change their own password
+
+router.put(
+  '/staff/me/password',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const staffId = req.staff!.staffId;
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || typeof currentPassword !== 'string') {
+        throw new ValidationError('currentPassword is required');
+      }
+      if (!newPassword || typeof newPassword !== 'string') {
+        throw new ValidationError('newPassword is required');
+      }
+
+      // Validate new password complexity
+      const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$/;
+      if (!PASSWORD_REGEX.test(newPassword)) {
+        throw new ValidationError(
+          'New password must be at least 10 characters and contain uppercase, lowercase, digit, and special character',
+        );
+      }
+
+      // Verify current password
+      const staffResult = await db.query(
+        `SELECT password_hash FROM staff WHERE id = $1`,
+        [staffId],
+      );
+      if (staffResult.rows.length === 0) {
+        throw new ValidationError('Staff not found');
+      }
+
+      const valid = await bcrypt.compare(currentPassword, staffResult.rows[0].password_hash);
+      if (!valid) {
+        throw new BusinessError('INVALID_CURRENT_PASSWORD', 'Current password is incorrect');
+      }
+
+      // Hash and save new password
+      const newHash = await bcrypt.hash(newPassword, 12);
+      await db.query(
+        `UPDATE staff SET password_hash = $1, must_change_password = false, password_changed_at = now() WHERE id = $2`,
+        [newHash, staffId],
+      );
+
+      // Audit log
+      await db.query(
+        `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
+         VALUES ($1, $2, 'UPDATE', 'staff', $3, $4)`,
+        [staffId, req.staff!.role, String(staffId), JSON.stringify({ action: 'password_changed' })],
+      );
+
+      res.json({ message: 'Password updated successfully' });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // ── GET /api/staff ────────────────────────────────────────────────────────────
 
 router.get(
@@ -110,11 +222,13 @@ router.get(
 
       const result = await db.query(
         `SELECT s.id, s.username, s.full_name, s.is_active, s.created_at,
+                s.must_change_password, s.locked_until, s.failed_login_attempts,
                 COALESCE(json_agg(
-                  json_build_object('branchId', sbr.branch_id, 'role', sbr.role)
+                  json_build_object('branchId', sbr.branch_id, 'branchName', b.name, 'role', sbr.role)
                 ) FILTER (WHERE sbr.staff_id IS NOT NULL), '[]') AS roles
          FROM staff s
          LEFT JOIN staff_branch_roles sbr ON sbr.staff_id = s.id
+         LEFT JOIN branches b ON b.id = sbr.branch_id
          ${branchFilter}
          GROUP BY s.id
          ORDER BY s.username ASC
@@ -135,6 +249,9 @@ router.get(
           fullName: r.full_name,
           isActive: r.is_active,
           createdAt: r.created_at,
+          mustChangePassword: r.must_change_password,
+          lockedUntil: r.locked_until,
+          failedLoginAttempts: r.failed_login_attempts,
           roles: r.roles,
         })),
         total: parseInt(countResult.rows[0].count, 10),
@@ -298,6 +415,64 @@ router.put(
 
       await authService.assignRoles(staffId, parsed.data);
       res.json({ message: 'Roles updated' });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── GET /api/staff/:id ────────────────────────────────────────────────────────
+// Admin+ can view full staff detail including security status
+
+router.get(
+  '/staff/:id',
+  authenticate,
+  requireRole('Super_Admin', 'Admin', 'Manager'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const staffId = parseInt(req.params.id as string, 10);
+      const staff = await authService.getStaffById(staffId);
+      res.json(staff);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── POST /api/staff/:id/reset-password ────────────────────────────────────────
+// Admin sets a temporary password; staff must change on next login
+
+router.post(
+  '/staff/:id/reset-password',
+  authenticate,
+  requireRole('Super_Admin', 'Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const staffId = parseInt(req.params.id as string, 10);
+      const { temporaryPassword } = req.body;
+      if (!temporaryPassword || typeof temporaryPassword !== 'string') {
+        throw new ValidationError('temporaryPassword is required');
+      }
+      await authService.adminResetPassword(staffId, temporaryPassword, req.staff!);
+      res.json({ message: 'Password reset. Staff must change password on next login.' });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── POST /api/staff/:id/unlock ────────────────────────────────────────────────
+// Admin clears lockout and resets failed attempt counter
+
+router.post(
+  '/staff/:id/unlock',
+  authenticate,
+  requireRole('Super_Admin', 'Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const staffId = parseInt(req.params.id as string, 10);
+      await authService.unlockAccount(staffId, req.staff!);
+      res.json({ message: 'Account unlocked' });
     } catch (err) {
       next(err);
     }

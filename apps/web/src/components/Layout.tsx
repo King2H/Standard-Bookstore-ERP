@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTheme } from '../lib/theme.js';
 import { logout } from '../lib/auth.js';
 
-type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts';
+type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'profile';
 type Role = string;
 
 interface NavItem {
@@ -97,6 +97,19 @@ export default function Layout({ currentPage, onNavigate, onLogout, userRole, ch
 
         {/* Sidebar footer */}
         <div className="p-2 border-t border-gray-200 dark:border-gray-800 space-y-1">
+          {/* My Profile */}
+          <button
+            onClick={() => onNavigate('profile')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150
+              ${currentPage === 'profile'
+                ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
+              }`}
+          >
+            <span className="text-base flex-shrink-0">👤</span>
+            {sidebarOpen && <span className="animate-fade-in truncate">My Profile</span>}
+          </button>
+
           {/* Dark mode toggle */}
           <button
             onClick={toggleTheme}
