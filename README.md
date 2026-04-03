@@ -84,9 +84,16 @@ A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing phy
 - SettingsPage: Security tab with the 3 policy keys
 - 9 integration tests — all passing
 
----
+**Task 5 — Location Management** ✅
+- DB migration: `locations` table with `UNIQUE (branch_id, name)` + partial unique index `WHERE is_default_fulfillment = true` (enforces at most one default per branch at DB level)
+- Seed: one default "Main Floor" location inserted for every existing branch on migration
+- `location.service.ts`: `listLocations`, `createLocation` (409 on duplicate name), `renameLocation` (409 on duplicate), `setDefaultLocation` (atomic: clears all → sets one), `deleteLocation` (409 DEPENDENCY_CONFLICT if inventory/orders exist — forward-compatible table existence check)
+- API routes: 5 endpoints under `/api/branches/:branchId/locations`; RBAC: any authenticated for reads, Admin/Manager for writes
+- LocationsPage UI: branch selector, location table with default badge, inline rename, set-default button, delete with confirmation, dependency error toast
+- Locations nav item added to sidebar (visible to all roles)
+- 17 integration tests — all passing; concurrency test verifies exactly one default after parallel set-default calls
 
-## Domain Coverage (17 Vertical Slices)
+---
 
 | Slice | Domain | Status |
 |-------|--------|--------|
@@ -94,7 +101,7 @@ A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing phy
 | 2+3 | Staff & Auth + Branch | ✅ Done |
 | 1 | Configuration & System Settings | ✅ Done |
 | 4 | Bank Account Management | ✅ Done |
-| 5 | Location Management | ⬜ Next |
+| 5 | Location Management | ✅ Done |
 | 6 | Catalog Management | ⬜ Pending |
 | 7 | Inventory Management | ⬜ Pending |
 | 8–15 | Operations + Financial Flows | ⬜ Pending |
@@ -403,7 +410,14 @@ Copy `.env.example` to `.env` and fill in:
 |--------|------|-------|-------------|
 | GET | `/api/audit-logs` | Admin+ | Paginated audit log; filter by entityType |
 
-### Bank Accounts (Slice 4)
+### Locations (Slice 5)
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/api/branches/:branchId/locations` | Any | List locations for branch |
+| POST | `/api/branches/:branchId/locations` | Admin, Manager | Create location (409 on duplicate name) |
+| PUT | `/api/branches/:branchId/locations/:id` | Admin, Manager | Rename location |
+| PUT | `/api/branches/:branchId/locations/:id/set-default` | Admin, Manager | Set as default fulfillment (atomic) |
+| DELETE | `/api/branches/:branchId/locations/:id` | Admin, Manager | Delete (409 if inventory/orders exist) |
 | Method | Path | Roles | Description |
 |--------|------|-------|-------------|
 | GET | `/api/branches/:branchId/bank-accounts` | Admin+, Finance_Officer | List accounts (masked numbers) |

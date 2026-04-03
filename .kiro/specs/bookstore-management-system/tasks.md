@@ -324,24 +324,24 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 5. Manage Locations (Create, Rename, Assign Default Fulfillment)
+- [x] 5. Manage Locations (Create, Rename, Assign Default Fulfillment)
   > Define stock areas within each branch. Required before inventory can be tracked.
   > _Slice 5 = Requirement 5 | Design: design.md §3.7_
 
-  - [ ] 5.1 Create DB migration: locations
+  - [x] 5.1 Create DB migration: locations
     - `locations (id SERIAL PK, branch_id INTEGER REFERENCES branches(id), name TEXT NOT NULL, is_default_fulfillment BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now(), UNIQUE (branch_id, name))`
     - Index on `branch_id`
     - Seed: insert one default location per seeded branch
     - _Requirements: 5_
 
-  - [ ] 5.2 Implement location.service.ts
+  - [x] 5.2 Implement location.service.ts
     - `create(branchId, name, staffCtx)` — validate branch is_active; INSERT locations; INSERT audit_logs; 409 DUPLICATE_LOCATION_NAME on unique violation
     - `rename(id, name, staffCtx)` — UPDATE locations.name; INSERT audit_logs; 409 on duplicate name within branch
     - `setDefault(id, staffCtx)` — BEGIN; UPDATE locations SET is_default_fulfillment=false WHERE branch_id=$branchId; UPDATE SET is_default_fulfillment=true WHERE id=$id; INSERT audit_logs; COMMIT
     - `delete(id, staffCtx)` — check inventory.quantity > 0 or open orders assigned; 409 DEPENDENCY_CONFLICT; DELETE + INSERT audit_logs if clear
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
 
-  - [ ] 5.3 Implement location API routes
+  - [x] 5.3 Implement location API routes
     - `GET /api/branches/:branchId/locations` — any authenticated
     - `POST /api/branches/:branchId/locations` — Admin/Manager; 403 for other roles
     - `PUT /api/branches/:branchId/locations/:id` — Admin/Manager; rename
@@ -349,12 +349,12 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `PUT /api/branches/:branchId/locations/:id/set-default` — Admin/Manager
     - _Requirements: 5.7_
 
-  - [ ] 5.4 Implement Location list UI per branch
+  - [x] 5.4 Implement Location list UI per branch
     - Location list: table with name, is_default_fulfillment badge, inventory count; inline rename; set-default button; delete with dependency guard
     - TanStack Query hooks: `useLocations`, `useCreateLocation`, `useRenameLocation`, `useSetDefaultLocation`, `useDeleteLocation`
     - _Requirements: 5_
 
-  - [ ] 5.5 Write integration tests for location service
+  - [x] 5.5 Write integration tests for location service
     - Create location, duplicate name (409), rename, set default (clears previous default), delete with inventory (409), delete clean location
     - _Requirements: 5_
 
