@@ -1,6 +1,6 @@
 # Bookstore Management System (BMS)
 
-A multi-user, multi-role, multi-branch ERP platform for managing physical bookstore operations.
+A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing physical bookstore operations.
 
 ## Project Status
 

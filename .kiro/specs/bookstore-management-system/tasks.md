@@ -2,7 +2,7 @@
 
 ## Overview
 
-Risk-driven, vertically-sliced execution roadmap for a solo developer building a production-grade
+Risk-driven, vertically-sliced execution roadmap for a solo developer building a complete production-grade
 Bookstore ERP on the PERN stack (PostgreSQL + Express + React + Node.js) with Docker.
 
 **Guiding principles:**
