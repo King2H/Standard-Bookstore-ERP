@@ -1,10 +1,10 @@
-# Bookstore Management System (BMS)
+﻿# Bookstore Management System (BMS)
 
-A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing physical bookstore operations.
+A multi-user, multi-role, multi-branch ERP platform for managing physical bookstore operations.
 
 ## Project Status
 
-**Phase: Phase 1 In Progress — Slice 4 (Bank Account Management) + Staff Security Complete**
+**Phase: Phase 1 — Slices 0–5 Complete. Next: Slice 6 (Catalog Management)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -23,11 +23,11 @@ A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing phy
 - Docker Compose: API + PostgreSQL 16
 - node-pg-migrate with `.cjs` migration files (required for ESM monorepo)
 - DB migrations: `audit_logs`, `staff`, `staff_branch_roles`, `refresh_tokens`, `branches`
-- Express middleware: JWT auth, RBAC (`requireRole`), branch context, request ID, structured JSON logging, error handler
+- Express middleware: JWT auth, RBAC (`requireRole`), branch context, request ID, structured JSON logging, global error handler
 - `GET /health` endpoint
 - Vitest + Supertest integration test infrastructure (prefix-based cleanup — seed data never touched)
 
-**Task 0B — Auth + Branch Management (First Vertical Slice)** ✅
+**Task 0B — Auth + Branch Management** ✅
 - Full JWT authentication: login (branch dropdown), logout, token refresh
 - 7-role RBAC: `Super_Admin`, `Admin`, `Manager`, `Finance_Officer`, `Stock_Clerk`, `Sales`, `Purchasor`
 - Staff management: create, deactivate, reactivate, branch-role assignment (full replace)
@@ -36,6 +36,20 @@ A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing phy
 - Audit Log viewer UI: real-time (3s polling), expandable details, entity filter
 - Toast notifications for all CRUD actions
 - Role-based UI: nav items and action buttons hidden based on JWT role
+
+**Task 0B.9 — Staff Profile & Security** ✅
+- DB migration `1700000006_staff_security`: `failed_login_attempts`, `locked_until`, `must_change_password`, `last_login_at`, `password_changed_at`
+- 3 system_config security keys: `max_failed_login_attempts` (5), `account_lockout_minutes` (30), `password_expiry_days` (0)
+- Login enforces account lockout after N failed attempts; resets on success; tracks `last_login_at`
+- `GET /api/staff/me` — own profile with security fields + location access scope
+- `PUT /api/staff/me/password` — verifies current password, enforces complexity, clears `must_change_password`
+- `GET /api/staff/:id` — Admin+; full staff detail including security status
+- `POST /api/staff/:id/reset-password` — Admin+; sets temp password, forces `must_change_password=true`, revokes all tokens
+- `POST /api/staff/:id/unlock` — Admin+; clears lockout, resets failed attempt counter
+- ProfilePage: avatar, account details, last login, password changed date, branch-role badges, location access scope, must-change-password banner, password change form
+- StaffPage: 🔒 Locked and ⚠ Must reset status badges; unlock and reset-password icon buttons
+- SettingsPage: Security tab with the 3 policy keys
+- 9 integration tests — all passing
 
 **UI Polish** ✅
 - Dark / light mode with system preference detection and `localStorage` persistence
@@ -58,42 +72,36 @@ A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing phy
 - 15 typed helper methods for use by future service modules (`getPOApprovalThreshold`, `getLoyaltyAccrualRate`, `isNegativeStockAllowed`, etc.)
 - API routes: `GET/PUT /api/config/system`, `GET/PUT/DELETE /api/config/branches/:branchId/:key`
 - RBAC: Super_Admin only for system config writes; Admin/Manager for branch overrides
-- Settings UI: 9-tab page (General, Discounts, Inventory, Procurement, Returns, Payments, Loyalty, Exchange, Notifications) with side-by-side system defaults + branch overrides panels, inline editing, source badges
-- 13 integration tests — all passing; seed data preserved
+- Settings UI: 10-tab page (General, Discounts, Inventory, Procurement, Returns, Payments, Loyalty, Exchange, Notifications, Security)
+- 13 integration tests — all passing
 
 **Task 4 — Bank Account Management** ✅
 - `lib/encryption.ts`: AES-256-GCM column encryption (`encrypt`, `decrypt`, `maskLast4`) — key from `COLUMN_ENCRYPTION_KEY` env var
 - DB migration: `bank_accounts` (encrypted account_number + IBAN) + `bank_reconciliation` tables
-- `bankAccount.service.ts`: create (encrypts at rest), update (re-encrypts if changed), deactivate, list (always masked), `validateBankAccountForBranch` (used by future POS/Orders), `importReconciliation` (batch, full rollback on error), `clearEntry` (409 if already cleared)
-- API routes: 7 endpoints under `/api/branches/:branchId/bank-accounts` and `/api/branches/:branchId/reconciliation`
+- `bankAccount.service.ts`: create (encrypts at rest), update (re-encrypts if changed), deactivate, list (always masked), `importReconciliation` (batch, full rollback on error), `clearEntry` (409 if already cleared)
+- API routes: 8 endpoints under `/api/branches/:branchId/bank-accounts` and `/api/branches/:branchId/reconciliation`
 - RBAC: Admin/Manager/Finance_Officer read; Admin/Manager write; Finance_Officer reconcile
 - Bank Accounts UI: two-panel layout — accounts table + reconciliation panel, branch selector, create form, deactivate, import, clear entries, status filter, pagination
 - 10 integration tests — all passing; account numbers verified encrypted at rest
 
-**Staff Profile & Security** ✅
-- DB migration `1700000006_staff_security`: adds `failed_login_attempts`, `locked_until`, `must_change_password`, `last_login_at`, `password_changed_at` to `staff` table
-- 3 new system_config security policy keys: `max_failed_login_attempts` (5), `account_lockout_minutes` (30), `password_expiry_days` (0)
-- Login enforces account lockout after N failed attempts, resets counter on success, tracks `last_login_at`
-- `GET /api/staff/me` — any role; own profile with security fields
-- `PUT /api/staff/me/password` — any role; verifies current password, enforces complexity, clears `must_change_password`
-- `GET /api/staff/:id` — Admin+; full staff detail including security status
-- `POST /api/staff/:id/reset-password` — Admin+; sets temp password, forces `must_change_password=true`, revokes all tokens
-- `POST /api/staff/:id/unlock` — Admin+; clears lockout, resets failed attempt counter
-- ProfilePage: avatar, account details, last login, password changed date, branch-role badges, must-change-password warning banner, password change form
-- StaffPage: 🔒 Locked and ⚠ Must reset status badges; unlock and reset-password icon buttons
-- SettingsPage: Security tab with the 3 policy keys
-- 9 integration tests — all passing
-
-**Task 5 — Location Management** ✅
-- DB migration: `locations` table with `UNIQUE (branch_id, name)` + partial unique index `WHERE is_default_fulfillment = true` (enforces at most one default per branch at DB level)
+**Task 5 — Location Management + Access Control** ✅
+- DB migration `1700000007_create_locations`: `locations` table with `UNIQUE (branch_id, name)` + partial unique index `WHERE is_default_fulfillment = true` (DB-enforced single default per branch)
+- DB migration `1700000008_create_staff_locations`: `staff_locations` junction table for optional location-level access control
 - Seed: one default "Main Floor" location inserted for every existing branch on migration
-- `location.service.ts`: `listLocations`, `createLocation` (409 on duplicate name), `renameLocation` (409 on duplicate), `setDefaultLocation` (atomic: clears all → sets one), `deleteLocation` (409 DEPENDENCY_CONFLICT if inventory/orders exist — forward-compatible table existence check)
-- API routes: 5 endpoints under `/api/branches/:branchId/locations`; RBAC: any authenticated for reads, Admin/Manager for writes
-- LocationsPage UI: branch selector, location table with default badge, inline rename, set-default button, delete with confirmation, dependency error toast
-- Locations nav item added to sidebar (visible to all roles)
-- 17 integration tests — all passing; concurrency test verifies exactly one default after parallel set-default calls
+- `location.service.ts`: `listLocations`, `createLocation` (409 on duplicate name), `renameLocation`, `setDefaultLocation` (atomic), `deleteLocation` (409 DEPENDENCY_CONFLICT if inventory/orders exist)
+- `locationAccess.service.ts`: `getAccessibleLocations`, `assertLocationAccess`, `assignLocationsToStaff`, `getStaffLocationAssignments`
+- **Location access model**: Staff with no assignments → full branch access (fallback). Staff with explicit assignments → restricted to those locations only. Enforced at API layer, not just UI.
+- `GET /api/branches/:branchId/locations` — access-aware: Admin/Manager see all; restricted staff see only their assigned locations; response includes `accessMode: 'full' | 'restricted'`
+- `GET /api/staff/me` — includes `locationAccess: { mode, locations[] }` for current session scope
+- API routes: 5 location CRUD endpoints + 2 staff-location assignment endpoints
+- LocationsPage UI: branch selector, location table, inline rename, set-default, delete with confirmation; restricted access banner shown to restricted staff
+- StaffPage: 📍 location access icon per staff row → inline LocationAccessPanel with checkbox selection, fallback mode indicator
+- ProfilePage: "Location Access (Current Session)" section showing scope (Full Access / Restricted with location list)
+- 17 location CRUD tests + 14 location access control tests — all passing (80 total across 8 test files)
 
 ---
+
+## Domain Coverage (17 Vertical Slices)
 
 | Slice | Domain | Status |
 |-------|--------|--------|
@@ -101,192 +109,11 @@ A multi-user, multi-role, multi-branch/multi-stock ERP platform for managing phy
 | 2+3 | Staff & Auth + Branch | ✅ Done |
 | 1 | Configuration & System Settings | ✅ Done |
 | 4 | Bank Account Management | ✅ Done |
-| 5 | Location Management | ✅ Done |
-| 6 | Catalog Management | ⬜ Pending |
+| 5 | Location Management + Access Control | ✅ Done |
+| 6 | Catalog Management | ⬜ Next |
 | 7 | Inventory Management | ⬜ Pending |
 | 8–15 | Operations + Financial Flows | ⬜ Pending |
 | 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
-
----
-
-## Folder Structure
-
-```
-standard-book-store-erp/
-├── apps/
-│   ├── api/                          # Express API (Node.js 20 + TypeScript)
-│   │   ├── scripts/
-│   │   │   └── reseed.mjs            # Restores seed data if wiped (npm run reseed)
-│   │   ├── src/
-│   │   │   ├── db/
-│   │   │   │   ├── index.ts          # pg.Pool singleton + checkDbConnection()
-│   │   │   │   ├── database.json     # node-pg-migrate connection config
-│   │   │   │   └── migrations/       # .cjs migration files (ESM-safe)
-│   │   │   │       ├── 1700000001_create_audit_logs.cjs
-│   │   │   │       ├── 1700000002_create_staff_auth.cjs
-│   │   │   │       ├── 1700000003_create_branches.cjs
-│   │   │   │       ├── 1700000004_create_config.cjs       ← Slice 1
-│   │   │   │       ├── 1700000005_create_bank_accounts.cjs ← Slice 4
-│   │   │   │       └── 1700000006_staff_security.cjs       ← Staff security
-│   │   │   ├── lib/
-│   │   │   │   ├── errors.ts         # AppError class + error code constants
-│   │   │   │   └── encryption.ts     # AES-256-GCM encrypt/decrypt/maskLast4  ← Slice 4
-│   │   │   ├── middleware/
-│   │   │   │   ├── auth.ts           # JWT verify → req.staff
-│   │   │   │   ├── rbac.ts           # requireRole(...roles) factory
-│   │   │   │   ├── branchCtx.ts      # X-Branch-Id header validation
-│   │   │   │   ├── errorHandler.ts   # Global error → { error, message, requestId }
-│   │   │   │   ├── logger.ts         # Structured JSON request logging
-│   │   │   │   └── requestId.ts      # UUID injection per request
-│   │   │   ├── modules/
-│   │   │   │   ├── auth/
-│   │   │   │   │   ├── auth.service.ts   # login, logout, refresh, createStaff, assignRoles
-│   │   │   │   │   └── auth.routes.ts    # POST /auth/login|logout|refresh, GET/POST /staff
-│   │   │   │   ├── branch/
-│   │   │   │   │   ├── branch.service.ts # create, update, deactivate, reactivate, delete
-│   │   │   │   │   └── branch.routes.ts  # GET/POST/PUT/DELETE /branches
-│   │   │   │   └── config/               ← Slice 1
-│   │   │   │       ├── config.service.ts # getEffectiveConfig, set/delete system+branch config, typed helpers
-│   │   │   │       └── config.routes.ts  # GET/PUT /config/system, GET/PUT/DELETE /config/branches/:id/:key
-│   │   │   │   └── bankAccount/          ← Slice 4
-│   │   │   │       ├── bankAccount.service.ts # create/update/deactivate, import reconciliation, clearEntry
-│   │   │   │       └── bankAccount.routes.ts  # GET/POST/PUT /branches/:id/bank-accounts + /reconciliation
-│   │   │   ├── routes/
-│   │   │   │   └── auditLogs.ts      # GET /audit-logs (paginated, filtered)
-│   │   │   ├── types/
-│   │   │   │   └── express.d.ts      # req.staff type augmentation
-│   │   │   ├── tests/
-│   │   │   │   ├── auth.test.ts      # Auth + staff integration tests
-│   │   │   │   ├── branch.test.ts    # Branch CRUD integration tests
-│   │   │   │   ├── config.test.ts    # Config system + branch override tests  ← Slice 1
-│   │   │   │   ├── bankAccount.test.ts # Bank account CRUD + encryption + reconciliation ← Slice 4
-│   │   │   │   ├── health.test.ts    # Health endpoint test
-│   │   │   │   ├── setup.ts          # Global test setup
-│   │   │   │   └── helpers/
-│   │   │   │       ├── testDb.ts     # Prefix-based cleanup (seed data preserved)
-│   │   │   │       ├── testApp.ts    # Supertest app factory
-│   │   │   │       └── seed.ts       # createTestStaff, createTestBranch
-│   │   │   ├── app.ts                # Express app factory (middleware stack)
-│   │   │   └── server.ts             # HTTP server entry point
-│   │   ├── package.json
-│   │   ├── tsconfig.json
-│   │   └── vitest.config.ts
-│   │
-│   └── web/                          # React SPA (Vite + Tailwind)
-│       ├── src/
-│       │   ├── components/
-│       │   │   ├── Layout.tsx        # Collapsible sidebar + top bar + dark mode toggle
-│       │   │   └── Toast.tsx         # Toast notification system (ToastProvider + useToast)
-│       │   ├── lib/
-│       │   │   ├── api.ts            # Typed fetch wrapper (auto-refresh on 401)
-│       │   │   ├── auth.ts           # login(), logout(), token memory store
-│       │   │   └── theme.tsx         # ThemeProvider + useTheme (dark/light, localStorage)
-│       │   ├── pages/
-│       │   │   ├── LoginPage.tsx     # Animated login with branch dropdown
-│       │   │   ├── BranchesPage.tsx  # Branch CRUD table
-│       │   │   ├── StaffPage.tsx     # Staff CRUD + inline role editor
-│       │   │   ├── AuditLogPage.tsx  # Real-time audit log (3s polling)
-│       │   │   ├── SettingsPage.tsx  # Config settings (9 tabs, system + branch)  ← Slice 1
-│       │   │   └── BankAccountsPage.tsx # Bank accounts + reconciliation UI  ← Slice 4
-│       │   ├── App.tsx               # Root: ThemeProvider → Layout → pages
-│       │   ├── main.tsx              # React entry point
-│       │   └── index.css             # Tailwind base + dark mode scrollbar
-│       ├── package.json
-│       ├── tailwind.config.js        # darkMode: 'class' + custom animations
-│       └── vite.config.ts            # Proxy /api → localhost:3000
-│
-├── packages/
-│   └── shared/                       # Shared TypeScript types (future use)
-│       └── src/index.ts
-│
-├── .kiro/specs/bookstore-management-system/
-│   ├── requirements.md               # 27 functional requirements + NFRs
-│   ├── design.md                     # 17 vertical slices, DB schema, API design
-│   └── tasks.md                      # Phased implementation roadmap
-│
-├── docker-compose.yml                # API + PostgreSQL 16
-├── .env                              # Local env vars (not committed)
-├── .env.example                      # Template for required env vars
-└── package.json                      # Workspace root (npm workspaces)
-```
-
----
-
-## Data Flow
-
-Every request follows this path through the system:
-
-```
-Browser (React)
-    │
-    │  HTTP request (fetch via api.ts)
-    │  Authorization: Bearer <accessToken>
-    │  X-Branch-Id: <branchId>
-    ▼
-Vite Dev Server (:5173)
-    │
-    │  /api/* proxied to localhost:3000
-    ▼
-Express API (:3000)
-    │
-    ├─ requestId middleware     → injects X-Request-Id UUID
-    ├─ logger middleware        → logs method + path + requestId
-    ├─ auth middleware          → verifies JWT → populates req.staff
-    ├─ branchCtx middleware     → validates X-Branch-Id ∈ staff's branches
-    ├─ rbac middleware          → requireRole(...) → 403 if role mismatch
-    │
-    ├─ Route handler            → validates request body (Zod)
-    │
-    ├─ Service layer            → business logic
-    │   ├─ DB queries           → pg.Pool (parameterized SQL, no ORM)
-    │   ├─ Audit log insert     → INSERT INTO audit_logs (staff_id, role, action, entity_type, entity_id, branch_id, meta)
-    │   └─ Returns result
-    │
-    ├─ errorHandler middleware  → catches AppError → { error, message, requestId, timestamp }
-    │
-    └─ JSON response
-    │
-    ▼
-TanStack Query (React)
-    │
-    ├─ Caches response
-    ├─ Auto-refetches on mutation (invalidateQueries)
-    └─ Renders UI
-```
-
-### Auth Token Flow
-
-```
-Login → POST /api/auth/login
-    → API returns { accessToken } (15 min JWT)
-    → API sets httpOnly cookie: refresh_token (7 days)
-    → accessToken stored in memory (api.ts module variable)
-
-401 on any request
-    → api.ts intercepts → POST /api/auth/refresh (sends cookie)
-    → New accessToken stored in memory
-    → Original request retried
-
-Logout → POST /api/auth/logout
-    → Refresh token revoked in DB
-    → Cookie cleared
-    → accessToken cleared from memory
-```
-
-### Config Lookup Flow (Slice 1)
-
-```
-Any service needing a business rule
-    │
-    ├─ getEffectiveConfig(branchId, key)
-    │   ├─ SELECT FROM branch_config WHERE branch_id = $1 AND key = $2
-    │   │   → found: return branch override value
-    │   └─ fallback: SELECT FROM system_config WHERE key = $1
-    │       → return system default
-    │
-    └─ Typed helpers (e.g. getPOApprovalThreshold, getLoyaltyAccrualRate)
-        → parse and return typed value for use in business logic
-```
 
 ---
 
@@ -296,13 +123,15 @@ Any service needing a business rule
 |-------|-----------|
 | Frontend | React 18 + TypeScript + Vite |
 | Styling | Tailwind CSS (dark mode: class strategy) |
-| State / Data | TanStack Query |
+| State / Data | TanStack Query v5 |
 | Forms | React Hook Form + Zod |
 | Backend | Node.js 20 + Express 5 + TypeScript |
-| Database | PostgreSQL 16 (raw `pg` driver) |
+| Database | PostgreSQL 16 (raw `pg` driver, no ORM) |
 | Auth | JWT (15 min) + httpOnly refresh cookie (7 days) |
+| Encryption | AES-256-GCM (column-level, bank account data) |
 | Logging | Structured JSON (console) |
 | Container | Docker + Docker Compose |
+| Testing | Vitest + Supertest (integration tests, real DB) |
 
 ---
 
@@ -333,7 +162,8 @@ Open `http://localhost:5173` — login with `superadmin` / `password` / Main Bra
 cd apps/api && npm test
 ```
 
-> Tests use prefix-based cleanup (`auth_test_*`, `branch_test_*`, etc.) — seed data (Main Branch, superadmin, admin) is never touched.
+> Tests use prefix-based cleanup — seed data (Main Branch, superadmin, admin) is never touched.
+> Current: **8 test files, 80 tests, all passing.**
 
 ## Restoring Seed Data
 
@@ -343,7 +173,7 @@ If seed data is ever lost (e.g. after a DB reset):
 cd apps/api && npm run reseed
 ```
 
-This restores Main Branch, superadmin, admin, and all 21 system_config defaults.
+Restores: Main Branch, superadmin, admin, 21 system_config defaults, default "Main Floor" location per branch.
 
 ---
 
@@ -357,7 +187,7 @@ Copy `.env.example` to `.env` and fill in:
 | `JWT_SECRET` | Secret for signing JWTs | any long random string |
 | `NODE_ENV` | Environment | `development` |
 | `PORT` | API port (optional) | `3000` |
-| `COLUMN_ENCRYPTION_KEY` | 64-char hex key for AES-256-GCM column encryption | generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `COLUMN_ENCRYPTION_KEY` | 64-char hex key for AES-256-GCM | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 
 ---
 
@@ -375,8 +205,8 @@ Copy `.env.example` to `.env` and fill in:
 |--------|------|-------|-------------|
 | GET | `/api/staff` | Admin+ | List staff with branch-role assignments |
 | POST | `/api/staff` | Admin+ | Create staff account |
-| GET | `/api/staff/me` | Any | Own profile (security fields included) |
-| PUT | `/api/staff/me/password` | Any | Change own password (clears must_change_password) |
+| GET | `/api/staff/me` | Any | Own profile (security fields + location access scope) |
+| PUT | `/api/staff/me/password` | Any | Change own password |
 | GET | `/api/staff/:id` | Admin+ | Full staff detail including security status |
 | PUT | `/api/staff/:id` | Admin+ | Update full name |
 | POST | `/api/staff/:id/deactivate` | Admin+ | Deactivate (revokes tokens) |
@@ -384,6 +214,8 @@ Copy `.env.example` to `.env` and fill in:
 | PUT | `/api/staff/:id/roles` | Admin+ | Full replace branch-role assignments |
 | POST | `/api/staff/:id/reset-password` | Admin+ | Set temp password + force must_change_password |
 | POST | `/api/staff/:id/unlock` | Admin+ | Clear lockout + reset failed attempt counter |
+| GET | `/api/staff/:id/locations` | Admin, Manager | Get staff location access assignments |
+| PUT | `/api/staff/:id/locations` | Admin, Manager | Set location restrictions (empty array = full access) |
 
 ### Branches
 | Method | Path | Auth | Description |
@@ -396,6 +228,15 @@ Copy `.env.example` to `.env` and fill in:
 | POST | `/api/branches/:id/reactivate` | Admin+ | Reactivate |
 | DELETE | `/api/branches/:id` | Admin+ | Delete (409 if dependencies exist) |
 
+### Locations (Slice 5)
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/api/branches/:branchId/locations` | Any | List locations (access-filtered for restricted staff) |
+| POST | `/api/branches/:branchId/locations` | Admin, Manager | Create location (409 on duplicate name) |
+| PUT | `/api/branches/:branchId/locations/:id` | Admin, Manager | Rename location |
+| PUT | `/api/branches/:branchId/locations/:id/set-default` | Admin, Manager | Set as default fulfillment (atomic) |
+| DELETE | `/api/branches/:branchId/locations/:id` | Admin, Manager | Delete (409 if inventory/orders exist) |
+
 ### Configuration (Slice 1)
 | Method | Path | Roles | Description |
 |--------|------|-------|-------------|
@@ -403,21 +244,9 @@ Copy `.env.example` to `.env` and fill in:
 | PUT | `/api/config/system/:key` | Super_Admin | Update system default |
 | GET | `/api/config/branches/:branchId` | Admin+ | Merged effective config with source labels |
 | PUT | `/api/config/branches/:branchId/:key` | Admin+ | Set branch override |
-| DELETE | `/api/config/branches/:branchId/:key` | Admin+ | Remove branch override (restores system default) |
+| DELETE | `/api/config/branches/:branchId/:key` | Admin+ | Remove branch override |
 
-### Audit Log
-| Method | Path | Roles | Description |
-|--------|------|-------|-------------|
-| GET | `/api/audit-logs` | Admin+ | Paginated audit log; filter by entityType |
-
-### Locations (Slice 5)
-| Method | Path | Roles | Description |
-|--------|------|-------|-------------|
-| GET | `/api/branches/:branchId/locations` | Any | List locations for branch |
-| POST | `/api/branches/:branchId/locations` | Admin, Manager | Create location (409 on duplicate name) |
-| PUT | `/api/branches/:branchId/locations/:id` | Admin, Manager | Rename location |
-| PUT | `/api/branches/:branchId/locations/:id/set-default` | Admin, Manager | Set as default fulfillment (atomic) |
-| DELETE | `/api/branches/:branchId/locations/:id` | Admin, Manager | Delete (409 if inventory/orders exist) |
+### Bank Accounts (Slice 4)
 | Method | Path | Roles | Description |
 |--------|------|-------|-------------|
 | GET | `/api/branches/:branchId/bank-accounts` | Admin+, Finance_Officer | List accounts (masked numbers) |
@@ -428,3 +257,8 @@ Copy `.env.example` to `.env` and fill in:
 | GET | `/api/branches/:branchId/reconciliation` | Admin+, Finance_Officer | List reconciliation entries |
 | POST | `/api/branches/:branchId/reconciliation/import` | Admin+, Finance_Officer | Import rows (batch, full rollback on error) |
 | PUT | `/api/branches/:branchId/reconciliation/:entryId` | Admin+, Finance_Officer | Clear entry (409 if already cleared) |
+
+### Audit Log
+| Method | Path | Roles | Description |
+|--------|------|-------|-------------|
+| GET | `/api/audit-logs` | Admin+ | Paginated audit log; filter by entityType |

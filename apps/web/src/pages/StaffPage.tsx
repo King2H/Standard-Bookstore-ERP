@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +21,8 @@ interface StaffMember {
   lastLoginAt?: string | null;
 }
 interface Branch { id: number; name: string; isActive: boolean }
+interface LocationEntry { locationId: number; locationName: string; branchId: number }
+interface Location { id: number; branchId: number; name: string; isDefaultFulfillment: boolean }
 
 const ROLES = ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] as const;
 
@@ -41,6 +44,7 @@ export default function StaffPage() {
   const [showForm, setShowForm] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [editingRoles, setEditingRoles] = useState<number | null>(null);
+  const [editingLocations, setEditingLocations] = useState<number | null>(null);
   const { showToast } = useToast();
 
   const { data: staffData, isLoading } = useQuery({
@@ -118,6 +122,17 @@ export default function StaffPage() {
       showToast('Account unlocked');
     },
     onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to unlock account', 'error'); },
+  });
+
+  const assignLocationsMutation = useMutation({
+    mutationFn: ({ id, locationIds }: { id: number; locationIds: number[] }) =>
+      api.put(`/staff/${id}/locations`, locationIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      setEditingLocations(null);
+      showToast('Location access updated');
+    },
+    onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to update location access', 'error'); },
   });
 
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<CreateForm>({
@@ -251,7 +266,8 @@ export default function StaffPage() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {staffData?.items.map((staff) => (
-                <tr key={staff.id} className={`transition-colors ${editingRoles === staff.id ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}>
+                <React.Fragment key={staff.id}>
+                <tr className={`transition-colors ${editingRoles === staff.id ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}>
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{staff.username}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{staff.fullName}</td>
 
@@ -321,6 +337,15 @@ export default function StaffPage() {
                           </svg>
                         </button>
                       )}
+                      {/* Location access button */}
+                      <button type="button" title="Manage location access"
+                        onClick={() => setEditingLocations(editingLocations === staff.id ? null : staff.id)}
+                        className={`transition-colors ${editingLocations === staff.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400'}`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </button>
                       {/* Unlock button — shown when account is locked */}
                       {staff.lockedUntil && new Date(staff.lockedUntil) > new Date() && (
                         <button type="button" title="Unlock account"
@@ -366,6 +391,21 @@ export default function StaffPage() {
                     </div>
                   </td>
                 </tr>
+                {editingLocations === staff.id && (
+                  <tr className="bg-indigo-50 dark:bg-indigo-950/20">
+                    <td colSpan={6} className="px-4 py-3">
+                      <LocationAccessPanel
+                        staffId={staff.id}
+                        staffUsername={staff.username}
+                        branchIds={staff.roles.map(r => r.branchId)}
+                        onSave={(locationIds) => assignLocationsMutation.mutate({ id: staff.id, locationIds })}
+                        onClose={() => setEditingLocations(null)}
+                        isSaving={assignLocationsMutation.isPending}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -438,6 +478,170 @@ function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
         </button>
         <button type="button" onClick={onCancel}
           className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── LocationAccessPanel ───────────────────────────────────────────────────────
+// Shown inline below a staff row. Loads current assignments, lets admin
+// select/deselect locations per branch, and saves with PUT /staff/:id/locations.
+
+function LocationAccessPanel({ staffId, staffUsername, branchIds, onSave, onClose, isSaving }: {
+  staffId: number;
+  staffUsername: string;
+  branchIds: number[];
+  onSave: (locationIds: number[]) => void;
+  onClose: () => void;
+  isSaving: boolean;
+}) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  // Load current explicit assignments for this staff member
+  const { data: assignmentsData, isLoading: loadingAssignments } = useQuery({
+    queryKey: ['staff-locations', staffId],
+    queryFn: () => api.get<{ items: LocationEntry[]; fallbackMode: boolean }>(`/staff/${staffId}/locations`),
+    enabled: !!getAccessToken(),
+    staleTime: 0,
+  });
+
+  // Load all locations across the staff member's branches
+  const { data: allBranchLocations, isLoading: loadingLocations } = useQuery({
+    queryKey: ['locations-for-branches', ...branchIds],
+    queryFn: async () => {
+      const results = await Promise.all(
+        branchIds.map(id => api.get<{ items: Location[] }>(`/branches/${id}/locations`))
+      );
+      return results.flatMap(r => r.items);
+    },
+    enabled: branchIds.length > 0 && !!getAccessToken(),
+    staleTime: 30_000,
+  });
+
+  // Initialise checkbox state once both queries resolve — useEffect is the correct place
+  const [initialised, setInitialised] = useState(false);
+  React.useEffect(() => {
+    if (!initialised && assignmentsData && allBranchLocations) {
+      setSelected(new Set(assignmentsData.items.map(a => a.locationId)));
+      setInitialised(true);
+    }
+  }, [assignmentsData, allBranchLocations, initialised]);
+
+  const toggle = (id: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isFallback = selected.size === 0;
+  const isLoading = loadingAssignments || loadingLocations || !initialised;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 py-1">
+        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        Loading location access...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 py-1">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+            📍 Location Access — <span className="font-mono">{staffUsername}</span>
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {isFallback
+              ? 'No restrictions — staff can access all locations in their branch'
+              : `Restricted to ${selected.size} specific location(s)`}
+          </p>
+        </div>
+        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+          isFallback
+            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+            : 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400'
+        }`}>
+          {isFallback ? '✓ Full Access' : '⚠ Restricted'}
+        </span>
+      </div>
+
+      {/* Location checkboxes */}
+      {(allBranchLocations ?? []).length === 0 ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+          No locations exist for this staff member's branches yet.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {(allBranchLocations ?? []).map(loc => {
+            const isChecked = selected.has(loc.id);
+            return (
+              <button
+                key={loc.id}
+                type="button"
+                onClick={() => toggle(loc.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                  isChecked
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400'
+                }`}
+              >
+                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
+                  isChecked ? 'bg-white border-white' : 'border-current'
+                }`}>
+                  {isChecked && (
+                    <svg className="w-2.5 h-2.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </span>
+                {loc.name}
+                {loc.isDefaultFulfillment && (
+                  <span className={`text-xs ${isChecked ? 'text-indigo-200' : 'text-green-500'}`}>★</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        Select specific locations to restrict access. Deselect all to restore full branch access. ★ = default fulfillment.
+      </p>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          onClick={() => onSave(Array.from(selected))}
+          disabled={isSaving}
+          className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-colors"
+        >
+          {isSaving ? 'Saving...' : 'Save Access'}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSelected(new Set()); }}
+          className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+          title="Clear all — restore full branch access"
+        >
+          Clear all
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors ml-auto"
+        >
           Cancel
         </button>
       </div>

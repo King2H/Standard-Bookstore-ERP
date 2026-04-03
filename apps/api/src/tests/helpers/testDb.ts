@@ -46,6 +46,22 @@ export async function cleanTestStaff(usernamePrefix: string): Promise<void> {
  * NEVER truncates — the seeded "Main Branch" is preserved.
  */
 export async function cleanTestBranches(namePrefix: string): Promise<void> {
+  // Remove staff_locations referencing locations in these branches first
+  await db.query(
+    `DELETE FROM staff_locations WHERE location_id IN (
+       SELECT id FROM locations WHERE branch_id IN (
+         SELECT id FROM branches WHERE name LIKE $1
+       )
+     )`,
+    [`${namePrefix}%`],
+  );
+  // Remove locations in these branches
+  await db.query(
+    `DELETE FROM locations WHERE branch_id IN (
+       SELECT id FROM branches WHERE name LIKE $1
+     )`,
+    [`${namePrefix}%`],
+  );
   // Remove staff_branch_roles referencing these branches first
   await db.query(
     `DELETE FROM staff_branch_roles WHERE branch_id IN (
@@ -80,4 +96,11 @@ export async function cleanBankAccounts(branchId: number): Promise<void> {
     [branchId],
   );
   await db.query(`DELETE FROM bank_accounts WHERE branch_id = $1`, [branchId]);
+}
+
+/**
+ * Cleans staff_locations rows for a specific staff member.
+ */
+export async function cleanStaffLocations(staffId: number): Promise<void> {
+  await db.query(`DELETE FROM staff_locations WHERE staff_id = $1`, [staffId]);
 }

@@ -88,12 +88,22 @@ async function reseed() {
     await client.query(`SELECT setval('branches_id_seq', (SELECT MAX(id) FROM branches))`);
     await client.query(`SELECT setval('staff_id_seq', (SELECT MAX(id) FROM staff))`);
 
+    // ── Restore default locations for each branch ────────────────────────
+    // The migration seeds this on first run; reseed must be idempotent.
+    await client.query(`
+      INSERT INTO locations (branch_id, name, is_default_fulfillment)
+      SELECT id, 'Main Floor', true
+      FROM branches
+      ON CONFLICT DO NOTHING
+    `);
+
     await client.query('COMMIT');
     console.log('✓ Seed data restored successfully');
     console.log('  - Main Branch (id=1) active');
     console.log('  - superadmin / password (Super_Admin @ Main Branch)');
     console.log('  - admin / password (Admin @ Main Branch)');
     console.log('  - 21 system_config defaults present');
+    console.log('  - Default "Main Floor" location per branch');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('✗ Reseed failed:', err.message);

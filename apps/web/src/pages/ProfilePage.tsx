@@ -10,6 +10,8 @@ import { useToast } from '../components/Toast.js';
 
 interface StaffRole { branchId: number; branchName?: string; role: string }
 
+interface LocationScopeEntry { id: number; name: string; isDefaultFulfillment: boolean }
+
 interface MyProfile {
   id: number;
   username: string;
@@ -23,6 +25,10 @@ interface MyProfile {
   lastLoginAt?: string | null;
   passwordChangedAt?: string | null;
   isLocked?: boolean;
+  locationAccess: {
+    mode: 'full' | 'restricted';
+    locations: LocationScopeEntry[];
+  };
 }
 
 // ── Password change schema ────────────────────────────────────────────────────
@@ -221,6 +227,40 @@ export default function ProfilePage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+
+        {/* Location access scope */}
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Location Access (Current Session)</p>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+              profile.locationAccess?.mode === 'restricted'
+                ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300'
+                : 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+            }`}>
+              {profile.locationAccess?.mode === 'restricted' ? '⚠ Restricted' : '✓ Full Access'}
+            </span>
+          </div>
+
+          {profile.locationAccess?.mode === 'restricted' ? (
+            <div>
+              <p className="text-xs text-orange-600 dark:text-orange-400 mb-2">
+                Your access is limited to the following location(s) in this branch:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {profile.locationAccess.locations.map(loc => (
+                  <span key={loc.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-700 text-orange-800 dark:text-orange-300">
+                    📍 {loc.name}
+                    {loc.isDefaultFulfillment && <span className="text-green-500 dark:text-green-400">★</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              You have access to all locations in your current branch.
+            </p>
           )}
         </div>
       </div>

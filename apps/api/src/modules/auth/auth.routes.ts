@@ -96,6 +96,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const staffId = req.staff!.staffId;
+      const currentBranchId = req.staff!.branchId;
 
       const result = await db.query(
         `SELECT s.id, s.username, s.full_name, s.is_active, s.created_at,
@@ -116,6 +117,28 @@ router.get(
         return next(new ValidationError('Staff not found'));
       }
 
+      // Fetch location access scope for the current branch session
+      const locationAssignments = await db.query(
+        `SELECT l.id, l.name, l.is_default_fulfillment
+         FROM staff_locations sl
+         JOIN locations l ON l.id = sl.location_id
+         WHERE sl.staff_id = $1 AND l.branch_id = $2
+         ORDER BY l.is_default_fulfillment DESC, l.name ASC`,
+        [staffId, currentBranchId],
+      );
+
+      const isLocationRestricted = locationAssignments.rows.length > 0;
+      const locationAccess = {
+        mode: isLocationRestricted ? 'restricted' : 'full',
+        locations: isLocationRestricted
+          ? locationAssignments.rows.map((l: Record<string, unknown>) => ({
+              id: l.id,
+              name: l.name,
+              isDefaultFulfillment: l.is_default_fulfillment,
+            }))
+          : [],
+      };
+
       const r = result.rows[0];
       res.json({
         id: r.id,
@@ -129,7 +152,8 @@ router.get(
         isLocked: r.locked_until && new Date(r.locked_until) > new Date(),
         roles: r.roles,
         currentRole: req.staff!.role,
-        currentBranchId: req.staff!.branchId,
+        currentBranchId,
+        locationAccess,
       });
     } catch (err) {
       next(err);
