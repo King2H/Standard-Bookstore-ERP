@@ -1,5 +1,5 @@
 /**
- * Restores seed data wiped by tests.
+ * Restores seed data wiped by tests. Otherwise, complete messup.
  * Run: node scripts/reseed.mjs
  */
 import pg from 'pg';
