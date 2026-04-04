@@ -127,13 +127,13 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { locationId, items, notes } = req.body as {
-        locationId: number;
+        locationId?: number | null;
         items: procurementService.ReceiveItemInput[];
         notes?: string;
       };
       const po = await procurementService.receivePO(
         pi(req.params.id),
-        locationId,
+        locationId ?? null,
         items,
         notes ?? null,
         req.staff!,

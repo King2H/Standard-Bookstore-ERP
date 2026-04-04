@@ -18,6 +18,8 @@ interface PO {
   id: string; branchId: number; supplierId: number; supplierName: string;
   status: string; totalAmount: number; currency: string;
   expectedDeliveryDate: string | null; notes: string | null;
+  receivingBranchId: number | null; receivingLocationId: number | null;
+  receivingLocationName: string | null; financialStatus: 'unpaid' | 'partial' | 'paid';
   createdBy: number; approvedBy: number | null; createdAt: string; updatedAt: string;
   lineItems?: POLineItem[]; receipts?: POReceipt[];
 }
@@ -70,6 +72,8 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
   const [currency, setCurrency] = useState(editing?.currency ?? 'USD');
   const [expectedDate, setExpectedDate] = useState(editing?.expectedDeliveryDate ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
+  const [receivingBranchId, setReceivingBranchId] = useState<number | null>(editing?.receivingBranchId ?? null);
+  const [receivingLocationId, setReceivingLocationId] = useState<number | null>(editing?.receivingLocationId ?? null);
   const [lineItems, setLineItems] = useState<LineItemFormRow[]>(
     editing?.lineItems?.map(li => ({ bookId: li.bookId, bookTitle: li.bookTitle, quantity: li.quantity, unitCost: li.unitCost })) ?? [{ ...EMPTY_LINE }],
   );
@@ -85,6 +89,17 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
     queryFn: () => api.get(`/books?pageSize=200`),
   });
 
+  const { data: branchesData } = useQuery<{ items: Array<{id: number; name: string}> }>({
+    queryKey: ['branches-for-po'],
+    queryFn: () => api.get('/branches?pageSize=200'),
+  });
+
+  const { data: receivingLocData } = useQuery<{ items: Array<{id: number; name: string; isDefaultFulfillment: boolean}> }>({
+    queryKey: ['receiving-locations', receivingBranchId],
+    queryFn: () => api.get(`/branches/${receivingBranchId}/locations?pageSize=200`),
+    enabled: !!receivingBranchId,
+  });
+
   const createMut = useMutation({
     mutationFn: (body: unknown) => api.post<PO>('/purchase-orders', body),
     onSuccess: (po) => { showToast('PO created', 'success'); onSaved(po); },
@@ -98,6 +113,8 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
 
   const suppliers = suppliersData?.items ?? [];
   const books = booksData?.items ?? [];
+  const branches = branchesData?.items ?? [];
+  const receivingLocations = receivingLocData?.items ?? [];
   const total = lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
   const busy = createMut.isPending || updateMut.isPending;
 
@@ -117,6 +134,8 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
       currency,
       expectedDeliveryDate: expectedDate || null,
       notes: notes || null,
+      receivingBranchId: receivingBranchId || null,
+      receivingLocationId: receivingLocationId || null,
       lineItems: validLines.map(li => ({ bookId: li.bookId, quantity: li.quantity, unitCost: li.unitCost })),
     };
     editing ? updateMut.mutate(body) : createMut.mutate(body);
@@ -155,6 +174,24 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
               <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Receiving Branch</label>
+              <select value={receivingBranchId ?? ''} onChange={e => { setReceivingBranchId(Number(e.target.value) || null); setReceivingLocationId(null); }}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Same as order branch (default)</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            {receivingBranchId && (
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Receiving Location</label>
+                <select value={receivingLocationId ?? ''} onChange={e => setReceivingLocationId(Number(e.target.value) || null)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Default fulfillment location</option>
+                  {receivingLocations.map(l => <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>)}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -213,16 +250,21 @@ function ReceiveForm({ po, onDone, onBack }: { po: PO; onDone: (updated: PO) => 
   const [notes, setNotes] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
+  // Use PO's receiving branch for location query
+  const effectiveBranchId = po.receivingBranchId ?? po.branchId;
+
   const { data: locData } = useQuery<{ items: Location[] }>({
-    queryKey: ['locations-for-receive', po.branchId],
-    queryFn: () => api.get(`/branches/${po.branchId}/locations?pageSize=200`),
+    queryKey: ['locations-for-receive', effectiveBranchId],
+    queryFn: () => api.get(`/branches/${effectiveBranchId}/locations?pageSize=200`),
   });
 
-  // Auto-select default fulfillment location once data loads
+  // Auto-select PO's receiving location or default fulfillment location
   const locations = locData?.items ?? [];
   if (!locationId && locations.length > 0) {
-    const def = locations.find(l => l.isDefaultFulfillment) ?? locations[0];
-    setLocationId(def.id);
+    const preferred = locations.find(l => l.id === po.receivingLocationId)
+      ?? locations.find(l => l.isDefaultFulfillment)
+      ?? locations[0];
+    setLocationId(preferred.id);
   }
 
   const receiveMut = useMutation({
@@ -341,6 +383,18 @@ function PODetail({ poId, userRole, onBack, onEdit, onReceive }: {
         <div><span className="text-gray-500 dark:text-gray-400">Total:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.currency} {Number(po.totalAmount).toFixed(2)}</span></div>
         <div><span className="text-gray-500 dark:text-gray-400">Expected Delivery:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.expectedDeliveryDate ?? '—'}</span></div>
         <div><span className="text-gray-500 dark:text-gray-400">Created:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{new Date(po.createdAt).toLocaleDateString()}</span></div>
+        {po.receivingLocationName && (
+          <div>
+            <span className="text-gray-500 dark:text-gray-400">Receiving Location:</span>
+            <span className="font-medium text-gray-900 dark:text-white ml-1">{po.receivingLocationName}</span>
+          </div>
+        )}
+        <div>
+          <span className="text-gray-500 dark:text-gray-400">Payment Status:</span>
+          <span className={`ml-1 text-xs font-medium px-2 py-0.5 rounded-full ${po.financialStatus === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : po.financialStatus === 'partial' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+            {po.financialStatus}
+          </span>
+        </div>
         {po.notes && <div className="col-span-2"><span className="text-gray-500 dark:text-gray-400">Notes:</span> <span className="text-gray-900 dark:text-white ml-1">{po.notes}</span></div>}
       </div>
 

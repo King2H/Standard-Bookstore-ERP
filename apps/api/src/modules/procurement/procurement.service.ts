@@ -27,6 +27,10 @@ export interface PORow {
   currency: string;
   expectedDeliveryDate: string | null;
   notes: string | null;
+  receivingBranchId: number | null;
+  receivingLocationId: number | null;
+  receivingLocationName: string | null;
+  financialStatus: 'unpaid' | 'partial' | 'paid';
   createdBy: number;
   approvedBy: number | null;
   createdAt: string;
@@ -90,6 +94,10 @@ function mapPORow(row: Record<string, unknown>): PORow {
           : String(row.expected_delivery_date))
       : null,
     notes: (row.notes as string | null) ?? null,
+    receivingBranchId: (row.receiving_branch_id as number | null) ?? null,
+    receivingLocationId: (row.receiving_location_id as number | null) ?? null,
+    receivingLocationName: (row.receiving_location_name as string | null) ?? null,
+    financialStatus: (row.financial_status as 'unpaid' | 'partial' | 'paid') ?? 'unpaid',
     createdBy: row.created_by as number,
     approvedBy: (row.approved_by as number | null) ?? null,
     createdAt: (row.created_at as Date).toISOString(),
@@ -185,9 +193,12 @@ export async function getById(id: number | string): Promise<PORow> {
   const result = await db.query(
     `SELECT po.id, po.branch_id, po.supplier_id, s.name AS supplier_name,
             po.status, po.total_amount, po.currency, po.expected_delivery_date,
-            po.notes, po.created_by, po.approved_by, po.created_at, po.updated_at
+            po.notes, po.receiving_branch_id, po.receiving_location_id,
+            rl.name AS receiving_location_name,
+            po.financial_status, po.created_by, po.approved_by, po.created_at, po.updated_at
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
+     LEFT JOIN locations rl ON rl.id = po.receiving_location_id
      WHERE po.id = $1`,
     [id],
   );
@@ -235,9 +246,12 @@ export async function list(opts: {
     db.query(
       `SELECT po.id, po.branch_id, po.supplier_id, s.name AS supplier_name,
               po.status, po.total_amount, po.currency, po.expected_delivery_date,
-              po.notes, po.created_by, po.approved_by, po.created_at, po.updated_at
+              po.notes, po.receiving_branch_id, po.receiving_location_id,
+              rl.name AS receiving_location_name,
+              po.financial_status, po.created_by, po.approved_by, po.created_at, po.updated_at
        FROM purchase_orders po
        JOIN suppliers s ON s.id = po.supplier_id
+       LEFT JOIN locations rl ON rl.id = po.receiving_location_id
        ${where}
        ORDER BY po.created_at DESC
        LIMIT $${limitParam} OFFSET $${offsetParam}`,
@@ -259,6 +273,8 @@ export async function createPO(
   data: {
     supplierId: number;
     branchId: number;
+    receivingBranchId?: number | null;
+    receivingLocationId?: number | null;
     currency?: string;
     expectedDeliveryDate?: string | null;
     notes?: string | null;
@@ -285,6 +301,27 @@ export async function createPO(
     if (item.unitCost < 0) throw new ValidationError('Unit cost cannot be negative');
   }
 
+  const effectiveReceivingBranchId = data.receivingBranchId ?? data.branchId;
+
+  // Validate or auto-resolve receiving location
+  let resolvedLocationId: number | null = null;
+  if (data.receivingLocationId != null) {
+    const locRes = await db.query(
+      `SELECT id FROM locations WHERE id = $1 AND branch_id = $2`,
+      [data.receivingLocationId, effectiveReceivingBranchId],
+    );
+    if (!locRes.rows.length) {
+      throw new ValidationError('Receiving location does not exist or does not belong to the receiving branch');
+    }
+    resolvedLocationId = data.receivingLocationId;
+  } else {
+    const locRes = await db.query(
+      `SELECT id FROM locations WHERE branch_id = $1 AND is_default_fulfillment = true LIMIT 1`,
+      [effectiveReceivingBranchId],
+    );
+    resolvedLocationId = locRes.rows.length ? (locRes.rows[0].id as number) : null;
+  }
+
   const totalAmount = data.lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
 
   const client = await db.connect();
@@ -292,8 +329,8 @@ export async function createPO(
     await client.query('BEGIN');
 
     const poRes = await client.query(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, currency, expected_delivery_date, notes, created_by)
-       VALUES ($1, $2, 'draft', $3, $4, $5, $6, $7)
+      `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, currency, expected_delivery_date, notes, created_by, receiving_branch_id, receiving_location_id)
+       VALUES ($1, $2, 'draft', $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         data.branchId,
@@ -303,6 +340,8 @@ export async function createPO(
         data.expectedDeliveryDate ?? null,
         data.notes ?? null,
         staffCtx.staffId,
+        data.receivingBranchId ?? null,
+        resolvedLocationId,
       ],
     );
     const poId: string = String(poRes.rows[0].id);
@@ -340,12 +379,14 @@ export async function updatePO(
     currency?: string;
     expectedDeliveryDate?: string | null;
     notes?: string | null;
+    receivingBranchId?: number | null;
+    receivingLocationId?: number | null;
     lineItems?: POLineItemInput[];
   },
   staffCtx: StaffCtx,
 ): Promise<PORow> {
   const existing = await db.query(
-    `SELECT status FROM purchase_orders WHERE id = $1`,
+    `SELECT status, branch_id FROM purchase_orders WHERE id = $1`,
     [id],
   );
   if (!existing.rows.length) throw new NotFoundError('Purchase Order');
@@ -355,6 +396,20 @@ export async function updatePO(
 
   if (data.supplierId) {
     await validateSupplierForProcurement(data.supplierId);
+  }
+
+  // Validate/resolve receiving location if being changed
+  if (data.receivingBranchId !== undefined || data.receivingLocationId !== undefined) {
+    const effectiveReceivingBranchId = data.receivingBranchId ?? (existing.rows[0].branch_id as number);
+    if (data.receivingLocationId != null) {
+      const locRes = await db.query(
+        `SELECT id FROM locations WHERE id = $1 AND branch_id = $2`,
+        [data.receivingLocationId, effectiveReceivingBranchId],
+      );
+      if (!locRes.rows.length) {
+        throw new ValidationError('Receiving location does not exist or does not belong to the receiving branch');
+      }
+    }
   }
 
   const client = await db.connect();
@@ -389,15 +444,17 @@ export async function updatePO(
     const params: unknown[] = [];
     let p = 1;
 
-    if (data.supplierId !== undefined) { sets.push(`supplier_id = ${p++}`); params.push(data.supplierId); }
-    if (data.currency !== undefined) { sets.push(`currency = ${p++}`); params.push(data.currency); }
-    if (data.expectedDeliveryDate !== undefined) { sets.push(`expected_delivery_date = ${p++}`); params.push(data.expectedDeliveryDate); }
-    if (data.notes !== undefined) { sets.push(`notes = ${p++}`); params.push(data.notes); }
-    if (totalAmount !== undefined) { sets.push(`total_amount = ${p++}`); params.push(totalAmount.toFixed(2)); }
+    if (data.supplierId !== undefined) { sets.push(`supplier_id = $${p++}`); params.push(data.supplierId); }
+    if (data.currency !== undefined) { sets.push(`currency = $${p++}`); params.push(data.currency); }
+    if (data.expectedDeliveryDate !== undefined) { sets.push(`expected_delivery_date = $${p++}`); params.push(data.expectedDeliveryDate); }
+    if (data.notes !== undefined) { sets.push(`notes = $${p++}`); params.push(data.notes); }
+    if (data.receivingBranchId !== undefined) { sets.push(`receiving_branch_id = $${p++}`); params.push(data.receivingBranchId); }
+    if (data.receivingLocationId !== undefined) { sets.push(`receiving_location_id = $${p++}`); params.push(data.receivingLocationId); }
+    if (totalAmount !== undefined) { sets.push(`total_amount = $${p++}`); params.push(totalAmount.toFixed(2)); }
 
     params.push(id);
     await client.query(
-      `UPDATE purchase_orders SET ${sets.join(', ')} WHERE id = ${p}`,
+      `UPDATE purchase_orders SET ${sets.join(', ')} WHERE id = $${p}`,
       params,
     );
 
@@ -568,7 +625,7 @@ export async function cancelPO(id: number | string, staffCtx: StaffCtx): Promise
 
 export async function receivePO(
   id: number | string,
-  locationId: number,
+  locationId: number | null,
   items: ReceiveItemInput[],
   notes: string | null,
   staffCtx: StaffCtx,
@@ -583,7 +640,7 @@ export async function receivePO(
 
     // 1. Fetch PO — must be in receivable status
     const poRes = await client.query(
-      `SELECT id, status FROM purchase_orders WHERE id = $1 FOR UPDATE`,
+      `SELECT id, status, receiving_location_id FROM purchase_orders WHERE id = $1 FOR UPDATE`,
       [id],
     );
     if (!poRes.rows.length) throw new NotFoundError('Purchase Order');
@@ -593,8 +650,14 @@ export async function receivePO(
       throw new BusinessError('PO_INVALID_STATUS', 'Purchase Order must be approved, ordered, or partially_received to receive goods');
     }
 
+    // Resolve effective location: use provided locationId or fall back to PO's receiving_location_id
+    const effectiveLocationId = locationId ?? (poRes.rows[0].receiving_location_id as number | null);
+    if (!effectiveLocationId) {
+      throw new ValidationError('No receiving location specified and PO has no default receiving location');
+    }
+
     // 2. Validate location exists
-    const locRes = await client.query(`SELECT id FROM locations WHERE id = $1`, [locationId]);
+    const locRes = await client.query(`SELECT id FROM locations WHERE id = $1`, [effectiveLocationId]);
     if (!locRes.rows.length) throw new NotFoundError('Location');
 
     // 3. Process each item
@@ -638,13 +701,13 @@ export async function receivePO(
       await client.query(
         `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version)
          VALUES ($1, $2, 0, 5, 0) ON CONFLICT DO NOTHING`,
-        [bookId, locationId],
+        [bookId, effectiveLocationId],
       );
 
       // Get current inventory state with lock
       const invRes = await client.query(
         `SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
-        [bookId, locationId],
+        [bookId, effectiveLocationId],
       );
       const qtyBefore = invRes.rows[0].quantity as number;
       const qtyAfter = qtyBefore + item.quantityReceived;
@@ -653,7 +716,7 @@ export async function receivePO(
       await client.query(
         `UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now()
          WHERE book_id = $2 AND location_id = $3`,
-        [qtyAfter, bookId, locationId],
+        [qtyAfter, bookId, effectiveLocationId],
       );
 
       // Insert inventory_history
@@ -661,7 +724,7 @@ export async function receivePO(
         `INSERT INTO inventory_history
            (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
          VALUES ($1, $2, $3, $4, $5, 'stock_in', 'stock_in', 'purchase_order', $6, $7, $8)`,
-        [bookId, locationId, qtyBefore, qtyAfter, item.quantityReceived, String(id), notes ?? null, staffCtx.staffId],
+        [bookId, effectiveLocationId, qtyBefore, qtyAfter, item.quantityReceived, String(id), notes ?? null, staffCtx.staffId],
       );
     }
 
@@ -670,7 +733,7 @@ export async function receivePO(
       `INSERT INTO po_receipts (po_id, location_id, received_by, notes)
        VALUES ($1, $2, $3, $4)
        RETURNING id`,
-      [id, locationId, staffCtx.staffId, notes ?? null],
+      [id, effectiveLocationId, staffCtx.staffId, notes ?? null],
     );
     const receiptId = receiptRes.rows[0].id as string;
 
@@ -704,7 +767,7 @@ export async function receivePO(
       `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
        VALUES ($1, $2, 'UPDATE', 'purchase_order', $3, $4, $5)`,
       [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId,
-       JSON.stringify({ action: 'receive', locationId, itemCount: items.length, newStatus })],
+       JSON.stringify({ action: 'receive', locationId: effectiveLocationId, itemCount: items.length, newStatus })],
     );
 
     await client.query('COMMIT');

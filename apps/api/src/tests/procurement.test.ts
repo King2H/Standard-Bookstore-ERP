@@ -530,4 +530,163 @@ describe('Procurement — Purchase Orders', () => {
     expect(approveRes.status).toBe(200);
     expect(approveRes.body.status).toBe('approved');
   });
+
+  // ── 15. PO can be received at a specific (non-default) location ───────────
+
+  it('15. PO can be received at a specific location (not just default)', async () => {
+    // Create a second location in the test branch
+    const loc2Res = await db.query(
+      `INSERT INTO locations (branch_id, name, is_default_fulfillment) VALUES ($1, 'Proc Test Location 2', false) RETURNING id`,
+      [branchId],
+    );
+    const location2Id = loc2Res.rows[0].id as number;
+
+    // Ensure inventory row exists for location2
+    await db.query(
+      `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version)
+       VALUES ($1, $2, 0, 5, 0) ON CONFLICT DO NOTHING`,
+      [bookId, location2Id],
+    );
+
+    const invBefore = await db.query(
+      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+      [bookId, location2Id],
+    );
+    const qtyBefore = invBefore.rows[0]?.quantity ?? 0;
+
+    // Create PO and submit (auto-approve)
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        supplierId,
+        branchId,
+        notes: 'proc_test specific location receive',
+        lineItems: [{ bookId, quantity: 5, unitCost: 5.00 }],
+      });
+    expect(createRes.status).toBe(201);
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+
+    await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/submit`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId));
+
+    // Receive at location2 (not the default)
+    const receiveRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        locationId: location2Id,
+        items: [{ poLineItemId: lineItemId, quantityReceived: 5 }],
+        notes: 'proc_test specific location',
+      });
+
+    expect(receiveRes.status).toBe(200);
+    expect(receiveRes.body.status).toBe('received');
+
+    // Verify inventory updated at location2
+    const invAfter = await db.query(
+      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+      [bookId, location2Id],
+    );
+    expect(invAfter.rows[0].quantity).toBe(qtyBefore + 5);
+
+    // Verify inventory at default location was NOT changed by this receipt
+    const receipt = receiveRes.body.receipts?.find((r: { locationId: number }) => r.locationId === location2Id);
+    expect(receipt).toBeTruthy();
+
+    // Cleanup
+    await db.query(`DELETE FROM inventory_history WHERE location_id = $1`, [location2Id]);
+    await db.query(`DELETE FROM inventory WHERE location_id = $1`, [location2Id]);
+    await db.query(`
+      DELETE FROM po_receipt_items WHERE receipt_id IN (
+        SELECT id FROM po_receipts WHERE location_id = $1
+      )
+    `, [location2Id]);
+    await db.query(`DELETE FROM po_receipts WHERE location_id = $1`, [location2Id]);
+    await db.query(`DELETE FROM locations WHERE id = $1`, [location2Id]);
+  });
+
+  // ── 16. Receiving location defaults to PO's receiving_location_id when not specified ──
+
+  it('16. Receiving location defaults to PO receiving_location_id when locationId not specified in GRN', async () => {
+    // Create a dedicated location for this test
+    const loc3Res = await db.query(
+      `INSERT INTO locations (branch_id, name, is_default_fulfillment) VALUES ($1, 'Proc Test Location 3', false) RETURNING id`,
+      [branchId],
+    );
+    const location3Id = loc3Res.rows[0].id as number;
+
+    await db.query(
+      `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version)
+       VALUES ($1, $2, 0, 5, 0) ON CONFLICT DO NOTHING`,
+      [bookId, location3Id],
+    );
+
+    const invBefore = await db.query(
+      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+      [bookId, location3Id],
+    );
+    const qtyBefore = invBefore.rows[0]?.quantity ?? 0;
+
+    // Create PO with explicit receivingLocationId
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        supplierId,
+        branchId,
+        receivingLocationId: location3Id,
+        notes: 'proc_test default receiving location',
+        lineItems: [{ bookId, quantity: 3, unitCost: 5.00 }],
+      });
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.receivingLocationId).toBe(location3Id);
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+
+    // Submit (auto-approve)
+    await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/submit`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId));
+
+    // Receive WITHOUT specifying locationId — should fall back to PO's receiving_location_id
+    const receiveRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        items: [{ poLineItemId: lineItemId, quantityReceived: 3 }],
+        notes: 'proc_test no location specified',
+      });
+
+    expect(receiveRes.status).toBe(200);
+    expect(receiveRes.body.status).toBe('received');
+
+    // Verify inventory updated at location3 (the PO's receiving_location_id)
+    const invAfter = await db.query(
+      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+      [bookId, location3Id],
+    );
+    expect(invAfter.rows[0].quantity).toBe(qtyBefore + 3);
+
+    // Cleanup
+    await db.query(`DELETE FROM inventory_history WHERE location_id = $1`, [location3Id]);
+    await db.query(`DELETE FROM inventory WHERE location_id = $1`, [location3Id]);
+    await db.query(`
+      DELETE FROM po_receipt_items WHERE receipt_id IN (
+        SELECT id FROM po_receipts WHERE location_id = $1
+      )
+    `, [location3Id]);
+    await db.query(`DELETE FROM po_receipts WHERE location_id = $1`, [location3Id]);
+    // Null out receiving_location_id on POs referencing this location before deleting
+    await db.query(`UPDATE purchase_orders SET receiving_location_id = NULL WHERE receiving_location_id = $1`, [location3Id]);
+    await db.query(`DELETE FROM locations WHERE id = $1`, [location3Id]);
+  });
 });

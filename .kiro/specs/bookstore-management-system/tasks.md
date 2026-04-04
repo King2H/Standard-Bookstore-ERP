@@ -630,28 +630,29 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 ---
 
 - [x] 9. Procure Stock via Purchase Orders (Full Lifecycle — Draft → GRN → Inventory)
-  > Full procurement lifecycle: draft → approval → ordered → GRN (partial/full receive) → closed. GRN is the sole authoritative source of stock_in for purchased inventory.
+  > Full procurement lifecycle: draft → approval → ordered → GRN (partial/full receive) → closed. GRN is the sole authoritative source of stock_in for purchased inventory. Supports flexible receiving destination (direct-to-branch or centralized). Clean separation from Payments (Slice 14).
   > _Slice 9 = Requirement 9 | Design: design.md §3.10, §4.3_
   > _Concurrency: Inline inventory update within GRN transaction — no nested transaction issues_
 
-  - [x] 9.1 Create DB migration: purchase_orders, po_line_items, po_receipts, po_receipt_items
-    - `purchase_orders (id BIGSERIAL PK, branch_id, supplier_id, status CHECK IN ('draft','pending_approval','approved','ordered','partially_received','received','closed','cancelled'), total_amount NUMERIC(14,2), currency TEXT, expected_delivery_date DATE, notes TEXT, created_by, approved_by, created_at, updated_at)`
+  - [x] 9.1 Create DB migrations: purchase_orders, po_line_items, po_receipts, po_receipt_items + receiving location refinement
+    - Migration `1700000018`: `purchase_orders (id BIGSERIAL PK, branch_id, supplier_id, status CHECK IN ('draft','pending_approval','approved','ordered','partially_received','received','closed','cancelled'), total_amount NUMERIC(14,2), currency TEXT, expected_delivery_date DATE, notes TEXT, created_by, approved_by, created_at, updated_at)`
     - `po_line_items (id BIGSERIAL PK, po_id, book_id, format_id, edition_id, quantity, unit_cost, received_quantity, CONSTRAINT received_lte_ordered)`
     - `po_receipts (id BIGSERIAL PK, po_id, location_id, received_by, received_at, notes)`
     - `po_receipt_items (id BIGSERIAL PK, receipt_id, po_line_item_id, quantity_received)`
+    - Migration `1700000019`: adds `receiving_branch_id`, `receiving_location_id`, `financial_status TEXT CHECK IN ('unpaid','partial','paid') DEFAULT 'unpaid'` to `purchase_orders`; backfills existing POs with branch's default fulfillment location
     - Seed: 2 sample draft POs
     - _Requirements: 9_
 
   - [x] 9.2 Implement procurement.service.ts
-    - `createPO()` — validate supplier (active, not blacklisted), validate books active, calculate total_amount, INSERT draft PO + line items, audit log
-    - `updatePO()` — draft only; recalculate totals; replace line items
+    - `createPO()` — validate supplier (active, not blacklisted), validate books active, calculate total_amount; accept `receivingBranchId`/`receivingLocationId` (auto-resolves to default fulfillment location if not provided); INSERT draft PO + line items, audit log
+    - `updatePO()` — draft only; recalculate totals; replace line items; update receiving location with validation
     - `submitForApproval()` — draft → pending_approval (if total > threshold) or auto-approved (if ≤ threshold)
     - `approvePO()` — pending_approval → approved; sets approved_by
     - `markAsOrdered()` — approved → ordered
-    - `receivePO()` — TRANSACTIONAL: validate receivable status, validate no over-receipt, UPDATE received_quantity, inline inventory update (INSERT inventory row if missing, UPDATE quantity, INSERT inventory_history with movement_type='stock_in' reference_type='purchase_order'), INSERT po_receipts + po_receipt_items, auto-set status to partially_received or received, audit log
+    - `receivePO(id, locationId | null, items, notes, staffCtx)` — TRANSACTIONAL: validate receivable status; resolve effective location (provided locationId OR PO's receiving_location_id); validate no over-receipt per line; UPDATE received_quantity; inline inventory update (INSERT inventory row if missing, UPDATE quantity, INSERT inventory_history with movement_type='stock_in' reference_type='purchase_order'); INSERT po_receipts + po_receipt_items; auto-set status to partially_received or received; audit log
     - `closePO()` — received → closed
     - `cancelPO()` — draft/pending_approval/approved only; blocked if any receipts exist
-    - `getById()` / `list()` — full PO with line items and receipts
+    - `getById()` / `list()` — full PO with line items, receipts, receiving location name, financial_status
     - _Requirements: 9_
 
   - [x] 9.3 Implement procurement API routes (10 endpoints)
@@ -660,21 +661,21 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `POST /api/purchase-orders/:id/submit` — Admin/Manager/Purchasor
     - `POST /api/purchase-orders/:id/approve` — Admin/Manager only
     - `POST /api/purchase-orders/:id/order` — Admin/Manager/Purchasor
-    - `POST /api/purchase-orders/:id/receive` — Admin/Manager/Stock_Clerk; body: `{ locationId, items: [{ poLineItemId, quantityReceived }], notes? }`
+    - `POST /api/purchase-orders/:id/receive` — Admin/Manager/Stock_Clerk; body: `{ locationId? (optional, falls back to PO's receiving_location_id), items: [{ poLineItemId, quantityReceived }], notes? }`
     - `POST /api/purchase-orders/:id/close` — Admin/Manager
     - `POST /api/purchase-orders/:id/cancel` — Admin/Manager/Purchasor
     - _Requirements: 9_
 
   - [x] 9.4 Implement ProcurementPage.tsx (4 sub-views)
     - PO List: table with ID, supplier, status badge, total, expected date; filter by status/supplier; "New PO" button
-    - PO Detail: header info, line items table (ordered/received/remaining), GRN history, action buttons per status
-    - Receive Goods (GRN form): location selector (branch-scoped, default pre-selected), per-line quantity inputs with max=remaining, notes
-    - Create/Edit PO form: supplier selector (active + not blacklisted), line item builder (book select + qty + unit cost), running total
+    - PO Detail: header info (incl. receiving location name + payment status badge), line items table (ordered/received/remaining), GRN history, action buttons per status
+    - Receive Goods (GRN form): location selector filtered to PO's receiving branch (pre-selects PO's receiving_location_id or default fulfillment), per-line quantity inputs with max=remaining, notes
+    - Create/Edit PO form: supplier selector (active + not blacklisted), receiving branch + receiving location dropdowns (location filtered by branch), line item builder (book select + qty + unit cost), running total
     - RBAC: canWrite (Admin/Manager/Purchasor), canApprove (Admin/Manager), canReceive (Admin/Manager/Stock_Clerk)
     - Wired into Layout nav and App.tsx routing
     - _Requirements: 9_
 
-  - [x] 9.5 Write integration tests for procurement service (14 tests)
+  - [x] 9.5 Write integration tests for procurement service (16 tests)
     - Create PO → correct total_amount
     - Submit below threshold → auto-approved
     - Submit above threshold → pending_approval
@@ -689,17 +690,21 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - Finance_Officer can list POs
     - Stock_Clerk can list but not create
     - Manager can approve
+    - PO can be received at a specific non-default location
+    - Receiving location defaults to PO's receiving_location_id when not specified in GRN
     - _Requirements: 9_
 
   **Definition of Done:**
   - Full PO lifecycle working (draft → closed)
-  - GRN correctly updates inventory inline within transaction
+  - Flexible receiving destination: direct-to-branch or centralized (Option A/B)
+  - GRN correctly updates inventory inline within transaction at the resolved location
   - Partial receiving supported; status auto-transitions
   - Over-receipt rejected (422)
   - Cancel blocked after any receipt
+  - financial_status field tracks payment readiness (unpaid/partial/paid) — payment logic deferred to Slice 14
   - No direct DB mutation outside service layer
-  - 14 integration tests passing
-  - Locations dropdown in GRN form uses branch-scoped endpoint
+  - 16 integration tests passing
+  - Locations dropdown in GRN form uses PO's receiving branch (not hardcoded Main Branch)
 
 ---
 

@@ -133,12 +133,14 @@ Every API endpoint and UI page enforces role restrictions. The table below summa
 **Slice 9 — Procurement & Purchase Orders ✅**
 - Full PO lifecycle: draft → pending_approval → approved → ordered → partially_received → received → closed → cancelled
 - Approval threshold: auto-approved if total ≤ `po_approval_threshold` config; otherwise requires Manager/Admin approval
-- GRN (Goods Receipt Note): transactional receive with inline inventory update — sole authoritative source of `stock_in` for purchased goods
+- Flexible receiving destination: `receiving_branch_id` + `receiving_location_id` on PO — supports direct-to-branch delivery (Option A) or centralized receiving + transfer (Option B via Inventory `transfer()`)
+- GRN (Goods Receipt Note): transactional receive with inline inventory update — sole authoritative source of `stock_in` for purchased goods; `locationId` in GRN is optional (falls back to PO's `receiving_location_id`)
 - Partial receiving supported; status auto-transitions to `partially_received` or `received`
 - Over-receipt rejected (422 OVER_RECEIPT); cancel blocked after any receipt exists
-- 4 UI sub-views: PO List, PO Detail, Receive Goods (GRN form with branch-scoped location selector), Create/Edit PO
+- `financial_status` field (`unpaid`/`partial`/`paid`) tracks payment readiness — payment logic deferred to Slice 14 (no cross-slice coupling)
+- 4 UI sub-views: PO List, PO Detail (with receiving location + payment status), Receive Goods (GRN form with branch-scoped location selector pre-selecting PO's receiving location), Create/Edit PO (with receiving branch + location dropdowns)
 - RBAC: `Admin`/`Manager`/`Purchasor` create; `Admin`/`Manager` approve/close; `Admin`/`Manager`/`Stock_Clerk` receive; `Finance_Officer` read-only
-- 14 integration tests passing
+- 16 integration tests passing (including flexible location and PO-default-location fallback tests)
 
 ---
 
@@ -189,7 +191,7 @@ cd apps/api && npm test
 ```
 
 > Tests use prefix-based cleanup — seed data is never touched.
-> Current: **12 test files, 169 tests, all passing.**
+> Current: **12 test files, 171 tests, all passing.**
 
 ## Restoring Seed Data
 
@@ -289,7 +291,7 @@ Generate encryption key: `node -e "console.log(require('crypto').randomBytes(32)
 - `POST /api/purchase-orders/:id/submit` — submit for approval (`Admin`, `Manager`, `Purchasor`)
 - `POST /api/purchase-orders/:id/approve` — approve (`Admin`, `Manager`)
 - `POST /api/purchase-orders/:id/order` — mark as ordered (`Admin`, `Manager`, `Purchasor`)
-- `POST /api/purchase-orders/:id/receive` — GRN (`Admin`, `Manager`, `Stock_Clerk`); body: `{ locationId, items: [{ poLineItemId, quantityReceived }] }`
+- `POST /api/purchase-orders/:id/receive` — GRN (`Admin`, `Manager`, `Stock_Clerk`); body: `{ locationId? (optional, falls back to PO's receiving_location_id), items: [{ poLineItemId, quantityReceived }] }`
 - `POST /api/purchase-orders/:id/close` — close (`Admin`, `Manager`)
 - `POST /api/purchase-orders/:id/cancel` — cancel (`Admin`, `Manager`, `Purchasor`)
 
