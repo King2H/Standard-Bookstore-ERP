@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTheme } from '../lib/theme.js';
 import { logout } from '../lib/auth.js';
 
-type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'profile';
+type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'profile';
 type Role = string;
 
 interface NavItem {
@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'suppliers',     label: 'Suppliers',     icon: '🚚', roles: ['Admin', 'Manager', 'Purchasor'] },
   { id: 'procurement',   label: 'Procurement',   icon: '📋', roles: ['Admin', 'Manager', 'Purchasor', 'Stock_Clerk', 'Finance_Officer'] },
   { id: 'customers',    label: 'Customers',     icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer', 'Stock_Clerk', 'Purchasor'] },
+  { id: 'pos',          label: 'POS',           icon: '🛒', roles: ['Admin', 'Manager', 'Sales'] },
   { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'] },
   { id: 'settings',      label: 'Settings',      icon: '⚙️', roles: ['Super_Admin', 'Admin', 'Manager'] },
   { id: 'audit-log',     label: 'Audit Log',     icon: '📋', roles: ['Super_Admin', 'Admin'] },

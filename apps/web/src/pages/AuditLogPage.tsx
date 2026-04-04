@@ -84,7 +84,7 @@ export default function AuditLogPage() {
     refetchOnWindowFocus: true,
   });
 
-  const entityTypes = ['branch', 'staff', 'location', 'book', 'supplier', 'customer'];
+  const entityTypes = ['branch', 'staff', 'location', 'book', 'supplier', 'purchase_order', 'customer', 'transaction'];
 
   return (
     <div className="p-6">

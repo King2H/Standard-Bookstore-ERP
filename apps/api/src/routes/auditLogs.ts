@@ -11,8 +11,8 @@ router.get(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const page = parseInt(req.query.page as string ?? '1', 10);
-      const pageSize = Math.min(parseInt(req.query.pageSize as string ?? '25', 10), 100);
+      const page = Math.max(1, parseInt(req.query.page as string ?? '1', 10));
+      const pageSize = Math.min(100, parseInt(req.query.pageSize as string ?? '25', 10));
       const entityType = req.query.entityType as string | undefined;
       const staffId = req.query.staffId ? parseInt(req.query.staffId as string, 10) : undefined;
 
@@ -21,29 +21,30 @@ router.get(
 
       if (entityType) {
         params.push(entityType);
-        conditions.push(`entity_type = $${params.length}`);
+        conditions.push(`al.entity_type = $${params.length}`);
       }
       if (staffId) {
         params.push(staffId);
-        conditions.push(`staff_id = $${params.length}`);
+        conditions.push(`al.staff_id = $${params.length}`);
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const offset = (page - 1) * pageSize;
 
       const [dataResult, countResult] = await Promise.all([
         db.query(
-          `SELECT al.id, al.staff_id, s.username as staff_username, al.staff_role,
+          `SELECT al.id, al.staff_id, s.username AS staff_username, al.staff_role,
                   al.action, al.entity_type, al.entity_id, al.branch_id,
-                  b.name as branch_name, al.meta, al.created_at
+                  b.name AS branch_name, al.meta, al.created_at
            FROM audit_logs al
            LEFT JOIN staff s ON s.id = al.staff_id
            LEFT JOIN branches b ON b.id = al.branch_id
            ${where}
            ORDER BY al.created_at DESC
            LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-          [...params, pageSize, (page - 1) * pageSize],
+          [...params, pageSize, offset],
         ),
-        db.query(`SELECT COUNT(*) FROM audit_logs ${where}`, params),
+        db.query(`SELECT COUNT(*) FROM audit_logs al ${where}`, params),
       ]);
 
       res.json({
@@ -60,10 +61,10 @@ router.get(
           meta: r.meta,
           createdAt: r.created_at,
         })),
-        total: parseInt(countResult.rows[0].count, 10),
+        total: parseInt(countResult.rows[0].count as string, 10),
         page,
         pageSize,
-        totalPages: Math.ceil(parseInt(countResult.rows[0].count, 10) / pageSize),
+        totalPages: Math.ceil(parseInt(countResult.rows[0].count as string, 10) / pageSize),
       });
     } catch (err) {
       next(err);

@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 2 — Slices 8, 9 & 10 Complete. Next: Slice 11 (POS Transactions)**
+**Phase 2 — Slices 8, 9, 10 & 11 Complete. Next: Slice 12 (Returns & Refunds)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -30,7 +30,8 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 8 | Supplier Management | ✅ Done |
 | 9 | Procurement & Purchase Orders | ✅ Done |
 | 10 | Customer Management | ✅ Done |
-| 11–15 | POS, Returns, Orders, Payments, Exchange | ⬜ Pending |
+| 11 | POS Transactions | ✅ Done |
+| 12–15 | Returns, Orders, Payments, Exchange | ⬜ Pending |
 | 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
 
 ---
@@ -155,6 +156,29 @@ Every API endpoint and UI page enforces role restrictions. The table below summa
 - Forward-compatible: `customers.id` ready to be referenced by transactions, orders, returns (Slices 11–13)
 - 15 integration tests passing
 
+**Slice 11 — POS Transactions ✅**
+- Single-step atomic transaction engine: no draft state, completed immediately on creation
+- Currency locked to ETB (Ethiopian Birr) — enforced at DB and service layer
+- Inventory decremented via `stock_out` with `inventory_history` (`reference_type = 'sale'`)
+- Config-driven tax rate and per-role max discount enforcement
+- Customer integration: loyalty point accrual on subtotal, loyalty point redemption, store credit deduction
+- Void: reverses inventory (`reference_type = 'void'`), reverses loyalty accrual + redemption, restores store credit
+- Transaction number format: `POS-YYYYMMDD-XXXX`
+- 3-column POS terminal UI: book search | cart (qty ±, inline discount) | summary + payment (Cash/Bank/Store Credit/Loyalty)
+- Bank payment method: dropdown of active branch bank accounts
+- "Fill ETB X.XX" quick-fill button + auto-default to remaining balance on empty Add click
+- Pending balance indicator: amber (due) / green (paid) / red (overpaid)
+- Credit sales: `payment_status` (`paid`/`partial`/`credit`) tracked per transaction; `amount_paid` and `amount_due` stored
+- "Credit Sale" button (amber) allows recording a sale with partial or zero payment — requires a customer
+- `POST /api/pos/transactions/:id/payment` collects outstanding balance on credit/partial transactions
+- History tab: Paid/Due columns, payment_status badge (green/amber/red), "Collect" button on pending rows
+- Receipt modal on success; transaction history tab with filters
+- Location dropdown correctly scoped to logged-in branch via `getCurrentBranchId()` (session memory)
+- Migration `1700000022`: extends `inventory_history_reference_type_check` to include `'sale'` and `'void'`
+- Migration `1700000023`: adds `payment_status`, `amount_paid`, `amount_due` to `transactions`
+- RBAC: `Sales`/`Manager` create; `Manager`/`Admin` void; all authenticated view
+- 10 integration tests passing
+
 ---
 
 ## Tech Stack
@@ -204,7 +228,7 @@ cd apps/api && npm test
 ```
 
 > Tests use prefix-based cleanup — seed data is never touched.
-> Current: **13 test files, 186 tests, all passing.**
+> Current: **14 test files, 196 tests, all passing.**
 
 ## Restoring Seed Data
 
@@ -307,6 +331,13 @@ Generate encryption key: `node -e "console.log(require('crypto').randomBytes(32)
 - `POST /api/purchase-orders/:id/receive` — GRN (`Admin`, `Manager`, `Stock_Clerk`); body: `{ locationId? (optional, falls back to PO's receiving_location_id), items: [{ poLineItemId, quantityReceived }] }`
 - `POST /api/purchase-orders/:id/close` — close (`Admin`, `Manager`)
 - `POST /api/purchase-orders/:id/cancel` — cancel (`Admin`, `Manager`, `Purchasor`)
+
+### POS Transactions (Slice 11)
+- `POST /api/pos/transactions` — create transaction (`Sales`, `Manager`); body: `{ branchId, locationId, customerId?, items, payments, allowCredit? }`
+- `GET /api/pos/transactions` — list (all authenticated); filters: `branchId`, `customerId`, `staffId`, `dateFrom`, `dateTo`, `status`, `paymentStatus`
+- `GET /api/pos/transactions/:id` — detail with line items + payments (all authenticated)
+- `POST /api/pos/transactions/:id/payment` — collect outstanding balance on credit/partial transaction (`Sales`, `Manager`, `Admin`)
+- `POST /api/pos/transactions/:id/void` — void transaction (`Manager`, `Admin`)
 
 ### Audit Log
 - `GET /api/audit-logs` — paginated; filter by entityType (`Super_Admin`, `Admin`)
