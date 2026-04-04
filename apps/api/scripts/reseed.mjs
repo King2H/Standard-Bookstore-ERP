@@ -1,6 +1,6 @@
 /**
  * Restores seed data wiped by tests. Otherwise, complete messup.
- * Run: node scripts/reseed.mjs
+ * Run: node scripts/reseed.mjs -- for reference
  */
 import pg from 'pg';
 import bcrypt from 'bcrypt';
