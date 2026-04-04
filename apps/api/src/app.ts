@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import cookieParser from 'cookie-parser';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { loggerMiddleware } from './middleware/logger.js';
@@ -10,23 +10,25 @@ import branchRouter from './modules/branch/branch.routes.js';
 import configRouter from './modules/config/config.routes.js';
 import bankAccountRouter from './modules/bankAccount/bankAccount.routes.js';
 import locationRouter from './modules/location/location.routes.js';
+import catalogRouter from './modules/catalog/catalog.routes.js';
 
 export function createApp() {
   const app = express();
 
-  // ── Core middleware ──────────────────────────────────────────────────────
+  // â”€â”€ Core middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   app.use(express.json());
   app.use(cookieParser());
   app.use(requestIdMiddleware);
   app.use(loggerMiddleware);
 
-  // ── Routes ───────────────────────────────────────────────────────────────
+  // â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   app.use('/api', healthRouter);
   app.use('/api', authRouter);
   app.use('/api', branchRouter);
   app.use('/api', configRouter);
   app.use('/api', bankAccountRouter);
   app.use('/api', locationRouter);
+  app.use('/api', catalogRouter);
   app.use('/api', auditLogsRouter);
 
   // 404 handler
@@ -37,7 +39,7 @@ export function createApp() {
     });
   });
 
-  // ── Error handler (must be last) ─────────────────────────────────────────
+  // â”€â”€ Error handler (must be last) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   app.use(errorHandler);
 
   return app;

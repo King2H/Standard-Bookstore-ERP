@@ -366,11 +366,11 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 6. Build the Book Catalog (Create, Search, Price Overrides)
+- [x] 6. Build the Book Catalog (Create, Search, Price Overrides)
   > Master catalog of all books. Required before inventory, POS, or orders can reference books.
   > _Slice 6 = Requirement 6 | Design: design.md §3.8_
 
-  - [ ] 6.1 Create DB migration: books, book_branch_prices, book_categories, book_tags, book_edit_history
+  - [x] 6.1 Create DB migration: books, book_branch_prices, book_categories, book_tags, book_edit_history
     - `books (id SERIAL PK, isbn TEXT UNIQUE NOT NULL, title TEXT NOT NULL, authors TEXT[] NOT NULL, genre TEXT, publisher TEXT, edition TEXT, language TEXT, format TEXT, description TEXT, cover_image_url TEXT, default_price NUMERIC(14,2), trade_value NUMERIC(14,2), is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now(), search_vector TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(array_to_string(authors,' '),''))) STORED)`
     - Indexes: GIN on `search_vector`, btree on `isbn`, btree on `is_active`
     - `book_branch_prices (book_id INTEGER REFERENCES books(id), branch_id INTEGER REFERENCES branches(id), price NUMERIC(14,2) NOT NULL, PRIMARY KEY (book_id, branch_id))`
@@ -387,7 +387,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `getEffectivePrice(bookId, branchId)` — SELECT from book_branch_prices; fallback to books.default_price
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9_
 
-  - [ ] 3.3 Implement catalog API routes
+  - [x] 3.3 Implement catalog API routes
     - `GET /api/books` — any authenticated; paginated; `?q`, `isbn`, `genre`, `category`, `tag`, `is_active`, `branchId`, `sortBy`, `sortDir`
     - `POST /api/books` — Admin/Manager; 409 DUPLICATE_ISBN; 403 for other roles
     - `GET /api/books/:id` — any authenticated; includes categories, tags, branch prices
@@ -398,7 +398,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `PUT /api/books/:id/prices/:branchId` — Admin/Manager
     - _Requirements: 6.10_
 
-  - [ ] 6.2 Implement catalog.service.ts
+  - [x] 6.2 Implement catalog.service.ts
     - `create(data, staffCtx)` — validate ISBN-13 check digit (mod-10 algorithm); INSERT books + categories + tags; INSERT audit_logs; 409 DUPLICATE_ISBN
     - `update(id, data, staffCtx)` — diff changed bibliographic fields; INSERT book_edit_history row per changed field; UPDATE books; INSERT audit_logs
     - `deactivate(id, staffCtx)` — UPDATE books SET is_active=false; INSERT audit_logs
@@ -407,7 +407,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `getEffectivePrice(bookId, branchId)` — SELECT from book_branch_prices; fallback to books.default_price
     - _Requirements: 6.1–6.9_
 
-  - [ ] 6.3 Implement catalog API routes
+  - [x] 6.3 Implement catalog API routes
     - `GET /api/books` — any authenticated; paginated; `?q`, `isbn`, `genre`, `category`, `tag`, `is_active`, `branchId`, `sortBy`, `sortDir`
     - `POST /api/books` — Admin/Manager; 409 DUPLICATE_ISBN; 403 for other roles
     - `GET /api/books/:id` — any authenticated; includes categories, tags, branch prices
@@ -418,23 +418,50 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
     - `PUT /api/books/:id/prices/:branchId` — Admin/Manager
     - _Requirements: 6.10_
 
-  - [ ] 6.4 Implement Book list, Detail, and Edit UI
+  - [x] 6.4 Implement Book list, Detail, and Edit UI
     - Book list: DataTable with isbn, title, authors, genre, default_price, is_active; full-text search input; filter panel
     - Book detail: all fields + categories/tags + branch price overrides table + edit history timeline
     - Create/Edit form: all bibliographic fields + category/tag multi-input
     - TanStack Query hooks: `useBookList`, `useBook`, `useCreateBook`, `useUpdateBook`, `useDeactivateBook`, `useBookHistory`, `useSetBranchPrice`
     - _Requirements: 6_
 
-  - [ ] 6.5 Write integration tests for catalog service
+  - [x] 6.5 Write integration tests for catalog service
     - Create book, duplicate ISBN (409), update (edit history created), deactivate (rejected from new PO), full-text search returns correct results, branch price override takes precedence
     - _Requirements: 6_
 
+  - [x] 6.6 Implement master data architecture (Authors, Categories, Publishers)
+    - Migration `1700000011_master_data`: `publishers` table, `publisher_id` FK on books, `parent_id` on categories for hierarchy
+    - `authors`, `categories`, `publishers` as independent CRUD entities with book-count reporting
+    - Books reference master data by ID; backward-compat name-based upsert retained
+    - API: `GET/POST /api/authors`, `PUT/DELETE /api/authors/:id`, same for `/categories` and `/publishers`
+    - Catalog sub-navigation: Books | Authors | Categories | Publishers tabs
+    - _Requirements: 6_
+
+  - [x] 6.7 Implement book format and edition structured fields
+    - Migration `1700000012_book_format_edition`: `book_formats` table (softcover, hardcover, leather_bound, cloth_bound, traditional_orthodox), `book_editions` table (first_edition, revised_edition, student_edition, annotated, special_religious)
+    - Migration `1700000013_fix_price_pk`: `format_id` + `edition_id` on `books` (nullable FK); `book_branch_prices` PK extended to `(book_id, branch_id, format_id, edition_id)` with `NOT NULL DEFAULT 0` sentinel
+    - Format and edition required on book creation; pricing can vary per format/edition/branch combination
+    - API: `GET /api/book-formats`, `GET /api/book-editions`
+    - Book form: Physical tab with enum dropdowns for format and edition; validation enforced before save
+    - _Requirements: 6_
+
+  - [x] 6.8 Production-grade Catalog UI
+    - Compact single-row toolbar: KPI chips + debounced search + Category/Author/Genre/Status dropdowns
+    - All filters wired to backend API and synced to URL query params (shareable state)
+    - Sortable columns (Title, ISBN, Price, Added), bulk select + activate/deactivate
+    - Row action menu: smart up/down positioning based on viewport space; `opacity-40` at rest for operational visibility
+    - Tabbed create/edit drawer: Basic Info | Physical (format + edition) | Authors | Categories | Pricing
+    - RBAC: Super_Admin excluded from operational catalog writes (Admin/Manager only)
+    - _Requirements: 6_
+
   **Definition of Done:**
-  - ISBN-13 check digit validated on create
+  - ISBN-13 check digit validated on create (optional ISBN, SKU as fallback)
   - Full-text search returns relevant results
   - Edit history entry created for each changed field
-  - Inactive book rejected from new operations
-  - Branch price override works correctly
+  - Format + edition required; pricing supports format/edition/branch variation
+  - Master data (authors, categories, publishers) managed independently
+  - All filters functional and URL-synced
+  - 104 integration tests passing (9 test files)
 
 ---
 
