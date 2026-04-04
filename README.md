@@ -54,7 +54,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 ### Phase 1 — Core Business Foundation 🔄
 
 **Slice 1 — Configuration & System Settings ✅**
-- 21 system-wide defaults (currency, tax, discounts, inventory, procurement, returns, payments, loyalty, exchange)
+- 21 system-wide defaults (currency, tax, discounts, inventory, procurement, returns, payments, loyalty, exchange and others)
 - Per-branch overrides with fallback to system defaults
 - 15 typed helper methods for use by downstream services
 - Settings UI: 10-tab page (General, Discounts, Inventory, Procurement, Returns, Payments, Loyalty, Exchange, Notifications, Security)
