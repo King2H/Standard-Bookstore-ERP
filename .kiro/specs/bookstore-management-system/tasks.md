@@ -629,51 +629,77 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 9. Procure Stock via Purchase Orders (Create, Receive, Track Status)
-  > Full procurement flow: create PO → receive stock → inventory updated. Includes over-receipt confirmation.
+- [x] 9. Procure Stock via Purchase Orders (Full Lifecycle — Draft → GRN → Inventory)
+  > Full procurement lifecycle: draft → approval → ordered → GRN (partial/full receive) → closed. GRN is the sole authoritative source of stock_in for purchased inventory.
   > _Slice 9 = Requirement 9 | Design: design.md §3.10, §4.3_
-  > _Concurrency: Optimistic locking on inventory during PO receipt — see design.md §5.1_
+  > _Concurrency: Inline inventory update within GRN transaction — no nested transaction issues_
 
-  - [ ] 9.1 Create DB migration: purchase_orders, po_line_items, po_receipts
-    - `purchase_orders (id SERIAL PK, po_number TEXT UNIQUE NOT NULL, supplier_id INTEGER REFERENCES suppliers(id), branch_id INTEGER REFERENCES branches(id), location_id INTEGER REFERENCES locations(id), status TEXT DEFAULT 'PendingApproval' CHECK (status IN ('PendingApproval','Pending','In_Progress','Closed','Cancelled')), bank_account_id INTEGER REFERENCES bank_accounts(id), notes TEXT, created_by INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`
-    - Indexes: `(supplier_id, status)`, `(branch_id, status)`
-    - `po_line_items (id SERIAL PK, po_id INTEGER REFERENCES purchase_orders(id), book_id INTEGER REFERENCES books(id), qty_ordered INTEGER NOT NULL CHECK (qty_ordered > 0), qty_received INTEGER NOT NULL DEFAULT 0, unit_price NUMERIC(14,2) NOT NULL)` + index on `po_id`
-    - `po_receipts (id BIGSERIAL PK, po_id INTEGER REFERENCES purchase_orders(id), line_item_id INTEGER REFERENCES po_line_items(id), qty_received INTEGER NOT NULL, over_receipt BOOLEAN DEFAULT false, confirmed_by INTEGER, received_by INTEGER NOT NULL, received_at TIMESTAMPTZ DEFAULT now())`
+  - [x] 9.1 Create DB migration: purchase_orders, po_line_items, po_receipts, po_receipt_items
+    - `purchase_orders (id BIGSERIAL PK, branch_id, supplier_id, status CHECK IN ('draft','pending_approval','approved','ordered','partially_received','received','closed','cancelled'), total_amount NUMERIC(14,2), currency TEXT, expected_delivery_date DATE, notes TEXT, created_by, approved_by, created_at, updated_at)`
+    - `po_line_items (id BIGSERIAL PK, po_id, book_id, format_id, edition_id, quantity, unit_cost, received_quantity, CONSTRAINT received_lte_ordered)`
+    - `po_receipts (id BIGSERIAL PK, po_id, location_id, received_by, received_at, notes)`
+    - `po_receipt_items (id BIGSERIAL PK, receipt_id, po_line_item_id, quantity_received)`
+    - Seed: 2 sample draft POs
     - _Requirements: 9_
 
-  - [ ] 9.2 Implement procurement.service.ts
-    - `create(data, staffCtx)` — validate supplier is_active; validate each book is_active; generate unique po_number (`PO-{YYYYMMDD}-{seq}`); compute PO total = SUM(qty × unit_price); if PO total > config.getPOApprovalThreshold(): set status='PendingApproval' and INSERT outbox(POApprovalRequired) to notify Manager/Admin; else set status='Pending'; INSERT purchase_orders + po_line_items; INSERT audit_logs; restricted to `Purchasor` and `Manager` roles
-    - `approve(poId, staffCtx)` — validate status='PendingApproval'; UPDATE status='Pending'; INSERT audit_logs; restricted to `Manager` and `Admin` roles; 409 INVALID_STATE_TRANSITION for other statuses
-    - `cancel(poId, staffCtx)` — validate status IN ('PendingApproval','Pending'); UPDATE status='Cancelled'; INSERT audit_logs; 409 INVALID_STATE_TRANSITION for other statuses
-    - `receive(poId, lineItemId, qtyReceived, confirm, staffCtx)` — validate status='Pending' or 'In_Progress' (409 if PendingApproval — must be approved first); if `qty_received + qtyReceived > qty_ordered` AND `!confirm`: return `202 { requiresConfirmation: true, overReceiptQty }`; else: BEGIN; UPDATE po_line_items.qty_received; UPDATE inventory (optimistic lock — version check); INSERT po_receipts; INSERT inventory_history (PO_RECEIPT); if all lines fully received: UPDATE status='Closed'; else if status='Pending': UPDATE status='In_Progress'; INSERT audit_logs; COMMIT; restricted to `Stock_Clerk` and `Manager` roles (not `Purchasor`)
-    - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9_
-
-  - [ ] 9.3 Implement procurement API routes
-    - `GET /api/purchase-orders` — Purchasor/Manager/Admin; paginated; filter by supplier/branch/status
-    - `POST /api/purchase-orders` — Purchasor/Manager; calls create
-    - `GET /api/purchase-orders/:id` — Purchasor/Manager/Admin; includes line items + receipts
-    - `PUT /api/purchase-orders/:id` — Purchasor/Manager; update notes (PendingApproval or Pending only)
-    - `POST /api/purchase-orders/:id/approve` — Manager/Admin; calls approve; 403 for Purchasor
-    - `POST /api/purchase-orders/:id/cancel` — Purchasor/Manager/Admin
-    - `POST /api/purchase-orders/:id/receive` — Stock_Clerk/Manager only (not Purchasor); body: `{ lineItemId, qtyReceived, confirm? }`; 202 on over-receipt; 409 if status='PendingApproval'
-    - _Requirements: 9.10_
-
-  - [ ] 9.4 Implement PO list, Create form, Approve, and Receive stock UI
-    - PO list: DataTable with po_number, supplier, branch, status badge (PendingApproval highlighted), created_at; filter by status
-    - Create PO form: supplier select, branch/location selects, line item builder (book search + qty + unit_price); shows computed total and approval threshold warning if total exceeds threshold
-    - Receive stock form: per-line qty_received input; over-receipt confirmation modal
-    - TanStack Query hooks: `usePurchaseOrders`, `useCreatePO`, `useCancelPO`, `useReceivePO`
+  - [x] 9.2 Implement procurement.service.ts
+    - `createPO()` — validate supplier (active, not blacklisted), validate books active, calculate total_amount, INSERT draft PO + line items, audit log
+    - `updatePO()` — draft only; recalculate totals; replace line items
+    - `submitForApproval()` — draft → pending_approval (if total > threshold) or auto-approved (if ≤ threshold)
+    - `approvePO()` — pending_approval → approved; sets approved_by
+    - `markAsOrdered()` — approved → ordered
+    - `receivePO()` — TRANSACTIONAL: validate receivable status, validate no over-receipt, UPDATE received_quantity, inline inventory update (INSERT inventory row if missing, UPDATE quantity, INSERT inventory_history with movement_type='stock_in' reference_type='purchase_order'), INSERT po_receipts + po_receipt_items, auto-set status to partially_received or received, audit log
+    - `closePO()` — received → closed
+    - `cancelPO()` — draft/pending_approval/approved only; blocked if any receipts exist
+    - `getById()` / `list()` — full PO with line items and receipts
     - _Requirements: 9_
 
-  - [ ] 9.5 Write integration tests for procurement service
-    - Create PO, cancel (Pending only), partial receipt (status → In_Progress), full receipt (status → Closed), over-receipt requires confirmation, inventory incremented correctly
+  - [x] 9.3 Implement procurement API routes (10 endpoints)
+    - `GET/POST /api/purchase-orders` — list (Admin/Manager/Purchasor/Stock_Clerk/Finance_Officer), create (Admin/Manager/Purchasor)
+    - `GET/PUT /api/purchase-orders/:id` — detail / update draft
+    - `POST /api/purchase-orders/:id/submit` — Admin/Manager/Purchasor
+    - `POST /api/purchase-orders/:id/approve` — Admin/Manager only
+    - `POST /api/purchase-orders/:id/order` — Admin/Manager/Purchasor
+    - `POST /api/purchase-orders/:id/receive` — Admin/Manager/Stock_Clerk; body: `{ locationId, items: [{ poLineItemId, quantityReceived }], notes? }`
+    - `POST /api/purchase-orders/:id/close` — Admin/Manager
+    - `POST /api/purchase-orders/:id/cancel` — Admin/Manager/Purchasor
+    - _Requirements: 9_
+
+  - [x] 9.4 Implement ProcurementPage.tsx (4 sub-views)
+    - PO List: table with ID, supplier, status badge, total, expected date; filter by status/supplier; "New PO" button
+    - PO Detail: header info, line items table (ordered/received/remaining), GRN history, action buttons per status
+    - Receive Goods (GRN form): location selector (branch-scoped, default pre-selected), per-line quantity inputs with max=remaining, notes
+    - Create/Edit PO form: supplier selector (active + not blacklisted), line item builder (book select + qty + unit cost), running total
+    - RBAC: canWrite (Admin/Manager/Purchasor), canApprove (Admin/Manager), canReceive (Admin/Manager/Stock_Clerk)
+    - Wired into Layout nav and App.tsx routing
+    - _Requirements: 9_
+
+  - [x] 9.5 Write integration tests for procurement service (14 tests)
+    - Create PO → correct total_amount
+    - Submit below threshold → auto-approved
+    - Submit above threshold → pending_approval
+    - Approve (Admin) → approved
+    - Purchasor cannot approve (403)
+    - Partial receive → partially_received + inventory updated
+    - Over-receive → 422 OVER_RECEIPT
+    - Full receive → received
+    - Cancel draft → succeeds
+    - Cancel after receipt → rejected (PO_INVALID_STATUS)
+    - Inventory history: movement_type=stock_in, reference_type=purchase_order
+    - Finance_Officer can list POs
+    - Stock_Clerk can list but not create
+    - Manager can approve
     - _Requirements: 9_
 
   **Definition of Done:**
-  - PO state machine enforced (Pending → In_Progress → Closed, Cancelled from Pending only)
-  - Inventory incremented atomically on receipt
-  - Over-receipt returns 202 and requires explicit confirmation
-  - Audit log entries on all state transitions
+  - Full PO lifecycle working (draft → closed)
+  - GRN correctly updates inventory inline within transaction
+  - Partial receiving supported; status auto-transitions
+  - Over-receipt rejected (422)
+  - Cancel blocked after any receipt
+  - No direct DB mutation outside service layer
+  - 14 integration tests passing
+  - Locations dropdown in GRN form uses branch-scoped endpoint
 
 ---
 

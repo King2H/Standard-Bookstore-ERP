@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 2 — Slice 8 (Supplier Management) Complete. Next: Slice 9 (Procurement)**
+**Phase 2 — Slices 8 & 9 Complete. Next: Slice 10 (Customer Management)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -28,7 +28,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 6 | Catalog Management | ✅ Done |
 | 7 | Inventory Management | ✅ Done |
 | 8 | Supplier Management | ✅ Done |
-| 9 | Procurement & Purchase Orders | ⬜ Next |
+| 9 | Procurement & Purchase Orders | ✅ Done |
 | 10–15 | Customer, POS, Returns, Orders, Payments, Exchange | ⬜ Pending |
 | 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
 
@@ -130,6 +130,16 @@ Every API endpoint and UI page enforces role restrictions. The table below summa
 - Supplier UI: DataTable with type/status badges, blacklist action, create/edit drawer with dynamic publisher selector
 - RBAC: `Admin`/`Manager`/`Purchasor` manage suppliers; `Admin`/`Manager` blacklist/delete; `Super_Admin` excluded
 
+**Slice 9 — Procurement & Purchase Orders ✅**
+- Full PO lifecycle: draft → pending_approval → approved → ordered → partially_received → received → closed → cancelled
+- Approval threshold: auto-approved if total ≤ `po_approval_threshold` config; otherwise requires Manager/Admin approval
+- GRN (Goods Receipt Note): transactional receive with inline inventory update — sole authoritative source of `stock_in` for purchased goods
+- Partial receiving supported; status auto-transitions to `partially_received` or `received`
+- Over-receipt rejected (422 OVER_RECEIPT); cancel blocked after any receipt exists
+- 4 UI sub-views: PO List, PO Detail, Receive Goods (GRN form with branch-scoped location selector), Create/Edit PO
+- RBAC: `Admin`/`Manager`/`Purchasor` create; `Admin`/`Manager` approve/close; `Admin`/`Manager`/`Stock_Clerk` receive; `Finance_Officer` read-only
+- 14 integration tests passing
+
 ---
 
 ## Tech Stack
@@ -179,7 +189,7 @@ cd apps/api && npm test
 ```
 
 > Tests use prefix-based cleanup — seed data is never touched.
-> Current: **11 test files, 155 tests, all passing.**
+> Current: **12 test files, 169 tests, all passing.**
 
 ## Restoring Seed Data
 
@@ -271,6 +281,17 @@ Generate encryption key: `node -e "console.log(require('crypto').randomBytes(32)
 - `GET /api/books/:bookId/suppliers` — linked suppliers sorted by is_primary (all authenticated)
 - `POST /api/books/:bookId/suppliers` — link supplier to book (`Admin`, `Manager`)
 - `DELETE /api/books/:bookId/suppliers/:supplierId` — unlink (`Admin`, `Manager`)
+
+### Procurement (Slice 9)
+- `GET /api/purchase-orders` — list (`Admin`, `Manager`, `Purchasor`, `Stock_Clerk`, `Finance_Officer`)
+- `POST /api/purchase-orders` — create (`Admin`, `Manager`, `Purchasor`)
+- `GET/PUT /api/purchase-orders/:id` — detail / update draft
+- `POST /api/purchase-orders/:id/submit` — submit for approval (`Admin`, `Manager`, `Purchasor`)
+- `POST /api/purchase-orders/:id/approve` — approve (`Admin`, `Manager`)
+- `POST /api/purchase-orders/:id/order` — mark as ordered (`Admin`, `Manager`, `Purchasor`)
+- `POST /api/purchase-orders/:id/receive` — GRN (`Admin`, `Manager`, `Stock_Clerk`); body: `{ locationId, items: [{ poLineItemId, quantityReceived }] }`
+- `POST /api/purchase-orders/:id/close` — close (`Admin`, `Manager`)
+- `POST /api/purchase-orders/:id/cancel` — cancel (`Admin`, `Manager`, `Purchasor`)
 
 ### Audit Log
 - `GET /api/audit-logs` — paginated; filter by entityType (`Super_Admin`, `Admin`)
