@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 1 — Slices 0–6 Complete. Next: Slice 7 (Inventory Management)**
+**Phase 1 — Slices 0–7 Complete. Next: Slice 8 (Supplier Management)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -26,7 +26,8 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 4 | Bank Account Management | ✅ Done |
 | 5 | Location Management + Access Control | ✅ Done |
 | 6 | Catalog Management | ✅ Done |
-| 7 | Inventory Management | ⬜ Next |
+| 7 | Inventory Management | ✅ Done |
+| 8 | Supplier Management | ⬜ Next |
 | 8–15 | Operations + Financial Flows | ⬜ Pending |
 | 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
 
@@ -71,13 +72,24 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 **Slice 6 — Catalog Management ✅**
 - Master data architecture: Authors, Categories, Publishers as independent entities
-- Books reference master data by ID (no embedded strings)
+- Books reference master data by ID; format + edition required (structured enums)
 - Book formats: softcover, hardcover, leather_bound, cloth_bound, traditional_orthodox
 - Book editions: first_edition, revised_edition, student_edition, annotated, special_religious
-- Format + edition required on book creation; pricing can vary by format/edition/branch
+- Pricing can vary by format/edition/branch combination
 - Full-text search (tsvector), ISBN-13 validation, SKU/internal ID support
-- Edit history per field, branch price overrides
-- Production-grade catalog UI: compact filter bar, category/author/genre/status dropdowns, URL-synced filters, sortable columns, bulk select, row action menu (smart up/down positioning), tabbed create/edit drawer
+- Production-grade catalog UI: compact filter bar, URL-synced filters, sortable columns, bulk select, tabbed create/edit drawer
+
+**Slice 7 — Inventory Management ✅**
+- `inventory` table: stock per book per location with optimistic locking (version counter)
+- `inventory_history` partitioned table: full audit trail with `movement_type`, `reference_type`, `reference_id`
+- 5 movement types: `stock_in`, `stock_out`, `transfer_in`, `transfer_out`, `adjustment`
+- Stock In / Stock Out as first-class operations (not generic adjust misuse); accept reference to source document (PO, order, etc.)
+- Adjust: admin corrections only (damage, loss, return, correction)
+- Transfer: atomic REPEATABLE READ + FOR UPDATE; dual history rows
+- Low-stock detection via partial index; auto-refresh alerts dashboard
+- 7 UI sub-pages: Stock Levels | Stock In | Stock Out | Adjust | Transfer | History | Low Stock Alerts
+- RBAC: Sales can stock-out; Stock_Clerk can stock-in/out/adjust/transfer; Admin/Manager full access
+- Future hooks prepared: Procurement → `stockIn()`, POS/Orders → `stockOut()`, Returns → `stockIn()`
 
 ---
 
@@ -126,7 +138,7 @@ cd apps/api && npm test
 ```
 
 > Tests use prefix-based cleanup — seed data is never touched.
-> Current: **9 test files, 104 tests, all passing.**
+> Current: **10 test files, 133 tests, all passing.**
 
 ## Restoring Seed Data
 
@@ -195,6 +207,17 @@ Generate encryption key: `node -e "console.log(require('crypto').randomBytes(32)
 - `GET /api/book-editions` — first_edition, revised_edition, student_edition, annotated, special_religious
 - `GET /api/catalog/authors/suggest?q=` — autocomplete
 - `GET /api/catalog/categories/suggest?q=` — autocomplete
+
+### Inventory (Slice 7)
+- `GET /api/inventory` — paginated stock levels; `?q`, `locationId`, `bookId`, `lowStockOnly`
+- `GET /api/inventory/low-stock` — all items at/below reorder point
+- `GET /api/inventory/history` — movement log; filter by book/location/reason/movementType/date
+- `POST /api/inventory/stock-in` — Manager, Stock_Clerk; `referenceType`/`referenceId` optional
+- `POST /api/inventory/stock-out` — Manager, Stock_Clerk, Sales; enforces stock availability
+- `POST /api/inventory/adjust` — Admin/Manager/Stock_Clerk; corrections only (damage/loss/return/correction)
+- `POST /api/inventory/transfer` — atomic transfer between locations; 409/422
+- `PUT /api/inventory/reorder-point` — Admin/Manager only
+- `POST /api/inventory/initialize` — idempotent row creation
 
 ### Audit Log
 - `GET /api/audit-logs` — paginated; filter by entityType

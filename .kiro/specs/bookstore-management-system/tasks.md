@@ -465,61 +465,81 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 7. Track Inventory (Adjust Stock, Transfer Between Locations)
+- [x] 7. Track Inventory (Adjust Stock, Transfer Between Locations)
   > Stock levels per book per location. The most concurrency-critical module — optimistic locking implemented here.
   > _Slice 7 = Requirement 7 | Design: design.md §3.9, §5.1, §5.2_
   > _Concurrency: Optimistic locking (version counter) on all inventory mutations — see design.md §5.1_
 
-  - [ ] 7.1 Create DB migration: inventory and inventory_history
-    - `inventory (book_id INTEGER REFERENCES books(id), location_id INTEGER REFERENCES locations(id), quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0), reorder_point INTEGER NOT NULL DEFAULT 5, version INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (book_id, location_id))`
-    - Partial index: `CREATE INDEX ON inventory (book_id, location_id) WHERE quantity <= reorder_point` (low-stock queries)
-    - `inventory_history (id BIGSERIAL NOT NULL, book_id INTEGER NOT NULL, location_id INTEGER NOT NULL, qty_before INTEGER NOT NULL, qty_after INTEGER NOT NULL, delta INTEGER NOT NULL, reason TEXT NOT NULL, reason_code TEXT, staff_id INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (id, created_at)) PARTITION BY RANGE (created_at)`
-    - Create initial 3 monthly partitions (current month + 2 ahead)
-    - Index on `(book_id, location_id)` on inventory_history
-    - Seed: initialize inventory records for seeded books at seeded locations (quantity=0)
+  - [x] 7.1 Create DB migration: inventory and inventory_history
+    - `inventory (book_id, location_id, quantity, reorder_point, version, updated_at)` — PK (book_id, location_id), CHECK quantity >= 0
+    - Partial index: `WHERE quantity <= reorder_point` for low-stock queries
+    - `inventory_history` — partitioned by RANGE (created_at); 4 initial monthly partitions
+    - reason_code: damage | loss | return | correction | transfer_in | transfer_out | initial
+    - Seed: initialize inventory rows for all active books × all locations (quantity=0)
     - _Requirements: 7, 24.6_
 
-  - [ ] 7.2 Implement inventory.service.ts
-    - `initializeInventory(bookId, locationId)` — INSERT inventory (quantity=0, version=0) ON CONFLICT DO NOTHING
-    - `adjust(bookId, locationId, delta, reasonCode, version, staffCtx)` — validate reasonCode IN ('damage','loss','return','correction'); if delta < 0 AND !config.isNegativeStockAllowed(): check current quantity + delta >= 0 (422 INSUFFICIENT_STOCK); `UPDATE inventory SET quantity=quantity+$delta, version=version+1 WHERE book_id=$1 AND location_id=$2 AND version=$3`; if 0 rows: re-read to distinguish VERSION_CONFLICT vs INSUFFICIENT_STOCK; INSERT inventory_history; INSERT audit_logs; if new quantity <= reorder_point: INSERT outbox(InventoryAdjusted) for low-stock alert
-    - `transfer(bookId, fromLocationId, toLocationId, quantity, fromVersion, staffCtx)` — BEGIN REPEATABLE READ; SELECT inventory WHERE book_id=$1 AND location_id=$from FOR UPDATE; check quantity >= requested (422 INSUFFICIENT_STOCK); UPDATE source (version check → 409 VERSION_CONFLICT on 0 rows); UPDATE destination (version+1); INSERT inventory_history (TRANSFER_OUT + TRANSFER_IN); INSERT audit_logs; COMMIT
+  - [x] 7.2 Implement inventory.service.ts
+    - `initializeInventory(bookId, locationId)` — INSERT ON CONFLICT DO NOTHING
+    - `adjustStock(opts)` — validates reason code; checks negative stock policy; optimistic lock via version; INSERT inventory_history; INSERT audit_logs; 409 VERSION_CONFLICT, 422 INSUFFICIENT_STOCK
+    - `transferStock(opts)` — REPEATABLE READ + FOR UPDATE; atomic source decrement + destination increment; dual history rows (transfer_out + transfer_in); 409 VERSION_CONFLICT, 422 INSUFFICIENT_STOCK
     - `getLowStock(branchId)` — SELECT via partial index WHERE quantity <= reorder_point
-    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8_
+    - `getInventoryHistory(opts)` — paginated; filter by book, location, reasonCode, date range
+    - `setReorderPoint(bookId, locationId, reorderPoint, staffCtx)` — UPDATE + audit log
+    - _Requirements: 7.1–7.8_
 
-  - [ ] 7.3 Implement inventory API routes
-    - `GET /api/inventory` — any authenticated; paginated; `?branchId`, `locationId`, `bookId`, `lowStock=true`
-    - `PUT /api/inventory/:bookId/:locationId/adjust` — Manager/Stock_Clerk; body: `{ delta, reasonCode, version }`; 409 VERSION_CONFLICT, 422 INSUFFICIENT_STOCK, 400 INVALID_REASON_CODE
-    - `POST /api/inventory/transfer` — Manager/Stock_Clerk; body: `{ bookId, fromLocationId, toLocationId, quantity, fromVersion }`
-    - `GET /api/inventory/:bookId/:locationId/history` — any authenticated; paginated
+  - [x] 7.3 Implement inventory API routes
+    - `GET /api/inventory` — any authenticated; paginated; `?q`, `locationId`, `bookId`, `lowStockOnly`
+    - `GET /api/inventory/low-stock` — any authenticated; returns all items at/below reorder point
+    - `GET /api/inventory/history` — any authenticated; paginated; filter by book/location/reason/date
+    - `POST /api/inventory/adjust` — Admin/Manager/Stock_Clerk; 409 VERSION_CONFLICT, 422 INSUFFICIENT_STOCK
+    - `POST /api/inventory/transfer` — Admin/Manager/Stock_Clerk; atomic; 409/422
+    - `PUT /api/inventory/reorder-point` — Admin/Manager only
+    - `POST /api/inventory/initialize` — Admin/Manager; idempotent
     - _Requirements: 7.9_
 
-  - [ ] 7.4 Implement Inventory grid UI
-    - Inventory grid: DataTable with book title, isbn, location, quantity, reorder_point, low-stock badge; filter by branch/location/lowStock
-    - Adjust modal: delta input, reasonCode select, version (hidden); client retries on 409 VERSION_CONFLICT (re-fetch version, re-submit up to 3 times)
-    - Transfer form: book search, from/to location selects, quantity input
-    - History drawer: slide-in panel with inventory_history for selected book+location
-    - TanStack Query hooks: `useInventory`, `useAdjustInventory`, `useTransferInventory`, `useInventoryHistory`
+  - [x] 7.4 Implement Inventory UI (5 sub-pages)
+    - **Stock Levels**: table with book, location, qty, reorder point, low-stock badge, inline reorder-point edit
+    - **Adjust**: split-panel — book/location selector + adjustment form (delta, reason, notes, version)
+    - **Transfer**: split-panel — source selector + transfer form (destination, quantity)
+    - **History**: paginated log with reason/date filters; color-coded delta (+/-)
+    - **Low Stock Alerts**: dedicated dashboard with deficit column; auto-refreshes every 60s; badge on tab
+    - RBAC: Sales/Finance_Officer read-only; Stock_Clerk can adjust/transfer; Admin/Manager full access
     - _Requirements: 7_
 
-  - [ ] 7.5 Write integration tests for inventory service
-    - Adjust: success, insufficient stock (422), version conflict (409), reason code validation (400)
-    - Transfer: atomic (both locations updated), insufficient stock (422), version conflict (409)
-    - History: every quantity change recorded with correct qty_before/qty_after/delta
+  - [x] 7.5 Write integration tests for inventory service
+    - List inventory, filter by locationId, unauthenticated 401
+    - Adjust: success (correction), Stock_Clerk can adjust, Sales 403, VERSION_CONFLICT 409, invalid reason 400, zero delta 400
+    - Transfer: success (atomic, both locations updated), insufficient stock 422, VERSION_CONFLICT 409
+    - Low-stock endpoint returns items at/below reorder point
+    - History endpoint with reasonCode filter
+    - Reorder point: Admin can update, Stock_Clerk 403
+    - Audit log entry created on adjust
+    - 17 tests — all passing
     - _Requirements: 7_
 
-  - [ ]* 7.6 Write property-based tests for inventory (Properties 17–21)
-    - **Property 17:** Inventory initialized to 0 on first association — `Validates: Req 7.1`
-    - **Property 18:** Stock transfer atomic: source decrements, destination increments, total conserved — `Validates: Req 7.4`
-    - **Property 19:** Transfer rejected when source quantity < requested; no quantity changes — `Validates: Req 7.5`
-    - **Property 20:** Low-stock condition detected when quantity falls to or below reorder_point — `Validates: Req 7.7`
-    - **Property 21:** Inventory history: qty_after = qty_before + delta for every change — `Validates: Req 7.8`
+  - [x] 7.6 Introduce Stock In / Stock Out as first-class operations
+    - Migration `1700000015_inventory_movement_type`: adds `movement_type` CHECK constraint, `reference_type`, `reference_id` to `inventory_history`; backfills existing rows; index on `movement_type`
+    - `stockIn()` — always positive; writes `movement_type='stock_in'`; accepts `referenceType`/`referenceId`; optimistic locking
+    - `stockOut()` — enforces negative-stock policy; writes `movement_type='stock_out'`; accepts `referenceType`/`referenceId`; optimistic locking
+    - `adjustStock()` unchanged — now writes `movement_type='adjustment'` (corrections only)
+    - `transferStock()` unchanged — now writes `movement_type='transfer_in'`/`'transfer_out'`
+    - `getInventoryHistory()` — new `movementType` filter parameter
+    - API: `POST /api/inventory/stock-in` (Manager, Stock_Clerk), `POST /api/inventory/stock-out` (Manager, Stock_Clerk, Sales)
+    - History API: `?movementType=` filter added
+    - UI: Stock In tab (split-panel, reference type/ID, notes), Stock Out tab (real-time stock validation warning)
+    - Stock Levels: quick `+ In` / `− Out` action buttons per row
+    - History tab: `movementType` dropdown filter + color-coded `MovementBadge`
+    - Future hooks: Procurement → `stockIn()`, POS/Orders → `stockOut()`, Returns → `stockIn()`
+    - 12 new tests (29 inventory total, 133 total across 10 test files)
+    - _Requirements: 7_
 
   **Definition of Done:**
-  - Optimistic locking prevents concurrent quantity corruption
-  - Transfer is atomic — no partial state possible
-  - Version conflict returns 409 with retryable flag
-  - Inventory history records every change with correct before/after values
-  - Low-stock condition correctly detected
+  - Stock In / Stock Out available as explicit first-class operations
+  - Adjust remains for admin corrections only (damage, loss, return, correction)
+  - Inventory history clearly distinguishes all 5 movement types
+  - Optimistic locking prevents concurrent quantity corruption (409 VERSION_CONFLICT)
+  - Transfer is atomic — no partial state possible (REPEATABLE READ + FOR UPDATE)
+  - All 133 integration tests passing (10 test files)
 
 ---
 

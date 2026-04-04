@@ -11,6 +11,7 @@ import configRouter from './modules/config/config.routes.js';
 import bankAccountRouter from './modules/bankAccount/bankAccount.routes.js';
 import locationRouter from './modules/location/location.routes.js';
 import catalogRouter from './modules/catalog/catalog.routes.js';
+import inventoryRouter from './modules/inventory/inventory.routes.js';
 
 export function createApp() {
   const app = express();
@@ -29,6 +30,7 @@ export function createApp() {
   app.use('/api', bankAccountRouter);
   app.use('/api', locationRouter);
   app.use('/api', catalogRouter);
+  app.use('/api', inventoryRouter);
   app.use('/api', auditLogsRouter);
 
   // 404 handler
