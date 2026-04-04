@@ -789,6 +789,13 @@ function StockInTab({ userRole }: { userRole?: Role }) {
     enabled: bookSearch.length > 1,
   });
 
+  // Fetch POs for reference dropdown when referenceType = purchase_order
+  const { data: poData } = useQuery<{ items: Array<{ id: string; supplierName: string; status: string }> }>({
+    queryKey: ['purchase-orders-for-ref'],
+    queryFn: () => api.get('/purchase-orders?pageSize=200&status=approved'),
+    enabled: referenceType === 'purchase_order',
+  });
+
   if (!canWrite(userRole)) return <AccessDenied />;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -881,7 +888,7 @@ function StockInTab({ userRole }: { userRole?: Role }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference Type</label>
-                <select value={referenceType} onChange={e => setReferenceType(e.target.value)}
+                <select value={referenceType} onChange={e => { setReferenceType(e.target.value); setReferenceId(''); }}
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">— None —</option>
                   <option value="purchase_order">Purchase Order</option>
@@ -891,9 +898,23 @@ function StockInTab({ userRole }: { userRole?: Role }) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference ID</label>
-                <input type="number" value={referenceId} onChange={e => setReferenceId(e.target.value)} placeholder="e.g. PO #42"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {referenceType === 'purchase_order' ? 'Purchase Order' : 'Reference ID'}
+                </label>
+                {referenceType === 'purchase_order' ? (
+                  <select value={referenceId} onChange={e => setReferenceId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select PO...</option>
+                    {(poData?.items ?? []).map(po => (
+                      <option key={po.id} value={po.id}>PO #{po.id} — {po.supplierName}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input type="text" value={referenceId} onChange={e => setReferenceId(e.target.value)}
+                    placeholder={referenceType ? 'Reference number' : '—'}
+                    disabled={!referenceType}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-40" />
+                )}
               </div>
             </div>
 

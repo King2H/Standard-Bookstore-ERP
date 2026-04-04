@@ -705,6 +705,8 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
   - No direct DB mutation outside service layer
   - 16 integration tests passing
   - Locations dropdown in GRN form uses PO's receiving branch (not hardcoded Main Branch)
+  - GRN form fetches full PO detail (including line items) with `staleTime: 0` to avoid stale cache
+  - Stock In reference type `purchase_order` shows PO dropdown instead of free-text input
 
 ---
 

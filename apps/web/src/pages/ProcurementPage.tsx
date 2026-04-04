@@ -244,36 +244,47 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
 
 // ── View 3: Receive Goods (GRN form) ─────────────────────────────────────────
 
-function ReceiveForm({ po, onDone, onBack }: { po: PO; onDone: (updated: PO) => void; onBack: () => void }) {
+function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated: PO) => void; onBack: () => void }) {
   const { showToast } = useToast();
   const [locationId, setLocationId] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
+  // Always fetch the full PO detail to ensure lineItems are loaded
+  const { data: po, isLoading: poLoading } = useQuery<PO>({
+    queryKey: ['po-detail-receive', poProp.id],
+    queryFn: () => api.get(`/purchase-orders/${poProp.id}`),
+    staleTime: 0,
+  });
+
   // Use PO's receiving branch for location query
-  const effectiveBranchId = po.receivingBranchId ?? po.branchId;
+  const effectiveBranchId = (po ?? poProp).receivingBranchId ?? (po ?? poProp).branchId;
 
   const { data: locData } = useQuery<{ items: Location[] }>({
     queryKey: ['locations-for-receive', effectiveBranchId],
     queryFn: () => api.get(`/branches/${effectiveBranchId}/locations?pageSize=200`),
+    enabled: !!effectiveBranchId,
   });
 
   // Auto-select PO's receiving location or default fulfillment location
   const locations = locData?.items ?? [];
   if (!locationId && locations.length > 0) {
-    const preferred = locations.find(l => l.id === po.receivingLocationId)
+    const preferred = locations.find(l => l.id === (po ?? poProp).receivingLocationId)
       ?? locations.find(l => l.isDefaultFulfillment)
       ?? locations[0];
     setLocationId(preferred.id);
   }
 
   const receiveMut = useMutation({
-    mutationFn: (body: unknown) => api.post<PO>(`/purchase-orders/${po.id}/receive`, body),
-    onSuccess: (updated) => { showToast('Goods received', 'success'); onDone(updated); },
+    mutationFn: (body: unknown) => api.post<PO>(`/purchase-orders/${poProp.id}/receive`, body),
+    onSuccess: (updated) => {
+      showToast('Goods received', 'success');
+      onDone(updated);
+    },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
-  const receivableLines = (po.lineItems ?? []).filter(li => li.remaining > 0);
+  const receivableLines = (po?.lineItems ?? []).filter(li => li.remaining > 0);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -285,11 +296,23 @@ function ReceiveForm({ po, onDone, onBack }: { po: PO; onDone: (updated: PO) => 
     receiveMut.mutate({ locationId, items, notes: notes || null });
   }
 
+  if (poLoading) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back to PO</button>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Receive Goods — PO #{poProp.id}</h2>
+        </div>
+        <div className="p-8 text-center text-gray-400">Loading PO details...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back to PO</button>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Receive Goods — PO #{po.id}</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Receive Goods — PO #{poProp.id}</h2>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
@@ -316,7 +339,13 @@ function ReceiveForm({ po, onDone, onBack }: { po: PO; onDone: (updated: PO) => 
               ))}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {receivableLines.map(li => (
+              {receivableLines.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">
+                    All items have been fully received.
+                  </td>
+                </tr>
+              ) : receivableLines.map(li => (
                 <tr key={li.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                   <td className="px-4 py-3 text-gray-900 dark:text-white">{li.bookTitle}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.quantity}</td>

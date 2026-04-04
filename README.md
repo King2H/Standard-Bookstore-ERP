@@ -141,6 +141,8 @@ Every API endpoint and UI page enforces role restrictions. The table below summa
 - 4 UI sub-views: PO List, PO Detail (with receiving location + payment status), Receive Goods (GRN form with branch-scoped location selector pre-selecting PO's receiving location), Create/Edit PO (with receiving branch + location dropdowns)
 - RBAC: `Admin`/`Manager`/`Purchasor` create; `Admin`/`Manager` approve/close; `Admin`/`Manager`/`Stock_Clerk` receive; `Finance_Officer` read-only
 - 16 integration tests passing (including flexible location and PO-default-location fallback tests)
+- GRN form always fetches full PO detail (bypasses list cache) to ensure line items are populated
+- Stock In PO reference shows dropdown of approved POs instead of free-text input
 
 ---
 
