@@ -14,6 +14,7 @@ import catalogRouter from './modules/catalog/catalog.routes.js';
 import inventoryRouter from './modules/inventory/inventory.routes.js';
 import supplierRouter from './modules/supplier/supplier.routes.js';
 import procurementRouter from './modules/procurement/procurement.routes.js';
+import customerRouter from './modules/customer/customer.routes.js';
 
 export function createApp() {
   const app = express();
@@ -35,6 +36,7 @@ export function createApp() {
   app.use('/api', inventoryRouter);
   app.use('/api', supplierRouter);
   app.use('/api', procurementRouter);
+  app.use('/api', customerRouter);
   app.use('/api', auditLogsRouter);
 
   // 404 handler

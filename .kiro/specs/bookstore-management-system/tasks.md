@@ -710,54 +710,79 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 10. Manage Customers (Profiles, Store Credit, Loyalty Points)
-  > Customer registry with encrypted PII, store credit balance, and loyalty points. Required before POS transactions.
+- [x] 10. Manage Customers (Production-Grade ERP — CRUD, Groups, Loyalty, Store Credit)
+  > Customer is a core financial entity. Supports POS (Slice-11), Orders (Slice-13), Returns (Slice-12), and future Payments (Slice-14). Config-driven loyalty. No PII encryption (phone/email stored plain — no AES overhead for operational lookup).
   > _Slice 10 = Requirement 10 | Design: design.md §3.11_
-  > _Security: AES-256-GCM column encryption for email + phone — see design.md §8.5_
 
-  - [ ] 10.1 Create DB migration: customers, loyalty_history, store_credit_history
-    - `customers (id SERIAL PK, full_name TEXT NOT NULL, email TEXT UNIQUE, phone TEXT UNIQUE, email_lookup TEXT, phone_lookup TEXT, notes TEXT, preferences JSONB, store_credit NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (store_credit >= 0), loyalty_points INTEGER NOT NULL DEFAULT 0 CHECK (loyalty_points >= 0), version INTEGER NOT NULL DEFAULT 0, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now(), CONSTRAINT at_least_one_contact CHECK (email IS NOT NULL OR phone IS NOT NULL))`
-    - Indexes: `email_lookup`, `phone_lookup`
-    - `loyalty_history (id BIGSERIAL PK, customer_id INTEGER REFERENCES customers(id), delta INTEGER NOT NULL, balance_after INTEGER NOT NULL, reason TEXT CHECK (reason IN ('ACCRUAL','REDEMPTION')), transaction_ref TEXT, created_at TIMESTAMPTZ DEFAULT now())` + index on `customer_id`
-    - `store_credit_history (id BIGSERIAL PK, customer_id INTEGER REFERENCES customers(id), delta NUMERIC(14,2) NOT NULL, balance_after NUMERIC(14,2) NOT NULL, reason TEXT NOT NULL, reference_id TEXT, created_at TIMESTAMPTZ DEFAULT now())` + index on `customer_id`
-    - Seed: insert 3–5 sample customers
+  - [x] 10.1 Create DB migration: customers, customer_groups, loyalty_accounts, loyalty_history, store_credit_accounts, store_credit_history
+    - `customers (id SERIAL PK, branch_id INTEGER REFERENCES branches(id), customer_code TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, phone TEXT, email TEXT, gender TEXT CHECK (gender IN ('male','female','other')), date_of_birth DATE, address TEXT, city TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now(), created_by INTEGER)`
+    - Indexes: `(phone)`, `(email)`, `(customer_code)`, `(branch_id, is_active)`
+    - `customer_groups (id SERIAL PK, name TEXT UNIQUE NOT NULL, description TEXT, discount_pct NUMERIC(5,2) DEFAULT 0)`
+    - `customer_group_membership (customer_id INTEGER REFERENCES customers(id), group_id INTEGER REFERENCES customer_groups(id), PRIMARY KEY (customer_id, group_id))`
+    - `loyalty_accounts (customer_id INTEGER PRIMARY KEY REFERENCES customers(id), points_balance NUMERIC(14,2) DEFAULT 0, lifetime_points NUMERIC(14,2) DEFAULT 0, updated_at TIMESTAMPTZ DEFAULT now())`
+    - `loyalty_history (id BIGSERIAL PK, customer_id INTEGER REFERENCES customers(id), transaction_ref TEXT, points_delta NUMERIC(14,2) NOT NULL, reason TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`
+    - `store_credit_accounts (customer_id INTEGER PRIMARY KEY REFERENCES customers(id), balance NUMERIC(14,2) DEFAULT 0 CHECK (balance >= 0))`
+    - `store_credit_history (id BIGSERIAL PK, customer_id INTEGER REFERENCES customers(id), ref_type TEXT, ref_id TEXT, amount NUMERIC(14,2) NOT NULL, direction TEXT NOT NULL CHECK (direction IN ('credit','debit')), created_at TIMESTAMPTZ DEFAULT now())`
+    - Seed: 3 sample customers with loyalty + store credit accounts
     - _Requirements: 10_
 
-  - [ ] 10.2 Implement customer.service.ts
-    - `create(data, staffCtx)` — validate at least one of email/phone non-null (422 CONTACT_REQUIRED); encrypt email+phone with `lib/encryption`; compute `email_lookup` (first 3 chars + SHA-256 hash) and `phone_lookup`; INSERT customers; INSERT audit_logs; 409 DUPLICATE_CONTACT on unique violation
-    - `update(id, data, staffCtx)` — re-encrypt if changed; recompute lookup columns; UPDATE customers; INSERT audit_logs
-    - `deactivate(id, staffCtx)` — UPDATE is_active=false; INSERT audit_logs
-    - `search(query)` — match via email_lookup or phone_lookup; decrypt for display
-    - `adjustStoreCredit(id, delta, reason, referenceId, client)` — UPDATE customers SET store_credit=store_credit+$delta, version=version+1 WHERE id=$1 AND version=$v AND store_credit+$delta >= 0; if 0 rows: 422 INSUFFICIENT_STORE_CREDIT or 409 VERSION_CONFLICT; INSERT store_credit_history
-    - Note: loyalty accrual is async (Phase 4 Task H1); for now, loyalty_points updated synchronously in POS completion using config.getLoyaltyAccrualRate() and config.getLoyaltyMinTransactionAmount()
-    - _Requirements: 10.1, 10.2, 10.4, 10.5, 10.9_
+  - [x] 10.2 Implement customer.service.ts + loyalty.service.ts + storeCredit.service.ts
+    - `createCustomer(data, staffCtx)` — auto-generate `customer_code` (CUS-XXXX, zero-padded sequential); enforce unique phone/email (409 DUPLICATE_CONTACT); INSERT customers; INSERT loyalty_accounts + store_credit_accounts; INSERT audit_logs
+    - `updateCustomer(id, data, staffCtx)` — UPDATE customers; INSERT audit_logs
+    - `deactivateCustomer(id, staffCtx)` — UPDATE is_active=false; INSERT audit_logs (future: block if active orders)
+    - `getCustomerById(id)` — JOIN loyalty_accounts + store_credit_accounts + group memberships
+    - `searchCustomers(query, filters, page)` — search by name ILIKE, phone, email, customer_code; paginated
+    - `accruePoints(customerId, transactionAmount, transactionRef, staffCtx)` — use `config.getLoyaltyAccrualRate()` + `config.getLoyaltyMinTransactionAmount()`; skip if below threshold; UPDATE loyalty_accounts; INSERT loyalty_history
+    - `redeemPoints(customerId, points, transactionRef, staffCtx)` — validate balance; UPDATE loyalty_accounts; INSERT loyalty_history
+    - `creditStoreCredit(customerId, amount, refType, refId, staffCtx)` — UPDATE store_credit_accounts; INSERT store_credit_history (direction='credit')
+    - `debitStoreCredit(customerId, amount, refType, refId, staffCtx)` — validate balance >= amount (422 INSUFFICIENT_STORE_CREDIT); UPDATE store_credit_accounts; INSERT store_credit_history (direction='debit')
+    - _Requirements: 10_
 
-  - [ ] 10.3 Implement customer API routes
-    - `GET /api/customers` — any authenticated; paginated; `?q` (search by name/lookup), `is_active`
-    - `POST /api/customers` — any authenticated; calls create
-    - `GET /api/customers/:id` — any authenticated; decrypted email/phone for display
-    - `PUT /api/customers/:id` — any authenticated
+  - [x] 10.3 Implement customer API routes (12 endpoints)
+    - `GET /api/customers` — all authenticated; paginated; `?q`, `branchId`, `isActive`, `groupId`
+    - `POST /api/customers` — Admin/Manager/Sales
+    - `GET /api/customers/:id` — all authenticated; full profile with loyalty + store credit
+    - `PUT /api/customers/:id` — Admin/Manager/Sales
     - `POST /api/customers/:id/deactivate` — Admin/Manager
-    - `GET /api/customers/:id/transactions` — any authenticated; paginated
-    - `GET /api/customers/:id/orders` — any authenticated; paginated
-    - `GET /api/customers/:id/loyalty-history` — any authenticated; paginated
+    - `GET /api/customer-groups` / `POST /api/customer-groups` — Admin/Manager
+    - `GET /api/customers/:id/loyalty` — all authenticated
+    - `GET /api/customers/:id/loyalty/history` — all authenticated; paginated
+    - `POST /api/customers/:id/loyalty/redeem` — Sales; body: `{ points, transactionRef? }`
+    - `GET /api/customers/:id/store-credit` — all authenticated
+    - `GET /api/customers/:id/store-credit/history` — all authenticated; paginated
+    - `POST /api/customers/:id/store-credit/adjust` — Admin/Finance_Officer; body: `{ amount, direction, refType?, refId? }`
     - _Requirements: 10_
 
-  - [ ] 10.4 Implement Customer list and Detail UI
-    - Customer list: DataTable with full_name, masked email/phone, store_credit, loyalty_points, is_active; search input
-    - Customer detail: profile info + store_credit + loyalty_points + tabs (Transactions, Orders, Loyalty History, Store Credit History)
-    - TanStack Query hooks: `useCustomerList`, `useCustomer`, `useCreateCustomer`, `useUpdateCustomer`, `useDeactivateCustomer`
+  - [x] 10.4 Implement CustomersPage.tsx (4 sub-views)
+    - Customer List: search (name/phone/code), table (code, name, phone, loyalty pts, credit balance, status), "New Customer" button
+    - Customer Profile: personal info form (name, phone, email, gender, DOB, address, city, branch, group), edit/deactivate actions
+    - Loyalty Tab: points balance, lifetime earned, redeem form, history timeline
+    - Store Credit Tab: current balance, credit/debit history, manual adjustment form (Admin/Finance_Officer only)
+    - RBAC: all roles view; Admin/Manager/Sales create+edit; Admin/Manager deactivate; Admin/Finance_Officer adjust store credit; Sales redeem loyalty
+    - Wired into Layout nav and App.tsx routing
     - _Requirements: 10_
 
-  - [ ] 10.5 Write integration tests for customer service
-    - Create with email only, phone only, both, neither (422); duplicate email (409); store credit never goes below 0 (422); search by email_lookup returns correct customer
+  - [x] 10.5 Write integration tests for customer service (10+ tests)
+    - Create customer → loyalty + store credit accounts auto-created
+    - customer_code auto-increments (CUS-0001, CUS-0002)
+    - Duplicate phone → 409 DUPLICATE_CONTACT
+    - Duplicate email → 409 DUPLICATE_CONTACT
+    - Loyalty accrual: below threshold → no points; above threshold → correct points
+    - Loyalty redeem: insufficient balance → 422
+    - Store credit debit: insufficient balance → 422 INSUFFICIENT_STORE_CREDIT
+    - Store credit credit → balance increases
+    - Search by name, phone, customer_code
+    - Deactivate customer → is_active=false
     - _Requirements: 10_
 
   **Definition of Done:**
-  - PII encrypted at rest; search works via lookup columns
-  - Store credit balance never goes below 0
-  - At least one contact field required
-  - Audit log entries on all writes
+  - Customer CRUD with auto-generated customer_code
+  - Loyalty accounts auto-created on customer creation; config-driven accrual
+  - Store credit enforces non-negative balance
+  - Customer groups for segmentation (discount_pct ready for POS Slice-11)
+  - Clean standalone UI (not embedded in POS)
+  - Forward-compatible: customers.id referenced by transactions, orders, returns
+  - All integration tests passing
 
 ---
 

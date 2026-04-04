@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 2 — Slices 8 & 9 Complete. Next: Slice 10 (Customer Management)**
+**Phase 2 — Slices 8, 9 & 10 Complete. Next: Slice 11 (POS Transactions)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -29,7 +29,8 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 7 | Inventory Management | ✅ Done |
 | 8 | Supplier Management | ✅ Done |
 | 9 | Procurement & Purchase Orders | ✅ Done |
-| 10–15 | Customer, POS, Returns, Orders, Payments, Exchange | ⬜ Pending |
+| 10 | Customer Management | ✅ Done |
+| 11–15 | POS, Returns, Orders, Payments, Exchange | ⬜ Pending |
 | 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
 
 ---
@@ -144,6 +145,16 @@ Every API endpoint and UI page enforces role restrictions. The table below summa
 - GRN form always fetches full PO detail (bypasses list cache) to ensure line items are populated
 - Stock In PO reference shows dropdown of approved POs instead of free-text input
 
+**Slice 10 — Customer Management ✅**
+- Customer as a core financial entity: CRUD with auto-generated `customer_code` (CUS-0001 format)
+- Customer groups for segmentation with `discount_pct` (ready for POS Slice-11)
+- Loyalty accounts auto-created on customer creation; config-driven accrual (`getLoyaltyAccrualRate`, `getLoyaltyMinTransactionAmount`); redeem with balance validation
+- Store credit accounts with non-negative balance enforcement; credit/debit with full audit trail
+- 4 UI sub-views: Customer List (search by name/phone/code), Customer Profile (edit form), Loyalty Tab (balance + redeem + history), Store Credit Tab (balance + manual adjustment + history)
+- RBAC: all roles view; `Admin`/`Manager`/`Sales` create+edit; `Admin`/`Manager` deactivate; `Admin`/`Finance_Officer` adjust store credit; `Sales` redeem loyalty
+- Forward-compatible: `customers.id` ready to be referenced by transactions, orders, returns (Slices 11–13)
+- 15 integration tests passing
+
 ---
 
 ## Tech Stack
@@ -193,7 +204,7 @@ cd apps/api && npm test
 ```
 
 > Tests use prefix-based cleanup — seed data is never touched.
-> Current: **12 test files, 171 tests, all passing.**
+> Current: **13 test files, 186 tests, all passing.**
 
 ## Restoring Seed Data
 
