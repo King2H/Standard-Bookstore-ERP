@@ -1,5 +1,7 @@
 import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
+
+export type ReferenceType = 'purchase_order' | 'return' | 'adjustment' | 'manual' | 'initial_stock';
 import { isNegativeStockAllowed } from '../config/config.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -499,14 +501,20 @@ export async function stockIn(opts: {
   locationId: number;
   quantity: number;
   version: number;
-  referenceType?: string;
+  referenceType?: ReferenceType;
   referenceId?: number;
   notes?: string;
   staffCtx: StaffCtx;
 }): Promise<InventoryRow> {
-  const { bookId, locationId, quantity, version, referenceType, referenceId, notes, staffCtx } = opts;
+  const { bookId, locationId, quantity, version, referenceId, notes, staffCtx } = opts;
+  const referenceType: ReferenceType = opts.referenceType ?? 'manual';
 
   if (quantity <= 0) throw new ValidationError('Stock-in quantity must be positive');
+
+  // Validate: purchase_order reference_type requires a reference_id
+  if (referenceType === 'purchase_order' && !referenceId) {
+    throw new ValidationError('reference_id is required when reference_type is purchase_order');
+  }
 
   const client = await db.connect();
   try {

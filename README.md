@@ -1,12 +1,12 @@
 # Bookstore Management System (BMS)
 
-A multi-user, multi-role, multi-branch ERP platform for managing physical bookstore operations — built on the PERN stack with Docker. 
+A multi-user, multi-role, multi-branch ERP platform for managing physical bookstore operations — built on the PERN stack with Docker.
 
 ---
 
 ## Project Status
 
-**Phase 1 — Slices 0–7 Complete. Next: Slice 8 (Supplier Management)**
+**Phase 2 — Slice 8 (Supplier Management) Complete. Next: Slice 9 (Procurement)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -27,9 +27,33 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 5 | Location Management + Access Control | ✅ Done |
 | 6 | Catalog Management | ✅ Done |
 | 7 | Inventory Management | ✅ Done |
-| 8 | Supplier Management | ⬜ Next |
-| 8–15 | Operations + Financial Flows | ⬜ Pending |
+| 8 | Supplier Management | ✅ Done |
+| 9 | Procurement & Purchase Orders | ⬜ Next |
+| 10–15 | Customer, POS, Returns, Orders, Payments, Exchange | ⬜ Pending |
 | 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
+
+---
+
+## Role-Based Access Control (RBAC)
+
+Every API endpoint and UI page enforces role restrictions. The table below summarises what each role can and cannot do.
+
+| Role | Scope | Can Do | Cannot Do |
+|------|-------|--------|-----------|
+| `Super_Admin` | Global | System config, staff management, audit log, branch management | Any operational activity (catalog, inventory, suppliers, bank accounts, POS, orders) |
+| `Admin` | Global / Multi-Branch | All operational management, staff, branches, bank accounts, catalog, inventory, suppliers | System-level config writes |
+| `Manager` | Branch / Multi-Branch | Daily operations: catalog, inventory, suppliers, bank accounts, locations, reconciliation | System config, staff creation |
+| `Finance_Officer` | Global / Multi-Branch | Read bank accounts, reconciliation import/clear | Catalog writes, inventory mutations, supplier writes |
+| `Stock_Clerk` | Branch / Multi-Branch | Stock in/out, adjust, transfer, inventory reads | PO creation, cash handling, catalog writes |
+| `Sales` | Branch | POS transactions, stock-out, customer service | Inventory adjust/transfer, supplier management, PO creation |
+| `Purchasor` | Branch / Multi-Branch | Supplier CRUD, PO creation and tracking | Receiving inventory, approving payments |
+
+### Key RBAC Rules
+
+- `Super_Admin` manages **platform and configuration only** — no catalog writes, no inventory mutations, no supplier management, no bank account operations
+- `Super_Admin` sees: Branches, Staff, Settings, Audit Log in the UI
+- Operational pages (Catalog, Inventory, Suppliers, Bank Accounts, Locations) are hidden from `Super_Admin`
+- All restrictions are enforced at the **API layer** via `requireRole()` middleware — client-side nav filtering is cosmetic only
 
 ---
 
@@ -52,25 +76,27 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 - Staff profile: own profile view, password change, security status (locked, must-change)
 - Admin controls: unlock accounts, reset passwords, view full security detail
 
-### Phase 1 — Core Business Foundation 🔄
+### Phase 1 — Core Business Foundation ✅
 
-**Slice 1 — Configuration & System Settings ✅**
-- 21 system-wide defaults (currency, tax, discounts, inventory, procurement, returns, payments, loyalty, exchange and others)
+**Slice 1 — Configuration & System Settings**
+- 21 system-wide defaults (currency, tax, discounts, inventory, procurement, returns, payments, loyalty, exchange)
 - Per-branch overrides with fallback to system defaults
 - 15 typed helper methods for use by downstream services
 - Settings UI: 10-tab page (General, Discounts, Inventory, Procurement, Returns, Payments, Loyalty, Exchange, Notifications, Security)
+- RBAC: `Super_Admin` writes system config; `Admin`/`Manager` write branch overrides
 
-**Slice 4 — Bank Account Management ✅**
+**Slice 4 — Bank Account Management**
 - AES-256-GCM column encryption for account numbers and IBANs
 - Reconciliation import (batch, full rollback on error), clear entries
-- RBAC: Admin/Manager write; Finance_Officer reconcile
+- RBAC: `Admin`/`Manager` write; `Finance_Officer` read + reconcile
 
-**Slice 5 — Location Management + Access Control ✅**
+**Slice 5 — Location Management + Access Control**
 - Locations per branch with single-default enforcement (DB-level)
 - Staff location access control: explicit assignments or full-branch fallback
 - Location access scope surfaced in `GET /api/staff/me` and ProfilePage
+- RBAC: `Admin`/`Manager` write; all operational roles read
 
-**Slice 6 — Catalog Management ✅**
+**Slice 6 — Catalog Management**
 - Master data architecture: Authors, Categories, Publishers as independent entities
 - Books reference master data by ID; format + edition required (structured enums)
 - Book formats: softcover, hardcover, leather_bound, cloth_bound, traditional_orthodox
@@ -78,18 +104,31 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 - Pricing can vary by format/edition/branch combination
 - Full-text search (tsvector), ISBN-13 validation, SKU/internal ID support
 - Production-grade catalog UI: compact filter bar, URL-synced filters, sortable columns, bulk select, tabbed create/edit drawer
+- RBAC: `Admin`/`Manager` write; all operational roles read; `Super_Admin` excluded from writes
 
-**Slice 7 — Inventory Management ✅**
+**Slice 7 — Inventory Management**
 - `inventory` table: stock per book per location with optimistic locking (version counter)
 - `inventory_history` partitioned table: full audit trail with `movement_type`, `reference_type`, `reference_id`
 - 5 movement types: `stock_in`, `stock_out`, `transfer_in`, `transfer_out`, `adjustment`
-- Stock In / Stock Out as first-class operations (not generic adjust misuse); accept reference to source document (PO, order, etc.)
+- Stock In / Stock Out as first-class operations; accept reference to source document (PO, order, etc.)
 - Adjust: admin corrections only (damage, loss, return, correction)
 - Transfer: atomic REPEATABLE READ + FOR UPDATE; dual history rows
 - Low-stock detection via partial index; auto-refresh alerts dashboard
 - 7 UI sub-pages: Stock Levels | Stock In | Stock Out | Adjust | Transfer | History | Low Stock Alerts
-- RBAC: Sales can stock-out; Stock_Clerk can stock-in/out/adjust/transfer; Admin/Manager full access
-- Future hooks prepared: Procurement → `stockIn()`, POS/Orders → `stockOut()`, Returns → `stockIn()`
+- RBAC: `Sales` can stock-out; `Stock_Clerk` can stock-in/out/adjust/transfer; `Admin`/`Manager` full access; `Super_Admin` excluded
+
+### Phase 2 — Operations (In Progress) 🔄
+
+**Slice 8 — Supplier Management ✅**
+- Unified party model: `supplier_type` = `external` (distributor/wholesaler) or `publisher` (direct from catalog publisher)
+- `publisher`-type suppliers require a `publisher_id` FK to the catalog publishers table; `external` must have `publisher_id = NULL` (enforced by DB CHECK constraints)
+- `is_blacklisted` flag: blacklisted suppliers are blocked from new purchase orders
+- `book_suppliers` junction table: books can map to multiple suppliers with `supplier_sku` and `is_primary` flag
+- `validateSupplierForProcurement()`: rejects inactive or blacklisted suppliers before PO creation
+- `getSuppliersForBook()`: returns linked suppliers sorted by `is_primary DESC`
+- Inventory `reference_type` extended: `purchase_order`, `return`, `adjustment`, `manual`, `initial_stock` (migration 1700000017)
+- Supplier UI: DataTable with type/status badges, blacklist action, create/edit drawer with dynamic publisher selector
+- RBAC: `Admin`/`Manager`/`Purchasor` manage suppliers; `Admin`/`Manager` blacklist/delete; `Super_Admin` excluded
 
 ---
 
@@ -131,6 +170,8 @@ npm run dev:web
 
 Open `http://localhost:5173` — login with `superadmin` / `password` / Main Branch.
 
+> Note: `superadmin` only sees Settings, Staff, Branches, and Audit Log. Use `admin` / `password` for operational pages (Catalog, Inventory, Suppliers, etc.).
+
 ## Running Tests
 
 ```bash
@@ -138,7 +179,7 @@ cd apps/api && npm test
 ```
 
 > Tests use prefix-based cleanup — seed data is never touched.
-> Current: **10 test files, 133 tests, all passing.**
+> Current: **11 test files, 155 tests, all passing.**
 
 ## Restoring Seed Data
 
@@ -167,68 +208,80 @@ Generate encryption key: `node -e "console.log(require('crypto').randomBytes(32)
 ### Auth & Staff
 - `POST /api/auth/login` — login with branch selection
 - `POST /api/auth/logout` / `POST /api/auth/refresh`
-- `GET/POST /api/staff` — list / create
-- `GET /api/staff/me` — own profile + location access scope
-- `PUT /api/staff/me/password` — change own password
-- `GET/PUT /api/staff/:id` — detail / update
-- `POST /api/staff/:id/deactivate|reactivate|reset-password|unlock`
+- `GET/POST /api/staff` — list / create (`Super_Admin`, `Admin`, `Manager`)
+- `GET /api/staff/me` — own profile + location access scope (all roles)
+- `PUT /api/staff/me/password` — change own password (all roles)
+- `GET/PUT /api/staff/:id` — detail / update (`Super_Admin`, `Admin`)
+- `POST /api/staff/:id/deactivate|reactivate|reset-password|unlock` (`Super_Admin`, `Admin`)
 - `GET/PUT /api/staff/:id/locations` — location access assignments
 
 ### Branches & Locations
 - `GET /api/branches/public` — no auth, for login dropdown
-- `GET/POST /api/branches` — list / create
+- `GET/POST /api/branches` — list / create (`Super_Admin`, `Admin`, `Manager`)
 - `GET/PUT /api/branches/:id` — detail / update
 - `POST /api/branches/:id/deactivate|reactivate`
-- `DELETE /api/branches/:id` — 409 if dependencies exist
-- `GET/POST /api/branches/:branchId/locations`
+- `DELETE /api/branches/:id` — 409 if dependencies exist (`Super_Admin`, `Admin`)
+- `GET/POST /api/branches/:branchId/locations` (`Admin`, `Manager`)
 - `PUT /api/branches/:branchId/locations/:id` — rename
 - `PUT /api/branches/:branchId/locations/:id/set-default`
 - `DELETE /api/branches/:branchId/locations/:id`
 
 ### Configuration
-- `GET/PUT /api/config/system` / `GET/PUT/DELETE /api/config/branches/:branchId/:key`
+- `GET /api/config/system` — read (`Super_Admin`, `Admin`, `Manager`)
+- `PUT /api/config/system/:key` — write (`Super_Admin` only)
+- `GET/PUT /api/config/branches/:branchId/:key` — branch overrides (`Admin`, `Manager`)
+- `DELETE /api/config/branches/:branchId/:key` — remove override (`Admin`)
 
 ### Bank Accounts
-- `GET/POST /api/branches/:branchId/bank-accounts`
-- `POST /api/branches/:branchId/bank-accounts/:id/deactivate`
-- `GET/POST /api/branches/:branchId/reconciliation/import`
-- `PUT /api/branches/:branchId/reconciliation/:entryId`
+- `GET/POST /api/branches/:branchId/bank-accounts` (`Admin`, `Manager`; Finance_Officer read)
+- `PUT/POST .../deactivate` (`Admin`, `Manager`)
+- `GET/POST /api/branches/:branchId/reconciliation/import` (`Admin`, `Manager`, `Finance_Officer`)
+- `PUT /api/branches/:branchId/reconciliation/:entryId` (`Admin`, `Manager`, `Finance_Officer`)
 
 ### Catalog (Slice 6)
-- `GET/POST /api/books` — list (full-text search, filters) / create
-- `GET/PUT /api/books/:id` — detail / update
-- `POST /api/books/:id/deactivate|reactivate`
-- `GET /api/books/:id/history` — field-level edit history
-- `GET/PUT /api/books/:id/prices/:branchId` — branch price override
-- `GET /api/authors` / `POST /api/authors` / `PUT/DELETE /api/authors/:id`
-- `GET /api/categories` / `POST /api/categories` / `PUT/DELETE /api/categories/:id`
-- `GET /api/publishers` / `POST /api/publishers` / `PUT/DELETE /api/publishers/:id`
-- `GET /api/book-formats` — softcover, hardcover, leather_bound, cloth_bound, traditional_orthodox
-- `GET /api/book-editions` — first_edition, revised_edition, student_edition, annotated, special_religious
-- `GET /api/catalog/authors/suggest?q=` — autocomplete
-- `GET /api/catalog/categories/suggest?q=` — autocomplete
+- `GET /api/books` — list with full-text search (all authenticated)
+- `POST /api/books` — create (`Admin`, `Manager`)
+- `GET/PUT /api/books/:id` — detail / update (`Admin`, `Manager` write)
+- `POST /api/books/:id/deactivate|reactivate` (`Admin`, `Manager`)
+- `GET /api/books/:id/history` — field-level edit history (`Admin`, `Manager`)
+- `PUT /api/books/:id/prices/:branchId` — branch price override (`Admin`, `Manager`)
+- `GET/POST /api/authors` / `PUT/DELETE /api/authors/:id` (`Admin`, `Manager` write)
+- `GET/POST /api/categories` / `PUT/DELETE /api/categories/:id` (`Admin`, `Manager` write)
+- `GET/POST /api/publishers` / `PUT/DELETE /api/publishers/:id` (`Admin`, `Manager` write)
+- `GET /api/book-formats` / `GET /api/book-editions` (all authenticated)
 
 ### Inventory (Slice 7)
-- `GET /api/inventory` — paginated stock levels; `?q`, `locationId`, `bookId`, `lowStockOnly`
-- `GET /api/inventory/low-stock` — all items at/below reorder point
-- `GET /api/inventory/history` — movement log; filter by book/location/reason/movementType/date
-- `POST /api/inventory/stock-in` — Manager, Stock_Clerk; `referenceType`/`referenceId` optional
-- `POST /api/inventory/stock-out` — Manager, Stock_Clerk, Sales; enforces stock availability
-- `POST /api/inventory/adjust` — Admin/Manager/Stock_Clerk; corrections only (damage/loss/return/correction)
-- `POST /api/inventory/transfer` — atomic transfer between locations; 409/422
-- `PUT /api/inventory/reorder-point` — Admin/Manager only
-- `POST /api/inventory/initialize` — idempotent row creation
+- `GET /api/inventory` — paginated stock levels (all authenticated)
+- `GET /api/inventory/low-stock` — items at/below reorder point (all authenticated)
+- `GET /api/inventory/history` — movement log (all authenticated)
+- `POST /api/inventory/stock-in` — `Admin`, `Manager`, `Stock_Clerk`
+- `POST /api/inventory/stock-out` — `Admin`, `Manager`, `Stock_Clerk`, `Sales`
+- `POST /api/inventory/adjust` — `Admin`, `Manager`, `Stock_Clerk`
+- `POST /api/inventory/transfer` — `Admin`, `Manager`, `Stock_Clerk`
+- `PUT /api/inventory/reorder-point` — `Admin`, `Manager`
+- `POST /api/inventory/initialize` — `Admin`, `Manager`
+
+### Suppliers (Slice 8)
+- `GET /api/suppliers` — list with filters (`Admin`, `Manager`, `Purchasor`)
+- `POST /api/suppliers` — create (`Admin`, `Manager`, `Purchasor`)
+- `GET/PUT /api/suppliers/:id` — detail / update (`Admin`, `Manager`, `Purchasor`)
+- `POST /api/suppliers/:id/deactivate` — (`Admin`, `Manager`, `Purchasor`)
+- `POST /api/suppliers/:id/blacklist` — (`Admin`, `Manager`)
+- `DELETE /api/suppliers/:id` — (`Admin`, `Manager`)
+- `GET /api/books/:bookId/suppliers` — linked suppliers sorted by is_primary (all authenticated)
+- `POST /api/books/:bookId/suppliers` — link supplier to book (`Admin`, `Manager`)
+- `DELETE /api/books/:bookId/suppliers/:supplierId` — unlink (`Admin`, `Manager`)
 
 ### Audit Log
-- `GET /api/audit-logs` — paginated; filter by entityType
+- `GET /api/audit-logs` — paginated; filter by entityType (`Super_Admin`, `Admin`)
 
 ---
 
 ## Seed Credentials
 
-| Username | Password | Role | Branch |
-|----------|----------|------|--------|
-| `superadmin` | `password` | Super_Admin | Main Branch |
-| `admin` | `password` | Admin | Main Branch |
+| Username | Password | Role | Branch | UI Access |
+|----------|----------|------|--------|-----------|
+| `superadmin` | `password` | Super_Admin | Main Branch | Settings, Staff, Branches, Audit Log |
+| `admin` | `password` | Admin | Main Branch | All operational pages |
 
-> Super_Admin manages system configuration only. Operational catalog/inventory work requires Admin or Manager role.
+> Create a Manager/Stock_Clerk/Sales/Purchasor via the Staff page after logging in as `admin`.

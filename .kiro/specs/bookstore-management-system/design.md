@@ -113,7 +113,7 @@ Each module owns its tables. Cross-module access goes through service interfaces
 | Slice 5 | Location | locations | Slice 3 |
 | Slice 6 | Catalog | books, book_branch_prices, book_categories, book_tags, book_edit_history | Slice 3 |
 | Slice 7 | Inventory | inventory, inventory_history | Slices 5, 6 |
-| Slice 8 | Supplier | suppliers | Slice 2 |
+| Slice 8 | Supplier | suppliers, book_suppliers | Slice 2 |
 | Slice 9 | Procurement | purchase_orders, po_line_items, po_receipts | Slices 7, 8 |
 | Slice 10 | Customer | customers, loyalty_history, store_credit_history | Slice 1 |
 | Slice 11 | POS | transactions, transaction_line_items, transaction_payments | Slices 4, 7, 10 |
@@ -517,15 +517,37 @@ CREATE INDEX ON inventory_history (book_id, location_id);
 ### 3.10 Supplier & Procurement Tables — Slices 8 & 9 (Requirements 8, 9)
 
 ```sql
+-- ─────────────────────────────────────────────
+-- SUPPLIER TABLES — Slice 8 (Requirement 8)
+-- ─────────────────────────────────────────────
+
 CREATE TABLE suppliers (
-  id             SERIAL  PRIMARY KEY,
-  name           TEXT    UNIQUE NOT NULL,
-  contact_info   JSONB   NOT NULL,
-  lead_time_days INTEGER NOT NULL DEFAULT 7,
-  pricing_terms  TEXT,
-  is_active      BOOLEAN NOT NULL DEFAULT true,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+  id              SERIAL  PRIMARY KEY,
+  name            TEXT    UNIQUE NOT NULL,
+  contact_info    JSONB   NOT NULL,
+  lead_time_days  INTEGER NOT NULL DEFAULT 7,
+  pricing_terms   TEXT,
+  supplier_type   TEXT    NOT NULL DEFAULT 'external'
+                    CHECK (supplier_type IN ('external','publisher')),
+  publisher_id    INTEGER REFERENCES publishers(id),  -- required when supplier_type='publisher'
+  is_active       BOOLEAN NOT NULL DEFAULT true,
+  is_blacklisted  BOOLEAN NOT NULL DEFAULT false,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT publisher_supplier_requires_publisher_id
+    CHECK (supplier_type != 'publisher' OR publisher_id IS NOT NULL),
+  CONSTRAINT external_supplier_no_publisher_id
+    CHECK (supplier_type != 'external' OR publisher_id IS NULL)
 );
+
+CREATE TABLE book_suppliers (
+  book_id      INTEGER NOT NULL REFERENCES books(id),
+  supplier_id  INTEGER NOT NULL REFERENCES suppliers(id),
+  supplier_sku TEXT,
+  is_primary   BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (book_id, supplier_id)
+);
+CREATE INDEX ON book_suppliers (supplier_id);
+CREATE INDEX ON book_suppliers (book_id, is_primary) WHERE is_primary = true;
 
 CREATE TABLE purchase_orders (
   id              SERIAL  PRIMARY KEY,

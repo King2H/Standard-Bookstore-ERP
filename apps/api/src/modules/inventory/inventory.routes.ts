@@ -98,7 +98,7 @@ router.get(
 router.post(
   '/inventory/adjust',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Stock_Clerk'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = adjustSchema.safeParse(req.body);
@@ -115,7 +115,7 @@ router.post(
 router.post(
   '/inventory/transfer',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Stock_Clerk'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = transferSchema.safeParse(req.body);
@@ -132,7 +132,7 @@ router.post(
 router.put(
   '/inventory/reorder-point',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { bookId, locationId } = req.body as { bookId: number; locationId: number };
@@ -150,7 +150,7 @@ router.put(
 router.post(
   '/inventory/initialize',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { bookId, locationId } = req.body as { bookId: number; locationId: number };
@@ -168,7 +168,7 @@ const stockInSchema = z.object({
   locationId:    z.number().int().positive(),
   quantity:      z.number().int().positive(),
   version:       z.number().int().min(0),
-  referenceType: z.string().max(50).optional(),
+  referenceType: z.enum(['purchase_order', 'return', 'adjustment', 'manual', 'initial_stock']).optional(),
   referenceId:   z.number().int().positive().optional(),
   notes:         z.string().max(500).optional(),
 });
@@ -176,7 +176,7 @@ const stockInSchema = z.object({
 router.post(
   '/inventory/stock-in',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Stock_Clerk'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = stockInSchema.safeParse(req.body);
@@ -203,7 +203,7 @@ const stockOutSchema = z.object({
 router.post(
   '/inventory/stock-out',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Stock_Clerk', 'Sales'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk', 'Sales'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = stockOutSchema.safeParse(req.body);

@@ -9,6 +9,7 @@ import BankAccountsPage from './pages/BankAccountsPage.js';
 import LocationsPage from './pages/LocationsPage.js';
 import CatalogPage from './pages/CatalogPage.js';
 import InventoryPage from './pages/InventoryPage.js';
+import SuppliersPage from './pages/SuppliersPage.js';
 import ProfilePage from './pages/ProfilePage.js';
 import { ToastProvider } from './components/Toast.js';
 import { ThemeProvider } from './lib/theme.js';
@@ -19,7 +20,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } },
 });
 
-type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'profile';
+type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'profile';
 type Role = 'Super_Admin' | 'Admin' | 'Manager' | 'Finance_Officer' | 'Stock_Clerk' | 'Sales' | 'Purchasor';
 
 function parseRoleFromToken(): Role | null {
@@ -70,6 +71,7 @@ export default function App() {
               {currentPage === 'locations' && <LocationsPage userRole={userRole ?? undefined} />}
               {currentPage === 'catalog' && <CatalogPage userRole={userRole ?? undefined} />}
               {currentPage === 'inventory' && <InventoryPage userRole={userRole ?? undefined} />}
+              {currentPage === 'suppliers' && <SuppliersPage userRole={userRole ?? undefined} />}
               {currentPage === 'profile' && <ProfilePage />}
             </Layout>
           )}

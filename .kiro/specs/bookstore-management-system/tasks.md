@@ -557,35 +557,75 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 8. Manage Suppliers (Register, Update, Deactivate)
-  > Supplier registry required before purchase orders can be created.
+- [ ] 8. Manage Suppliers (Register, Link to Publishers, Map to Books, Validate for Procurement)
+  > Supplier registry with unified party model. Supports external vendors and publisher-as-supplier. Books can map to multiple suppliers. Stock In supports flexible reference types. Required before purchase orders can be created.
   > _Slice 8 = Requirement 8 | Design: design.md §3.10_
 
-  - [ ] 8.1 Create DB migration: suppliers
-    - `suppliers (id SERIAL PK, name TEXT UNIQUE NOT NULL, contact_info JSONB NOT NULL, lead_time_days INTEGER NOT NULL DEFAULT 7, pricing_terms TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now())`
-    - Seed: insert 2–3 sample suppliers
+  - [x] 8.1 Create DB migration: suppliers with unified party model
+    - `suppliers (id SERIAL PK, name TEXT UNIQUE NOT NULL, contact_info JSONB NOT NULL, lead_time_days INTEGER NOT NULL DEFAULT 7, pricing_terms TEXT, supplier_type TEXT NOT NULL DEFAULT 'external' CHECK (supplier_type IN ('external','publisher')), publisher_id INTEGER REFERENCES publishers(id), is_active BOOLEAN DEFAULT true, is_blacklisted BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`
+    - CHECK constraints: `publisher_supplier_requires_publisher_id` (supplier_type='publisher' → publisher_id NOT NULL), `external_supplier_no_publisher_id` (supplier_type='external' → publisher_id IS NULL)
+    - `book_suppliers (book_id INTEGER REFERENCES books(id), supplier_id INTEGER REFERENCES suppliers(id), supplier_sku TEXT, is_primary BOOLEAN DEFAULT false, PRIMARY KEY (book_id, supplier_id))`
+    - Indexes: `(supplier_id)` on book_suppliers, partial `(book_id, is_primary) WHERE is_primary = true`
+    - Seed: insert 2–3 sample suppliers (mix of external and publisher-linked)
+    - _Requirements: 8.1, 8.2, 8.9, 8.14_
+
+  - [x] 8.2 Implement supplier.service.ts
+    - `create(data, staffCtx)` — validate supplier_type rules (publisher_id required/forbidden); INSERT suppliers; INSERT audit_logs; 409 DUPLICATE_SUPPLIER_NAME
+    - `update(id, data, staffCtx)` — re-validate supplier_type rules on update; UPDATE suppliers; INSERT audit_logs (does not affect existing POs)
+    - `deactivate(id, staffCtx)` — UPDATE is_active=false; INSERT audit_logs
+    - `blacklist(id, staffCtx)` — UPDATE is_blacklisted=true; INSERT audit_logs; Admin/Manager only
+    - `delete(id, staffCtx)` — check for associated POs; 409 DEPENDENCY_CONFLICT if any; DELETE + INSERT audit_logs if clear
+    - `getSuppliersForBook(bookId)` — SELECT from book_suppliers JOIN suppliers; ORDER BY is_primary DESC
+    - `validateSupplierForProcurement(supplierId)` — 422 SUPPLIER_INACTIVE if is_active=false; 422 SUPPLIER_BLACKLISTED if is_blacklisted=true
+    - `linkBookToSupplier(bookId, supplierId, supplierSku, isPrimary, staffCtx)` — UPSERT book_suppliers; if isPrimary=true: UPDATE book_suppliers SET is_primary=false WHERE book_id=$bookId AND supplier_id != $supplierId; INSERT audit_logs
+    - `unlinkBookFromSupplier(bookId, supplierId, staffCtx)` — DELETE from book_suppliers; INSERT audit_logs
+    - _Requirements: 8.1–8.14_
+
+  - [x] 8.3 Implement supplier API routes
+    - `GET /api/suppliers` — Admin/Manager/Purchasor; paginated; filter by supplier_type, is_active, is_blacklisted
+    - `POST /api/suppliers` — Admin/Manager/Purchasor; validates supplier_type rules; 409 DUPLICATE_SUPPLIER_NAME
+    - `GET /api/suppliers/:id` — Admin/Manager/Purchasor
+    - `PUT /api/suppliers/:id` — Admin/Manager/Purchasor
+    - `POST /api/suppliers/:id/deactivate` — Admin/Manager/Purchasor
+    - `POST /api/suppliers/:id/blacklist` — Admin/Manager only
+    - `DELETE /api/suppliers/:id` — Admin/Manager; 409 DEPENDENCY_CONFLICT
+    - `GET /api/books/:bookId/suppliers` — any authenticated; returns linked suppliers sorted by is_primary
+    - `POST /api/books/:bookId/suppliers` — Admin/Manager; body: `{ supplierId, supplierSku?, isPrimary? }`
+    - `DELETE /api/books/:bookId/suppliers/:supplierId` — Admin/Manager
+    - _Requirements: 8.6, 8.8, 8.11_
+
+  - [x] 8.4 Update inventory migration for flexible reference types
+    - Migration `1700000016_supplier_management`: ALTER TABLE inventory_history ADD COLUMN IF NOT EXISTS reference_type TEXT CHECK (reference_type IN ('purchase_order','return','adjustment','manual','initial_stock')); backfill existing rows with reference_type='manual' where reference_type IS NULL
+    - Update `stockIn()` in inventory.service.ts to accept `referenceType` (required, defaults to 'manual') and validate that reference_type='purchase_order' requires a non-null reference_id
+    - _Requirements: 8.15, 8.16, 8.17, 8.18_
+
+  - [x] 8.5 Implement Supplier UI
+    - Supplier list: DataTable with name, supplier_type badge (External / Publisher), linked publisher name (if publisher type), lead_time_days, is_active, is_blacklisted badge; filter by type/status
+    - Create/Edit form: name, contact_info, lead_time_days, pricing_terms, Supplier Type dropdown (External / Publisher); if Publisher → show publisher dropdown from catalog publishers
+    - Blacklist action: Admin/Manager only; confirmation dialog
+    - Book form enhancement: "Suppliers" section — multi-select suppliers, mark one as primary; shows supplier_sku field per supplier
+    - Stock In form update: Reference Type dropdown (purchase_order / return / adjustment / manual / initial_stock); Reference ID field shown only when reference_type='purchase_order'
+    - TanStack Query hooks: `useSupplierList`, `useCreateSupplier`, `useUpdateSupplier`, `useDeactivateSupplier`, `useBlacklistSupplier`, `useBookSuppliers`, `useLinkBookSupplier`, `useUnlinkBookSupplier`
     - _Requirements: 8_
 
-  - [ ] 8.2 Implement supplier.service.ts
-    - `create(data, staffCtx)` — INSERT suppliers; INSERT audit_logs; 409 DUPLICATE_SUPPLIER_NAME
-    - `update(id, data, staffCtx)` — UPDATE suppliers; INSERT audit_logs (does not affect existing POs)
-    - `deactivate(id, staffCtx)` — UPDATE is_active=false; INSERT audit_logs
-    - `delete(id, staffCtx)` — check for associated POs; 409 DEPENDENCY_CONFLICT if any; DELETE + INSERT audit_logs if clear
-    - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
-
-  - [ ] 8.3 Implement supplier API routes + UI
-    - `GET/POST /api/suppliers`, `GET/PUT /api/suppliers/:id`, `POST /api/suppliers/:id/deactivate`, `DELETE /api/suppliers/:id`
-    - Supplier list: DataTable with name, lead_time_days, is_active; create/edit/deactivate/delete actions
-    - TanStack Query hooks: `useSupplierList`, `useCreateSupplier`, `useUpdateSupplier`, `useDeactivateSupplier`
-    - _Requirements: 8.6_
-
-  - [ ] 8.4 Write integration tests for supplier service
-    - Create, duplicate name (409), update, deactivate, delete with POs (409), delete clean supplier
+  - [x] 8.6 Write integration tests for supplier service
+    - Create external supplier (no publisher_id), create publisher-type supplier (with publisher_id), publisher-type without publisher_id (422), external with publisher_id (422)
+    - Duplicate name (409), update, deactivate, blacklist
+    - validateSupplierForProcurement: active+clean passes, inactive fails (422), blacklisted fails (422)
+    - getSuppliersForBook: returns linked suppliers sorted by is_primary
+    - linkBookToSupplier: setting isPrimary=true clears previous primary
+    - delete with POs (409), delete clean supplier
+    - Stock In with reference_type='purchase_order' requires reference_id; other types allow null reference_id
     - _Requirements: 8_
 
   **Definition of Done:**
-  - Supplier CRUD working; deactivated supplier blocked from new POs
-  - Delete blocked when POs exist
+  - Authors remain purely bibliographic (no supplier link)
+  - Publishers optionally act as suppliers via supplier_type='publisher' + publisher_id
+  - Books can map to multiple suppliers; one can be marked primary
+  - Blacklisted or inactive suppliers blocked from new POs
+  - Stock In supports all 5 reference types (not just PO)
+  - System ready for Procurement (Slice 9) without redesign
+  - All integration tests passing
 
 ---
 

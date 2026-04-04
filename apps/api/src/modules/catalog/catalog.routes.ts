@@ -77,7 +77,7 @@ router.get(
 router.post(
   '/books',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = bookWriteSchema.safeParse(req.body);
@@ -116,7 +116,7 @@ router.get(
 router.put(
   '/books/:id',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -137,7 +137,7 @@ router.put(
 router.post(
   '/books/:id/deactivate',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -154,7 +154,7 @@ router.post(
 router.post(
   '/books/:id/reactivate',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -171,7 +171,7 @@ router.post(
 router.get(
   '/books/:id/history',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -206,7 +206,7 @@ router.get(
 router.put(
   '/books/:id/prices/:branchId',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const bookId = parseInt(req.params.id as string, 10);
@@ -278,7 +278,7 @@ router.get('/authors', authenticate, async (req: Request, res: Response, next: N
   } catch (err) { next(err); }
 });
 
-router.post('/authors', authenticate, requireRole('Super_Admin', 'Admin', 'Manager'),
+router.post('/authors', authenticate, requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = nameSchema.safeParse(req.body);
@@ -289,7 +289,7 @@ router.post('/authors', authenticate, requireRole('Super_Admin', 'Admin', 'Manag
   },
 );
 
-router.put('/authors/:id', authenticate, requireRole('Super_Admin', 'Admin', 'Manager'),
+router.put('/authors/:id', authenticate, requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params['id'] as string, 10);
@@ -301,7 +301,7 @@ router.put('/authors/:id', authenticate, requireRole('Super_Admin', 'Admin', 'Ma
   },
 );
 
-router.delete('/authors/:id', authenticate, requireRole('Super_Admin', 'Admin'),
+router.delete('/authors/:id', authenticate, requireRole('Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await catalogService.deleteAuthor(parseInt(req.params['id'] as string, 10), req.staff!);
@@ -323,7 +323,7 @@ router.get('/categories', authenticate, async (req: Request, res: Response, next
   } catch (err) { next(err); }
 });
 
-router.post('/categories', authenticate, requireRole('Super_Admin', 'Admin', 'Manager'),
+router.post('/categories', authenticate, requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = categoryWriteSchema.safeParse(req.body);
@@ -334,7 +334,7 @@ router.post('/categories', authenticate, requireRole('Super_Admin', 'Admin', 'Ma
   },
 );
 
-router.put('/categories/:id', authenticate, requireRole('Super_Admin', 'Admin', 'Manager'),
+router.put('/categories/:id', authenticate, requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params['id'] as string, 10);
@@ -346,7 +346,7 @@ router.put('/categories/:id', authenticate, requireRole('Super_Admin', 'Admin', 
   },
 );
 
-router.delete('/categories/:id', authenticate, requireRole('Super_Admin', 'Admin'),
+router.delete('/categories/:id', authenticate, requireRole('Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await catalogService.deleteCategory(parseInt(req.params['id'] as string, 10), req.staff!);
@@ -368,7 +368,7 @@ router.get('/publishers', authenticate, async (req: Request, res: Response, next
   } catch (err) { next(err); }
 });
 
-router.post('/publishers', authenticate, requireRole('Super_Admin', 'Admin', 'Manager'),
+router.post('/publishers', authenticate, requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = nameSchema.safeParse(req.body);
@@ -379,7 +379,7 @@ router.post('/publishers', authenticate, requireRole('Super_Admin', 'Admin', 'Ma
   },
 );
 
-router.put('/publishers/:id', authenticate, requireRole('Super_Admin', 'Admin', 'Manager'),
+router.put('/publishers/:id', authenticate, requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params['id'] as string, 10);
@@ -391,7 +391,7 @@ router.put('/publishers/:id', authenticate, requireRole('Super_Admin', 'Admin', 
   },
 );
 
-router.delete('/publishers/:id', authenticate, requireRole('Super_Admin', 'Admin'),
+router.delete('/publishers/:id', authenticate, requireRole('Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await catalogService.deletePublisher(parseInt(req.params['id'] as string, 10), req.staff!);

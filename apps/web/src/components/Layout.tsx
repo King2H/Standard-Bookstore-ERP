@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTheme } from '../lib/theme.js';
 import { logout } from '../lib/auth.js';
 
-type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'profile';
+type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'profile';
 type Role = string;
 
 interface NavItem {
@@ -15,10 +15,11 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'branches',      label: 'Branches',      icon: '🏪', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
   { id: 'staff',         label: 'Staff',         icon: '👥', roles: ['Super_Admin', 'Admin', 'Manager'] },
-  { id: 'locations',     label: 'Locations',     icon: '📍', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
-  { id: 'catalog',       label: 'Catalog',       icon: '📚', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
-  { id: 'inventory',     label: 'Inventory',     icon: '📦', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
-  { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer'] },
+  { id: 'locations',     label: 'Locations',     icon: '📍', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
+  { id: 'catalog',       label: 'Catalog',       icon: '📚', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
+  { id: 'inventory',     label: 'Inventory',     icon: '📦', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
+  { id: 'suppliers',     label: 'Suppliers',     icon: '🚚', roles: ['Admin', 'Manager', 'Purchasor'] },
+  { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'] },
   { id: 'settings',      label: 'Settings',      icon: '⚙️', roles: ['Super_Admin', 'Admin', 'Manager'] },
   { id: 'audit-log',     label: 'Audit Log',     icon: '📋', roles: ['Super_Admin', 'Admin'] },
 ];

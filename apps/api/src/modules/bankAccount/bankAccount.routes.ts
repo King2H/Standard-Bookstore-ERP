@@ -39,7 +39,7 @@ const clearSchema = z.object({
 router.get(
   '/branches/:branchId/bank-accounts',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Finance_Officer'),
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const branchId = parseInt(req.params.branchId, 10);
@@ -62,7 +62,7 @@ router.get(
 router.post(
   '/branches/:branchId/bank-accounts',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const branchId = parseInt(req.params.branchId, 10);
@@ -87,7 +87,7 @@ router.post(
 router.get(
   '/branches/:branchId/bank-accounts/:id',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Finance_Officer'),
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -104,7 +104,7 @@ router.get(
 router.put(
   '/branches/:branchId/bank-accounts/:id',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -126,7 +126,7 @@ router.put(
 router.post(
   '/branches/:branchId/bank-accounts/:id/deactivate',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager'),
+  requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -143,7 +143,7 @@ router.post(
 router.get(
   '/branches/:branchId/reconciliation',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Finance_Officer'),
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const bankAccountId = parseInt(req.query.bankAccountId as string, 10);
@@ -168,7 +168,7 @@ router.get(
 router.post(
   '/branches/:branchId/reconciliation/import',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Finance_Officer'),
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const bankAccountId = parseInt(req.query.bankAccountId as string, 10);
@@ -198,7 +198,7 @@ router.post(
 router.put(
   '/branches/:branchId/reconciliation/:entryId',
   authenticate,
-  requireRole('Super_Admin', 'Admin', 'Manager', 'Finance_Officer'),
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const entryId = parseInt(req.params.entryId, 10);

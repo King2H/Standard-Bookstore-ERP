@@ -129,7 +129,8 @@ The system is a single-tenant deployment serving one business with multiple phys
 | book_edit_history | id, book_id, field_name, old_value, new_value, changed_by, changed_at | belongs to Book |
 | Inventory | book_id, location_id, quantity, reorder_point, version | composite PK (book_id, location_id); has many inventory_history |
 | inventory_history | id, book_id, location_id, qty_before, qty_after, delta, reason, reason_code, staff_id, created_at | belongs to Inventory |
-| Supplier | id, name (unique), contact_info, lead_time_days, pricing_terms, is_active | has many PurchaseOrders |
+| Supplier | id, name (unique), contact_info, lead_time_days, pricing_terms, supplier_type, publisher_id (nullable), is_active, is_blacklisted | has many PurchaseOrders; optionally references Publisher |
+| book_suppliers | book_id, supplier_id, supplier_sku (nullable), is_primary | joins Book ↔ Supplier |
 | PurchaseOrder | id, po_number (unique), supplier_id, branch_id, location_id, status, bank_account_id (nullable), notes, created_by, created_at | has many PO_LineItems, PO_Receipts |
 | PO_LineItem | id, po_id, book_id, qty_ordered, qty_received, unit_price | belongs to PurchaseOrder |
 | PO_Receipt | id, po_id, line_item_id, qty_received, over_receipt, confirmed_by, received_by, received_at | belongs to PurchaseOrder |
@@ -796,21 +797,49 @@ The client SHOULD retry up to 3 times with a fresh version read before surfacing
 
 ### Requirement 8: Supplier Management
 
-**User Story:** As a Manager, I want to manage supplier records, so that I can associate purchase orders with the correct vendors.
+**User Story:** As a Manager or Purchasor, I want to manage supplier records with proper domain separation from catalog entities, so that I can associate purchase orders with the correct vendors and optionally link publishers who act as direct suppliers.
 
 #### Acceptance Criteria
 
-1. WHEN an Admin or Manager creates a Supplier, THE System SHALL persist: unique name, contact information (JSONB), lead time in days (INTEGER), and pricing terms (TEXT, nullable).
-2. WHEN a Supplier record is updated, THE System SHALL persist the changes without modifying any existing POs that reference that Supplier.
-3. WHEN a Supplier is deactivated, THE System SHALL set `is_active = false` and reject any subsequent request to create a PO against that Supplier with `422 SUPPLIER_INACTIVE`, while retaining all historical PO records.
-4. WHEN a Supplier deletion is requested and the Supplier has associated POs, THE System SHALL reject the request with `409 DEPENDENCY_CONFLICT` and return a descriptive error.
-5. WHEN a Supplier is created, updated, or deactivated, THE System SHALL insert a row into the Outbox within the same DB transaction; the Outbox_Poller SHALL subsequently write the Audit_Log entry.
-6. THE System SHALL restrict Supplier management to Staff with the `Admin`, `Manager`, or `Purchasor` Role; `Purchasor` has full C,R,U,D on Suppliers within their assigned scope.
+**8.1 — Supplier Registry**
+
+1. WHEN an Admin, Manager, or Purchasor creates a Supplier, THE System SHALL persist: unique name, contact information (JSONB), lead time in days (INTEGER), pricing terms (TEXT, nullable), `supplier_type` (TEXT CHECK IN ('external','publisher')), and optional `publisher_id` (INTEGER REFERENCES publishers(id)).
+2. WHEN `supplier_type = 'publisher'`, THE System SHALL require a valid `publisher_id` referencing an existing publisher in the catalog; requests without a `publisher_id` SHALL be rejected with `422 PUBLISHER_ID_REQUIRED`.
+3. WHEN `supplier_type = 'external'`, THE System SHALL require `publisher_id` to be NULL; requests with a `publisher_id` SHALL be rejected with `422 PUBLISHER_ID_NOT_ALLOWED`.
+4. WHEN a Supplier record is updated, THE System SHALL persist the changes without modifying any existing POs that reference that Supplier.
+5. WHEN a Supplier is deactivated, THE System SHALL set `is_active = false` and reject any subsequent request to create a PO against that Supplier with `422 SUPPLIER_INACTIVE`, while retaining all historical PO records.
+6. WHEN a Supplier deletion is requested and the Supplier has associated POs, THE System SHALL reject the request with `409 DEPENDENCY_CONFLICT` and return a descriptive error.
+7. WHEN a Supplier is created, updated, or deactivated, THE System SHALL insert a row into the Outbox within the same DB transaction; the Outbox_Poller SHALL subsequently write the Audit_Log entry.
+8. THE System SHALL restrict Supplier management to Staff with the `Admin`, `Manager`, or `Purchasor` Role.
+
+**8.2 — Book-Supplier Mapping**
+
+9. THE System SHALL maintain a `book_suppliers` junction table linking Books to Suppliers with: `book_id`, `supplier_id`, `supplier_sku` (TEXT, nullable), and `is_primary` (BOOLEAN DEFAULT false).
+10. WHEN a book-supplier mapping is created, THE System SHALL allow the same book to be linked to multiple suppliers.
+11. THE System SHALL expose `getSuppliersForBook(bookId)` returning all linked suppliers sorted by `is_primary DESC`.
+12. THE System SHALL allow marking one supplier per book as primary (`is_primary = true`); marking a new supplier as primary for a book SHALL automatically unset the previous primary.
+
+**8.3 — Procurement Validation**
+
+13. THE System SHALL expose `validateSupplierForProcurement(supplierId)` which SHALL reject with `422 SUPPLIER_INACTIVE` if `is_active = false`, and `422 SUPPLIER_BLACKLISTED` if `is_blacklisted = true`.
+14. THE System SHALL add an `is_blacklisted` BOOLEAN field to suppliers (DEFAULT false); blacklisted suppliers SHALL be blocked from new POs.
+
+**8.4 — Inventory Stock In Reference Types**
+
+15. THE System SHALL support the following `reference_type` values on `inventory_history` for stock-in operations: `'purchase_order'`, `'return'`, `'adjustment'`, `'manual'`, `'initial_stock'`.
+16. WHEN `reference_type = 'purchase_order'`, THE System SHALL require a valid `reference_id` pointing to an existing PO.
+17. WHEN `reference_type` is any other value, `reference_id` SHALL be optional (nullable).
+18. Existing stock-in records without a `reference_type` SHALL be treated as `'manual'` for backward compatibility.
 
 #### Constraints
 
 - `suppliers.name`: UNIQUE system-wide
+- `suppliers.supplier_type`: CHECK IN ('external', 'publisher')
+- `suppliers.publisher_id`: REFERENCES publishers(id); required when supplier_type='publisher', NULL when supplier_type='external'
+- `book_suppliers`: PRIMARY KEY (book_id, supplier_id)
 - Supplier deletion: RESTRICT if has any POs
+- Authors remain purely bibliographic — they are NOT suppliers
+- Publishers remain bibliographic entities — they MAY optionally act as suppliers via the supplier_type='publisher' link
 - Idempotency-Key: not required
 
 ---
