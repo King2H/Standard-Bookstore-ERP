@@ -36,13 +36,20 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ### Phase 0 — System Validation ✅
 
+**Slice 0 — Infrastructure**
 - Monorepo: `apps/api` (Node.js 20 + TypeScript + Express 5), `apps/web` (React 18 + Vite + Tailwind), `packages/shared`
 - Docker Compose: API + PostgreSQL 16
 - JWT auth (15 min access + httpOnly refresh cookie), 7-role RBAC
-- Staff management: create, deactivate, reactivate, branch-role assignment, account lockout, password policy
-- Branch management: CRUD with dependency guard
 - Audit log: all write actions recorded; real-time viewer UI
 - Dark/light mode, animated login, collapsible sidebar
+
+**Slices 2+3 — Staff & Auth + Branch Management**
+- Full JWT authentication: login with branch selection, logout, token refresh
+- 7-role RBAC: `Super_Admin`, `Admin`, `Manager`, `Finance_Officer`, `Stock_Clerk`, `Sales`, `Purchasor`
+- Staff management: create, deactivate, reactivate, branch-role assignment, account lockout, password policy, force-reset
+- Branch management: CRUD with dependency guard (409 if locations/staff/orders exist)
+- Staff profile: own profile view, password change, security status (locked, must-change)
+- Admin controls: unlock accounts, reset passwords, view full security detail
 
 ### Phase 1 — Core Business Foundation 🔄
 
