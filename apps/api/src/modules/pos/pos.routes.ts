@@ -52,6 +52,7 @@ router.get(
         dateTo:        qs(req.query.dateTo),
         status:        qs(req.query.status),
         paymentStatus: qs(req.query.paymentStatus),
+        transactionNumber: qs(req.query.transactionNumber),
         page:          qi(req.query.page, 1),
         pageSize:      qi(req.query.pageSize, 25),
       });

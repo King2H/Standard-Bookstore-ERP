@@ -1,4 +1,4 @@
-import { db } from '../../db/index.js';
+﻿import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import {
   getEffectiveConfig,
@@ -173,6 +173,7 @@ export async function list(opts: {
   dateTo?: string;
   status?: string;
   paymentStatus?: string;
+  transactionNumber?: string;
   page?: number;
   pageSize?: number;
 }): Promise<{ items: TransactionRow[]; total: number; page: number; totalPages: number }> {
@@ -187,7 +188,8 @@ export async function list(opts: {
   if (opts.customerId)    { params.push(opts.customerId);    conditions.push(`t.customer_id = $${params.length}`); }
   if (opts.staffId)       { params.push(opts.staffId);       conditions.push(`t.staff_id = $${params.length}`); }
   if (opts.status)        { params.push(opts.status);        conditions.push(`t.status = $${params.length}`); }
-  if (opts.paymentStatus) { params.push(opts.paymentStatus); conditions.push(`t.payment_status = $${params.length}`); }
+  if (opts.paymentStatus)    { params.push(opts.paymentStatus);    conditions.push(`t.payment_status = $${params.length}`); }
+  if (opts.transactionNumber){ params.push(opts.transactionNumber);conditions.push(`t.transaction_number = $${params.length}`); }
   if (opts.dateFrom)      { params.push(opts.dateFrom);      conditions.push(`t.created_at >= $${params.length}`); }
   if (opts.dateTo)        { params.push(opts.dateTo);        conditions.push(`t.created_at <= $${params.length}`); }
 

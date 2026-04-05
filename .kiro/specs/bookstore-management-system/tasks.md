@@ -876,36 +876,30 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 12. Process Returns and Issue Refunds
+- [x] 12. Process Returns and Issue Refunds
   > Reverse a completed transaction. Includes return window enforcement, partial returns, and store credit issuance.
   > _Slice 12 = Requirement 12 | Design: design.md §3.13_
 
-  - [ ] 12.1 Create DB migration: returns, return_line_items, refunds
-    - `returns (id BIGSERIAL PK, original_tx_id BIGINT NOT NULL, branch_id INTEGER REFERENCES branches(id), location_id INTEGER REFERENCES locations(id), staff_id INTEGER NOT NULL, manager_auth_id INTEGER, created_at TIMESTAMPTZ DEFAULT now())` + index on `original_tx_id`
-    - `return_line_items (id BIGSERIAL PK, return_id BIGINT REFERENCES returns(id), tx_line_id BIGINT REFERENCES transaction_line_items(id), quantity INTEGER NOT NULL CHECK (quantity > 0), refund_amount NUMERIC(14,2) NOT NULL)`
-    - `refunds (id BIGSERIAL PK, return_id BIGINT REFERENCES returns(id), method TEXT NOT NULL CHECK (method IN ('original','store_credit','bank_transfer')), amount NUMERIC(14,2) NOT NULL CHECK (amount > 0), bank_account_id INTEGER REFERENCES bank_accounts(id), reason TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`
-    - _Requirements: 12_
-
-  - [ ] 12.2 Implement returns.service.ts
-    - `processReturn(data, staffCtx)` — validate original_tx_id references completed transaction (422 INVALID_TRANSACTION_REFERENCE); get return_window_days via config.getReturnWindowDays(branchId); if `now() > completed_at + return_window_days` AND no manager_auth_id: 403 RETURN_WINDOW_EXCEEDED; compute total refund value; if refund value > config.getMaxReturnValueWithoutAuth() AND no manager_auth_id: 403 RETURN_VALUE_EXCEEDS_LIMIT; if out-of-window AND config.getRefundMethodAfterWindow() = 'store_credit_only' AND refundMethod != 'store_credit': 422 REFUND_METHOD_NOT_ALLOWED_AFTER_WINDOW; for each line: compute sum of previously returned qty; if sum + new qty > original qty: 422 QUANTITY_EXCEEDS_ORIGINAL; BEGIN; INSERT returns + return_line_items; UPDATE inventory (increment at receiving location); if refundMethod='store_credit': adjustStoreCredit + INSERT store_credit_history; if refundMethod='bank_transfer': validate bank_account_id; INSERT refunds; INSERT audit_logs; COMMIT
-    - _Requirements: 12.1–12.8_
-
-  - [ ] 12.3 Implement returns API routes + UI
-    - `POST /api/returns` — Sales/Manager; body: `{ originalTxId, lines: [{txLineId, quantity}], refundMethod, bankAccountId?, reason, managerAuthId? }`
-    - `GET /api/returns/:id`, `GET /api/transactions/:id/returns`
-    - Return form: transaction lookup → line item checkboxes + qty inputs → refund method selector → manager auth modal if window exceeded
-    - TanStack Query hooks: `useProcessReturn`, `useReturn`, `useTransactionReturns`
-    - _Requirements: 12_
-
-  - [ ] 12.4 Write integration tests for returns service
-    - Partial return, full return, return window exceeded without auth (403), return window exceeded with manager auth (200), quantity overflow (422), double-return prevention (422), store credit issued correctly
-    - _Requirements: 12_
+  - [x] 12.1 Create DB migration: returns, return_line_items, refunds
+  - [x] 12.2 Implement returns.service.ts
+  - [x] 12.3 Implement returns API routes + UI
+  - [x] 12.4 Write integration tests for returns service
 
   **Definition of Done:**
-  - Return window enforced; manager auth recorded in audit log
-  - Inventory incremented on return
+  - Return window enforced; refund method restricted after window (store_credit_only policy)
+  - Approval required for refunds exceeding max_return_value_without_auth
+  - Inventory incremented on return via `pos_return` reference_type
   - Store credit balance updated atomically with refund record
-  - Double-return and quantity overflow prevented
+  - Double-return and quantity overflow prevented (OVER_RETURN)
+  - Loyalty points reversed proportionally on return
+  - Refund cannot exceed amount paid on transaction
+  - 8 integration tests passing
+  - Returns page wired into Layout + App.tsx (Sales, Manager, Finance_Officer, Admin)
+  - **Post-implementation fixes:**
+    - Manager/Admin self-approve automatically (`isPrivileged` check) — no `APPROVAL_REQUIRED` error for privileged roles
+    - Transaction search fixed: uses `transactionNumber` API filter instead of client-side pagination match
+    - `pos.service.ts` list() `$N` placeholder bug fixed for all WHERE conditions + `transactionNumber` filter added
+    - Returns UI: approval section simplified — Manager/Admin see confirmation banner; Sales see policy hint
 
 ---
 

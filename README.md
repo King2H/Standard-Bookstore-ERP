@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 2 — Slices 8, 9, 10 & 11 Complete. Next: Slice 12 (Returns & Refunds)**
+**Phase 2 — Slices 8, 9, 10, 11 & 12 Complete. Next: Slice 13 (Order Management)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -31,7 +31,8 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 9 | Procurement & Purchase Orders | ✅ Done |
 | 10 | Customer Management | ✅ Done |
 | 11 | POS Transactions | ✅ Done |
-| 12–15 | Returns, Orders, Payments, Exchange | ⬜ Pending |
+| 12 | Returns & Refunds | ✅ Done |
+| 13–15 | Orders, Payments, Exchange | ⬜ Pending |
 | 16–17 | Reporting + UI/Dashboard | ⬜ Pending |
 
 ---
@@ -179,6 +180,24 @@ Every API endpoint and UI page enforces role restrictions. The table below summa
 - RBAC: `Sales`/`Manager` create; `Manager`/`Admin` void; all authenticated view
 - 10 integration tests passing
 
+**Slice 12 — Returns & Refunds ✅**
+- Compensating financial operations — returns never delete transactions, only reverse effects
+- Return number format: `RET-YYYYMMDD-XXXX`
+- Config-driven: `return_window_days`, `max_return_value_without_auth`, `refund_method_after_window`
+- Outside return window: enforces `store_credit_only` refund policy
+- Approval required: refunds exceeding `max_return_value_without_auth` require `approvedBy` staff ID
+- Manager/Admin self-approve automatically — their `staffId` is used as `approvedBy`; Sales staff must ask a Manager/Admin to process high-value returns directly
+- Partial returns: tracks cumulative returned qty per line item; prevents over-return (OVER_RETURN)
+- Inventory restored via `stock_in` with `reference_type = 'pos_return'`
+- Store credit: credited atomically with `store_credit_history` audit trail
+- Loyalty reversal: proportional points reversed on return
+- Refund capped at `amount_paid` on the original transaction
+- 4 API routes: `POST /api/returns`, `GET /api/returns`, `GET /api/returns/:id`, `POST /api/returns/:id/reject`
+- Returns UI: 3-step wizard (find transaction → select items → refund method) + history tab with expandable details
+- RBAC: `Sales`/`Manager` create; `Manager`/`Admin` reject; `Admin`/`Manager`/`Finance_Officer` view
+- Migration `1700000024`: creates `returns`, `return_line_items`, `refunds` tables; extends `inventory_history_reference_type_check` to include `'pos_return'`
+- 8 integration tests passing
+
 ---
 
 ## Tech Stack
@@ -228,7 +247,7 @@ cd apps/api && npm test
 ```
 
 > Tests use prefix-based cleanup — seed data is never touched.
-> Current: **14 test files, 196 tests, all passing.**
+> Current: **15 test files, 204 tests, all passing.**
 
 ## Restoring Seed Data
 
@@ -338,6 +357,12 @@ Generate encryption key: `node -e "console.log(require('crypto').randomBytes(32)
 - `GET /api/pos/transactions/:id` — detail with line items + payments (all authenticated)
 - `POST /api/pos/transactions/:id/payment` — collect outstanding balance on credit/partial transaction (`Sales`, `Manager`, `Admin`)
 - `POST /api/pos/transactions/:id/void` — void transaction (`Manager`, `Admin`)
+
+### Returns (Slice 12)
+- `POST /api/returns` — create return (`Sales`, `Manager`); body: `{ transactionId, refundMethod, reason?, lines: [{transactionLineItemId, quantity}], approvedBy? }`
+- `GET /api/returns` — list (`Admin`, `Manager`, `Finance_Officer`); filters: `branchId`, `customerId`, `transactionId`, `status`
+- `GET /api/returns/:id` — detail with line items + refunds
+- `POST /api/returns/:id/reject` — reject return (`Manager`, `Admin`)
 
 ### Audit Log
 - `GET /api/audit-logs` — paginated; filter by entityType (`Super_Admin`, `Admin`)

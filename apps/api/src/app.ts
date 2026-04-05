@@ -16,6 +16,7 @@ import supplierRouter from './modules/supplier/supplier.routes.js';
 import procurementRouter from './modules/procurement/procurement.routes.js';
 import customerRouter from './modules/customer/customer.routes.js';
 import posRouter from './modules/pos/pos.routes.js';
+import returnsRouter from './modules/returns/returns.routes.js';
 
 export function createApp() {
   const app = express();
@@ -39,6 +40,7 @@ export function createApp() {
   app.use('/api', procurementRouter);
   app.use('/api', customerRouter);
   app.use('/api', posRouter);
+  app.use('/api', returnsRouter);
   app.use('/api', auditLogsRouter);
 
   // 404 handler
