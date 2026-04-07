@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 In Progress (Slices 12–14 Complete). Next: Slice 15 (Merchant Exchange)**
+**Phase 3 Complete (Slices 12–15). Next: Phase 4 (Reporting & Analytics)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -34,7 +34,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 12 | Returns & Refunds | ✅ Done |
 | 13 | Order Management | ✅ Done |
 | 14 | Payment Management | ✅ Done |
-| 15 | Merchant Exchange | ⬜ Pending |
+| 15 | Merchant Exchange | ✅ Done |
 | 16-17 | Reporting + UI/Dashboard | Pending |
 
 ---
@@ -152,9 +152,19 @@ Key rules:
 - Migration 1700000026: creates order_payments, order_refunds tables
 - 8 integration tests passing
 
----
+**Slice 15 — Merchant Exchange ✅**
+- Exchange reference format: EXC-YYYYMMDD-XXXX; currency locked to ETB
+- Single-step atomic exchange: validates books/stock, updates inventory, computes net balance, determines settlement
+- net_balance = total_outgoing_value − total_incoming_value; settlement_type: Even / Customer_Pays / Store_Refunds
+- Incoming items increase stock; outgoing items decrease stock — all within one DB transaction
+- Inventory history recorded with reference_type = exchange_in / exchange_out
+- Cancel blocked on Completed exchanges; audit log on all state changes
+- Exchanges UI: list with status/settlement badges + expandable item detail; New Exchange tab with incoming/outgoing item builders and real-time balance/settlement preview
+- RBAC: Sales/Manager/Admin create; Manager/Admin cancel
+- Migration 1700000027: exchanges, exchange_incoming_items, exchange_outgoing_items; extends inventory_history reference_type check
+- 8 integration tests passing
 
-## Tech Stack
+---
 
 | Layer | Technology |
 |-------|-----------|
@@ -165,7 +175,7 @@ Key rules:
 | Database | PostgreSQL 16 (raw pg driver, no ORM) |
 | Auth | JWT (15 min) + httpOnly refresh cookie (7 days) |
 | Encryption | AES-256-GCM (column-level, bank account data) |
-| Migrations | node-pg-migrate (.cjs format, 25 migrations) |
+| Migrations | node-pg-migrate (.cjs format, 27 migrations) |
 | Testing | Vitest + Supertest (integration tests, real DB) |
 | Container | Docker + Docker Compose |
 
@@ -192,7 +202,7 @@ cd apps/api && npm test
 ```
 
 Tests use prefix-based cleanup — seed data is never touched.
-Current: 17 test files, 220 tests, all passing.
+Current: 18 test files, 228 tests, all passing.
 
 ## Restoring Seed Data
 
@@ -302,6 +312,12 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - POST /api/payments/:id/refund — process refund (Manager, Admin); body: { refundAmount, reason }
 - GET /api/payments/:id/refunds — list refunds for payment
 
+### Exchanges (Slice 15)
+- POST /api/exchanges — create exchange (Sales, Manager, Admin); body: { locationId?, customerId?, notes?, incomingItems, outgoingItems }
+- GET /api/exchanges — list; filters: branchId, customerId, status, dateFrom, dateTo
+- GET /api/exchanges/:id — detail with incoming/outgoing items
+- POST /api/exchanges/:id/cancel — cancel exchange (Manager, Admin)
+
 ### Audit Log
 - GET /api/audit-logs — paginated; filter by entityType (Super_Admin, Admin)
 
@@ -347,3 +363,5 @@ Create Manager/Stock_Clerk/Sales/Purchasor via the Staff page after logging in a
 | 1700000023_pos_payment_status | payment_status, amount_paid, amount_due |
 | 1700000024_create_returns | Returns, return_line_items, refunds |
 | 1700000025_create_orders | Orders, order_line_items |
+| 1700000026_create_payments | Order payments, order refunds |
+| 1700000027_create_exchanges | Exchanges, exchange_incoming_items, exchange_outgoing_items |

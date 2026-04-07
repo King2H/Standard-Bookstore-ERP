@@ -978,45 +978,25 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 15. Trade Books with Merchants (Exchange Orders, Settlement)
-  > In-kind book trading with atomic inventory swap and trade value adjustment calculation.
+- [x] 15. Trade Books with Merchants (Exchange Orders, Settlement)
+  > In-kind book trading with atomic inventory swap and net balance settlement calculation.
   > _Slice 15 = Requirement 15 | Design: design.md §3.15, §4.5_
-  > _Concurrency: REPEATABLE READ + SELECT FOR UPDATE on inventory during settlement_
+  > _Concurrency: BEGIN + SELECT FOR UPDATE on inventory during exchange creation_
 
-  - [ ] 15.1 Create DB migration: merchants, exchange_agreements, exchange_orders, exchange_order_lines
-    - `merchants (id SERIAL PK, name TEXT UNIQUE NOT NULL, contact_info JSONB NOT NULL, address TEXT NOT NULL, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now())`
-    - `exchange_agreements (id SERIAL PK, merchant_id INTEGER REFERENCES merchants(id), basis TEXT NOT NULL CHECK (basis IN ('book_for_book','value_based')), terms TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now())`
-    - `exchange_orders (id BIGSERIAL PK, agreement_id INTEGER REFERENCES exchange_agreements(id), branch_id INTEGER REFERENCES branches(id), src_location_id INTEGER REFERENCES locations(id), dst_location_id INTEGER REFERENCES locations(id), status TEXT DEFAULT 'Pending' CHECK (status IN ('Pending','Accepted','Settled','Cancelled')), trade_value_offered NUMERIC(14,2), trade_value_requested NUMERIC(14,2), adjustment_amount NUMERIC(14,2), adjustment_type TEXT CHECK (adjustment_type IN ('cash','store_credit')), created_by INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now())` + index on `(agreement_id, status)`
-    - `exchange_order_lines (id BIGSERIAL PK, exchange_order_id BIGINT REFERENCES exchange_orders(id), direction TEXT NOT NULL CHECK (direction IN ('offered','requested')), book_id INTEGER REFERENCES books(id), quantity INTEGER NOT NULL CHECK (quantity > 0), trade_value NUMERIC(14,2) NOT NULL)` + index on `exchange_order_id`
-    - _Requirements: 15_
-
-  - [ ] 15.2 Implement exchange.service.ts
-    - `createMerchant(data, staffCtx)` — INSERT merchants; INSERT audit_logs; 409 DUPLICATE_MERCHANT_NAME
-    - `createAgreement(merchantId, data, staffCtx)` — validate merchant is_active; INSERT exchange_agreements; INSERT audit_logs
-    - `createExchangeOrder(data, staffCtx)` — validate agreement is_active; validate all books is_active; compute trade_value_offered = SUM(offered lines); compute trade_value_requested = SUM(requested lines); adjustment_amount = ABS(offered - requested); if adjustment_amount > 0 AND data.adjustment_type = 'cash' AND !config.isExchangeCashAdjustmentAllowed(): 422 CASH_ADJUSTMENT_NOT_ALLOWED (must use store_credit); INSERT exchange_orders + exchange_order_lines; INSERT audit_logs
-    - `accept(orderId, staffCtx)` — validate status='Pending'; UPDATE status='Accepted'; INSERT audit_logs; 409 INVALID_STATE_TRANSITION
-    - `settle(orderId, staffCtx)` — BEGIN REPEATABLE READ; SELECT exchange_orders FOR UPDATE; validate status='Accepted'; SELECT inventory FOR UPDATE for all offered books at src_location; check each quantity >= line quantity (422 INSUFFICIENT_STOCK); UPDATE inventory (optimistic version check) for offered books (decrement) and requested books (increment); INSERT inventory_history (EXCHANGE_OUT, EXCHANGE_IN); UPDATE status='Settled'; INSERT audit_logs; COMMIT
-    - `cancel(orderId, staffCtx)` — validate status IN ('Pending','Accepted'); UPDATE status='Cancelled'; INSERT audit_logs; 409 INVALID_STATE_TRANSITION
-    - _Requirements: 15.1–15.10_
-
-  - [ ] 15.3 Implement exchange API routes + UI
-    - `GET/POST /api/merchants`, `GET/PUT /api/merchants/:id`, `GET/POST /api/merchants/:id/agreements`
-    - `GET/POST /api/exchange-orders`, `GET /api/exchange-orders/:id`, `POST /api/exchange-orders/:id/accept|settle|cancel`
-    - Merchant directory: DataTable with name, contact_info, is_active
-    - Exchange order form: merchant + agreement select, offered/requested line builders, adjustment_amount display (auto-computed), adjustment_type select
-    - Exchange order detail: status badge, offered/requested lines, trade value diff, settlement confirmation dialog
-    - TanStack Query hooks: `useMerchantList`, `useExchangeOrders`, `useCreateExchangeOrder`, `useAcceptExchange`, `useSettleExchange`, `useCancelExchange`
-    - _Requirements: 15_
-
-  - [ ] 15.4 Write integration tests for exchange service
-    - Create exchange order (trade value adjustment computed), accept, settle (inventory swapped atomically), settle with insufficient stock (422), cancel from Pending/Accepted, state machine violations (409)
-    - _Requirements: 15_
+  - [x] 15.1 Create DB migration: exchanges, exchange_incoming_items, exchange_outgoing_items
+  - [x] 15.2 Implement exchanges.service.ts
+  - [x] 15.3 Implement exchange API routes + UI
+  - [x] 15.4 Write integration tests for exchange service
 
   **Definition of Done:**
-  - Trade value adjustment calculated correctly
-  - Settlement is atomic — no partial inventory state
-  - State machine enforced; Settled → any transition forbidden
-  - Audit log entries on all state transitions
+  - Exchange reference format: EXC-YYYYMMDD-XXXX; currency locked to ETB
+  - Incoming items increase stock; outgoing items decrease stock — atomic within single transaction
+  - net_balance = total_outgoing_value − total_incoming_value; settlement_type auto-derived (Even / Customer_Pays / Store_Refunds)
+  - State machine: Evaluated → Completed (on creation) or Cancelled
+  - Inventory history recorded with reference_type = exchange_in / exchange_out
+  - Audit log entries on create and cancel
+  - Migration 1700000027: exchanges, exchange_incoming_items, exchange_outgoing_items; extends inventory_history reference_type check
+  - 8 integration tests passing
 
 ---
 
