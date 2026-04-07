@@ -20,18 +20,18 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 | Slice | Domain | Status |
 |-------|--------|--------|
-| 0 | Infrastructure | Done |
-| 2+3 | Staff & Auth + Branch | Done |
-| 1 | Configuration & System Settings | Done |
-| 4 | Bank Account Management | Done |
-| 5 | Location Management + Access Control | Done |
-| 6 | Catalog Management | Done |
-| 7 | Inventory Management | Done |
-| 8 | Supplier Management | Done |
-| 9 | Procurement & Purchase Orders | Done |
-| 10 | Customer Management | Done |
-| 11 | POS Transactions | Done |
-| 12 | Returns & Refunds | Done |
+| 0 | Infrastructure | ✅ Done |
+| 2+3 | Staff & Auth + Branch | ✅ Done |
+| 1 | Configuration & System Settings | ✅ Done |
+| 4 | Bank Account Management | Done ✅ |
+| 5 | Location Management + Access Control | Done ✅ |
+| 6 | Catalog Management | Done ✅ |
+| 7 | Inventory Management | Done ✅ |
+| 8 | Supplier Management | Done ✅ |
+| 9 | Procurement & Purchase Orders | Done ✅ |
+| 10 | Customer Management | Done ✅ |
+| 11 | POS Transactions | Done ✅ |
+| 12 | Returns & Refunds | Done ✅ |
 | 13 | Order Management | ✅ Done |
 | 14 | Payment Management | ✅ Done |
 | 15 | Merchant Exchange | ⬜ Pending |
