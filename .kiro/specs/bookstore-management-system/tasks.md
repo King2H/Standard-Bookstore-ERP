@@ -903,47 +903,53 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 13. Manage Customer Orders (Create, Confirm, Fulfill, Cancel)
+- [x] 13. Manage Customer Orders (Create, Confirm, Fulfill, Cancel)
   > Multi-channel order management with stock reservation. Pessimistic locking on confirmation.
+  > Currency locked to ETB. Supports partial fulfillment, split payments, and returns linkage.
   > _Slice 13 = Requirement 13 | Design: design.md §3.14, §4.2, §5.1_
   > _Concurrency: SELECT FOR UPDATE on inventory rows during confirmation_
 
-  - [ ] 13.1 Create DB migration: orders, order_line_items
-    - `orders (id BIGSERIAL PK, order_number TEXT UNIQUE NOT NULL, customer_id INTEGER REFERENCES customers(id), branch_id INTEGER REFERENCES branches(id), location_id INTEGER REFERENCES locations(id), channel TEXT NOT NULL CHECK (channel IN ('in_store','phone','online')), status TEXT DEFAULT 'Pending' CHECK (status IN ('Pending','Confirmed','In_Progress','Fulfilled','Cancelled')), tax_rate NUMERIC(6,4) NOT NULL, subtotal NUMERIC(14,2), tax_amount NUMERIC(14,2), total NUMERIC(14,2), cancel_reason TEXT, created_by INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now())`
+  - [x] 13.1 Create DB migration: orders, order_line_items
+  - [x] 13.2 Implement orders.service.ts
+  - [x] 13.3 Implement order API routes + UI
+  - [x] 13.4 Write integration tests for orders service
+    - `orders (id BIGSERIAL PK, order_number TEXT UNIQUE NOT NULL, customer_id INTEGER REFERENCES customers(id), branch_id INTEGER REFERENCES branches(id), location_id INTEGER REFERENCES locations(id), channel TEXT NOT NULL CHECK (channel IN ('in_store','phone','online')), status TEXT DEFAULT 'Pending' CHECK (status IN ('Pending','Confirmed','In_Progress','Fulfilled','Cancelled')), payment_status TEXT DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid','partial','paid','refunded')), currency TEXT NOT NULL DEFAULT 'ETB', subtotal NUMERIC(14,2), discount_amount NUMERIC(14,2) DEFAULT 0, tax_rate NUMERIC(6,4) NOT NULL, tax_amount NUMERIC(14,2), total NUMERIC(14,2), cancel_reason TEXT, created_by INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())`
     - Indexes: `(customer_id, status)`, `(branch_id, status)`, `created_at`
-    - `order_line_items (id BIGSERIAL PK, order_id BIGINT REFERENCES orders(id), book_id INTEGER REFERENCES books(id), quantity INTEGER NOT NULL CHECK (quantity > 0), unit_price NUMERIC(14,2) NOT NULL, qty_reserved INTEGER NOT NULL DEFAULT 0, is_backordered BOOLEAN DEFAULT false)` + index on `order_id`
+    - `order_line_items (id BIGSERIAL PK, order_id BIGINT REFERENCES orders(id), book_id INTEGER REFERENCES books(id), quantity INTEGER NOT NULL CHECK (quantity > 0), unit_price NUMERIC(14,2) NOT NULL, discount_amount NUMERIC(14,2) DEFAULT 0, total_price NUMERIC(14,2) NOT NULL, qty_reserved INTEGER NOT NULL DEFAULT 0, qty_fulfilled INTEGER NOT NULL DEFAULT 0, is_backordered BOOLEAN DEFAULT false)` + index on `order_id`
     - _Requirements: 13_
 
   - [ ] 13.2 Implement orders.service.ts
-    - `create(data, staffCtx)` — validate customer/branch is_active; validate books is_active; get effective prices + tax rate; generate unique order_number; INSERT orders + order_line_items; INSERT audit_logs
+    - `create(data, staffCtx)` — validate customer/branch is_active; validate books is_active; get effective prices + tax rate from config; generate unique order_number (ORD-YYYYMMDD-XXXX); INSERT orders + order_line_items; INSERT audit_logs; idempotency: check for duplicate order_number on retry
     - `confirm(orderId, staffCtx)` — BEGIN; SELECT inventory FOR UPDATE for all line items; for each line: if quantity >= requested: UPDATE inventory SET qty_reserved += qty; else: set is_backordered=true; UPDATE orders status='Confirmed'; INSERT audit_logs; COMMIT
     - `progress(orderId, staffCtx)` — validate status='Confirmed'; UPDATE status='In_Progress'; INSERT audit_logs
-    - `fulfill(orderId, staffCtx)` — BEGIN REPEATABLE READ; SELECT inventory FOR UPDATE; UPDATE inventory SET quantity -= qty_reserved, version=version+1 WHERE version=$v (409 VERSION_CONFLICT on 0 rows); set qty_reserved=0; INSERT inventory_history (SALE); UPDATE orders status='Fulfilled'; INSERT audit_logs; COMMIT
-    - `cancel(orderId, reason, staffCtx)` — validate status NOT 'Fulfilled' (409 ORDER_ALREADY_FULFILLED); release qty_reserved; UPDATE status='Cancelled', cancel_reason=$reason; INSERT audit_logs
+    - `fulfill(orderId, staffCtx)` — BEGIN REPEATABLE READ; SELECT inventory FOR UPDATE; UPDATE inventory SET quantity -= qty_reserved, version=version+1; set qty_fulfilled=qty_reserved, qty_reserved=0; INSERT inventory_history (reference_type='order'); UPDATE orders status='Fulfilled'; INSERT audit_logs; COMMIT; 409 VERSION_CONFLICT on concurrent modification
+    - `cancel(orderId, reason, staffCtx)` — validate status NOT 'Fulfilled' (409 ORDER_ALREADY_FULFILLED); release qty_reserved back to inventory; UPDATE status='Cancelled', cancel_reason=$reason; INSERT audit_logs
+    - `updatePaymentStatus(orderId, paymentStatus)` — called by Payments module (Slice 14); UPDATE orders.payment_status
+    - `getById(id)` — full order with line items
+    - `list(opts)` — paginated; filter by status, payment_status, channel, branchId, customerId
     - _Requirements: 13.1–13.9_
 
   - [ ] 13.3 Implement order API routes + UI
     - `GET/POST /api/orders`, `GET /api/orders/:id`, `POST /api/orders/:id/confirm|progress|fulfill|cancel`
-    - Order list: DataTable with order_number, customer, channel, status badge, total; filter by status/channel/branch
-    - Order detail: line items with qty_reserved + is_backordered indicators; status action buttons; cancel reason input
-    - Create order form: customer search, branch/location selects, channel select, line item builder
-    - TanStack Query hooks: `useOrderList`, `useOrder`, `useCreateOrder`, `useConfirmOrder`, `useProgressOrder`, `useFulfillOrder`, `useCancelOrder`
+    - Order list: DataTable with order_number, customer, channel, status badge, payment_status badge, total; filter by status/channel/branch
+    - Order detail: line items with qty_reserved + qty_fulfilled + is_backordered indicators; status action buttons; cancel reason input
+    - Create order form: customer search, branch/location selects, channel select, line item builder with book search
+    - RBAC: Sales/Manager create; Manager/Admin confirm/fulfill/cancel
     - _Requirements: 13_
 
   - [ ] 13.4 Write integration tests for orders service
-    - Full lifecycle: create → confirm (stock reserved) → progress → fulfill (inventory decremented); cancel from each state; backorder set when stock unavailable; state machine violations (409)
+    - Full lifecycle: create → confirm (stock reserved) → progress → fulfill (inventory decremented)
+    - Cancel from each state; backorder set when stock unavailable; state machine violations (409)
+    - Duplicate order_number idempotency; currency enforced as ETB
     - _Requirements: 13_
-
-  - [ ]* 13.5 Write property-based tests for orders (Properties 38–40)
-    - **Property 38:** Order confirmation reserves stock; available (unreserved) stock reduced — `Validates: Req 13.3`
-    - **Property 39:** Order status transitions follow allowed paths only — `Validates: Req 13.6`
-    - **Property 40:** Order cancellation releases reserved inventory — `Validates: Req 13.7`
 
   **Definition of Done:**
   - Stock reservation uses SELECT FOR UPDATE (no overselling)
   - State machine enforced; invalid transitions return 409
   - Cancellation releases reserved inventory atomically
   - Backorder flag set when stock unavailable
+  - payment_status tracked; updated by Payments module
+  - Currency locked to ETB
 
 ---
 
