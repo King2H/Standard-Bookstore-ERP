@@ -1,0 +1,130 @@
+import { Router, Request, Response, NextFunction } from 'express';
+import * as paymentsService from './payments.service.js';
+import { authenticate } from '../../middleware/auth.js';
+import { requireRole } from '../../middleware/rbac.js';
+import { ValidationError } from '../../lib/errors.js';
+
+const router = Router();
+const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
+const qi = (v: unknown, fb: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fb : fb; };
+
+// ── POST /api/payments ────────────────────────────────────────────────────────
+
+router.post(
+  '/payments',
+  authenticate,
+  requireRole('Sales', 'Manager', 'Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.body.orderId) throw new ValidationError('orderId is required');
+      if (!req.body.amount) throw new ValidationError('amount is required');
+      if (!req.body.paymentMethod) throw new ValidationError('paymentMethod is required');
+      const payment = await paymentsService.createPayment(
+        {
+          orderId:              parseInt(req.body.orderId, 10),
+          amount:               parseFloat(req.body.amount),
+          paymentMethod:        req.body.paymentMethod,
+          transactionReference: req.body.transactionReference,
+          notes:                req.body.notes,
+        },
+        req.staff!,
+      );
+      res.status(201).json(payment);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── GET /api/payments ─────────────────────────────────────────────────────────
+
+router.get(
+  '/payments',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await paymentsService.list({
+        orderId:       qi(req.query.orderId, 0) || undefined,
+        status:        qs(req.query.status),
+        paymentMethod: qs(req.query.paymentMethod),
+        dateFrom:      qs(req.query.dateFrom),
+        dateTo:        qs(req.query.dateTo),
+        page:          qi(req.query.page, 1),
+        pageSize:      qi(req.query.pageSize, 25),
+      });
+      res.json(result);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── GET /api/payments/:id ─────────────────────────────────────────────────────
+
+router.get(
+  '/payments/:id',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payment = await paymentsService.getById(parseInt(req.params.id, 10));
+      res.json(payment);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/payments/:id/refund ─────────────────────────────────────────────
+
+router.post(
+  '/payments/:id/refund',
+  authenticate,
+  requireRole('Manager', 'Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.body.refundAmount) throw new ValidationError('refundAmount is required');
+      if (!req.body.reason) throw new ValidationError('reason is required');
+      const refund = await paymentsService.createRefund(
+        parseInt(req.params.id, 10),
+        { refundAmount: parseFloat(req.body.refundAmount), reason: req.body.reason },
+        req.staff!,
+      );
+      res.status(201).json(refund);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── GET /api/payments/:id/refunds ─────────────────────────────────────────────
+
+router.get(
+  '/payments/:id/refunds',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payment = await paymentsService.getById(parseInt(req.params.id, 10));
+      res.json({ items: payment.refunds ?? [] });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── GET /api/orders/:id/payments ──────────────────────────────────────────────
+
+router.get(
+  '/orders/:id/payments',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payments = await paymentsService.listByOrder(parseInt(req.params.id, 10));
+      res.json({ items: payments });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── GET /api/orders/:id/balance ───────────────────────────────────────────────
+
+router.get(
+  '/orders/:id/balance',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const balance = await paymentsService.getOrderBalance(parseInt(req.params.id, 10));
+      res.json(balance);
+    } catch (err) { next(err); }
+  },
+);
+
+export default router;

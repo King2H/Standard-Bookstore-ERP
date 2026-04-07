@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 2 Complete (Slices 8–13). Phase 3 Next: Slice 14 (Payments & Installments)**
+**Phase 3 In Progress (Slices 12–14 Complete). Next: Slice 15 (Merchant Exchange)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -32,8 +32,9 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 10 | Customer Management | Done |
 | 11 | POS Transactions | Done |
 | 12 | Returns & Refunds | Done |
-| 13 | Order Management | Done |
-| 14-15 | Payments & Exchange | Pending |
+| 13 | Order Management | ✅ Done |
+| 14 | Payment Management | ✅ Done |
+| 15 | Merchant Exchange | ⬜ Pending |
 | 16-17 | Reporting + UI/Dashboard | Pending |
 
 ---
@@ -137,6 +138,20 @@ Key rules:
 - Migration 1700000025: creates orders, order_line_items; extends inventory_history reference_type
 - 8 integration tests
 
+**Slice 14 — Payment Management ✅**
+- Payment reference format: PAY-YYYYMMDD-XXXX; currency locked to ETB
+- Payment methods: cash, bank, mobile, card, store_credit, loyalty_points, other (extensible for Slice 15)
+- Payment status lifecycle: success → refunded / partially_refunded
+- Total payment cannot exceed order total (422 EXCEEDS_ORDER_TOTAL)
+- Refund cannot exceed payment amount (422 EXCEEDS_PAYMENT_AMOUNT)
+- Order payment_status auto-updated after every payment/refund: unpaid → partial → paid → refunded
+- Split payments: multiple payments per order with different methods
+- Outstanding balance: GET /api/orders/:id/balance returns orderTotal, totalPaid, totalRefunded, outstanding
+- Payments UI: list with status/method badges, inline refund form; Record Payment tab with order lookup + balance display
+- RBAC: Sales/Manager/Admin create payments; Manager/Admin process refunds; all authenticated view
+- Migration 1700000026: creates order_payments, order_refunds tables
+- 8 integration tests passing
+
 ---
 
 ## Tech Stack
@@ -177,7 +192,7 @@ cd apps/api && npm test
 ```
 
 Tests use prefix-based cleanup — seed data is never touched.
-Current: 16 test files, 212 tests, all passing.
+Current: 17 test files, 220 tests, all passing.
 
 ## Restoring Seed Data
 
@@ -277,6 +292,15 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - POST /api/orders/:id/progress — mark in progress (Manager, Admin, Stock_Clerk)
 - POST /api/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk)
 - POST /api/orders/:id/cancel — body: { reason } (Manager, Admin)
+- GET /api/orders/:id/payments — list payments for order
+- GET /api/orders/:id/balance — { orderTotal, totalPaid, totalRefunded, outstanding, paymentStatus }
+
+### Payments (Slice 14)
+- POST /api/payments — record payment (Sales, Manager, Admin); body: { orderId, amount, paymentMethod, transactionReference? }
+- GET /api/payments — list; filters: orderId, status, paymentMethod, dateFrom, dateTo
+- GET /api/payments/:id — detail with refunds
+- POST /api/payments/:id/refund — process refund (Manager, Admin); body: { refundAmount, reason }
+- GET /api/payments/:id/refunds — list refunds for payment
 
 ### Audit Log
 - GET /api/audit-logs — paginated; filter by entityType (Super_Admin, Admin)

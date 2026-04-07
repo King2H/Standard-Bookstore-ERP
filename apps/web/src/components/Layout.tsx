@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'pos',          label: 'POS',           icon: '🛒', roles: ['Admin', 'Manager', 'Sales'] },
   { id: 'returns',      label: 'Returns',       icon: '↩',  roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
   { id: 'orders',       label: 'Orders',        icon: '📦', roles: ['Admin', 'Manager', 'Sales'] },
+  { id: 'payments',     label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
   { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'] },
   { id: 'settings',      label: 'Settings',      icon: '⚙️', roles: ['Super_Admin', 'Admin', 'Manager'] },
   { id: 'audit-log',     label: 'Audit Log',     icon: '📋', roles: ['Super_Admin', 'Admin'] },

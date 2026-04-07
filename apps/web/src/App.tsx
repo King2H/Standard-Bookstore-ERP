@@ -15,6 +15,7 @@ import CustomersPage from './pages/CustomersPage.js';
 import POSPage from './pages/POSPage.js';
 import ReturnsPage from './pages/ReturnsPage.js';
 import OrdersPage from './pages/OrdersPage.js';
+import PaymentsPage from './pages/PaymentsPage.js';
 import ProfilePage from './pages/ProfilePage.js';
 import { ToastProvider } from './components/Toast.js';
 import { ThemeProvider } from './lib/theme.js';
@@ -25,7 +26,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } },
 });
 
-type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'profile';
+type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments' | 'profile';
 type Role = 'Super_Admin' | 'Admin' | 'Manager' | 'Finance_Officer' | 'Stock_Clerk' | 'Sales' | 'Purchasor';
 
 function parseRoleFromToken(): Role | null {
@@ -82,6 +83,7 @@ export default function App() {
               {currentPage === 'pos' && <POSPage userRole={userRole ?? undefined} />}
               {currentPage === 'returns' && <ReturnsPage userRole={userRole ?? undefined} />}
               {currentPage === 'orders' && <OrdersPage userRole={userRole ?? undefined} />}
+              {currentPage === 'payments' && <PaymentsPage userRole={userRole ?? undefined} />}
               {currentPage === 'profile' && <ProfilePage />}
             </Layout>
           )}
