@@ -17,6 +17,7 @@ import ReturnsPage from './pages/ReturnsPage.js';
 import OrdersPage from './pages/OrdersPage.js';
 import PaymentsPage from './pages/PaymentsPage.js';
 import ExchangesPage from './pages/ExchangesPage.js';
+import DashboardPage from './pages/DashboardPage.js';
 import ProfilePage from './pages/ProfilePage.js';
 import { ToastProvider } from './components/Toast.js';
 import { ThemeProvider } from './lib/theme.js';
@@ -27,7 +28,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } },
 });
 
-type Page = 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments' | 'exchanges' | 'profile';
+type Page = 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments' | 'exchanges' | 'profile';
 type Role = 'Super_Admin' | 'Admin' | 'Manager' | 'Finance_Officer' | 'Stock_Clerk' | 'Sales' | 'Purchasor';
 
 function parseRoleFromToken(): Role | null {
@@ -49,6 +50,9 @@ export default function App() {
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
     setUserRole(parseRoleFromToken());
+    // Land on dashboard for Manager/Admin, branches for others
+    const role = parseRoleFromToken();
+    if (role === 'Manager' || role === 'Admin') setCurrentPage('dashboard');
   };
 
   const handleLogout = () => {
@@ -70,6 +74,7 @@ export default function App() {
               onLogout={handleLogout}
               userRole={userRole}
             >
+              {currentPage === 'dashboard' && <DashboardPage userRole={userRole ?? undefined} />}
               {currentPage === 'branches' && <BranchesPage userRole={userRole ?? undefined} />}
               {currentPage === 'staff' && <StaffPage />}
               {currentPage === 'audit-log' && <AuditLogPage />}

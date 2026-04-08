@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Next: Phase 4 (Reporting & Analytics)**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17)**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -35,7 +35,8 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 13 | Order Management | ✅ Done |
 | 14 | Payment Management | ✅ Done |
 | 15 | Merchant Exchange | ✅ Done |
-| 16-17 | Reporting + UI/Dashboard | Pending |
+| 16 | Reporting Engine | ✅ Done |
+| 17 | Dashboard & UI | ✅ Done |
 
 ---
 
@@ -164,6 +165,34 @@ Key rules:
 - Migration 1700000027: exchanges, exchange_incoming_items, exchange_outgoing_items; extends inventory_history reference_type check
 - 8 integration tests passing
 
+### Phase 4 — Reporting & Analytics
+
+**Slice 17 — Dashboard & UI ✅**
+- Presentation-only layer — consumes /reports/* endpoints exclusively, zero business logic
+- 7 KPI cards: daily revenue, monthly revenue, AOV, active customers, low-stock alerts, pending orders, exchanges today
+- Sales trend line chart + sales by branch horizontal bar chart (recharts)
+- Payment method pie chart + payment collected vs refunded bar chart
+- Exchange summary: totals, incoming/outgoing value, settlement type distribution with progress bars
+- Inventory panel: stock summary stats, top-selling books list, low-stock alert list
+- Customer panel: summary stats, top customers by spend
+- Stock movement bar chart (stock in vs stock out by period)
+- Filter bar: dateFrom, dateTo, groupBy (day/week/month), clear button
+- All panels: loading skeleton, error state, empty state handled gracefully
+- RBAC: Manager/Admin only; other roles see access-denied message
+- Dashboard nav item in sidebar (Admin/Manager only); Manager/Admin land on Dashboard after login
+- No new dependencies — uses recharts already installed
+- API-first, read-only reporting layer — no business logic, pure aggregation
+- GET /api/reports/sales — order revenue + POS revenue; by period (day/week/month); by branch
+- GET /api/reports/payments — collected/refunded/pending totals; by payment method; by period
+- GET /api/reports/exchanges — exchange totals; by settlement type; by period
+- GET /api/reports/inventory — stock summary, low-stock list (top 50), top-selling books (top 20), stock movement by period
+- GET /api/reports/customers — totals, repeat customers, top spenders (top 20), new customers by period
+- GET /api/reports/kpis — daily revenue, monthly revenue, AOV, active customers, low-stock alerts, pending orders, exchanges today
+- Common filters: branchId, dateFrom, dateTo, groupBy (day/week/month)
+- RBAC: Manager/Admin only; Sales → 403
+- Empty date ranges return zeros gracefully
+- 10 integration tests passing
+
 ---
 
 | Layer | Technology |
@@ -202,7 +231,7 @@ cd apps/api && npm test
 ```
 
 Tests use prefix-based cleanup — seed data is never touched.
-Current: 18 test files, 228 tests, all passing.
+Current: 19 test files, 238 tests, all passing.
 
 ## Restoring Seed Data
 
@@ -317,6 +346,15 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - GET /api/exchanges — list; filters: branchId, customerId, status, dateFrom, dateTo
 - GET /api/exchanges/:id — detail with incoming/outgoing items
 - POST /api/exchanges/:id/cancel — cancel exchange (Manager, Admin)
+
+### Reports (Slice 16)
+- GET /api/reports/sales — total sales, orders, AOV; by period + by branch (Manager, Admin)
+- GET /api/reports/payments — collected/refunded/pending; by method + by period (Manager, Admin)
+- GET /api/reports/exchanges — exchange totals; by settlement type + by period (Manager, Admin)
+- GET /api/reports/inventory — stock summary, low-stock list, top-selling books, movement (Manager, Admin)
+- GET /api/reports/customers — totals, repeat customers, top spenders, new by period (Manager, Admin)
+- GET /api/reports/kpis — daily/monthly revenue, AOV, active customers, alerts (Manager, Admin)
+- Common filters: ?branchId=&dateFrom=&dateTo=&groupBy=day|week|month
 
 ### Audit Log
 - GET /api/audit-logs — paginated; filter by entityType (Super_Admin, Admin)

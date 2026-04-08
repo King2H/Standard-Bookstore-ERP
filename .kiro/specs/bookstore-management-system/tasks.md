@@ -1014,50 +1014,25 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] 16. Generate Reports and Analytics
-  > Business intelligence reports across all modules. Async generation for large datasets.
+- [x] 16. Generate Reports and Analytics
+  > API-first reporting engine aggregating data across all modules. Read-only, no business logic.
   > _Slice 16 = Requirement 16 | Design: design.md §6.8_
-  > _Architecture: CQRS read path — all queries use db.replica_
 
-  - [ ] 17.1 Add Redis to Docker Compose and implement lib/redis.ts
-    - Add `redis: redis:7-alpine` service to Docker Compose with `appendonly yes`
-    - Implement `lib/redis.ts` — ioredis singleton with connection error handling and reconnect strategy
-    - Add `REDIS_URL` to `.env.example`
-    - _Requirements: 26_
+  - [x] 16.1 Implement reports.service.ts (6 report functions)
+  - [x] 16.2 Implement report API routes (6 endpoints)
+  - [x] 16.3 Write integration tests for reports (10 tests)
 
-  - [ ] 17.2 Create DB migration: outbox table
-    - `outbox (id BIGSERIAL PK, event_type TEXT NOT NULL, payload JSONB NOT NULL, status TEXT DEFAULT 'pending' CHECK (status IN ('pending','published','failed')), created_at TIMESTAMPTZ DEFAULT now(), published_at TIMESTAMPTZ)`
-    - Index on `(status, created_at)`
-    - _Requirements: 26.5_
-
-  - [ ] 17.3 Implement lib/outbox.ts and refactor service layer to use outbox
-    - `insertOutbox(client, eventType, payload)` — INSERT into outbox within caller's DB transaction
-    - Refactor all service-layer audit_logs direct inserts to use outbox pattern instead: INSERT outbox within same transaction; Outbox Poller writes audit_logs asynchronously
-    - Note: services that currently INSERT audit_logs directly continue to work; outbox is additive
-    - _Requirements: 26.5_
-
-  - [ ] 17.4 Implement BullMQ queue definitions and Outbox Poller worker
-    - `queues/index.ts` — define queues: `notifications`, `report-generation`, `loyalty-accrual`, `audit-log-writes`, `bank-statement-import`, `dead-letter`
-    - `workers/outboxPoller.ts` — every 1s: `SELECT id, event_type, payload FROM outbox WHERE status='pending' ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED`; route by event_type to BullMQ queue; UPDATE status='published'; mark 'failed' after 5 consecutive errors
-    - _Requirements: 26.5_
-
-  - [ ] 17.5 Implement Loyalty Worker (async loyalty accrual)
-    - `workers/loyaltyAccrual.ts` — consumes `loyalty-accrual` queue; check if accrual already recorded for transaction_ref (idempotent); fetch `loyalty_accrual_rate` and `loyalty_min_transaction_amount` via config.service; if transaction.total < loyalty_min_transaction_amount: skip accrual; else compute `floor(transaction.total × loyalty_accrual_rate)` points; UPDATE customers.loyalty_points with optimistic locking; INSERT loyalty_history; retry 3× exp backoff; DLQ after 3 failures
-    - Refactor pos.service.ts: remove synchronous loyalty update; emit `TransactionCompleted` outbox event instead
-    - _Requirements: 10.6, 26.4_
-
-  - [ ] 17.6 Implement Notification Worker and Installment Checker cron
-    - `workers/notifications.ts` — consumes `notifications` queue; calls Email/SMS provider (configurable via `NOTIFICATION_PROVIDER_URL`); circuit breaker (50% error threshold, 30s reset); retry 3× exp backoff (1s, 2s, 4s); move to dead-letter after 3 failures
-    - `workers/installmentChecker.ts` — daily cron at 00:00 UTC; fetch `installment_grace_period_days` from config; `UPDATE installments SET status='overdue' WHERE due_date + grace_period_days < now() AND status IN ('pending','partial') AND paid_amount < amount`; for each updated row: INSERT outbox payment reminder notification (inapp + outbound)
-    - _Requirements: 14.7, 25.3, 26.3_
-
-  - [ ] 17.7 Implement idempotency for financial endpoints
-    - Create DB migration: `idempotency_keys (key TEXT PK, response_payload JSONB NOT NULL, created_at TIMESTAMPTZ DEFAULT now(), expires_at TIMESTAMPTZ DEFAULT now() + INTERVAL '24 hours')` + index on `expires_at`
-    - Implement `lib/idempotency.ts` — `withIdempotency(key, fn)`: check DB → execute → store result; return `{ result, replayed }`
-    - Implement `middleware/idempotency.ts` — extract `Idempotency-Key` header; call `withIdempotency`; set `X-Idempotent-Replayed: true` header on replay
-    - Apply to: `POST /api/transactions/:id/complete`, `POST /api/orders`, `POST /api/orders/:id/confirm|fulfill`, `POST /api/orders/:id/payments`, `POST /api/orders/:id/installment-plan`, `POST /api/returns`, `POST /api/exchange-orders/:id/settle`
-    - Add nightly cleanup job: `DELETE FROM idempotency_keys WHERE expires_at < now()`
-    - _Requirements: 20.5, 23.5_
+  **Definition of Done:**
+  - GET /api/reports/sales — order revenue + POS revenue, by period, by branch
+  - GET /api/reports/payments — collected/refunded/pending, by method, by period
+  - GET /api/reports/exchanges — totals, by settlement type, by period
+  - GET /api/reports/inventory — stock summary, low-stock list, top-selling books, movement by period
+  - GET /api/reports/customers — totals, repeat customers, top spenders, new by period
+  - GET /api/reports/kpis — daily/monthly revenue, AOV, active customers, low-stock alerts, pending orders, exchanges today
+  - Common filters: branchId, dateFrom, dateTo, groupBy (day/week/month)
+  - RBAC: Manager/Admin only; Sales → 403
+  - Empty date ranges return zeros, not errors
+  - 10 integration tests passing
 
   - [ ] 17.8 Implement Reconciliation Worker (async CSV import)
     - `workers/reconciliation.ts` — consumes `bank-statement-import` queue; processes CSV rows in single DB transaction; rolls back entire batch on any row failure; reports row-level error with row number; INSERT outbox on completion
@@ -1072,6 +1047,28 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
   - Dead-letter queue visible in Admin UI
 
 ---
+
+- [x] 17. Dashboard & UI (Analytics Presentation Layer)
+  > Presentation-only dashboard consuming Reporting APIs (Slice 16). No business logic, no direct DB access.
+  > _Slice 17 = Requirement 17 | Design: design.md §7.4_
+
+  - [x] 17.1 Implement DashboardPage.tsx — consumes all 6 /reports/* endpoints
+  - [x] 17.2 Wire Dashboard into App.tsx and Layout.tsx nav
+
+  **Definition of Done:**
+  - DashboardPage renders 7 KPI cards (daily revenue, monthly revenue, AOV, active customers, low-stock alerts, pending orders, exchanges today)
+  - Sales trend line chart (by period); sales by branch bar chart
+  - Payment method pie chart; payment collected vs refunded bar chart
+  - Exchange summary with settlement type distribution
+  - Inventory panel: stock summary, top-selling books, low-stock alerts list
+  - Customer panel: summary stats, top customers by spend
+  - Stock movement bar chart
+  - Filter bar: dateFrom, dateTo, groupBy (day/week/month), clear
+  - All panels show loading skeleton / error state / empty state gracefully
+  - RBAC: Manager/Admin see dashboard; other roles see access-denied message
+  - Dashboard nav item added to sidebar (Admin, Manager only)
+  - Manager/Admin land on Dashboard after login
+  - Uses recharts (already installed) — no new dependencies
 
 - [ ] H1. Add Async Infrastructure (BullMQ, Outbox Pattern, Workers)
   > Replace synchronous audit writes and loyalty accrual with guaranteed async delivery via outbox pattern.
