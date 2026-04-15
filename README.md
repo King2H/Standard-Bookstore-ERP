@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17)**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening Applied.**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -181,6 +181,46 @@ Key rules:
 - RBAC: Manager/Admin only; other roles see access-denied message
 - Dashboard nav item in sidebar (Admin/Manager only); Manager/Admin land on Dashboard after login
 - No new dependencies — uses recharts already installed
+
+### Post-MVP Hardening
+
+**Bank Transfer Validation + Reconciliation ✅**
+- `paymentMethod = 'bank'` now requires `bank_account_id`; validated against current branch
+- 422 INVALID_BANK_ACCOUNT if account inactive or belongs to different branch
+- Successful bank payment auto-creates `bank_reconciliation` entry (direction='in', status='uncleared')
+- Refund with bankAccountId auto-creates `bank_reconciliation` entry (direction='out', status='uncleared')
+
+**Idempotency (PostgreSQL-backed) ✅**
+- `lib/idempotency.ts` — `withIdempotency(key, endpoint, requestHash, fn)` using `idempotency_keys` table
+- Applied to `POST /api/payments` via `Idempotency-Key` header
+- Duplicate request returns stored response + `X-Idempotent-Replayed: true` header
+- 24h TTL; opportunistic cleanup; no Redis required
+
+**Customer PII Encryption ✅**
+- `lib/piiEncryption.ts` — `encryptPii`, `decryptPii`, `piiLookupHash` (SHA256)
+- New customers: `email_encrypted`, `phone_encrypted`, `email_lookup`, `phone_lookup` populated on create
+- API returns decrypted values transparently; backward compatible with existing plaintext records
+- Search uses lookup hash for exact-match + plaintext ILIKE for partial match
+
+**Rate Limiting (In-Memory) ✅**
+- `middleware/rateLimit.ts` — sliding window counter per IP; no Redis required
+- Login: 10 requests per 15 minutes; returns 429 + Retry-After header
+- `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers on all responses
+
+**Installment Plans ✅**
+- `installment_plans` + `installments` tables; monthly schedule auto-generated
+- `min_deposit_pct` enforced from config (422 DEPOSIT_TOO_LOW)
+- `max_installments` enforced from config (422 EXCEEDS_MAX_INSTALLMENTS)
+- `recordInstallmentPayment` updates installment status + order.payment_status
+- 4 new endpoints: POST/GET /api/orders/:id/installment-plan, GET /api/installment-plans/:id, POST /api/installments/:id/pay
+
+**Merchant Foundation ✅**
+- `merchants` table created; `exchanges.merchant_id` nullable FK added
+- Existing direct exchange flows unchanged; foundation for future merchant-to-merchant exchange
+
+**Outbox Table Foundation ✅**
+- `outbox` table created with `(event_type, payload, status, created_at, published_at)`
+- Ready for BullMQ worker implementation without further schema changes
 - API-first, read-only reporting layer — no business logic, pure aggregation
 - GET /api/reports/sales — order revenue + POS revenue; by period (day/week/month); by branch
 - GET /api/reports/payments — collected/refunded/pending totals; by payment method; by period
@@ -204,7 +244,7 @@ Key rules:
 | Database | PostgreSQL 16 (raw pg driver, no ORM) |
 | Auth | JWT (15 min) + httpOnly refresh cookie (7 days) |
 | Encryption | AES-256-GCM (column-level, bank account data) |
-| Migrations | node-pg-migrate (.cjs format, 27 migrations) |
+| Migrations | node-pg-migrate (.cjs format, 28 migrations) |
 | Testing | Vitest + Supertest (integration tests, real DB) |
 | Container | Docker + Docker Compose |
 
@@ -231,7 +271,7 @@ cd apps/api && npm test
 ```
 
 Tests use prefix-based cleanup — seed data is never touched.
-Current: 19 test files, 238 tests, all passing.
+Current: 20 test files, 253 tests, all passing.
 
 ## Restoring Seed Data
 
@@ -335,11 +375,15 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - GET /api/orders/:id/balance — { orderTotal, totalPaid, totalRefunded, outstanding, paymentStatus }
 
 ### Payments (Slice 14)
-- POST /api/payments — record payment (Sales, Manager, Admin); body: { orderId, amount, paymentMethod, transactionReference? }
+- POST /api/payments — record payment; body: { orderId, amount, paymentMethod, transactionReference?, bankAccountId? (required for bank method) }
 - GET /api/payments — list; filters: orderId, status, paymentMethod, dateFrom, dateTo
 - GET /api/payments/:id — detail with refunds
-- POST /api/payments/:id/refund — process refund (Manager, Admin); body: { refundAmount, reason }
+- POST /api/payments/:id/refund — process refund; body: { refundAmount, reason, bankAccountId? }
 - GET /api/payments/:id/refunds — list refunds for payment
+- POST /api/orders/:id/installment-plan — create installment plan; body: { numInstallments, depositAmount?, firstDueDate?, notes? }
+- GET /api/orders/:id/installment-plan — get plan with installment schedule
+- GET /api/installment-plans/:id — get plan by ID
+- POST /api/installments/:id/pay — record installment payment; body: { amount }
 
 ### Exchanges (Slice 15)
 - POST /api/exchanges — create exchange (Sales, Manager, Admin); body: { locationId?, customerId?, notes?, incomingItems, outgoingItems }
@@ -403,3 +447,4 @@ Create Manager/Stock_Clerk/Sales/Purchasor via the Staff page after logging in a
 | 1700000025_create_orders | Orders, order_line_items |
 | 1700000026_create_payments | Order payments, order refunds |
 | 1700000027_create_exchanges | Exchanges, exchange_incoming_items, exchange_outgoing_items |
+| 1700000028_hardening | Idempotency keys, outbox, customer PII columns, installment plans, merchants, bank_account_id on payments |

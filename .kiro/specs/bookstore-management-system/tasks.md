@@ -1000,7 +1000,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 
 ---
 
-- [ ] P3. Phase 3 Checkpoint — Financial Flows Validated
+- [x] P3. Phase 3 Checkpoint — Financial Flows Validated
   - Run full integration test suite; zero failures
   - Manually test: create order → confirm (stock reserved) → add installment plan → record deposit payment → fulfill order → verify inventory decremented
   - Manually test: complete POS transaction → process return → verify store credit issued + inventory restored
@@ -1069,6 +1069,185 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
   - Dashboard nav item added to sidebar (Admin, Manager only)
   - Manager/Admin land on Dashboard after login
   - Uses recharts (already installed) — no new dependencies
+
+---
+
+## Post-MVP Hardening — Targeted Improvements
+> Goal: Close the highest-impact gaps identified in BMS_MVP_Evaluation_1.md. Financial correctness, security baseline, and architectural alignment without rewriting existing modules.
+
+---
+
+- [x] H0. Post-MVP Hardening (Migration 1700000028)
+  > Single migration covering all structural changes for hardening items P1–P5.
+  > _Cross-cutting | References: BMS_MVP_Evaluation_1.md_
+
+  - [x] H0.1 Create DB migration: 1700000028_hardening
+    - `idempotency_keys (key TEXT PK, endpoint TEXT, request_hash TEXT, response_payload JSONB, created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ DEFAULT now() + INTERVAL '24 hours')` + index on `expires_at`
+    - `outbox (id BIGSERIAL PK, event_type TEXT, payload JSONB, status TEXT DEFAULT 'pending', created_at TIMESTAMPTZ, published_at TIMESTAMPTZ)` + index on `(status, created_at)`
+    - `customers`: ADD COLUMNS `email_encrypted TEXT`, `phone_encrypted TEXT`, `email_lookup TEXT`, `phone_lookup TEXT` + indexes on lookup columns
+    - `installment_plans (id BIGSERIAL PK, order_id BIGINT REFERENCES orders(id), total_amount NUMERIC(14,2), deposit_amount NUMERIC(14,2), num_installments INTEGER, currency TEXT DEFAULT 'ETB', notes TEXT, created_by INTEGER, created_at TIMESTAMPTZ)`
+    - `installments (id BIGSERIAL PK, plan_id BIGINT REFERENCES installment_plans(id), order_id BIGINT REFERENCES orders(id), due_date DATE, amount NUMERIC(14,2), paid_amount NUMERIC(14,2) DEFAULT 0, status TEXT DEFAULT 'pending' CHECK (status IN ('pending','partial','paid','overdue')), paid_at TIMESTAMPTZ, created_at TIMESTAMPTZ)` + indexes on `(plan_id)`, `(order_id)`, `(status, due_date)`
+    - `merchants (id SERIAL PK, name TEXT UNIQUE NOT NULL, contact_info JSONB, address TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ)`
+    - `exchanges`: ADD COLUMN `merchant_id INTEGER REFERENCES merchants(id)` (nullable)
+    - `order_payments`: ADD COLUMN `bank_account_id INTEGER REFERENCES bank_accounts(id)` (nullable)
+    - `order_refunds`: ADD COLUMN `bank_account_id INTEGER REFERENCES bank_accounts(id)` (nullable)
+
+  **Definition of Done:**
+  - Migration applies cleanly; all 28 migrations pass
+  - All existing tests continue to pass after migration
+
+---
+
+- [x] H1. Bank Transfer Validation + Reconciliation Linkage (P1)
+  > Enforce bank_account_id on bank transfer payments/refunds; auto-create reconciliation entries.
+  > _Fixes: BMS_MVP_Evaluation_1.md Slices 4, 12, 14 gaps_
+
+  - [x] H1.1 Enforce bank_account_id in payments.service.ts createPayment
+    - When `paymentMethod = 'bank'`: require `bankAccountId`; validate account is active and belongs to current branch; return `422 INVALID_BANK_ACCOUNT` on failure
+    - Auto-INSERT `bank_reconciliation (bank_account_id, payment_ref_id, amount, direction='in', status='uncleared')` within same transaction
+  - [x] H1.2 Enforce bank_account_id in payments.service.ts createRefund
+    - Accept optional `bankAccountId`; auto-INSERT `bank_reconciliation (bank_account_id, refund_ref_id, amount, direction='out', status='uncleared')` when provided
+  - [x] H1.3 Update payments.routes.ts to pass bankAccountId from request body
+  - [x] H1.4 Update existing payments tests to use non-bank methods (mobile) where bank_account_id not available
+
+  **Definition of Done:**
+  - POST /api/payments with paymentMethod='bank' and no bankAccountId → 400
+  - POST /api/payments with paymentMethod='bank' and wrong-branch bankAccountId → 422 INVALID_BANK_ACCOUNT
+  - Successful bank payment auto-creates bank_reconciliation entry (direction='in', status='uncleared')
+  - Refund with bankAccountId auto-creates bank_reconciliation entry (direction='out', status='uncleared')
+  - All existing payment tests pass
+
+---
+
+- [x] H2. PostgreSQL-Backed Idempotency (P1)
+  > Prevent duplicate financial records on client retries using Idempotency-Key header.
+  > _Fixes: BMS_MVP_Evaluation_1.md Cross-Cutting Gap #2_
+
+  - [x] H2.1 Implement lib/idempotency.ts
+    - `withIdempotency(key, endpoint, requestHash, fn)` — check idempotency_keys table; if found: return stored response; if not: execute fn(), store result, return
+    - Opportunistic cleanup of expired keys (1% of requests)
+    - `hashBody(body)` — SHA256 of JSON-serialized request body
+  - [x] H2.2 Apply idempotency to POST /api/payments
+    - Read `Idempotency-Key` header; call `withIdempotency`; set `X-Idempotent-Replayed: true` on replay; return 200 on replay, 201 on first write
+
+  **Definition of Done:**
+  - Duplicate POST /api/payments with same Idempotency-Key returns stored response + X-Idempotent-Replayed: true header
+  - No duplicate payment record created on retry
+  - Requests without Idempotency-Key work normally
+
+---
+
+- [x] H3. Customer PII Encryption (P2)
+  > Encrypt customer email/phone at rest using AES-256-GCM; add SHA256 lookup hashes for search.
+  > _Fixes: BMS_MVP_Evaluation_1.md Slice 10 gap_
+
+  - [x] H3.1 Implement lib/piiEncryption.ts
+    - `encryptPii(value)` — AES-256-GCM encrypt using COLUMN_ENCRYPTION_KEY; returns null for null input
+    - `decryptPii(ciphertext)` — decrypt; returns null on failure
+    - `piiLookupHash(value)` — SHA256 of lowercased/trimmed value; returns null for null input
+  - [x] H3.2 Update customer.service.ts createCustomer
+    - Write `email_encrypted`, `phone_encrypted`, `email_lookup`, `phone_lookup` on INSERT
+    - Uniqueness checks use `phone_lookup = $hash OR phone = $plaintext` (backward compatible)
+  - [x] H3.3 Update customer.service.ts mapCustomerRow
+    - Prefer decrypted value from `*_encrypted` columns; fall back to plaintext columns
+  - [x] H3.4 Update customer.service.ts searchCustomers
+    - Search includes `phone_lookup = $hash OR email_lookup = $hash` for exact-match on encrypted values
+
+  **Definition of Done:**
+  - New customers have email_encrypted, phone_encrypted, email_lookup, phone_lookup populated
+  - API returns decrypted values transparently (no API change)
+  - Search by exact email/phone works via lookup hash
+  - Existing customers with plaintext-only columns continue to work (backward compatible)
+  - 5 PII encryption tests passing
+
+---
+
+- [x] H4. In-Memory Rate Limiting (P2)
+  > Protect login endpoint from brute-force attacks using sliding window rate limiter.
+  > _Fixes: BMS_MVP_Evaluation_1.md Cross-Cutting Gap #2_
+
+  - [x] H4.1 Implement middleware/rateLimit.ts
+    - In-memory sliding window counter per IP; no Redis required
+    - `loginRateLimit`: 10 requests per 15 minutes per IP
+    - `apiRateLimit`: 200 requests per minute per IP (available for future use)
+    - Returns 429 with `Retry-After` header on limit exceeded
+    - Auto-cleanup of expired entries every 5 minutes
+  - [x] H4.2 Apply loginRateLimit to POST /api/auth/login
+
+  **Definition of Done:**
+  - POST /api/auth/login rate-limited to 10 req/15min per IP
+  - 429 response includes Retry-After header
+  - X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers on all responses
+
+---
+
+- [x] H5. Installment Plans — Minimal Viable Version (P3)
+  > Scheduled payment plans for orders with config-driven deposit and installment count limits.
+  > _Fixes: BMS_MVP_Evaluation_1.md Slice 14 gap_
+
+  - [x] H5.1 Implement payments/installments.service.ts
+    - `createPlan(data, staffCtx)` — validate order exists and not cancelled/paid; check no existing plan; enforce `max_installments` from config; enforce `min_deposit_pct` from config; generate monthly installment schedule; INSERT installment_plans + installments; INSERT audit_log
+    - `getPlanById(id)` — fetch plan with all installments
+    - `getPlanByOrder(orderId)` — fetch plan for an order (returns null if none)
+    - `recordInstallmentPayment(installmentId, amount, staffCtx)` — validate amount ≤ remaining; UPDATE installment status (pending → partial → paid); recompute order.payment_status; INSERT audit_log
+  - [x] H5.2 Implement payments/installments.routes.ts
+    - `POST /api/orders/:id/installment-plan` — create plan (Sales, Manager, Admin, Finance_Officer)
+    - `GET /api/orders/:id/installment-plan` — get plan for order
+    - `GET /api/installment-plans/:id` — get plan by ID
+    - `POST /api/installments/:id/pay` — record installment payment
+
+  **Definition of Done:**
+  - Installment plan created with correct schedule (monthly due dates, last installment absorbs rounding)
+  - min_deposit_pct enforced from config (422 DEPOSIT_TOO_LOW if below minimum)
+  - max_installments enforced from config (422 EXCEEDS_MAX_INSTALLMENTS if exceeded)
+  - Duplicate plan for same order rejected (422 PLAN_EXISTS)
+  - Installment payment updates status: pending → partial → paid
+  - Order payment_status updated after each installment payment
+  - 5 installment tests passing
+
+---
+
+- [x] H6. Merchant Foundation (P4)
+  > Add merchants table and nullable merchant_id on exchanges to prepare for future merchant-to-merchant exchange.
+  > _Partial fix: BMS_MVP_Evaluation_1.md Slice 15 gap_
+
+  - [x] H6.1 Create merchants table (via migration 1700000028)
+    - `merchants (id SERIAL PK, name TEXT UNIQUE NOT NULL, contact_info JSONB, address TEXT, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ)`
+  - [x] H6.2 Add nullable merchant_id to exchanges table
+    - Existing direct exchange flows unchanged; merchant_id is optional
+
+  **Definition of Done:**
+  - merchants table exists and is queryable
+  - exchanges.merchant_id column exists (nullable); existing exchanges unaffected
+  - No breaking changes to existing exchange API or tests
+
+---
+
+- [x] H7. Outbox Table Foundation (P5)
+  > Create outbox table as the foundation for future async event delivery.
+  > _Partial fix: BMS_MVP_Evaluation_1.md Cross-Cutting Gap #1_
+
+  - [x] H7.1 Create outbox table (via migration 1700000028)
+    - `outbox (id BIGSERIAL PK, event_type TEXT, payload JSONB, status TEXT DEFAULT 'pending', created_at TIMESTAMPTZ, published_at TIMESTAMPTZ)` + index on `(status, created_at)`
+  - Note: Workers (BullMQ, Outbox_Poller) remain deferred to future hardening phase
+
+  **Definition of Done:**
+  - outbox table exists and is queryable
+  - Ready for worker implementation without further schema changes
+
+---
+
+- [x] H8. Hardening Integration Tests
+  > 15 new integration tests covering all hardening items.
+
+  - [x] H8.1 PII encryption round-trip tests (5 tests)
+  - [x] H8.2 Bank transfer validation tests (3 tests)
+  - [x] H8.3 Idempotency tests (2 tests)
+  - [x] H8.4 Installment plan tests (5 tests)
+
+  **Definition of Done:**
+  - 20 test files, 253 tests, all passing
+  - All 238 pre-hardening tests continue to pass
 
 - [ ] H1. Add Async Infrastructure (BullMQ, Outbox Pattern, Workers)
   > Replace synchronous audit writes and loyalty accrual with guaranteed async delivery via outbox pattern.

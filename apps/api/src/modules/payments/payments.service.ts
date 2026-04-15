@@ -17,6 +17,7 @@ export interface PaymentRow {
   status: PaymentStatus;
   transactionReference: string | null;
   notes: string | null;
+  bankAccountId: number | null;
   processedBy: number;
   processedAt: string;
   createdAt: string;
@@ -44,6 +45,7 @@ function mapPaymentRow(row: Record<string, unknown>): PaymentRow {
     status: row.status as PaymentStatus,
     transactionReference: (row.transaction_reference as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
+    bankAccountId: (row.bank_account_id as number | null) ?? null,
     processedBy: row.processed_by as number,
     processedAt: (row.processed_at as Date).toISOString(),
     createdAt: (row.created_at as Date).toISOString(),
@@ -159,10 +161,28 @@ export async function createPayment(
     paymentMethod: PaymentMethod;
     transactionReference?: string;
     notes?: string;
+    bankAccountId?: number | null;
   },
   staffCtx: StaffCtx,
 ): Promise<PaymentRow> {
   if (data.amount <= 0) throw new ValidationError('Payment amount must be positive');
+
+  // Bank transfer requires bank_account_id
+  if (data.paymentMethod === 'bank') {
+    if (!data.bankAccountId) {
+      throw new ValidationError('bank_account_id is required for bank transfer payments');
+    }
+    // Validate bank account belongs to this branch and is active
+    const baRes = await db.query(
+      'SELECT id, is_active, branch_id FROM bank_accounts WHERE id = $1',
+      [data.bankAccountId],
+    );
+    if (!baRes.rows.length) throw new BusinessError('INVALID_BANK_ACCOUNT', 'Bank account not found');
+    if (!baRes.rows[0].is_active) throw new BusinessError('INVALID_BANK_ACCOUNT', 'Bank account is inactive');
+    if (baRes.rows[0].branch_id !== staffCtx.branchId) {
+      throw new BusinessError('INVALID_BANK_ACCOUNT', 'Bank account does not belong to the current branch');
+    }
+  }
 
   // Validate order exists and is not cancelled
   const orderRes = await db.query('SELECT id, total, status, payment_status FROM orders WHERE id = $1', [data.orderId]);
@@ -193,10 +213,19 @@ export async function createPayment(
     const paymentReference = 'PAY-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
 
     const payRes = await client.query(
-      "INSERT INTO order_payments (payment_reference, order_id, amount, currency, payment_method, status, transaction_reference, notes, processed_by) VALUES ($1,$2,$3,'ETB',$4,'success',$5,$6,$7) RETURNING id",
-      [paymentReference, data.orderId, data.amount.toFixed(2), data.paymentMethod, data.transactionReference ?? null, data.notes ?? null, staffCtx.staffId],
+      "INSERT INTO order_payments (payment_reference, order_id, amount, currency, payment_method, status, transaction_reference, notes, processed_by, bank_account_id) VALUES ($1,$2,$3,'ETB',$4,'success',$5,$6,$7,$8) RETURNING id",
+      [paymentReference, data.orderId, data.amount.toFixed(2), data.paymentMethod, data.transactionReference ?? null, data.notes ?? null, staffCtx.staffId, data.bankAccountId ?? null],
     );
     const paymentId = String(payRes.rows[0].id);
+
+    // Auto-create bank reconciliation entry for bank transfers
+    if (data.paymentMethod === 'bank' && data.bankAccountId) {
+      await client.query(
+        `INSERT INTO bank_reconciliation (bank_account_id, payment_ref_id, amount, direction, status)
+         VALUES ($1, $2, $3, 'in', 'uncleared')`,
+        [data.bankAccountId, paymentId, data.amount.toFixed(2)],
+      );
+    }
 
     // Recompute and update order payment_status
     const newPaymentStatus = await computeOrderPaymentStatus(client, data.orderId);
@@ -217,7 +246,7 @@ export async function createPayment(
 
 export async function createRefund(
   paymentId: string | number,
-  data: { refundAmount: number; reason: string },
+  data: { refundAmount: number; reason: string; bankAccountId?: number | null },
   staffCtx: StaffCtx,
 ): Promise<RefundRow> {
   if (data.refundAmount <= 0) throw new ValidationError('Refund amount must be positive');
@@ -242,10 +271,19 @@ export async function createRefund(
     await client.query('BEGIN');
 
     const refundRes = await client.query(
-      'INSERT INTO order_refunds (payment_id, order_id, refund_amount, reason, processed_by) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [paymentId, payment.orderId, data.refundAmount.toFixed(2), data.reason, staffCtx.staffId],
+      'INSERT INTO order_refunds (payment_id, order_id, refund_amount, reason, processed_by, bank_account_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [paymentId, payment.orderId, data.refundAmount.toFixed(2), data.reason, staffCtx.staffId, data.bankAccountId ?? null],
     );
     const refundId = String(refundRes.rows[0].id);
+
+    // Auto-create bank reconciliation entry for bank refunds
+    if (data.bankAccountId) {
+      await client.query(
+        `INSERT INTO bank_reconciliation (bank_account_id, refund_ref_id, amount, direction, status)
+         VALUES ($1, $2, $3, 'out', 'uncleared')`,
+        [data.bankAccountId, refundId, data.refundAmount.toFixed(2)],
+      );
+    }
 
     // Update payment status
     const newAlreadyRefunded = alreadyRefunded + data.refundAmount;

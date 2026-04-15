@@ -3,6 +3,7 @@ import * as paymentsService from './payments.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -19,17 +20,28 @@ router.post(
       if (!req.body.orderId) throw new ValidationError('orderId is required');
       if (!req.body.amount) throw new ValidationError('amount is required');
       if (!req.body.paymentMethod) throw new ValidationError('paymentMethod is required');
-      const payment = await paymentsService.createPayment(
-        {
-          orderId:              parseInt(req.body.orderId, 10),
-          amount:               parseFloat(req.body.amount),
-          paymentMethod:        req.body.paymentMethod,
-          transactionReference: req.body.transactionReference,
-          notes:                req.body.notes,
-        },
-        req.staff!,
-      );
-      res.status(201).json(payment);
+
+      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      const body = {
+        orderId:              parseInt(req.body.orderId, 10),
+        amount:               parseFloat(req.body.amount),
+        paymentMethod:        req.body.paymentMethod,
+        transactionReference: req.body.transactionReference,
+        notes:                req.body.notes,
+        bankAccountId:        req.body.bankAccountId ? parseInt(req.body.bankAccountId, 10) : null,
+      };
+
+      if (idempotencyKey) {
+        const { result, replayed } = await withIdempotency(
+          idempotencyKey, '/payments', hashBody(body),
+          () => paymentsService.createPayment(body, req.staff!),
+        );
+        if (replayed) res.setHeader('X-Idempotent-Replayed', 'true');
+        res.status(replayed ? 200 : 201).json(result);
+      } else {
+        const payment = await paymentsService.createPayment(body, req.staff!);
+        res.status(201).json(payment);
+      }
     } catch (err) { next(err); }
   },
 );
@@ -80,7 +92,11 @@ router.post(
       if (!req.body.reason) throw new ValidationError('reason is required');
       const refund = await paymentsService.createRefund(
         parseInt(req.params.id, 10),
-        { refundAmount: parseFloat(req.body.refundAmount), reason: req.body.reason },
+        {
+          refundAmount: parseFloat(req.body.refundAmount),
+          reason: req.body.reason,
+          bankAccountId: req.body.bankAccountId ? parseInt(req.body.bankAccountId, 10) : null,
+        },
         req.staff!,
       );
       res.status(201).json(refund);

@@ -21,6 +21,8 @@ import ordersRouter from './modules/orders/orders.routes.js';
 import paymentsRouter from './modules/payments/payments.routes.js';
 import exchangesRouter from './modules/exchanges/exchanges.routes.js';
 import reportsRouter from './modules/reports/reports.routes.js';
+import installmentsRouter from './modules/payments/installments.routes.js';
+import { loginRateLimit } from './middleware/rateLimit.js';
 
 export function createApp() {
   const app = express();
@@ -49,6 +51,7 @@ export function createApp() {
   app.use('/api', paymentsRouter);
   app.use('/api', exchangesRouter);
   app.use('/api', reportsRouter);
+  app.use('/api', installmentsRouter);
   app.use('/api', auditLogsRouter);
 
   // 404 handler

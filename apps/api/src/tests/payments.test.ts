@@ -189,7 +189,7 @@ describe('Payments — Order Payment Management', () => {
       .post('/api/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ orderId: parseInt(order.id), amount: partialAmount, paymentMethod: 'bank' });
+      .send({ orderId: parseInt(order.id), amount: partialAmount, paymentMethod: 'mobile' });
 
     const balRes = await request(getTestApp())
       .get(`/api/orders/${order.id}/balance`)
@@ -227,7 +227,7 @@ describe('Payments — Order Payment Management', () => {
 
   // ── 8. Split payment (two methods) ────────────────────────────────────────
 
-  it('8. Split payment (cash + bank) → order fully paid', async () => {
+  it('8. Split payment (cash + mobile) → order fully paid', async () => {
     const order = await createTestOrder(salesToken, branchId, locationId, bookId);
     const half = parseFloat((order.total / 2).toFixed(2));
     const remainder = parseFloat((order.total - half).toFixed(2));
@@ -242,7 +242,7 @@ describe('Payments — Order Payment Management', () => {
       .post('/api/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ orderId: parseInt(order.id), amount: remainder, paymentMethod: 'bank' });
+      .send({ orderId: parseInt(order.id), amount: remainder, paymentMethod: 'mobile' });
 
     expect(res2.status).toBe(201);
 

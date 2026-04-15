@@ -6,6 +6,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError, BusinessError, ForbiddenError } from '../../lib/errors.js';
 import { db } from '../../db/index.js';
+import { loginRateLimit } from '../../middleware/rateLimit.js';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ const assignRolesSchema = z.array(
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 
-router.post('/auth/login', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/auth/login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {

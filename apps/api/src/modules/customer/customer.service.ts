@@ -4,6 +4,7 @@ import {
   getLoyaltyAccrualRate,
   getLoyaltyMinTransactionAmount,
 } from '../config/config.service.js';
+import { encryptPii, decryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,13 +42,21 @@ function mapCustomerRow(
   row: Record<string, unknown>,
   groups: Array<{ id: number; name: string; discountPct: number }> = [],
 ): CustomerRow {
+  // Prefer decrypted values from encrypted columns; fall back to plaintext columns
+  const phone = row.phone_encrypted
+    ? decryptPii(row.phone_encrypted as string)
+    : (row.phone as string | null) ?? null;
+  const email = row.email_encrypted
+    ? decryptPii(row.email_encrypted as string)
+    : (row.email as string | null) ?? null;
+
   return {
     id: row.id as number,
     branchId: (row.branch_id as number | null) ?? null,
     customerCode: row.customer_code as string,
     fullName: row.full_name as string,
-    phone: (row.phone as string | null) ?? null,
-    email: (row.email as string | null) ?? null,
+    phone,
+    email,
     gender: (row.gender as string | null) ?? null,
     dateOfBirth: row.date_of_birth
       ? (row.date_of_birth instanceof Date
@@ -117,15 +126,23 @@ export async function createCustomer(
   },
   staffCtx: StaffCtx,
 ): Promise<CustomerRow> {
-  // Uniqueness checks
+  // Uniqueness checks — use lookup hash for encrypted search
   if (data.phone) {
-    const phoneCheck = await db.query(`SELECT id FROM customers WHERE phone = $1`, [data.phone]);
+    const phoneHash = piiLookupHash(data.phone);
+    const phoneCheck = await db.query(
+      `SELECT id FROM customers WHERE phone_lookup = $1 OR phone = $2`,
+      [phoneHash, data.phone],
+    );
     if (phoneCheck.rows.length) {
       throw new ConflictError('DUPLICATE_CONTACT', 'Phone number already in use', { field: 'phone' });
     }
   }
   if (data.email) {
-    const emailCheck = await db.query(`SELECT id FROM customers WHERE email = $1`, [data.email]);
+    const emailHash = piiLookupHash(data.email);
+    const emailCheck = await db.query(
+      `SELECT id FROM customers WHERE email_lookup = $1 OR email = $2`,
+      [emailHash, data.email],
+    );
     if (emailCheck.rows.length) {
       throw new ConflictError('DUPLICATE_CONTACT', 'Email address already in use', { field: 'email' });
     }
@@ -144,8 +161,9 @@ export async function createCustomer(
     const customerCode = `CUS-${String(nextSeq).padStart(4, '0')}`;
 
     const result = await client.query(
-      `INSERT INTO customers (branch_id, customer_code, full_name, phone, email, gender, date_of_birth, address, city, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO customers (branch_id, customer_code, full_name, phone, email, gender, date_of_birth, address, city, created_by,
+         phone_encrypted, email_encrypted, phone_lookup, email_lookup)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id`,
       [
         data.branchId ?? null,
@@ -158,6 +176,10 @@ export async function createCustomer(
         data.address ?? null,
         data.city ?? null,
         staffCtx.staffId,
+        encryptPii(data.phone),
+        encryptPii(data.email),
+        piiLookupHash(data.phone),
+        piiLookupHash(data.email),
       ],
     );
 
@@ -298,11 +320,14 @@ export async function searchCustomers(opts: {
   let p = 1;
 
   if (opts.q) {
+    const qTrimmed = opts.q.trim();
+    const lookupHash = piiLookupHash(qTrimmed);
     conditions.push(
-      `(c.full_name ILIKE $${p} OR c.phone ILIKE $${p} OR c.email ILIKE $${p} OR c.customer_code ILIKE $${p})`,
+      `(c.full_name ILIKE $${p} OR c.phone ILIKE $${p} OR c.email ILIKE $${p} OR c.customer_code ILIKE $${p} OR c.phone_lookup = $${p + 1} OR c.email_lookup = $${p + 1})`,
     );
-    params.push(`%${opts.q.trim()}%`);
-    p++;
+    params.push(`%${qTrimmed}%`);
+    params.push(lookupHash);
+    p += 2;
   }
   if (opts.branchId !== undefined) { conditions.push(`c.branch_id = $${p++}`); params.push(opts.branchId); }
   if (opts.isActive !== undefined) { conditions.push(`c.is_active = $${p++}`); params.push(opts.isActive); }
