@@ -121,7 +121,7 @@ describe('Returns & Refunds', () => {
 
     const res = await request(getTestApp())
       .post('/api/returns')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', reason: 'Customer changed mind', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
 
@@ -147,7 +147,7 @@ describe('Returns & Refunds', () => {
 
     const res = await request(getTestApp())
       .post('/api/returns')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
 
@@ -201,7 +201,7 @@ describe('Returns & Refunds', () => {
 
     const res = await request(getTestApp())
       .post('/api/returns')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(txRes.body.id), refundMethod: 'store_credit', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
 
@@ -309,7 +309,7 @@ describe('Returns & Refunds', () => {
     // First return — 2 units
     const r1 = await request(getTestApp())
       .post('/api/returns')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
     expect(r1.status).toBe(201);
@@ -317,7 +317,7 @@ describe('Returns & Refunds', () => {
     // Second return — tries to return again
     const r2 = await request(getTestApp())
       .post('/api/returns')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
     expect(r2.status).toBe(422);

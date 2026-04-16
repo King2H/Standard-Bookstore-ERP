@@ -3,6 +3,7 @@ import * as ordersService from './orders.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -19,17 +20,25 @@ router.post(
       if (!req.body.items || !Array.isArray(req.body.items) || req.body.items.length === 0) {
         throw new ValidationError('items array is required');
       }
-      const order = await ordersService.create(
-        {
-          customerId:  req.body.customerId ?? null,
-          locationId:  req.body.locationId ?? null,
-          channel:     req.body.channel ?? 'in_store',
-          notes:       req.body.notes,
-          items:       req.body.items,
-        },
-        req.staff!,
-      );
-      res.status(201).json(order);
+      const body = {
+        customerId: req.body.customerId ?? null,
+        locationId: req.body.locationId ?? null,
+        channel:    req.body.channel ?? 'in_store',
+        notes:      req.body.notes,
+        items:      req.body.items,
+      };
+      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      if (idempotencyKey) {
+        const { result, replayed } = await withIdempotency(
+          idempotencyKey, '/orders', hashBody(body),
+          () => ordersService.create(body, req.staff!),
+        );
+        if (replayed) res.setHeader('X-Idempotent-Replayed', 'true');
+        res.status(replayed ? 200 : 201).json(result);
+      } else {
+        const order = await ordersService.create(body, req.staff!);
+        res.status(201).json(order);
+      }
     } catch (err) { next(err); }
   },
 );

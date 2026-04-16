@@ -23,6 +23,7 @@ import exchangesRouter from './modules/exchanges/exchanges.routes.js';
 import reportsRouter from './modules/reports/reports.routes.js';
 import installmentsRouter from './modules/payments/installments.routes.js';
 import { loginRateLimit } from './middleware/rateLimit.js';
+import { csrfMiddleware } from './middleware/csrf.js';
 
 export function createApp() {
   const app = express();
@@ -32,6 +33,7 @@ export function createApp() {
   app.use(cookieParser());
   app.use(requestIdMiddleware);
   app.use(loggerMiddleware);
+  app.use(csrfMiddleware);
 
   // â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   app.use('/api', healthRouter);

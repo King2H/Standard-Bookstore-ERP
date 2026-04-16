@@ -3,6 +3,7 @@ import * as exchangesService from './exchanges.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -20,17 +21,25 @@ router.post(
       if ((!incomingItems || incomingItems.length === 0) && (!outgoingItems || outgoingItems.length === 0)) {
         throw new ValidationError('Exchange must have at least one incoming or outgoing item');
       }
-      const exchange = await exchangesService.createExchange(
-        {
-          locationId:    req.body.locationId ?? null,
-          customerId:    req.body.customerId ?? null,
-          notes:         req.body.notes,
-          incomingItems: incomingItems ?? [],
-          outgoingItems: outgoingItems ?? [],
-        },
-        req.staff!,
-      );
-      res.status(201).json(exchange);
+      const body = {
+        locationId:    req.body.locationId ?? null,
+        customerId:    req.body.customerId ?? null,
+        notes:         req.body.notes,
+        incomingItems: incomingItems ?? [],
+        outgoingItems: outgoingItems ?? [],
+      };
+      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      if (idempotencyKey) {
+        const { result, replayed } = await withIdempotency(
+          idempotencyKey, '/exchanges', hashBody(body),
+          () => exchangesService.createExchange(body, req.staff!),
+        );
+        if (replayed) res.setHeader('X-Idempotent-Replayed', 'true');
+        res.status(replayed ? 200 : 201).json(result);
+      } else {
+        const exchange = await exchangesService.createExchange(body, req.staff!);
+        res.status(201).json(exchange);
+      }
     } catch (err) { next(err); }
   },
 );

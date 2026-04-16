@@ -19,12 +19,22 @@ export function getCurrentBranchId() {
   return currentBranchId;
 }
 
+/** Read the csrf-token cookie set by the server after login. */
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
   headers?: Record<string, string>,
 ): Promise<T> {
+  const csrfToken = !SAFE_METHODS.has(method) ? getCsrfToken() : null;
+
   const res = await fetch(`/api${path}`, {
     method,
     credentials: 'include',
@@ -32,6 +42,7 @@ async function request<T>(
       'Content-Type': 'application/json',
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(currentBranchId ? { 'X-Branch-Id': String(currentBranchId) } : {}),
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,

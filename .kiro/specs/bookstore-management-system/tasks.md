@@ -1249,7 +1249,63 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
   - 20 test files, 253 tests, all passing
   - All 238 pre-hardening tests continue to pass
 
-- [ ] H1. Add Async Infrastructure (BullMQ, Outbox Pattern, Workers)
+---
+
+## Immediate Improvements
+> Goal: Close the most visible user-facing and security gaps without touching existing functionality.
+
+---
+
+- [x] I1. Installment Plans UI
+  > Frontend page for creating and managing installment plans, consuming the existing installments API.
+
+  - [x] I1.1 Implement apps/web/src/pages/InstallmentsPage.tsx
+    - View Plan tab: order ID lookup, plan summary with progress bar, payment schedule with status badges, inline payment recording per installment
+    - New Plan tab: create plan form with numInstallments, depositAmount, firstDueDate, notes; config-driven validation feedback
+    - RBAC: canCreate check (Sales, Manager, Admin, Finance_Officer)
+  - [x] I1.2 Wire into App.tsx (new 'installments' page type) and Layout.tsx (nav item after Payments)
+
+  **Definition of Done:**
+  - Installments nav item visible to Admin, Manager, Sales, Finance_Officer
+  - View Plan tab: lookup by order ID, shows plan summary + installment schedule
+  - New Plan tab: create plan; on success navigates to View Plan for the new order
+  - Inline payment recording: amount input + Pay button per unpaid installment
+  - Empty state when no plan exists with link to create one
+
+---
+
+- [x] I2. CSRF Protection
+  > Double-submit cookie pattern protecting all mutating API endpoints.
+
+  - [x] I2.1 Implement apps/api/src/middleware/csrf.ts
+    - `setCsrfCookie(res)` — generates 32-byte random token, sets `csrf-token` cookie (httpOnly=false, SameSite=strict)
+    - `csrfMiddleware` — validates `X-CSRF-Token` header matches cookie on all non-safe methods; skips if no cookie present
+    - Exempt paths: `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `/api/health`, `/api/branches/public`
+  - [x] I2.2 Apply csrfMiddleware in app.ts (after cookieParser)
+  - [x] I2.3 Call setCsrfCookie on login and token refresh in auth.routes.ts
+  - [x] I2.4 Update apps/web/src/lib/api.ts to read csrf-token cookie and send X-CSRF-Token header on POST/PUT/DELETE
+
+  **Definition of Done:**
+  - Login response sets csrf-token cookie and returns csrfToken in body
+  - Token refresh also rotates the CSRF cookie
+  - All mutating requests from frontend include X-CSRF-Token header automatically
+  - Missing/invalid CSRF token returns 403 CSRF_INVALID
+  - No cookie present → request passes through (backward compatible with tests)
+
+---
+
+- [x] I3. Idempotency Extended to Orders and Exchanges
+  > Apply existing PostgreSQL-backed idempotency to POST /api/orders and POST /api/exchanges.
+
+  - [x] I3.1 Update orders.routes.ts — POST /api/orders accepts Idempotency-Key header
+  - [x] I3.2 Update exchanges.routes.ts — POST /api/exchanges accepts Idempotency-Key header
+  - [x] I3.3 Fix returns.test.ts — use managerToken for high-value returns (pre-existing flakiness with book prices > 250 ETB)
+
+  **Definition of Done:**
+  - POST /api/orders with Idempotency-Key: duplicate returns stored response + X-Idempotent-Replayed: true
+  - POST /api/exchanges with Idempotency-Key: duplicate returns stored response + X-Idempotent-Replayed: true
+  - All 3 major financial write endpoints now idempotency-protected: payments, orders, exchanges
+  - 20 test files, 253 tests, all passing
   > Replace synchronous audit writes and loyalty accrual with guaranteed async delivery via outbox pattern.
   > _Cross-cutting hardening (deferred from Task 0A) | Requirements: 26 | Design: design.md §7_
 

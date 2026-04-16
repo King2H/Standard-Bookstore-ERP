@@ -7,6 +7,7 @@ import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError, BusinessError, ForbiddenError } from '../../lib/errors.js';
 import { db } from '../../db/index.js';
 import { loginRateLimit } from '../../middleware/rateLimit.js';
+import { setCsrfCookie } from '../../middleware/csrf.js';
 
 const router = Router();
 
@@ -51,7 +52,7 @@ router.post('/auth/login', loginRateLimit, async (req: Request, res: Response, n
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn, mustChangePassword: result.mustChangePassword });
+    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn, mustChangePassword: result.mustChangePassword, csrfToken: setCsrfCookie(res) });
   } catch (err) {
     next(err);
   }
@@ -82,7 +83,7 @@ router.post('/auth/refresh', async (req: Request, res: Response, next: NextFunct
     }
 
     const result = await authService.refresh(refreshToken);
-    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn });
+    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn, csrfToken: setCsrfCookie(res) });
   } catch (err) {
     next(err);
   }

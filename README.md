@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening Applied.**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate Improvements Applied.**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -218,9 +218,21 @@ Key rules:
 - `merchants` table created; `exchanges.merchant_id` nullable FK added
 - Existing direct exchange flows unchanged; foundation for future merchant-to-merchant exchange
 
-**Outbox Table Foundation ✅**
-- `outbox` table created with `(event_type, payload, status, created_at, published_at)`
-- Ready for BullMQ worker implementation without further schema changes
+**Installment Plans UI ✅**
+- InstallmentsPage: View Plan tab (lookup by order ID, payment schedule with status badges, inline payment recording) + New Plan tab (create plan with config-driven validation)
+- Installments nav item added to sidebar (Admin, Manager, Sales, Finance_Officer)
+- Wired into App.tsx and Layout.tsx
+
+**CSRF Protection ✅**
+- `middleware/csrf.ts` — double-submit cookie pattern; `setCsrfCookie()` sets readable `csrf-token` cookie on login and token refresh
+- `csrfMiddleware` validates `X-CSRF-Token` header on all mutating requests; skips if no cookie present (backward compatible with tests)
+- Frontend `api.ts` reads `csrf-token` cookie and sends as `X-CSRF-Token` header on all POST/PUT/DELETE requests
+- Exempt paths: `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `/api/health`, `/api/branches/public`
+
+**Idempotency Extended ✅**
+- `POST /api/orders` — accepts `Idempotency-Key` header; returns `X-Idempotent-Replayed: true` on replay
+- `POST /api/exchanges` — accepts `Idempotency-Key` header; returns `X-Idempotent-Replayed: true` on replay
+- Combined with existing `POST /api/payments` idempotency: all three major financial write endpoints are now protected
 - API-first, read-only reporting layer — no business logic, pure aggregation
 - GET /api/reports/sales — order revenue + POS revenue; by period (day/week/month); by branch
 - GET /api/reports/payments — collected/refunded/pending totals; by payment method; by period
