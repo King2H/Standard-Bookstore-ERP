@@ -4,9 +4,8 @@ import {
   getEffectiveConfig,
   getMaxLineDiscountPct,
   isNegativeStockAllowed,
-  getLoyaltyAccrualRate,
-  getLoyaltyMinTransactionAmount,
 } from '../config/config.service.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -400,17 +399,14 @@ export async function createTransaction(
           await client.query(`INSERT INTO loyalty_history (customer_id, transaction_ref, points_delta, reason) VALUES ($1, $2, $3, 'REDEMPTION')`, [data.customerId, transactionNumber, -payment.amount]);
         }
       }
-      // Accrue loyalty on subtotal (only for paid/partial — not pure credit)
-      if (paymentStatus !== 'credit') {
-        const rate = await getLoyaltyAccrualRate();
-        const minAmount = await getLoyaltyMinTransactionAmount();
-        if (subtotal >= minAmount) {
-          const points = Math.floor(subtotal * rate);
-          if (points > 0) {
-            await client.query(`UPDATE loyalty_accounts SET points_balance = points_balance + $1, lifetime_points = lifetime_points + $1, updated_at = now() WHERE customer_id = $2`, [points, data.customerId]);
-            await client.query(`INSERT INTO loyalty_history (customer_id, transaction_ref, points_delta, reason) VALUES ($1, $2, $3, 'ACCRUAL')`, [data.customerId, transactionNumber, points]);
-          }
-        }
+      // Emit loyalty accrual event via outbox (async — does not block POS completion)
+      if (paymentStatus !== 'credit' && data.customerId) {
+        await insertOutbox(client, 'LoyaltyAccrualRequested', {
+          customerId: data.customerId,
+          transactionRef: transactionNumber,
+          subtotal,
+          branchId: data.branchId,
+        });
       }
     }
 
@@ -498,17 +494,14 @@ export async function recordPayment(
           await client.query(`INSERT INTO loyalty_history (customer_id, transaction_ref, points_delta, reason) VALUES ($1, $2, $3, 'REDEMPTION')`, [tx.customerId, tx.transactionNumber, -payment.amount]);
         }
       }
-      // Accrue loyalty when fully settled (tx was partial/credit before this payment)
+      // Emit loyalty accrual event via outbox when fully settled
       if (newPaymentStatus === 'paid') {
-        const rate = await getLoyaltyAccrualRate();
-        const minAmount = await getLoyaltyMinTransactionAmount();
-        if (tx.subtotal >= minAmount) {
-          const points = Math.floor(tx.subtotal * rate);
-          if (points > 0) {
-            await client.query(`UPDATE loyalty_accounts SET points_balance = points_balance + $1, lifetime_points = lifetime_points + $1, updated_at = now() WHERE customer_id = $2`, [points, tx.customerId]);
-            await client.query(`INSERT INTO loyalty_history (customer_id, transaction_ref, points_delta, reason) VALUES ($1, $2, $3, 'ACCRUAL')`, [tx.customerId, tx.transactionNumber, points]);
-          }
-        }
+        await insertOutbox(client, 'LoyaltyAccrualRequested', {
+          customerId: tx.customerId,
+          transactionRef: tx.transactionNumber,
+          subtotal: tx.subtotal,
+          branchId: staffCtx.branchId,
+        });
       }
     }
 

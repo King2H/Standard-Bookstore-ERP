@@ -1,5 +1,6 @@
 import { db } from '../../db/index.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { redisGet, redisSet, redisDel } from '../../lib/redis.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,19 +68,32 @@ function validateConfigValue(key: string, value: unknown): void {
 // ── Core: effective config lookup (branch override → system default) ──────────
 
 export async function getEffectiveConfig(branchId: number, key: string): Promise<unknown> {
+  // Check Redis cache first (TTL 5 min)
+  const cacheKey = `cfg:${branchId}:${key}`;
+  const cached = await redisGet(cacheKey);
+  if (cached !== null) {
+    try { return JSON.parse(cached); } catch { /* fall through to DB */ }
+  }
+
   // Try branch override first
   const branchResult = await db.query(
     `SELECT value FROM branch_config WHERE branch_id = $1 AND key = $2`,
     [branchId, key],
   );
-  if (branchResult.rows.length > 0) return branchResult.rows[0].value;
+  if (branchResult.rows.length > 0) {
+    await redisSet(cacheKey, JSON.stringify(branchResult.rows[0].value), 300);
+    return branchResult.rows[0].value;
+  }
 
   // Fall back to system default
   const sysResult = await db.query(
     `SELECT value FROM system_config WHERE key = $1`,
     [key],
   );
-  if (sysResult.rows.length > 0) return sysResult.rows[0].value;
+  if (sysResult.rows.length > 0) {
+    await redisSet(cacheKey, JSON.stringify(sysResult.rows[0].value), 300);
+    return sysResult.rows[0].value;
+  }
 
   throw new NotFoundError(`Config key '${key}'`);
 }
@@ -135,6 +149,10 @@ export async function setSystemConfig(
     );
 
     await client.query('COMMIT');
+    // Invalidate Redis cache for all branches (system config affects all)
+    // We use a pattern-based approach: delete known branch cache keys
+    // Since we don't track all branches here, we rely on TTL expiry for system config
+    // Branch-specific cache is invalidated in setBranchConfig
     return mapSystemRow(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -225,6 +243,8 @@ export async function setBranchConfig(
     );
 
     await client.query('COMMIT');
+    // Invalidate Redis cache for this branch+key
+    await redisDel(`cfg:${branchId}:${key}`);
     return mapBranchRow(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');

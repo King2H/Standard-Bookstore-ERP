@@ -1306,7 +1306,55 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
   - POST /api/exchanges with Idempotency-Key: duplicate returns stored response + X-Idempotent-Replayed: true
   - All 3 major financial write endpoints now idempotency-protected: payments, orders, exchanges
   - 20 test files, 253 tests, all passing
-  > Replace synchronous audit writes and loyalty accrual with guaranteed async delivery via outbox pattern.
+
+---
+
+## Mid-Range Improvements
+> Goal: Async infrastructure, report exports, and installment overdue detection.
+
+---
+
+- [x] M1. Redis + Async Infrastructure
+  > Add Redis, implement outbox pattern, move loyalty accrual async, add installment checker cron.
+
+  - [x] M1.1 Add Redis 7 to Docker Compose with persistent volume and health check
+  - [x] M1.2 Implement lib/redis.ts — ioredis singleton with graceful degradation
+  - [x] M1.3 Implement lib/outbox.ts — insertOutbox(client, eventType, payload) helper
+  - [x] M1.4 Implement workers/outboxPoller.ts — SELECT FOR UPDATE SKIP LOCKED; routes to in-process handlers
+  - [x] M1.5 Implement workers/loyaltyWorker.ts — idempotent loyalty accrual; optimistic lock on loyalty account
+  - [x] M1.6 Implement workers/installmentChecker.ts — daily cron; marks overdue installments; emits InstallmentOverdue events
+  - [x] M1.7 Update pos.service.ts — loyalty accrual moved from synchronous to async via outbox
+  - [x] M1.8 Update config.service.ts — Redis cache for getEffectiveConfig (TTL 5min); invalidate on branch config write
+  - [x] M1.9 Update server.ts — start/stop workers with graceful shutdown (SIGTERM/SIGINT)
+
+  **Definition of Done:**
+  - Redis in Docker Compose; API depends_on redis with health check
+  - Outbox poller running; events routed to handlers; published/failed status tracked
+  - POS completion no longer blocks on loyalty accrual (async via outbox)
+  - Config reads cached in Redis; cache invalidated on write
+  - Installment checker runs at startup and every 24h; overdue installments marked
+  - Graceful shutdown stops all workers before process exit
+  - All 253 tests continue to pass
+
+---
+
+- [x] M2. Report CSV Export
+  > Add CSV download endpoints for all report types.
+
+  - [x] M2.1 Add toCSV() and sendCSV() helpers to reports.routes.ts
+  - [x] M2.2 Add 5 export endpoints: GET /api/reports/{sales,payments,inventory,customers,exchanges}/export
+    - Returns CSV with UTF-8 BOM (Excel-compatible)
+    - Content-Disposition: attachment header
+    - Same filters as JSON endpoints (branchId, dateFrom, dateTo, groupBy)
+    - RBAC: Manager/Admin only
+
+  **Definition of Done:**
+  - All 5 export endpoints return valid CSV
+  - BOM prefix ensures Excel opens without encoding issues
+  - Filename includes current date (e.g. sales-report-2026-04-16.csv)
+  - No new dependencies required
+
+
   > _Cross-cutting hardening (deferred from Task 0A) | Requirements: 26 | Design: design.md §7_
 
   - [ ] H1.1 Add Redis to Docker Compose and implement lib/redis.ts

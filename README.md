@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate Improvements Applied.**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied.**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -233,6 +233,24 @@ Key rules:
 - `POST /api/orders` — accepts `Idempotency-Key` header; returns `X-Idempotent-Replayed: true` on replay
 - `POST /api/exchanges` — accepts `Idempotency-Key` header; returns `X-Idempotent-Replayed: true` on replay
 - Combined with existing `POST /api/payments` idempotency: all three major financial write endpoints are now protected
+
+### Mid-Range Improvements
+
+**Redis + Async Infrastructure ✅**
+- Redis 7 added to Docker Compose with persistent volume and health check
+- `lib/redis.ts` — ioredis singleton with graceful degradation (no crash if Redis unavailable)
+- `lib/outbox.ts` — `insertOutbox(client, eventType, payload)` helper for domain event emission within DB transactions
+- `workers/outboxPoller.ts` — polls outbox table every 1s using `SELECT FOR UPDATE SKIP LOCKED`; routes events to in-process handlers
+- `workers/loyaltyWorker.ts` — idempotent loyalty accrual; checks for existing accrual; optimistic lock on loyalty account
+- `workers/installmentChecker.ts` — daily cron; marks overdue installments; emits InstallmentOverdue outbox events
+- POS loyalty accrual moved from synchronous to async via outbox — POS completion no longer blocks on loyalty calculation
+- Config service caches effective config in Redis (`cfg:{branchId}:{key}` TTL 5min); invalidates on branch config write
+- Graceful shutdown: workers stopped on SIGTERM/SIGINT
+
+**Report CSV Export ✅**
+- 5 export endpoints: GET /api/reports/{sales,payments,inventory,customers,exchanges}/export
+- Returns CSV with BOM (Excel-compatible); Content-Disposition: attachment
+- Same filters as JSON endpoints; RBAC: Manager/Admin only
 - API-first, read-only reporting layer — no business logic, pure aggregation
 - GET /api/reports/sales — order revenue + POS revenue; by period (day/week/month); by branch
 - GET /api/reports/payments — collected/refunded/pending totals; by payment method; by period
@@ -411,6 +429,11 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - GET /api/reports/customers — totals, repeat customers, top spenders, new by period (Manager, Admin)
 - GET /api/reports/kpis — daily/monthly revenue, AOV, active customers, alerts (Manager, Admin)
 - Common filters: ?branchId=&dateFrom=&dateTo=&groupBy=day|week|month
+- GET /api/reports/sales/export — CSV download (Manager, Admin)
+- GET /api/reports/payments/export — CSV download (Manager, Admin)
+- GET /api/reports/inventory/export — CSV download (Manager, Admin)
+- GET /api/reports/customers/export — CSV download (Manager, Admin)
+- GET /api/reports/exchanges/export — CSV download (Manager, Admin)
 
 ### Audit Log
 - GET /api/audit-logs — paginated; filter by entityType (Super_Admin, Admin)

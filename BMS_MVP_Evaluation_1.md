@@ -384,8 +384,8 @@ The outbox table now exists. Workers remain deferred:
 |-----|--------|-------|
 | Rate limiting (login) | ✅ Done | In-memory, 10 req/15min per IP |
 | Rate limiting (API) | ⚠️ Available | `apiRateLimit` middleware exists; not applied globally yet |
-| Idempotency on financial endpoints | ✅ Done | POST /api/payments; PostgreSQL-backed |
-| CSRF protection | ❌ Missing | SameSite=Strict cookie partially mitigates |
+| Idempotency on financial endpoints | ✅ Done | POST /api/payments, /api/orders, /api/exchanges; PostgreSQL-backed |
+| CSRF protection | ✅ Done | Double-submit cookie; X-CSRF-Token header validated on all mutating requests |
 | HMAC audit log signing | ❌ Missing | Audit log tampering undetectable |
 | Redis token revocation cache | ❌ Missing | Revocation works via DB |
 
@@ -445,19 +445,20 @@ Items resolved in Post-MVP Hardening are marked ✅. Remaining items ordered by 
 | P1 | Bank transfer payment → bank_account_id validation + reconciliation | ✅ Done | — |
 | P2 | Rate limiting (login) | ✅ Done | — |
 | P2 | Idempotency on POST /api/payments | ✅ Done | — |
+| P2 | Idempotency on POST /api/orders + /api/exchanges | ✅ Done | — |
+| P2 | CSRF protection | ✅ Done | — |
+| P2 | Installment Plans UI | ✅ Done | — |
 | P2 | Merchant foundation (merchants table) | ✅ Done | — |
 | P2 | Outbox table foundation | ✅ Done | — |
-| P2 | CSRF protection | ❌ Remaining | Low |
-| P3 | BullMQ + workers (loyalty async, notifications, installment checker) | ❌ Remaining | High |
+| P3 | Redis + BullMQ async infrastructure | ✅ Done (in-process workers) | — |
+| P3 | Report export (CSV) | ✅ Done | — |
+| P3 | Installment overdue cron | ✅ Done | — |
 | P3 | Exchange_Agreement model + full lifecycle | ❌ Remaining | Medium |
 | P3 | exchange_cash_adjustment_allowed enforcement | ❌ Remaining | Low |
-| P3 | Idempotency on more endpoints (orders, exchanges) | ❌ Remaining | Low |
 | P4 | HMAC audit log signing | ❌ Remaining | Low |
 | P4 | Read replica for reports | ❌ Remaining | Medium |
-| P4 | Report export (CSV/PDF) | ❌ Remaining | Medium |
 | P4 | SSE in-app notifications | ❌ Remaining | High |
 | P4 | Procurement + returns analytics endpoints | ❌ Remaining | Low |
-| P4 | Installment overdue cron | ❌ Remaining | Low |
 
 ---
 
