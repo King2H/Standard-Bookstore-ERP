@@ -9,12 +9,32 @@ const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
 const qi = (v: unknown, fb: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fb : fb; };
 
+// ── GET /api/payments/unpaid-orders ──────────────────────────────────────────
+// Returns orders with payment_status = unpaid or partial — for the payment collection UI
+
+router.get(
+  '/payments/unpaid-orders',
+  authenticate,
+  requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await paymentsService.listUnpaidOrders({
+        branchId:   qi(req.query.branchId, 0) || undefined,
+        customerId: qi(req.query.customerId, 0) || undefined,
+        page:       qi(req.query.page, 1),
+        pageSize:   qi(req.query.pageSize, 25),
+      });
+      res.json(result);
+    } catch (err) { next(err); }
+  },
+);
+
 // ── POST /api/payments ────────────────────────────────────────────────────────
 
 router.post(
   '/payments',
   authenticate,
-  requireRole('Sales', 'Manager', 'Admin'),
+  requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.body.orderId) throw new ValidationError('orderId is required');
@@ -85,7 +105,7 @@ router.get(
 router.post(
   '/payments/:id/refund',
   authenticate,
-  requireRole('Manager', 'Admin'),
+  requireRole('Manager', 'Admin', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.body.refundAmount) throw new ValidationError('refundAmount is required');

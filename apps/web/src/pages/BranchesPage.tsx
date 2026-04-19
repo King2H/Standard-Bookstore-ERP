@@ -40,6 +40,7 @@ export default function BranchesPage({ userRole }: { userRole?: string }) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const { showToast } = useToast();
 
   const { data, isLoading } = useQuery({
@@ -59,10 +60,19 @@ export default function BranchesPage({ userRole }: { userRole?: string }) {
       showToast('Branch created successfully');
     },
     onError: (err: unknown) => {
-      const e = err as { message?: string };
-      setApiError(e.message ?? 'Failed to create branch');
-      showToast(e.message ?? 'Failed to create branch', 'error');
+      const e = err as { message?: string; code?: string };
+      const msg = e.code === 'DUPLICATE_BRANCH_NAME'
+        ? 'A branch with this name already exists'
+        : (e.message ?? 'Failed to create branch');
+      setApiError(msg);
+      showToast(msg, 'error');
     },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/branches/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['branches'] }); showToast('Branch deleted'); setDeleteConfirmId(null); },
+    onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Cannot delete branch — it may have associated data', 'error'); setDeleteConfirmId(null); },
   });
 
   const deactivateMutation = useMutation({
@@ -87,9 +97,23 @@ export default function BranchesPage({ userRole }: { userRole?: string }) {
   });
 
   const canCreateBranch = ['Super_Admin', 'Admin', 'Manager'].includes(userRole ?? '');
+  const canDeleteBranch = ['Super_Admin', 'Admin'].includes(userRole ?? '');
 
   return (
     <div className="p-6">
+      {/* Delete confirmation dialog */}
+      {deleteConfirmId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Delete Branch?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">This action cannot be undone. Branches with associated data (staff, inventory, transactions) cannot be deleted.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+              <button onClick={() => deleteMutation.mutate(deleteConfirmId)} disabled={deleteMutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors">{deleteMutation.isPending ? 'Deleting...' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Branches</h1>
@@ -211,6 +235,7 @@ export default function BranchesPage({ userRole }: { userRole?: string }) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
                     {branch.isActive ? (
                       <button
                         type="button"
@@ -230,6 +255,16 @@ export default function BranchesPage({ userRole }: { userRole?: string }) {
                         Reactivate
                       </button>
                     )}
+                    {canDeleteBranch && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmId(branch.id)}
+                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs font-medium transition-colors ml-1"
+                      >
+                        Delete
+                      </button>
+                    )}
+                    </div>
                   </td>
                 </tr>
               ))}

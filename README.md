@@ -6,13 +6,15 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied.**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1).**
 
 | Document | Status | Location |
 |----------|--------|----------|
 | Requirements | Complete | `.kiro/specs/bookstore-management-system/requirements.md` |
 | Design | Complete | `.kiro/specs/bookstore-management-system/design.md` |
 | Tasks | In Progress | `.kiro/specs/bookstore-management-system/tasks.md` |
+| Fix Tracker | Active | `BMS_Fix_Tracker_V1.md` |
+| MVP Evaluation | v1.1 | `BMS_MVP_Evaluation_1.md` |
 
 ---
 
@@ -46,16 +48,19 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 |------|--------|-----------|
 | Super_Admin | System config, staff, audit log, branches | Any operational activity |
 | Admin | All operational management | System-level config writes |
-| Manager | Daily operations: catalog, inventory, orders, returns | System config, staff creation |
-| Finance_Officer | Bank accounts, reconciliation, view returns | Catalog writes, inventory mutations |
+| Manager | Daily operations: catalog, inventory, orders, returns, dashboard | System config, staff creation |
+| Finance_Officer | Bank accounts, reconciliation, reports, payments, returns (view+create), dashboard | Catalog writes, inventory mutations |
 | Stock_Clerk | Stock in/out, adjust, transfer, order fulfillment | PO creation, cash handling |
-| Sales | POS, orders, returns (under limit), customer service | Inventory adjust/transfer, suppliers |
+| Sales | POS, orders, returns (initiate), customer service | Inventory adjust/transfer, suppliers |
 | Purchasor | Supplier CRUD, PO creation and tracking | Receiving inventory, approving payments |
 
 Key rules:
 - Super_Admin manages platform only — no operational access
+- Finance_Officer has full read access to all financial reports and can create/view payments and returns
 - Manager/Admin self-approve high-value returns automatically
 - All restrictions enforced at the API layer
+- Deactivated staff are immediately locked out (auth middleware checks `is_active` on every request)
+- `must_change_password` flag forces password change before any other navigation
 
 ---
 
@@ -263,6 +268,45 @@ Key rules:
 - Empty date ranges return zeros gracefully
 - 10 integration tests passing
 
+### Post-Evaluation Bug Fixes (V1)
+
+Applied from `BMS_Fix_Tracker_V1.md` — 19 of 27 fixes completed.
+
+**Critical Fixes ✅**
+- **F-001** — Payments 500 error: NULL/NaN guards on `order.total` in payment service
+- **F-002** — Orders always backordered: `resolveLocationId()` helper falls back to branch default fulfillment location in `confirm()` and `fulfill()`
+- **F-003** — Order fulfillment not decrementing inventory: same `resolveLocationId()` fix in `fulfill()`
+- **F-004** — Returns blocked for Admin: Admin/Super_Admin bypass branch check in `returns.service.ts`
+- **F-023** — Sales cannot initiate returns: Sales added to POST /returns RBAC
+
+**Security & Auth Fixes ✅**
+- **F-016** — Deactivated staff not immediately locked out: `auth.ts` middleware queries `staff.is_active` on every request; returns 401 ACCOUNT_INACTIVE
+- **F-017** — `must_change_password` not enforced: login flow forces profile page with warning banner; navigation blocked until changed
+
+**Business Rule Fixes ✅**
+- **F-008** — Deactivated branch allows transactions: `branch.is_active` check in POS and Orders create (422 BRANCH_INACTIVE)
+- **F-009** — Deactivated customer can create orders: `customer.is_active` check in POS and Orders create (422 CUSTOMER_INACTIVE)
+
+**RBAC Fixes ✅**
+- **F-014** — Finance_Officer cannot access Reports: added to all report routes, payments, returns, and nav
+
+**UI/UX Fixes ✅**
+- **F-006** — Branch duplicate name error not shown: explicit DUPLICATE_BRANCH_NAME message in BranchesPage
+- **F-007** — Branch delete button missing: Delete button added (Admin/Super_Admin only) with confirmation dialog
+- **F-013** — Inventory not updated after exchange: cache invalidation on exchange create/cancel
+- **F-015** — Superadmin wrong landing page: role-based landing for all 7 roles
+- **F-018** — Catalog "All" shows only active: removed hardcoded `is_active=true` default from `searchBooks`
+- **F-025** — Dashboard not branch-specific: Manager pre-populates branchId from JWT; KPI auto-refreshes every 30s
+- **F-026** — CSV export buttons missing: export buttons for all 5 report types in Dashboard filter bar
+- **F-027** — DB test data cleanup: `npm run reseed` executed
+
+**Dashboard Real-Time & UI Polish ✅**
+- KPI cards redesigned: vertical layout (icon+label row, value row), no text truncation, responsive grid (2→4→7 cols)
+- Live indicator: pulsing green dot + "Live · 30s" label + last-updated timestamp (HH:MM:SS)
+- Pie chart labels replaced with `<Legend>` component — eliminates overlap on small containers
+- Filter bar and export buttons merged into single toolbar row
+- Page wrapped in `overflow-y-auto` for proper scrolling
+
 ---
 
 | Layer | Technology |
@@ -442,12 +486,19 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 
 ## Seed Credentials
 
-| Username | Password | Role | UI Access |
-|----------|----------|------|-----------|
-| superadmin | password | Super_Admin | Settings, Staff, Branches, Audit Log |
-| admin | password | Admin | All operational pages |
+| Username | Password | Role | Landing Page | UI Access |
+|----------|----------|------|--------------|-----------|
+| superadmin | password | Super_Admin | Settings | Settings, Staff, Branches, Audit Log |
+| admin | password | Admin | Dashboard | All operational pages |
 
-Create Manager/Stock_Clerk/Sales/Purchasor via the Staff page after logging in as admin.
+Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page after logging in as admin.
+
+**Role landing pages after login:**
+- Super_Admin → Settings
+- Admin / Manager / Finance_Officer → Dashboard
+- Sales → POS
+- Stock_Clerk → Inventory
+- Purchasor → Procurement
 
 ---
 

@@ -607,12 +607,10 @@ export async function searchBooks(filters: SearchFilters): Promise<{
     params.push(filters.tag);
   }
 
-  // Active filter (default: only active)
+  // Active filter - only apply if explicitly set; omitting means all records
   if (filters.isActive !== undefined) {
-    conditions.push(`b.is_active = $${p++}`);
+    conditions.push(`b.is_active = ${p++}`);
     params.push(filters.isActive);
-  } else {
-    conditions.push(`b.is_active = true`);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

@@ -72,7 +72,10 @@ async function computeOrderPaymentStatus(
 ): Promise<'unpaid' | 'partial' | 'paid' | 'refunded'> {
   const orderRes = await client.query('SELECT total FROM orders WHERE id = $1', [orderId]);
   if (!orderRes.rows.length) throw new NotFoundError('Order');
-  const orderTotal = parseFloat(orderRes.rows[0].total as string);
+  const rawTotal = orderRes.rows[0].total;
+  if (rawTotal == null) throw new BusinessError('ORDER_INVALID', 'Order has no total amount. Ensure the order was created correctly.');
+  const orderTotal = parseFloat(rawTotal as string);
+  if (isNaN(orderTotal) || orderTotal < 0) throw new BusinessError('ORDER_INVALID', 'Order total is invalid.');
 
   const paidRes = await client.query(
     "SELECT COALESCE(SUM(amount), 0) AS total_paid FROM order_payments WHERE order_id = $1 AND status IN ('success','partially_refunded','refunded')",
@@ -185,10 +188,47 @@ export async function createPayment(
   }
 
   // Validate order exists and is not cancelled
-  const orderRes = await db.query('SELECT id, total, status, payment_status FROM orders WHERE id = $1', [data.orderId]);
+  const orderRes = await db.query('SELECT id, total, status, payment_status, customer_id FROM orders WHERE id = $1', [data.orderId]);
   if (!orderRes.rows.length) throw new NotFoundError('Order');
   const order = orderRes.rows[0] as Record<string, unknown>;
   if (order.status === 'Cancelled') throw new BusinessError('ORDER_CANCELLED', 'Cannot record payment on a cancelled order');
+  if (order.total == null) throw new BusinessError('ORDER_INVALID', 'Order has no total. Ensure the order was created with valid book prices.');
+  const customerId = (order.customer_id as number | null) ?? null;
+
+  // Store credit requires a customer on the order
+  if (data.paymentMethod === 'store_credit') {
+    if (!customerId) {
+      throw new BusinessError('STORE_CREDIT_REQUIRES_CUSTOMER', 'Store credit payments require the order to be linked to a customer.');
+    }
+    // Validate customer has sufficient store credit balance
+    const scRes = await db.query('SELECT balance FROM store_credit_accounts WHERE customer_id = $1', [customerId]);
+    if (!scRes.rows.length) {
+      throw new BusinessError('INSUFFICIENT_STORE_CREDIT', 'Customer has no store credit account.');
+    }
+    const available = parseFloat(scRes.rows[0].balance as string);
+    if (available < data.amount - 0.01) {
+      throw new BusinessError('INSUFFICIENT_STORE_CREDIT',
+        `Insufficient store credit. Available: ETB ${available.toFixed(2)}, requested: ETB ${data.amount.toFixed(2)}`,
+        { available, requested: data.amount });
+    }
+  }
+
+  // Loyalty points requires a customer on the order
+  if (data.paymentMethod === 'loyalty_points') {
+    if (!customerId) {
+      throw new BusinessError('LOYALTY_REQUIRES_CUSTOMER', 'Loyalty point payments require the order to be linked to a customer.');
+    }
+    const lpRes = await db.query('SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1', [customerId]);
+    if (!lpRes.rows.length) {
+      throw new BusinessError('INSUFFICIENT_LOYALTY_POINTS', 'Customer has no loyalty account.');
+    }
+    const available = parseFloat(lpRes.rows[0].points_balance as string);
+    if (available < data.amount - 0.01) {
+      throw new BusinessError('INSUFFICIENT_LOYALTY_POINTS',
+        `Insufficient loyalty points. Available: ${available.toFixed(0)} pts, requested: ${data.amount.toFixed(0)} pts`,
+        { available, requested: data.amount });
+    }
+  }
 
   // Check payment would not exceed order total
   const existingRes = await db.query(
@@ -224,6 +264,32 @@ export async function createPayment(
         `INSERT INTO bank_reconciliation (bank_account_id, payment_ref_id, amount, direction, status)
          VALUES ($1, $2, $3, 'in', 'uncleared')`,
         [data.bankAccountId, paymentId, data.amount.toFixed(2)],
+      );
+    }
+
+    // Deduct store credit from customer account
+    if (data.paymentMethod === 'store_credit' && customerId) {
+      await client.query(
+        'UPDATE store_credit_accounts SET balance = balance - $1 WHERE customer_id = $2',
+        [data.amount.toFixed(2), customerId],
+      );
+      await client.query(
+        `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+         VALUES ($1, 'order_payment', $2, $3, 'debit')`,
+        [customerId, paymentId, data.amount.toFixed(2)],
+      );
+    }
+
+    // Deduct loyalty points from customer account
+    if (data.paymentMethod === 'loyalty_points' && customerId) {
+      await client.query(
+        'UPDATE loyalty_accounts SET points_balance = points_balance - $1, updated_at = now() WHERE customer_id = $2',
+        [data.amount.toFixed(2), customerId],
+      );
+      await client.query(
+        `INSERT INTO loyalty_history (customer_id, transaction_ref, points_delta, reason)
+         VALUES ($1, $2, $3, 'REDEMPTION')`,
+        [customerId, paymentReference, -data.amount],
       );
     }
 
@@ -307,7 +373,80 @@ export async function createRefund(
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
 }
 
-// ── getOrderBalance ───────────────────────────────────────────────────────────
+// ── listUnpaidOrders — orders awaiting payment (unpaid or partial) ────────────
+
+export async function listUnpaidOrders(opts: {
+  branchId?: number;
+  customerId?: number;
+  page?: number;
+  pageSize?: number;
+}): Promise<{
+  items: Array<{
+    id: string; orderNumber: string; customerName: string | null; customerCode: string | null;
+    total: number; totalPaid: number; outstanding: number; paymentStatus: string;
+    status: string; channel: string; createdAt: string;
+  }>;
+  total: number; page: number; totalPages: number;
+}> {
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(100, opts.pageSize ?? 25);
+  const offset = (page - 1) * pageSize;
+  const conditions: string[] = ["o.payment_status IN ('unpaid','partial')", "o.status != 'Cancelled'"];
+  const params: unknown[] = [];
+
+  if (opts.branchId) { params.push(opts.branchId); conditions.push(`o.branch_id = $${params.length}`); }
+  if (opts.customerId) { params.push(opts.customerId); conditions.push(`o.customer_id = $${params.length}`); }
+
+  const where = 'WHERE ' + conditions.join(' AND ');
+  const li = params.length + 1;
+  const oi = params.length + 2;
+
+  const [countRes, dataRes] = await Promise.all([
+    db.query(`SELECT COUNT(*) FROM orders o ${where}`, params),
+    db.query(
+      `SELECT o.id, o.order_number, o.total, o.payment_status, o.status, o.channel, o.created_at,
+              c.full_name AS customer_name, c.customer_code,
+              COALESCE(p.total_paid, 0) AS total_paid
+       FROM orders o
+       LEFT JOIN customers c ON c.id = o.customer_id
+       LEFT JOIN (
+         SELECT order_id, SUM(amount) AS total_paid
+         FROM order_payments
+         WHERE status IN ('success','partially_refunded','refunded')
+         GROUP BY order_id
+       ) p ON p.order_id = o.id
+       ${where}
+       ORDER BY o.created_at DESC
+       LIMIT $${li} OFFSET $${oi}`,
+      [...params, pageSize, offset],
+    ),
+  ]);
+
+  return {
+    items: dataRes.rows.map(r => {
+      const total = parseFloat(r.total ?? '0');
+      const totalPaid = parseFloat(r.total_paid ?? '0');
+      return {
+        id: String(r.id),
+        orderNumber: r.order_number as string,
+        customerName: (r.customer_name as string | null) ?? null,
+        customerCode: (r.customer_code as string | null) ?? null,
+        total,
+        totalPaid,
+        outstanding: Math.max(0, parseFloat((total - totalPaid).toFixed(2))),
+        paymentStatus: r.payment_status as string,
+        status: r.status as string,
+        channel: r.channel as string,
+        createdAt: (r.created_at as Date).toISOString(),
+      };
+    }),
+    total: parseInt(countRes.rows[0].count as string, 10),
+    page,
+    totalPages: Math.ceil(parseInt(countRes.rows[0].count as string, 10) / pageSize),
+  };
+}
+
+// ── getOrderBalance — orders awaiting payment (unpaid or partial) ─────────────
 
 export async function getOrderBalance(orderId: string | number): Promise<{
   orderTotal: number;
@@ -318,7 +457,9 @@ export async function getOrderBalance(orderId: string | number): Promise<{
 }> {
   const orderRes = await db.query('SELECT total, payment_status FROM orders WHERE id = $1', [orderId]);
   if (!orderRes.rows.length) throw new NotFoundError('Order');
-  const orderTotal = parseFloat(orderRes.rows[0].total as string);
+  const rawTotal = orderRes.rows[0].total;
+  if (rawTotal == null) throw new BusinessError('ORDER_INVALID', 'Order has no total amount. The order may have been created with books that have no price set.');
+  const orderTotal = parseFloat(rawTotal as string);
   const paymentStatus = orderRes.rows[0].payment_status as string;
 
   const paidRes = await db.query(

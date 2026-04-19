@@ -69,6 +69,8 @@ export default function ExchangesPage({ userRole }: ExchangesPageProps) {
       showToast(`Exchange ${e.exchangeReference} completed`, 'success');
       setIncomingItems([]); setOutgoingItems([]); setBookSearch('');
       qc.invalidateQueries({ queryKey: ['exchanges-list'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['inventory-low-stock'] });
       setTab('list');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
@@ -76,7 +78,12 @@ export default function ExchangesPage({ userRole }: ExchangesPageProps) {
 
   const cancelMut = useMutation({
     mutationFn: (id: string) => api.post<Exchange>(`/exchanges/${id}/cancel`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['exchanges-list'] }); showToast('Exchange cancelled', 'success'); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['exchanges-list'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['inventory-low-stock'] });
+      showToast('Exchange cancelled', 'success');
+    },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 

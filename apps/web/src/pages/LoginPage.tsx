@@ -16,7 +16,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 interface LoginPageProps {
-  onSuccess: () => void;
+  onSuccess: (opts?: { mustChangePassword?: boolean }) => void;
 }
 
 export default function LoginPage({ onSuccess }: LoginPageProps) {
@@ -41,8 +41,8 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     setError(null);
     setLoading(true);
     try {
-      await login(data.username, data.password, data.branchId);
-      onSuccess();
+      const result = await login(data.username, data.password, data.branchId);
+      onSuccess({ mustChangePassword: result.mustChangePassword });
     } catch (err: unknown) {
       const e = err as { message?: string; code?: string };
       if (e.code === 'INVALID_CREDENTIALS') setError('Invalid username or password');

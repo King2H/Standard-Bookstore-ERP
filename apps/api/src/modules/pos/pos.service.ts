@@ -238,6 +238,20 @@ export async function createTransaction(
     throw new BusinessError('CREDIT_REQUIRES_CUSTOMER', 'Credit sales require a customer to be selected');
   }
 
+  // F-008: Deactivated branch check
+  const branchRes = await db.query('SELECT is_active FROM branches WHERE id = $1', [data.branchId]);
+  if (!branchRes.rows.length || !branchRes.rows[0].is_active) {
+    throw new BusinessError('BRANCH_INACTIVE', 'This branch is inactive and cannot process transactions');
+  }
+
+  // F-009: Deactivated customer check
+  if (data.customerId) {
+    const custRes = await db.query('SELECT is_active FROM customers WHERE id = $1', [data.customerId]);
+    if (!custRes.rows.length || !custRes.rows[0].is_active) {
+      throw new BusinessError('CUSTOMER_INACTIVE', 'This customer account is inactive');
+    }
+  }
+
   interface ResolvedItem {
     bookId: number; bookTitle: string; bookIsbn: string;
     quantity: number; unitPrice: number;

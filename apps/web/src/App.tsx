@@ -47,18 +47,37 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentPage, setCurrentPage] = useState<Page>('branches');
   const [userRole, setUserRole] = useState<Role | null>(null);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = (opts?: { mustChangePassword?: boolean }) => {
     setIsAuthenticated(true);
-    setUserRole(parseRoleFromToken());
-    // Land on dashboard for Manager/Admin, branches for others
     const role = parseRoleFromToken();
-    if (role === 'Manager' || role === 'Admin') setCurrentPage('dashboard');
+    setUserRole(role);
+    // F-017: Force password change if required
+    if (opts?.mustChangePassword) {
+      setMustChangePassword(true);
+      setCurrentPage('profile');
+      return;
+    }
+    // F-015: Role-based landing pages
+    if (role === 'Super_Admin') setCurrentPage('settings');
+    else if (role === 'Manager' || role === 'Admin' || role === 'Finance_Officer') setCurrentPage('dashboard');
+    else if (role === 'Sales') setCurrentPage('pos');
+    else if (role === 'Stock_Clerk') setCurrentPage('inventory');
+    else if (role === 'Purchasor') setCurrentPage('procurement');
+    else setCurrentPage('branches');
+  };
+
+  const handleNavigate = (page: Page) => {
+    // F-017: Block navigation until password is changed
+    if (mustChangePassword && page !== 'profile') return;
+    setCurrentPage(page);
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUserRole(null);
+    setMustChangePassword(false);
     setCurrentPage('branches');
   };
 
@@ -71,10 +90,16 @@ export default function App() {
           ) : (
             <Layout
               currentPage={currentPage}
-              onNavigate={setCurrentPage}
+              onNavigate={handleNavigate}
               onLogout={handleLogout}
               userRole={userRole}
             >
+              {mustChangePassword && (
+                <div className="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>You must change your password before continuing. Please update it in your profile.</span>
+                </div>
+              )}
               {currentPage === 'dashboard' && <DashboardPage userRole={userRole ?? undefined} />}
               {currentPage === 'branches' && <BranchesPage userRole={userRole ?? undefined} />}
               {currentPage === 'staff' && <StaffPage />}

@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { getEffectiveConfig } from '../config/config.service.js';
@@ -93,6 +94,20 @@ export async function create(
   if (!data.items || data.items.length === 0) throw new ValidationError('At least one item is required');
   interface RI { bookId: number; quantity: number; unitPrice: number; discountAmount: number; totalPrice: number; }
   const resolvedItems: RI[] = [];
+
+  // F-008: Deactivated branch check
+  const branchCheck = await db.query('SELECT is_active FROM branches WHERE id = $1', [staffCtx.branchId]);
+  if (!branchCheck.rows.length || !branchCheck.rows[0].is_active) {
+    throw new BusinessError('BRANCH_INACTIVE', 'This branch is inactive and cannot accept new orders');
+  }
+
+  // F-009: Deactivated customer check
+  if (data.customerId) {
+    const custCheck = await db.query('SELECT is_active FROM customers WHERE id = $1', [data.customerId]);
+    if (!custCheck.rows.length || !custCheck.rows[0].is_active) {
+      throw new BusinessError('CUSTOMER_INACTIVE', 'This customer account is inactive');
+    }
+  }
   for (const item of data.items) {
     const bookRes = await db.query('SELECT id, title, is_active FROM books WHERE id = $1', [item.bookId]);
     if (!bookRes.rows.length) throw new NotFoundError('Book ' + item.bookId);
@@ -131,14 +146,32 @@ export async function create(
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
 }
 
+async function resolveLocationId(client: pg.PoolClient, order: OrderRow, staffCtx: StaffCtx): Promise<number> {
+  if (order.locationId) return order.locationId;
+  // Try branch default fulfillment location
+  const defRes = await client.query(
+    'SELECT id FROM locations WHERE branch_id = $1 AND is_default_fulfillment = true LIMIT 1',
+    [order.branchId],
+  );
+  if (defRes.rows.length) return defRes.rows[0].id as number;
+  // Fall back to any location in the branch
+  const anyRes = await client.query(
+    'SELECT id FROM locations WHERE branch_id = $1 ORDER BY id LIMIT 1',
+    [order.branchId],
+  );
+  if (anyRes.rows.length) return anyRes.rows[0].id as number;
+  // Last resort: use branchId (legacy behaviour)
+  return staffCtx.branchId;
+}
+
 export async function confirm(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
   const order = await getById(orderId);
   if (order.status !== 'Pending') throw new BusinessError('INVALID_STATE', "Cannot confirm order in status '" + order.status + "'");
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    const locationId = await resolveLocationId(client, order, staffCtx);
     for (const item of order.lineItems ?? []) {
-      const locationId = order.locationId ?? staffCtx.branchId;
       const invRes = await client.query('SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE', [item.bookId, locationId]);
       if (!invRes.rows.length || invRes.rows[0].quantity < item.quantity) {
         await client.query('UPDATE order_line_items SET is_backordered = true WHERE id = $1', [item.id]);
@@ -167,9 +200,9 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
   const client = await db.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const locationId = await resolveLocationId(client, order, staffCtx);
     for (const item of order.lineItems ?? []) {
       if (item.qtyReserved === 0) continue;
-      const locationId = order.locationId ?? staffCtx.branchId;
       const invRes = await client.query('SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE', [item.bookId, locationId]);
       if (!invRes.rows.length) throw new NotFoundError('Inventory for book ' + item.bookId);
       const qtyBefore = invRes.rows[0].quantity;

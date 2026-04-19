@@ -4,14 +4,16 @@ interface LoginResponse {
   accessToken: string;
   expiresIn: number;
   csrfToken?: string;
+  mustChangePassword?: boolean;
 }
 
-export async function login(username: string, password: string, branchId: number): Promise<void> {
+export async function login(username: string, password: string, branchId: number): Promise<{ mustChangePassword: boolean }> {
   const res = await api.post<LoginResponse>('/auth/login', { username, password, branchId });
   setAccessToken(res.accessToken);
   setCurrentBranchId(branchId);
   if (res.csrfToken) setCsrfToken(res.csrfToken);
   scheduleRefresh(res.expiresIn);
+  return { mustChangePassword: res.mustChangePassword ?? false };
 }
 
 export async function logout(): Promise<void> {

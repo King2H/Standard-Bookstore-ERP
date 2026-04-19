@@ -13,7 +13,7 @@ const qi = (v: unknown, fb: number): number => { const s = qs(v); return s ? par
 router.post(
   '/returns',
   authenticate,
-  requireRole('Sales', 'Manager'),
+  requireRole('Sales', 'Manager', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ret = await returnsService.createReturn(
@@ -36,7 +36,7 @@ router.post(
 router.get(
   '/returns',
   authenticate,
-  requireRole('Admin', 'Manager', 'Finance_Officer'),
+  requireRole('Admin', 'Manager', 'Finance_Officer', 'Sales'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await returnsService.list({

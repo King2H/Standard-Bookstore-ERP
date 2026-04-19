@@ -23,8 +23,8 @@ function parseFilters(req: Request) {
   };
 }
 
-// All report endpoints require Manager or Admin
-const reportAccess = [authenticate, requireRole('Manager', 'Admin')];
+// All report endpoints require Manager, Admin, or Finance_Officer
+const reportAccess = [authenticate, requireRole('Manager', 'Admin', 'Finance_Officer')];
 
 // ── CSV helper ────────────────────────────────────────────────────────────────
 

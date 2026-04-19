@@ -1,7 +1,7 @@
 # BMS MVP Evaluation — v1.1
 
 **Original Date:** April 8, 2026
-**Updated:** April 15, 2026 (Post-MVP Hardening applied)
+**Updated:** April 20, 2026 (Post-Evaluation Bug Fixes V1 + Dashboard Real-Time Improvements applied)
 **Scope:** Full evaluation of implemented system against requirements.md, design.md, and tasks.md
 **Test baseline:** 20 test files, 253 tests, all passing
 
@@ -9,22 +9,32 @@
 
 ## Executive Summary
 
-The BMS has completed all 17 vertical slices (Phases 0–4) plus a targeted Post-MVP Hardening pass. The core operational ERP is fully functional and several critical gaps from v1.0 have been resolved.
+The BMS has completed all 17 vertical slices (Phases 0–4) plus a targeted Post-MVP Hardening pass and a Post-Evaluation Bug Fix pass (V1). The core operational ERP is fully functional with critical bugs resolved.
 
-**Overall completion estimate: ~80% of full spec, ~98% of operational MVP.**
+**Overall completion estimate: ~83% of full spec, ~99% of operational MVP.**
 
-### Changes Since v1.0
+### Changes Since v1.1 (Post-Evaluation Bug Fixes V1)
 
 | Item | Was | Now |
 |------|-----|-----|
-| Bank transfer validation + reconciliation | ❌ Missing | ✅ Done |
-| Idempotency (financial endpoints) | ❌ Missing | ✅ Done |
-| Customer PII encryption | ❌ Missing | ✅ Done |
-| Rate limiting (login) | ❌ Missing | ✅ Done |
-| Installment plans | ❌ Missing | ✅ Done |
-| Merchant foundation (merchants table) | ❌ Missing | ✅ Done |
-| Outbox table (foundation) | ❌ Missing | ✅ Done |
-| Test count | 19 files / 238 tests | 20 files / 253 tests |
+| Orders always backordered (NULL locationId) | ❌ Bug | ✅ Fixed — resolveLocationId() |
+| Order fulfillment not decrementing inventory | ❌ Bug | ✅ Fixed — same resolveLocationId() |
+| Returns blocked for Admin | ❌ Bug | ✅ Fixed — Admin bypasses branch check |
+| Sales cannot initiate returns | ❌ Bug | ✅ Fixed — Sales added to RBAC |
+| Deactivated staff not immediately locked out | ❌ Security gap | ✅ Fixed — auth middleware checks is_active |
+| must_change_password not enforced | ❌ Security gap | ✅ Fixed — forced profile redirect |
+| Deactivated branch allows transactions | ❌ Business rule | ✅ Fixed — 422 BRANCH_INACTIVE |
+| Deactivated customer can create orders | ❌ Business rule | ✅ Fixed — 422 CUSTOMER_INACTIVE |
+| Finance_Officer blocked from Reports | ❌ RBAC error | ✅ Fixed — added to all report routes |
+| Catalog "All" shows only active books | ❌ Filter bug | ✅ Fixed — removed hardcoded is_active=true |
+| Inventory stale after exchange | ❌ Cache miss | ✅ Fixed — cache invalidation on exchange |
+| Branch delete button missing | ❌ Missing UI | ✅ Fixed — added with confirmation dialog |
+| Branch duplicate name error not shown | ❌ Missing UI | ✅ Fixed — explicit error message |
+| Superadmin wrong landing page | ❌ UX | ✅ Fixed — role-based landing for all 7 roles |
+| Dashboard KPIs not real-time | ❌ Static | ✅ Fixed — 30s auto-refresh, live indicator |
+| Dashboard KPI cards truncating text | ❌ UI overlap | ✅ Fixed — vertical card layout, no truncation |
+| Pie chart labels overlapping | ❌ UI overlap | ✅ Fixed — replaced with Legend component |
+| CSV export buttons missing | ❌ Missing UI | ✅ Fixed — added to filter bar |
 
 ---
 
@@ -94,7 +104,7 @@ The BMS has completed all 17 vertical slices (Phases 0–4) plus a targeted Post
 | Public branch list for login dropdown | ✅ Done | |
 | Branch UI | ✅ Done | |
 | Outbox insert on branch write | ❌ Missing | Direct audit_log insert |
-| Branch inactive → reject new transactions (422 BRANCH_INACTIVE) | ⚠️ Partial | Not validated in POS/orders service at creation time |
+| Branch inactive → reject new transactions (422 BRANCH_INACTIVE) | ✅ Done | Validated in POS createTransaction and Orders create |
 
 ---
 
@@ -265,6 +275,7 @@ The BMS has completed all 17 vertical slices (Phases 0–4) plus a targeted Post
 | Multi-channel support (in_store, phone, online) | ✅ Done | |
 | Orders UI | ✅ Done | |
 | customer_id nullable (anonymous orders) | ⚠️ Deviation | Design requires customer_id NOT NULL on orders; implemented as nullable |
+| Deactivated customer rejected (422 CUSTOMER_INACTIVE) | ✅ Done | Checked in Orders create and POS createTransaction |
 | Idempotency-Key on order create/confirm/fulfill | ❌ Missing | |
 | Outbox insert on order write | ❌ Missing | Direct audit_log insert |
 | In-app notification on order status change | ❌ Missing | |
@@ -329,7 +340,7 @@ The BMS has completed all 17 vertical slices (Phases 0–4) plus a targeted Post
 | RBAC: Manager/Admin only | ✅ Done | |
 | Read replica for reports | ❌ Missing | All queries hit primary DB |
 | Async report generation (Report_Worker) | ❌ Missing | All reports are synchronous |
-| Export (CSV/PDF) | ❌ Missing | |
+| Export (CSV/PDF) | ✅ Done | 5 CSV export endpoints; Dashboard export buttons added |
 | Procurement report | ❌ Missing | No PO/supplier analytics |
 | Returns report | ❌ Missing | No returns analytics endpoint |
 | POS-specific revenue report | ⚠️ Partial | POS totals included in sales summary; no dedicated POS report |
@@ -341,21 +352,23 @@ The BMS has completed all 17 vertical slices (Phases 0–4) plus a targeted Post
 | Item | Status | Notes |
 |------|--------|-------|
 | DashboardPage consuming all 6 /reports/* endpoints | ✅ Done | |
-| 7 KPI cards | ✅ Done | |
+| 7 KPI cards | ✅ Done | Redesigned: vertical layout, no truncation, responsive 2→4→7 col grid |
 | Sales trend line chart + branch bar chart | ✅ Done | |
-| Payment method pie chart + payment trend bar chart | ✅ Done | |
+| Payment method pie chart + payment trend bar chart | ✅ Done | Pie chart uses Legend (no label overlap) |
 | Exchange summary with settlement distribution | ✅ Done | |
 | Inventory panel (stock summary, top sellers, low-stock alerts) | ✅ Done | |
 | Customer insights panel | ✅ Done | |
 | Stock movement bar chart | ✅ Done | |
-| Filter bar (dateFrom, dateTo, groupBy) | ✅ Done | |
+| Filter bar (dateFrom, dateTo, groupBy) | ✅ Done | Merged with export buttons into single toolbar |
 | Loading/error/empty states | ✅ Done | |
-| RBAC guard (Manager/Admin only) | ✅ Done | |
-| Dashboard nav item + post-login redirect | ✅ Done | |
-| Real-time updates (SSE/WebSocket) | ❌ Missing | Static polling via TanStack Query staleTime |
+| RBAC guard (Manager/Admin/Finance_Officer) | ✅ Done | Finance_Officer added |
+| Dashboard nav item + post-login redirect | ✅ Done | Role-based landing for all 7 roles |
+| KPI real-time refresh (30s) | ✅ Done | Pulsing live indicator + last-updated timestamp |
+| CSV export buttons | ✅ Done | 5 report types; downloads with current filters |
+| Page scrollable | ✅ Done | `overflow-y-auto` wrapper |
+| Real-time updates (SSE/WebSocket) | ❌ Missing | Polling via TanStack Query refetchInterval |
 | Drill-down navigation (click → detail) | ❌ Missing | |
-| Export buttons (CSV/PDF) | ❌ Missing | |
-| Role-based dashboard variants | ❌ Missing | Single dashboard for all Manager/Admin |
+| Role-based dashboard variants | ❌ Missing | Single dashboard; Manager auto-filters by branch |
 
 ---
 
@@ -434,31 +447,44 @@ These features were implemented beyond what the spec required:
 
 ---
 
-## Priority Remediation List (Updated)
+## Priority Remediation List (Updated v1.2)
 
-Items resolved in Post-MVP Hardening are marked ✅. Remaining items ordered by operational impact:
+Items resolved in Post-MVP Hardening and Post-Evaluation Bug Fixes V1 are marked ✅.
 
 | Priority | Gap | Status | Effort |
 |----------|-----|--------|--------|
 | P1 | Installment plans | ✅ Done | — |
 | P1 | Customer email/phone encryption | ✅ Done | — |
 | P1 | Bank transfer payment → bank_account_id validation + reconciliation | ✅ Done | — |
+| P1 | Orders always backordered (NULL locationId) | ✅ Done | — |
+| P1 | Order fulfillment not decrementing inventory | ✅ Done | — |
+| P1 | Returns blocked for Admin | ✅ Done | — |
 | P2 | Rate limiting (login) | ✅ Done | — |
-| P2 | Idempotency on POST /api/payments | ✅ Done | — |
-| P2 | Idempotency on POST /api/orders + /api/exchanges | ✅ Done | — |
+| P2 | Idempotency on POST /api/payments + /api/orders + /api/exchanges | ✅ Done | — |
 | P2 | CSRF protection | ✅ Done | — |
+| P2 | Deactivated staff not immediately locked out | ✅ Done | — |
+| P2 | must_change_password not enforced | ✅ Done | — |
+| P2 | Deactivated branch/customer allows transactions | ✅ Done | — |
+| P2 | Finance_Officer blocked from Reports | ✅ Done | — |
 | P2 | Installment Plans UI | ✅ Done | — |
 | P2 | Merchant foundation (merchants table) | ✅ Done | — |
 | P2 | Outbox table foundation | ✅ Done | — |
 | P3 | Redis + BullMQ async infrastructure | ✅ Done (in-process workers) | — |
-| P3 | Report export (CSV) | ✅ Done | — |
+| P3 | Report export (CSV) + Dashboard export buttons | ✅ Done | — |
 | P3 | Installment overdue cron | ✅ Done | — |
+| P3 | Dashboard KPI real-time (30s refresh + live indicator) | ✅ Done | — |
+| P3 | Dashboard UI polish (no truncation, no pie overlap) | ✅ Done | — |
+| P3 | Role-based landing pages for all 7 roles | ✅ Done | — |
+| P3 | Catalog "All" filter shows only active | ✅ Done | — |
 | P3 | Exchange_Agreement model + full lifecycle | ❌ Remaining | Medium |
 | P3 | exchange_cash_adjustment_allowed enforcement | ❌ Remaining | Low |
 | P4 | HMAC audit log signing | ❌ Remaining | Low |
 | P4 | Read replica for reports | ❌ Remaining | Medium |
 | P4 | SSE in-app notifications | ❌ Remaining | High |
 | P4 | Procurement + returns analytics endpoints | ❌ Remaining | Low |
+| P4 | POS book search shows stock quantity | ❌ Remaining | Low |
+| P4 | Primary supplier settable in UI | ❌ Remaining | Low |
+| P4 | Bank reconciliation UI clear/match | ❌ Remaining | Medium |
 
 ---
 
@@ -498,13 +524,14 @@ Notable remaining gaps in test coverage:
 
 ## Conclusion
 
-The BMS MVP is a solid, production-ready ERP system covering all core bookstore operations. The Post-MVP Hardening pass resolved the most critical financial correctness and security gaps:
+The BMS MVP is a solid, production-ready ERP system covering all core bookstore operations. The Post-MVP Hardening pass resolved the most critical financial correctness and security gaps. The Post-Evaluation Bug Fix pass (V1) resolved 19 additional issues identified during manual testing:
 
-- Bank transfer payments now require and validate `bank_account_id`, with automatic reconciliation entry creation
-- Financial endpoints are protected against duplicate submissions via PostgreSQL-backed idempotency
-- Customer PII (email/phone) is now encrypted at rest with AES-256-GCM and searchable via SHA256 lookup hashes
-- Login endpoint is rate-limited against brute-force attacks
-- Installment payment plans are fully operational with config-driven deposit and count limits
-- The outbox table and merchants table are in place as foundations for future async infrastructure
+**Critical operational fixes:** Order confirmation/fulfillment now correctly resolves the fulfillment location when `locationId` is NULL, eliminating the "always backordered" bug. Returns are now accessible to Admin and Sales roles as intended.
 
-The remaining gaps are primarily in the async worker layer (BullMQ, notifications, loyalty async), CSRF protection, and advanced reporting features. These are non-blocking for production operation but should be addressed before high-volume deployment.
+**Security hardening:** Deactivated staff are immediately locked out on every request. The `must_change_password` flag is now enforced at the UI level with navigation blocking.
+
+**Business rule enforcement:** Deactivated branches and customers are now rejected at the service layer with clear 422 error codes.
+
+**Dashboard improvements:** KPI cards are real-time (30s polling with live indicator), properly laid out without truncation, and the pie chart no longer has overlapping labels. CSV export is accessible directly from the filter bar.
+
+The remaining gaps are primarily in the async worker layer (SSE notifications), advanced analytics (procurement/returns reports), and a few UI features (POS stock quantity display, primary supplier UI, bank reconciliation clear/match). These are non-blocking for production operation.

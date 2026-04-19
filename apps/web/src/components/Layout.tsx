@@ -13,7 +13,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard',     label: 'Dashboard',     icon: '📊', roles: ['Admin', 'Manager'] },
+  { id: 'dashboard',     label: 'Dashboard',     icon: '📊', roles: ['Admin', 'Manager', 'Finance_Officer'] },
   { id: 'branches',      label: 'Branches',      icon: '🏪', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
   { id: 'staff',         label: 'Staff',         icon: '👥', roles: ['Super_Admin', 'Admin', 'Manager'] },
   { id: 'locations',     label: 'Locations',     icon: '📍', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
@@ -24,7 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'customers',    label: 'Customers',     icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer', 'Stock_Clerk', 'Purchasor'] },
   { id: 'pos',          label: 'POS',           icon: '🛒', roles: ['Admin', 'Manager', 'Sales'] },
   { id: 'returns',      label: 'Returns',       icon: '↩',  roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
-  { id: 'orders',       label: 'Orders',        icon: '📦', roles: ['Admin', 'Manager', 'Sales'] },
+  { id: 'orders',       label: 'Orders',        icon: '📦', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
   { id: 'payments',     label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
   { id: 'installments', label: 'Installments',  icon: '📅', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
   { id: 'exchanges',    label: 'Exchanges',     icon: '🔁', roles: ['Admin', 'Manager', 'Sales'] },

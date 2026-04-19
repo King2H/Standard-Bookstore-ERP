@@ -96,7 +96,11 @@ export async function createReturn(
   if (!txRes.rows.length) throw new NotFoundError('Transaction');
   const tx = txRes.rows[0] as Record<string, unknown>;
   if (tx.status === 'voided') throw new BusinessError('TRANSACTION_VOIDED', 'Cannot return a voided transaction');
-  if (Number(tx.branch_id) !== staffCtx.branchId) throw new ForbiddenError('Transaction belongs to a different branch');
+  // Admin and Super_Admin have cross-branch authority; Sales and Stock_Clerk are branch-scoped
+  const isCrossBranchRole = ['Admin', 'Super_Admin'].includes(staffCtx.role);
+  if (!isCrossBranchRole && Number(tx.branch_id) !== staffCtx.branchId) {
+    throw new ForbiddenError('Transaction belongs to a different branch');
+  }
   const windowDays = await getReturnWindowDays(staffCtx.branchId);
   const daysSinceTx = (Date.now() - (tx.created_at as Date).getTime()) / (1000 * 60 * 60 * 24);
   if (daysSinceTx > windowDays) {
