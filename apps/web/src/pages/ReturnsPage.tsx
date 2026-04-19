@@ -141,7 +141,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
 
       {/* ── New Return tab ── */}
       {tab === 'new' && (
-        <div className="flex-1 overflow-auto p-4 max-w-3xl mx-auto w-full space-y-4">
+        <div className="flex-1 overflow-auto p-4 pb-6 max-w-3xl mx-auto w-full space-y-4">
 
           {/* Step 1: Find transaction */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">

@@ -78,7 +78,7 @@ export default function InventoryPage({ userRole }: { userRole?: Role }) {
           </button>
         ))}
       </div>
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0">
         {tab === 'stock'    && <StockLevelsTab userRole={userRole} onNavigate={setTab} />}
         {tab === 'stock-in' && <StockInTab userRole={userRole} />}
         {tab === 'stock-out' && <StockOutTab userRole={userRole} />}
@@ -316,8 +316,8 @@ function AdjustTab({ userRole }: { userRole?: Role }) {
       </div>
 
       {/* Right: adjustment form */}
-      <div className="flex-1 flex items-start justify-center p-8">
-        <div className="w-full max-w-md">
+      <div className="flex-1 overflow-auto flex items-start justify-center p-8">
+        <div className="w-full max-w-md pb-6">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Stock Adjustment</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">Record a manual stock change with a reason code.</p>
 
@@ -467,8 +467,8 @@ function TransferTab({ userRole }: { userRole?: Role }) {
       </div>
 
       {/* Right: transfer form */}
-      <div className="flex-1 flex items-start justify-center p-8">
-        <div className="w-full max-w-md">
+      <div className="flex-1 overflow-auto flex items-start justify-center p-8">
+        <div className="w-full max-w-md pb-6">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Stock Transfer</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">Move stock between locations within this branch.</p>
 
@@ -853,8 +853,8 @@ function StockInTab({ userRole }: { userRole?: Role }) {
       </div>
 
       {/* Right: form */}
-      <div className="flex-1 flex items-start justify-center p-8">
-        <div className="w-full max-w-md">
+      <div className="flex-1 overflow-auto flex items-start justify-center p-8">
+        <div className="w-full max-w-md pb-6">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-emerald-500 text-xl">⬇️</span>
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">Stock In</h2>
@@ -1020,8 +1020,8 @@ function StockOutTab({ userRole }: { userRole?: Role }) {
       </div>
 
       {/* Right: form */}
-      <div className="flex-1 flex items-start justify-center p-8">
-        <div className="w-full max-w-md">
+      <div className="flex-1 overflow-auto flex items-start justify-center p-8">
+        <div className="w-full max-w-md pb-6">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-blue-500 text-xl">⬆️</span>
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">Stock Out</h2>

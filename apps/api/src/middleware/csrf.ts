@@ -28,6 +28,7 @@ export function setCsrfCookie(res: Response): string {
     httpOnly: false,       // Must be readable by JS
     sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
+    path: '/',             // Accessible from all paths in the browser
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days — matches refresh token lifetime
   });
   return token;

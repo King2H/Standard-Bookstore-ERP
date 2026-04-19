@@ -142,7 +142,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className="p-6 max-w-3xl mx-auto space-y-6 pb-8">
       <div className="flex items-center gap-3">
         <button onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back</button>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{editing ? 'Edit Purchase Order' : 'New Purchase Order'}</h2>
@@ -309,7 +309,7 @@ function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated:
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-5">
+    <div className="p-6 max-w-2xl mx-auto space-y-5 pb-8">
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back to PO</button>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Receive Goods — PO #{poProp.id}</h2>

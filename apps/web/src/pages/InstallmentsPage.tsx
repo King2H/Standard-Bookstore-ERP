@@ -126,7 +126,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
 
       {/* ── Lookup / View Plan ── */}
       {tab === 'lookup' && (
-        <div className="flex-1 overflow-auto p-4 space-y-4 max-w-3xl mx-auto w-full">
+        <div className="flex-1 overflow-auto p-4 pb-6 space-y-4 max-w-3xl mx-auto w-full">
           {/* Order lookup */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Look up by Order ID</h3>
@@ -260,7 +260,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
 
       {/* ── New Plan ── */}
       {tab === 'new' && canCreate(userRole) && (
-        <div className="flex-1 overflow-auto p-4 max-w-xl mx-auto w-full space-y-4">
+        <div className="flex-1 overflow-auto p-4 pb-6 max-w-xl mx-auto w-full space-y-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Create Installment Plan</h3>
 

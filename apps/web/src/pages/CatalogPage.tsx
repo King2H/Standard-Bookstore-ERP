@@ -63,7 +63,7 @@ export default function CatalogPage({ userRole }: { userRole?: Role }) {
           </button>
         ))}
       </div>
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0">
         {tab === 'books' && <BooksTab userRole={userRole} />}
         {tab === 'authors' && <AuthorsTab userRole={userRole} />}
         {tab === 'categories' && <CategoriesTab userRole={userRole} />}

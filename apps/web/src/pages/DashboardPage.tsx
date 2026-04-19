@@ -32,7 +32,7 @@ interface ExchangeReport {
 }
 interface InventoryReport {
   summary: { totalBooks: number; totalStockUnits: number; lowStockItems: number; outOfStockItems: number };
-  lowStockItems: Array<{ bookId: number; title: string; locationName: string; quantity: number; reorderPoint: number }>;
+  lowStockItems: Array<{ bookId: number; title: string; locationId: number; locationName: string; quantity: number; reorderPoint: number }>;
   topSellingBooks: Array<{ bookId: number; title: string; unitsSold: number; revenue: number }>;
   stockMovement: Array<{ period: string; stockIn: number; stockOut: number }>;
 }
@@ -365,7 +365,7 @@ export default function DashboardPage({ userRole }: DashboardPageProps) {
                   <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-2">⚠️ Low Stock Alerts</p>
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {inventory.lowStockItems.slice(0, 6).map(item => (
-                      <div key={`${item.bookId}-${item.locationName}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">
+                      <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">
                         <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
                         <span className="text-gray-500 dark:text-gray-400 truncate">{item.locationName}</span>
                         <span className="text-amber-700 dark:text-amber-300 font-medium whitespace-nowrap">{item.quantity}/{item.reorderPoint}</span>

@@ -1,7 +1,8 @@
 /**
  * In-memory rate limiter — no Redis required.
- * Uses a sliding window counter per IP.
- * Suitable for single-instance deployments; for multi-instance, swap to Redis.
+ * Uses a sliding window counter per key.
+ * Login limiter keys by IP:username to avoid blocking all users from the same IP
+ * (important for localhost/office environments where everyone shares one IP).
  */
 import type { Request, Response, NextFunction } from 'express';
 
@@ -31,11 +32,17 @@ function getIp(req: Request): string {
  * @param maxRequests - max requests allowed in the window
  * @param windowMs - window duration in milliseconds
  * @param keyPrefix - prefix to namespace different limiters
+ * @param keyFn - optional function to derive the rate limit key from the request
  */
-export function rateLimit(maxRequests: number, windowMs: number, keyPrefix = 'rl') {
+export function rateLimit(
+  maxRequests: number,
+  windowMs: number,
+  keyPrefix = 'rl',
+  keyFn?: (req: Request) => string,
+) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const ip = getIp(req);
-    const key = `${keyPrefix}:${ip}`;
+    const keyPart = keyFn ? keyFn(req) : getIp(req);
+    const key = `${keyPrefix}:${keyPart}`;
     const now = Date.now();
 
     let entry = store.get(key);
@@ -55,7 +62,7 @@ export function rateLimit(maxRequests: number, windowMs: number, keyPrefix = 'rl
       res.setHeader('Retry-After', retryAfter);
       res.status(429).json({
         error: 'RATE_LIMIT_EXCEEDED',
-        message: 'Too many requests. Please try again later.',
+        message: 'Too many login attempts. Please try again later.',
         retryAfter,
       });
       return;
@@ -65,6 +72,21 @@ export function rateLimit(maxRequests: number, windowMs: number, keyPrefix = 'rl
   };
 }
 
-// Pre-configured limiters
-export const loginRateLimit = rateLimit(10, 15 * 60 * 1000, 'login');   // 10 per 15 min
-export const apiRateLimit   = rateLimit(200, 60 * 1000, 'api');          // 200 per minute
+/**
+ * Login rate limiter — keyed by IP:username.
+ * This prevents one user's failed attempts from locking out other users
+ * on the same IP (e.g. office/localhost environments).
+ * Limit: 10 attempts per username per IP per 15 minutes.
+ */
+export const loginRateLimit = rateLimit(
+  10,
+  15 * 60 * 1000,
+  'login',
+  (req: Request) => {
+    const ip = getIp(req);
+    const username = (req.body?.username as string | undefined)?.toLowerCase().trim() ?? 'unknown';
+    return `${ip}:${username}`;
+  },
+);
+
+export const apiRateLimit = rateLimit(200, 60 * 1000, 'api'); // 200 per minute per IP

@@ -2,6 +2,7 @@
 
 let accessToken: string | null = null;
 let currentBranchId: number | null = null;
+let csrfTokenMemory: string | null = null; // In-memory fallback for CSRF token
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
@@ -19,8 +20,18 @@ export function getCurrentBranchId() {
   return currentBranchId;
 }
 
-/** Read the csrf-token cookie set by the server after login. */
+/** Store CSRF token in memory (called after login/refresh). */
+export function setCsrfToken(token: string | null) {
+  csrfTokenMemory = token;
+}
+
+/**
+ * Get CSRF token — tries in-memory first (most reliable),
+ * then falls back to reading the cookie (works when path='/' is set).
+ */
 function getCsrfToken(): string | null {
+  if (csrfTokenMemory) return csrfTokenMemory;
+  // Cookie fallback
   const match = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
