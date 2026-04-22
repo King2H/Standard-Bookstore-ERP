@@ -477,6 +477,9 @@ This table defines which TanStack Query keys must be invalidated when each opera
 | April 2026 | F-025 | Dashboard not branch-specific — Manager role pre-populates branchId from JWT; KPI auto-refreshes every 30s with live indicator and last-updated timestamp | DashboardPage.tsx | ✅ Done |
 | April 2026 | F-026 | CSV export button missing — added export buttons for all report types in Dashboard (merged into filter bar) | DashboardPage.tsx | ✅ Done |
 | April 2026 | Dashboard UI | KPI cards redesigned — vertical layout, no truncation, proper responsive grid (2→4→7 cols); pie chart labels replaced with Legend to eliminate overlap; page made scrollable | DashboardPage.tsx | ✅ Done |
+| April 2026 | Staff Multi-Role | Staff can now hold multiple roles per branch — migration 1700000029 drops composite PK on staff_branch_roles, adds serial PK + UNIQUE(staff_id, branch_id, role); login picks first role; StaffPage RoleEditor updated | migration 1700000029, auth.service.ts, StaffPage.tsx | ✅ Done |
+| April 2026 | Catalog Search Fix | Fixed all SQL parameterized placeholder bugs in searchBooks — isActive, ISBN, SKU, author, category, genre, tag conditions all corrected ($${p++}); search field now covers title+author+SKU via single OR condition; dedicated ?author= JOIN filter added; Active/Inactive filter working | catalog.service.ts, catalog.routes.ts, CatalogPage.tsx | ✅ Done |
+| April 2026 | Inventory Transfer | Destination dropdown now fetches locations from /branches/:branchId/locations using current session branch on mount; updates when book from different branch is selected; no longer depends on inventory records existing | InventoryPage.tsx | ✅ Done |
 
 ---
 
@@ -484,8 +487,19 @@ This table defines which TanStack Query keys must be invalidated when each opera
 
 | Status | Count | Fix IDs |
 |--------|-------|---------|
-| ✅ Done | 19 | F-001, F-002, F-003, F-004, F-006, F-007, F-008, F-009, F-013, F-014, F-015, F-016, F-017, F-018, F-023, F-025, F-026, F-027 + Dashboard UI |
+| ✅ Done | 22 | F-001, F-002, F-003, F-004, F-006, F-007, F-008, F-009, F-013, F-014, F-015, F-016, F-017, F-018, F-023, F-025, F-026, F-027 + Dashboard UI + Staff Multi-Role + Catalog Search Fix + Inventory Transfer |
 | ⬜ Pending | 9 | F-005, F-010, F-011, F-012, F-019, F-020, F-021, F-022, F-024 |
+
+### Pending Items Notes
+- **F-005** (ISBN validation): The `validateIsbn13` function is correct; the issue was the search filter bug (now fixed). ISBN search via `?isbn=` now works correctly.
+- **F-019** (Inventory search stale): Cache invalidation is in place for all stock operations. Confirmed working.
+- **F-010, F-011, F-012** (POS/Returns/Exchange UI gaps): Deferred — require significant UI work.
+- **F-020, F-021, F-022** (Supplier/POS/Discount): Deferred — medium priority UI/logic work.
+- **F-024** (Bank reconciliation UI): Deferred — requires dedicated reconciliation UI work.
+
+### Known Limitations (Deferred to Next Phase)
+- Stock transfer is within-branch only (location to location). Cross-branch transfer requires a separate inter-branch transfer workflow with approval.
+- Branch-to-branch stock movement is tracked as separate stock-out + stock-in operations with a transfer reference.
 
 ---
 

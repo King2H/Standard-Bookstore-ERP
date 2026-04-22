@@ -142,9 +142,6 @@ export default function StaffPage() {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'assignments' });
 
-  const getUsedBranchIds = (currentIndex: number, allAssignments: { branchId: number }[]) =>
-    allAssignments.map((a, i) => i !== currentIndex ? a.branchId : null).filter(Boolean);
-
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -190,17 +187,16 @@ export default function StaffPage() {
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
                 Branch & Role Assignments <span className="text-red-500">*</span>
-                <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">(one role per branch)</span>
+                <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">(multiple roles per branch allowed)</span>
               </label>
               <button type="button"
                 onClick={() => {
-                  const usedIds = fields.map(f => (f as unknown as { branchId: number }).branchId);
-                  const nextBranch = branches.find(b => !usedIds.includes(b.id));
-                  if (nextBranch) append({ branchId: nextBranch.id, role: 'Sales' });
+                  const firstBranch = branches[0];
+                  if (firstBranch) append({ branchId: firstBranch.id, role: 'Sales' });
                 }}
-                disabled={fields.length >= branches.length}
+                disabled={branches.length === 0}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                + Add Branch Assignment
+                + Add Role Assignment
               </button>
             </div>
             {errors.assignments?.root && <p className="text-red-500 text-xs mb-2">{errors.assignments.root.message}</p>}
@@ -209,14 +205,9 @@ export default function StaffPage() {
                 <div key={field.id} className="flex items-center gap-2">
                   <select {...register(`assignments.${index}.branchId`)} className={inputCls}>
                     <option value="">Select branch...</option>
-                    {branches.map(b => {
-                      const usedIds = getUsedBranchIds(index, fields as { branchId: number }[]);
-                      return (
-                        <option key={b.id} value={b.id} disabled={usedIds.includes(b.id)}>
-                          {b.name}{usedIds.includes(b.id) ? ' (already assigned)' : ''}
-                        </option>
-                      );
-                    })}
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
                   </select>
                   <select {...register(`assignments.${index}.role`)} className={inputCls}>
                     {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
@@ -436,9 +427,6 @@ function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
     ));
   };
 
-  const usedBranchIds = (currentIndex: number) =>
-    assignments.map((a, i) => i !== currentIndex ? a.branchId : null).filter(Boolean) as number[];
-
   const selectCls = 'flex-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors';
 
   return (
@@ -447,7 +435,7 @@ function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
         <div key={i} className="flex items-center gap-2">
           <select value={a.branchId} onChange={e => update(i, 'branchId', parseInt(e.target.value, 10))} className={selectCls}>
             {branches.map(b => (
-              <option key={b.id} value={b.id} disabled={usedBranchIds(i).includes(b.id)}>{b.name}</option>
+              <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
           <select value={a.role} onChange={e => update(i, 'role', e.target.value)} className={selectCls}>
@@ -464,13 +452,12 @@ function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
       <div className="flex items-center gap-2 pt-1">
         <button type="button"
           onClick={() => {
-            const used = assignments.map(a => a.branchId);
-            const next = branches.find(b => !used.includes(b.id));
-            if (next) setAssignments(prev => [...prev, { branchId: next.id, role: 'Sales' }]);
+            const firstBranch = branches[0];
+            if (firstBranch) setAssignments(prev => [...prev, { branchId: firstBranch.id, role: 'Sales' }]);
           }}
-          disabled={assignments.length >= branches.length}
+          disabled={branches.length === 0}
           className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 transition-colors">
-          + Add Branch
+          + Add Role
         </button>
         <button type="button" onClick={() => onSave(assignments)}
           className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg transition-colors">

@@ -300,12 +300,15 @@ Applied from `BMS_Fix_Tracker_V1.md` — 19 of 27 fixes completed.
 - **F-026** — CSV export buttons missing: export buttons for all 5 report types in Dashboard filter bar
 - **F-027** — DB test data cleanup: `npm run reseed` executed
 
-**Dashboard Real-Time & UI Polish ✅**
-- KPI cards redesigned: vertical layout (icon+label row, value row), no text truncation, responsive grid (2→4→7 cols)
-- Live indicator: pulsing green dot + "Live · 30s" label + last-updated timestamp (HH:MM:SS)
-- Pie chart labels replaced with `<Legend>` component — eliminates overlap on small containers
-- Filter bar and export buttons merged into single toolbar row
-- Page wrapped in `overflow-y-auto` for proper scrolling
+**Post-Evaluation Bug Fixes (V1) — Session 2 ✅**
+
+Additional fixes applied in a follow-up session:
+
+- **Staff Multi-Role per Branch** — Migration `1700000029` changes `staff_branch_roles` from `PRIMARY KEY (staff_id, branch_id)` to a serial PK with `UNIQUE (staff_id, branch_id, role)`. A staff member can now hold e.g. Manager + Finance_Officer at the same branch. Login picks the first role for the selected branch (backward compatible). StaffPage RoleEditor updated to allow multiple role assignments per branch.
+
+- **Catalog Search — Complete Fix** — Root cause was systematic missing `$` prefix in PostgreSQL parameterized placeholders (`${p++}` instead of `$${p++}`) across ISBN, SKU, isActive, and author conditions in `searchBooks`. All conditions now correctly use `$${p++}`. Search field now covers title + author name + SKU via a single OR condition. Dedicated `?author=` JOIN-based filter added. Active/Inactive dropdown filter confirmed working.
+
+- **Inventory Transfer — Destination Dropdown** — Destination locations now fetched directly from `GET /branches/:branchId/locations` using the current session branch on mount. No longer depends on inventory records existing at the destination. Updates automatically when a book from a different branch is selected. Note: transfer remains within-branch only (location to location); cross-branch transfer is a deferred feature.
 
 ---
 
@@ -318,7 +321,7 @@ Applied from `BMS_Fix_Tracker_V1.md` — 19 of 27 fixes completed.
 | Database | PostgreSQL 16 (raw pg driver, no ORM) |
 | Auth | JWT (15 min) + httpOnly refresh cookie (7 days) |
 | Encryption | AES-256-GCM (column-level, bank account data) |
-| Migrations | node-pg-migrate (.cjs format, 28 migrations) |
+| Migrations | node-pg-migrate (.cjs format, 29 migrations) |
 | Testing | Vitest + Supertest (integration tests, real DB) |
 | Container | Docker + Docker Compose |
 
@@ -534,3 +537,4 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 | 1700000026_create_payments | Order payments, order refunds |
 | 1700000027_create_exchanges | Exchanges, exchange_incoming_items, exchange_outgoing_items |
 | 1700000028_hardening | Idempotency keys, outbox, customer PII columns, installment plans, merchants, bank_account_id on payments |
+| 1700000029_staff_multi_role | Drop composite PK on staff_branch_roles; add serial PK + UNIQUE(staff_id, branch_id, role) for multi-role support |

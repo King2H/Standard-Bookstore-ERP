@@ -53,6 +53,8 @@ router.get(
       const result = await catalogService.searchBooks({
         q:        qs(req.query.q),
         isbn:     qs(req.query.isbn),
+        sku:      qs(req.query.sku),
+        author:   qs(req.query.author),
         genre:    qs(req.query.genre),
         category: qs(req.query.category),
         tag:      qs(req.query.tag),

@@ -106,9 +106,9 @@ export async function login(
     throw new AuthError('INVALID_CREDENTIALS', 'Invalid username or password');
   }
 
-  // 4. Verify branch role assignment
+  // 4. Verify branch role assignment — pick the first role if multiple exist for this branch
   const roleResult = await db.query(
-    `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2`,
+    `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC LIMIT 1`,
     [staff.id, branchId],
   );
 
@@ -437,6 +437,8 @@ export async function getStaffById(staffId: number): Promise<{
 }
 
 // ── Assign Roles ─────────────────────────────────────────────────────────────
+// Replaces ALL role assignments for a staff member with the provided set.
+// Supports multiple roles per branch (e.g. Manager + Finance_Officer at same branch).
 
 export async function assignRoles(
   staffId: number,
@@ -452,11 +454,12 @@ export async function assignRoles(
       [staffId],
     );
 
-    // Insert the new complete set
+    // Insert the new complete set — ON CONFLICT DO NOTHING handles duplicates gracefully
     for (const { branchId, role } of roles) {
       await client.query(
         `INSERT INTO staff_branch_roles (staff_id, branch_id, role)
-         VALUES ($1, $2, $3)`,
+         VALUES ($1, $2, $3)
+         ON CONFLICT (staff_id, branch_id, role) DO NOTHING`,
         [staffId, branchId, role],
       );
     }

@@ -69,6 +69,8 @@ export interface BookRecord {
 export interface SearchFilters {
   q?: string;
   isbn?: string;
+  sku?: string;
+  author?: string;
   genre?: string;
   category?: string;
   tag?: string;
@@ -569,26 +571,51 @@ export async function searchBooks(filters: SearchFilters): Promise<{
   const params: unknown[] = [];
   let p = 1;
 
-  // Full-text search
+  // Full-text search — covers title, author name, SKU via OR
   if (filters.q) {
-    const tsQuery = filters.q.trim().split(/\s+/).map(w => `${w}:*`).join(' & ');
-    conditions.push(`b.search_vector @@ to_tsquery('english', $${p++})`);
-    params.push(tsQuery);
+    const q = filters.q.trim();
+    conditions.push(`(
+      lower(b.title) LIKE lower($${p}) OR
+      lower(COALESCE(b.sku, '')) LIKE lower($${p}) OR
+      EXISTS (
+        SELECT 1 FROM book_authors ba_q
+        JOIN authors a_q ON a_q.id = ba_q.author_id
+        WHERE ba_q.book_id = b.id AND lower(a_q.name) LIKE lower($${p})
+      )
+    )`);
+    params.push(`%${q}%`);
+    p += 1;
   }
 
-  // Exact ISBN
+  // Exact ISBN (strip dashes/spaces)
   if (filters.isbn) {
     conditions.push(`b.isbn = $${p++}`);
     params.push(filters.isbn.replace(/[-\s]/g, ''));
   }
 
-  // Genre
+  // SKU partial match
+  if (filters.sku) {
+    conditions.push(`lower(b.sku) LIKE lower($${p++})`);
+    params.push(`%${filters.sku.trim()}%`);
+  }
+
+  // Author partial match via JOIN
+  if (filters.author) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM book_authors ba2
+      JOIN authors a2 ON a2.id = ba2.author_id
+      WHERE ba2.book_id = b.id AND lower(a2.name) LIKE lower($${p++})
+    )`);
+    params.push(`%${filters.author.trim()}%`);
+  }
+
+  // Genre exact match (case-insensitive)
   if (filters.genre) {
     conditions.push(`lower(b.genre) = lower($${p++})`);
     params.push(filters.genre);
   }
 
-  // Category (join)
+  // Category via JOIN
   if (filters.category) {
     conditions.push(`EXISTS (
       SELECT 1 FROM book_categories bc2
@@ -598,7 +625,7 @@ export async function searchBooks(filters: SearchFilters): Promise<{
     params.push(filters.category);
   }
 
-  // Tag
+  // Tag via JOIN
   if (filters.tag) {
     conditions.push(`EXISTS (
       SELECT 1 FROM book_tags bt2
@@ -607,9 +634,9 @@ export async function searchBooks(filters: SearchFilters): Promise<{
     params.push(filters.tag);
   }
 
-  // Active filter - only apply if explicitly set; omitting means all records
+  // Active filter — only applied when explicitly set
   if (filters.isActive !== undefined) {
-    conditions.push(`b.is_active = ${p++}`);
+    conditions.push(`b.is_active = $${p++}`);
     params.push(filters.isActive);
   }
 
@@ -638,6 +665,8 @@ export async function searchBooks(filters: SearchFilters): Promise<{
        b.id, b.isbn, b.sku, b.title, b.genre, b.publisher, b.publisher_id,
        b.edition, b.language, b.format, b.description, b.cover_image_url,
        b.default_price, b.trade_value, b.is_active, b.created_at,
+       b.format_id, bf.code AS format_code, bf.label AS format_label,
+       b.edition_id, be.code AS edition_code, be.label AS edition_label,
        COALESCE(
          ARRAY_AGG(DISTINCT a.name ORDER BY a.name) FILTER (WHERE a.id IS NOT NULL),
          '{}'
@@ -660,14 +689,17 @@ export async function searchBooks(filters: SearchFilters): Promise<{
        ) AS tags,
        bbp.price AS branch_price
      FROM books b
+     LEFT JOIN book_formats bf ON bf.id = b.format_id
+     LEFT JOIN book_editions be ON be.id = b.edition_id
      LEFT JOIN book_authors ba ON ba.book_id = b.id
      LEFT JOIN authors a ON a.id = ba.author_id
      LEFT JOIN book_categories bc ON bc.book_id = b.id
      LEFT JOIN categories c ON c.id = bc.category_id
      LEFT JOIN book_tags bt ON bt.book_id = b.id
      LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $${p++}
+       AND bbp.format_id = 0 AND bbp.edition_id = 0
      ${whereClause}
-     GROUP BY b.id, bbp.price
+     GROUP BY b.id, bf.code, bf.label, be.code, be.label, bbp.price
      ORDER BY ${sortCol} ${sortDir}
      LIMIT $${p++} OFFSET $${p++}`,
     [...params, filters.branchId ?? null, pageSize, offset],

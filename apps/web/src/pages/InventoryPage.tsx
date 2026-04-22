@@ -2,7 +2,7 @@
 // Sub-pages: Stock Levels | Stock In | Stock Out | Adjust | Transfer | History | Low Stock Alerts
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api.js';
+import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 
 type Role = string;
@@ -394,20 +394,26 @@ function TransferTab({ userRole }: { userRole?: Role }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Use the selected book's branchId, or fall back to the current session branch
+  const targetBranchId = selectedBook?.branchId ?? getCurrentBranchId() ?? 0;
+
   const { data: stockData } = useQuery<InventoryList>({
     queryKey: ['inventory', bookSearch, '', false, 1],
     queryFn: () => api.get<InventoryList>(`/inventory?q=${encodeURIComponent(bookSearch)}&pageSize=10`),
     enabled: bookSearch.length > 1,
   });
 
-  // Get all locations for the branch (to populate destination dropdown)
-  const { data: allStock } = useQuery<InventoryList>({
-    queryKey: ['inventory', '', '', false, 1],
-    queryFn: () => api.get<InventoryList>('/inventory?pageSize=100'),
+  // Always fetch locations for the target branch — populated on mount, updates when book changes
+  const { data: branchLocations } = useQuery<{ items: Array<{ id: number; name: string; isDefaultFulfillment: boolean }> }>({
+    queryKey: ['branch-locations-transfer', targetBranchId],
+    queryFn: () => api.get(`/branches/${targetBranchId}/locations`),
+    enabled: targetBranchId > 0,
     staleTime: 60_000,
   });
-  const uniqueLocations = Array.from(
-    new Map((allStock?.items ?? []).map(r => [r.locationId, { id: r.locationId, name: r.locationName }])).values()
+
+  // Exclude the source location from the destination list
+  const availableLocations = (branchLocations?.items ?? []).filter(
+    l => l.id !== selectedBook?.locationId
   );
 
   if (!canWrite(userRole)) return <AccessDenied />;
@@ -492,8 +498,8 @@ function TransferTab({ userRole }: { userRole?: Role }) {
               <select value={toLocationId} onChange={e => setToLocationId(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">— Select destination —</option>
-                {uniqueLocations.filter(l => l.id !== selectedBook?.locationId).map(l => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
+                {availableLocations.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>
                 ))}
               </select>
             </div>

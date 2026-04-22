@@ -116,10 +116,20 @@ function BooksTab({ userRole }: { userRole?: Role }) {
     const p = new URLSearchParams();
     if (search) {
       const raw = search.replace(/[-\s]/g, '');
-      if (/^\d{10,13}$/.test(raw)) p.set('isbn', raw); else p.set('q', search);
+      // Pure 10-13 digits → exact ISBN match
+      if (/^\d{10,13}$/.test(raw)) {
+        p.set('isbn', raw);
+      // Looks like SKU: short alphanumeric starting with letters (e.g. "BK-001", "SKU123")
+      } else if (/^[A-Z]{2,5}[-_]?\d+$/i.test(search.trim())) {
+        p.set('sku', search.trim());
+      // Everything else → full-text search (title, author)
+      } else {
+        p.set('q', search);
+      }
     }
     if (genre) p.set('genre', genre);
     if (catId) p.set('category', catId);
+    if (authorId) p.set('author', authorId);
     if (status === 'active') p.set('is_active', 'true');
     else if (status === 'inactive') p.set('is_active', 'false');
     p.set('sortBy', sortBy); p.set('sortDir', sortDir);
@@ -192,7 +202,7 @@ function BooksTab({ userRole }: { userRole?: Role }) {
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <input value={searchRaw} onChange={e => setSearchRaw(e.target.value)} placeholder="Search title, author, ISBN…"
+          <input value={searchRaw} onChange={e => setSearchRaw(e.target.value)} placeholder="Search title, author, ISBN, SKU…"
             className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
           {searchRaw && <button onClick={() => setSearchRaw('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">✕</button>}
         </div>
