@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import WelcomeBanner from '../components/WelcomeBanner.js';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -7,7 +8,7 @@ import {
 import { api, getAccessToken, getCurrentBranchId } from '../lib/api.js';
 
 type Role = string;
-interface DashboardPageProps { userRole?: Role; }
+interface DashboardPageProps { userRole?: Role; onNavigate?: (page: string) => void; }
 
 // ── API types ─────────────────────────────────────────────────────────────────
 
@@ -54,9 +55,12 @@ type GroupBy = 'day' | 'week' | 'month';
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon, color }: { label: string; value: string; sub?: string; icon: string; color: string }) {
+function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; value: string; sub?: string; icon: string; color: string; onClick?: () => void }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2 min-w-0">
+    <div
+      onClick={onClick}
+      className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2 min-w-0 ${onClick ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all duration-150' : ''}`}
+    >
       <div className="flex items-center gap-2">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${color}`}>{icon}</div>
         <p className="text-xs text-gray-500 dark:text-gray-400 font-medium leading-tight">{label}</p>
@@ -109,7 +113,7 @@ function buildQs(filters: Filters): string {
 
 // ── Main DashboardPage ────────────────────────────────────────────────────────
 
-export default function DashboardPage({ userRole }: DashboardPageProps) {
+export default function DashboardPage({ userRole, onNavigate }: DashboardPageProps) {
   const canView = ['Manager', 'Admin', 'Finance_Officer'].includes(userRole ?? '');
 
   // F-025: Pre-populate branchId for Manager role from JWT
@@ -196,10 +200,36 @@ export default function DashboardPage({ userRole }: DashboardPageProps) {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full flex flex-col overflow-hidden">
+
+      {/* ── Welcome Banner — sits between the top bar and page content, outside scroll ── */}
+      <WelcomeBanner />
+
+    <div className="flex-1 overflow-y-auto">
     <div className="p-4 space-y-4 max-w-7xl mx-auto pb-8">
 
-      {/* ── Filter + Export bar ── */}
+      {/* ── Quick Actions ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'New Sale',        icon: '🛒', page: 'pos',         color: 'from-blue-500 to-blue-600',    desc: 'Open POS terminal' },
+          { label: 'New Purchase',    icon: '📋', page: 'procurement', color: 'from-indigo-500 to-indigo-600', desc: 'Create purchase order' },
+          { label: 'Add Customer',    icon: '👤', page: 'customers',   color: 'from-purple-500 to-purple-600', desc: 'Register new customer' },
+          { label: 'Record Payment',  icon: '💳', page: 'payments',    color: 'from-green-500 to-green-600',   desc: 'Record order payment' },
+        ].map(action => (
+          <button
+            key={action.page}
+            onClick={() => onNavigate?.(action.page)}
+            className={`group relative overflow-hidden rounded-xl bg-gradient-to-br ${action.color} p-4 text-left text-white shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0`}
+          >
+            <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full bg-white/10 group-hover:bg-white/15 transition-colors" />
+            <span className="text-2xl block mb-2">{action.icon}</span>
+            <p className="text-sm font-semibold leading-tight">{action.label}</p>
+            <p className="text-xs text-white/70 mt-0.5">{action.desc}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Filters row ── */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3 flex flex-wrap gap-3 items-center">
         <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
         <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
@@ -217,11 +247,15 @@ export default function DashboardPage({ userRole }: DashboardPageProps) {
           className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
           Clear
         </button>
-        <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Export</span>
+      </div>
+
+      {/* ── Export row ── */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3 flex flex-wrap gap-3 items-center">
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Export CSV</span>
+        <div className="w-px h-4 bg-gray-200 dark:bg-gray-700" />
         {[
-          { type: 'sales', label: '📊 Sales' },
-          { type: 'payments', label: '💳 Payments' },
+          { type: 'sales',     label: '📊 Sales' },
+          { type: 'payments',  label: '💳 Payments' },
           { type: 'inventory', label: '📦 Inventory' },
           { type: 'customers', label: '👤 Customers' },
           { type: 'exchanges', label: '🔁 Exchanges' },
@@ -256,17 +290,70 @@ export default function DashboardPage({ userRole }: DashboardPageProps) {
             ))
           ) : kpis ? (
             <>
-              <KpiCard label="Today's Revenue"  value={fmtShort(kpis.dailyRevenue)}         icon="💰" color="bg-green-100 dark:bg-green-900/30" />
-              <KpiCard label="Monthly Revenue"  value={fmtShort(kpis.monthlyRevenue)}        icon="📈" color="bg-blue-100 dark:bg-blue-900/30" />
-              <KpiCard label="Avg Order Value"  value={fmtShort(kpis.averageOrderValue)}     icon="🧾" color="bg-indigo-100 dark:bg-indigo-900/30" />
-              <KpiCard label="Active Customers" value={kpis.totalActiveCustomers.toString()} icon="👤" color="bg-purple-100 dark:bg-purple-900/30" />
-              <KpiCard label="Low Stock"        value={kpis.lowStockAlerts.toString()}       icon="⚠️" color="bg-amber-100 dark:bg-amber-900/30" sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'} />
-              <KpiCard label="Pending Orders"   value={kpis.pendingOrders.toString()}        icon="📋" color="bg-orange-100 dark:bg-orange-900/30" />
-              <KpiCard label="Exchanges Today"  value={kpis.totalExchangesToday.toString()}  icon="🔁" color="bg-teal-100 dark:bg-teal-900/30" />
+              <KpiCard label="Today's Revenue"  value={fmtShort(kpis.dailyRevenue)}         icon="💰" color="bg-green-100 dark:bg-green-900/30"   onClick={() => onNavigate?.('payments')} />
+              <KpiCard label="Monthly Revenue"  value={fmtShort(kpis.monthlyRevenue)}        icon="📈" color="bg-blue-100 dark:bg-blue-900/30"    onClick={() => onNavigate?.('payments')} />
+              <KpiCard label="Avg Order Value"  value={fmtShort(kpis.averageOrderValue)}     icon="🧾" color="bg-indigo-100 dark:bg-indigo-900/30" onClick={() => onNavigate?.('orders')} />
+              <KpiCard label="Active Customers" value={kpis.totalActiveCustomers.toString()} icon="👤" color="bg-purple-100 dark:bg-purple-900/30"  onClick={() => onNavigate?.('customers')} />
+              <KpiCard label="Low Stock"        value={kpis.lowStockAlerts.toString()}       icon="⚠️" color="bg-amber-100 dark:bg-amber-900/30"   sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'} onClick={() => onNavigate?.('inventory')} />
+              <KpiCard label="Pending Orders"   value={kpis.pendingOrders.toString()}        icon="📋" color="bg-orange-100 dark:bg-orange-900/30"  onClick={() => onNavigate?.('orders')} />
+              <KpiCard label="Exchanges Today"  value={kpis.totalExchangesToday.toString()}  icon="🔁" color="bg-teal-100 dark:bg-teal-900/30"     onClick={() => onNavigate?.('exchanges')} />
             </>
           ) : null}
         </div>
       </div>
+
+      {/* ── Alerts & Activity ── */}
+      {inventory && (kpis?.lowStockAlerts ?? 0) + (kpis?.pendingOrders ?? 0) > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Low stock alerts */}
+          {(kpis?.lowStockAlerts ?? 0) > 0 && inventory.lowStockItems.length > 0 && (
+            <div
+              className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 cursor-pointer hover:border-amber-400 dark:hover:border-amber-600 transition-colors"
+              onClick={() => onNavigate?.('inventory')}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-base">⚠️</span>
+                <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Low Stock Items</h3>
+                <span className="ml-auto text-xs font-medium bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full">
+                  {kpis?.lowStockAlerts}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {inventory.lowStockItems.slice(0, 4).map(item => (
+                  <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs">
+                    <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
+                    <span className="text-gray-500 dark:text-gray-400 truncate max-w-[80px]">{item.locationName}</span>
+                    <span className="font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">{item.quantity} left</span>
+                  </div>
+                ))}
+                {inventory.lowStockItems.length > 4 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">+{inventory.lowStockItems.length - 4} more → View Inventory</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Pending orders */}
+          {(kpis?.pendingOrders ?? 0) > 0 && (
+            <div
+              className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 cursor-pointer hover:border-orange-400 dark:hover:border-orange-600 transition-colors"
+              onClick={() => onNavigate?.('orders')}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-base">📋</span>
+                <h3 className="text-sm font-semibold text-orange-800 dark:text-orange-300">Pending Orders</h3>
+                <span className="ml-auto text-xs font-medium bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 px-2 py-0.5 rounded-full">
+                  {kpis?.pendingOrders}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                {kpis?.pendingOrders} order{(kpis?.pendingOrders ?? 0) !== 1 ? 's' : ''} awaiting confirmation or fulfillment.
+              </p>
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-medium">→ Go to Orders</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Row 1: Sales trend + Payment methods ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -519,6 +606,7 @@ export default function DashboardPage({ userRole }: DashboardPageProps) {
         </Section>
       </div>
 
+    </div>
     </div>
     </div>
   );

@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2).**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2).**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -307,6 +307,44 @@ All 9 service modules wired with `insertOutbox()` calls:
 
 **Integration Tests ✅**
 - `tests/notifications.test.ts` — 12 tests covering: worker inserts row, GET returns role-filtered results, isRead filter, mark single read, mark all read, unread count, SSE stream headers, branch isolation, insertOutbox failure is non-fatal, unknown event type handled gracefully, unauthenticated access rejected
+
+### UI/UX Improvements
+
+**Hierarchical Sidebar Refactor ✅**
+- `components/Layout.tsx` — flat nav list replaced with accordion-style grouped sidebar
+- 5 collapsible sections: **Sales** (POS, Orders, Returns, Exchanges, Customers), **Stock** (Inventory, Procurement, Suppliers, Catalog), **Finance** (Payments, Installments, Bank Accounts), **Organization** (Branches, Locations, Staff), **System** (Settings, Audit Log)
+- Dashboard remains a standalone top-level item
+- Accordion: only one section open at a time; auto-expands the section containing the active page on navigation
+- Collapsed sidebar (icon-only mode) shows section headers as icon buttons with tooltips
+- Configuration-driven menu structure via `NAV_SECTIONS` array; `SidebarSection` and `SidebarItem` as reusable sub-components
+- Role-based visibility preserved — items only render for roles that have access
+
+**Dashboard Enhancement ✅**
+- `components/WelcomeBanner.tsx` — slim branded banner between top bar and page content; "Welcome to Bakos Bookstore" + Amharic subtitle; slide-in animation on first load; book icon with gentle pulse; dismissible (sessionStorage); does not re-trigger on navigation
+- **Quick Actions** row: New Sale → POS, New Purchase → Procurement, Add Customer → Customers, Record Payment → Payments — gradient buttons with hover lift
+- **KPI cards** are now clickable and navigate to the relevant module
+- **Alerts & Activity** section: Low Stock panel (amber, links to Inventory) and Pending Orders panel (orange, links to Orders) — only shown when there's actually something to alert about
+- Filters and Export split into two separate rows for better space utilization
+- `onNavigate` prop added to `DashboardPage` and wired through `App.tsx`
+
+**Stock Quantity in POS & Orders Book Search ✅**
+- `GET /api/books` now returns `stockQuantity` for the selected location (or branch total when no location specified)
+- Catalog service `searchBooks` query: correlated subquery sums `inventory.quantity` filtered by `locationId` (specific location) or all locations in the branch (fallback)
+- `POSPage.tsx` and `OrdersPage.tsx` book search dropdowns show stock availability under each book name:
+  - `✓ N in stock` (green) — adequate stock
+  - `⚠ Only N left` (amber) — low stock (≤3)
+  - `⚠ Out of stock` (red) — button disabled, cannot be added
+
+**Notification System Fixes ✅**
+- `components/NotificationBell.tsx` — complete rewrite to fix silent failures:
+  - `fetchList()` called directly on mount (no longer waits for SSE `connected` event)
+  - Single `openStream` function with `scheduleReconnect` as a plain closure — eliminates stale `useCallback` closure chain
+  - `AbortController` for clean stream teardown on unmount or reconnect
+  - `mountedRef` guard prevents state updates on unmounted component
+  - "→ Go to [Module]" hint shown on each notification for clear navigation intent
+- `modules/notifications/notifications.routes.ts` — query logic updated for all 5 endpoints (list, stream unread count, unread-count, mark-read, mark-all-read):
+  - Admin and Super_Admin now see notifications across **all branches** (not just their login branch): `OR $2 IN ('Admin', 'Super_Admin')` added to branch filter
+  - Other roles (Manager, Finance_Officer, Stock_Clerk, Sales, Purchasor) see notifications for their specific branch + system-wide (`branch_id IS NULL`) notifications
 
 ### Post-Evaluation Bug Fixes (V1)
 

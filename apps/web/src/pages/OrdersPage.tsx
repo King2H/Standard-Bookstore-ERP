@@ -235,14 +235,12 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
                   {(bookResults?.items ?? []).map(b => (
                     <button key={b.id} onClick={() => addItem(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
-                        {b.stockQuantity != null && (
-                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${b.stockQuantity === 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' : b.stockQuantity <= 3 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400'}`}>
-                            {b.stockQuantity === 0 ? 'Out of stock' : `${b.stockQuantity} in stock`}
-                          </span>
-                        )}
-                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      {b.stockQuantity != null && (
+                        <p className={`text-xs font-medium mt-0.5 ${b.stockQuantity === 0 ? 'text-red-600 dark:text-red-400' : b.stockQuantity <= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                          {b.stockQuantity === 0 ? '⚠ Out of stock' : b.stockQuantity <= 3 ? `⚠ Only ${b.stockQuantity} left` : `✓ ${b.stockQuantity} in stock`}
+                        </p>
+                      )}
                     </button>
                   ))}
                 </div>

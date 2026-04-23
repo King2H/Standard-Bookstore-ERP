@@ -1849,3 +1849,102 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 - Unread badge count is accurate in real time
 - All 10 integration tests pass
 - No business operation is blocked or fails due to notification system errors
+
+---
+
+## Post-Phase 5 — UI/UX Improvements & Bug Fixes
+
+---
+
+- [x] UI-1. Hierarchical Sidebar Refactor
+  > Replace flat nav list with accordion-style grouped sidebar for industry-standard ERP navigation.
+
+  - [x] UI-1.1 Refactor `components/Layout.tsx`
+    - 5 collapsible sections: Sales, Stock, Finance, Organization, System
+    - Dashboard as standalone top-level item
+    - Accordion: only one section open at a time; auto-expands active section on navigation
+    - `SidebarSection` and `SidebarItem` as reusable sub-components
+    - Configuration-driven menu via `NAV_SECTIONS` array
+    - Role-based visibility preserved; collapsed (icon-only) mode with tooltips
+
+  **Definition of Done:**
+  - All pages accessible via grouped sidebar
+  - Active section auto-expands on navigation
+  - Collapsed mode shows icon-only with tooltips
+  - Role filtering works correctly
+
+---
+
+- [x] UI-2. Dashboard Enhancement
+  > Transform dashboard from analytics-only to action-driven with welcome branding.
+
+  - [x] UI-2.1 Create `components/WelcomeBanner.tsx`
+    - Slim branded banner between top bar and page content
+    - "Welcome to Bakos Bookstore" + Amharic subtitle
+    - Slide-in animation on first load; book icon with gentle pulse
+    - Dismissible via sessionStorage; does not re-trigger on navigation
+
+  - [x] UI-2.2 Add Quick Actions row to `DashboardPage.tsx`
+    - New Sale → POS, New Purchase → Procurement, Add Customer → Customers, Record Payment → Payments
+    - Gradient buttons with hover lift effect; `onNavigate` prop wired through `App.tsx`
+
+  - [x] UI-2.3 Make KPI cards clickable
+    - Each KPI card navigates to the relevant module on click
+
+  - [x] UI-2.4 Add Alerts & Activity section
+    - Low Stock panel (amber) links to Inventory; only shown when `lowStockAlerts > 0`
+    - Pending Orders panel (orange) links to Orders; only shown when `pendingOrders > 0`
+
+  - [x] UI-2.5 Split Filters and Export into separate rows
+    - Filters row: date range + groupBy + Clear
+    - Export row: 5 CSV download buttons
+
+  **Definition of Done:**
+  - Welcome banner appears on first dashboard load; dismissible
+  - Quick actions navigate correctly
+  - KPI cards are clickable
+  - Alerts only shown when data warrants them
+
+---
+
+- [x] UI-3. Stock Quantity in POS & Orders Book Search
+  > Show available stock under each book name in search dropdowns to aid purchasing decisions.
+
+  - [x] UI-3.1 Fix `catalog.service.ts` `searchBooks` query
+    - Add correlated subquery: `SUM(inv.quantity)` filtered by `locationId` (specific) or all branch locations (fallback)
+    - Cast parameters with `::integer` to resolve PostgreSQL type inference errors
+    - `mapBook` already reads `row.stock_quantity` — no mapper change needed
+
+  - [x] UI-3.2 Update `POSPage.tsx` book search results
+    - Stock shown as dedicated line under book name (not a badge on the same line)
+    - `✓ N in stock` (green), `⚠ Only N left` (amber, ≤3), `⚠ Out of stock` (red, button disabled)
+
+  - [x] UI-3.3 Update `OrdersPage.tsx` book search results
+    - Same three-state display as POS
+
+  **Definition of Done:**
+  - Stock quantity visible under book name in POS and Orders search
+  - Color coding correct (green/amber/red)
+  - Out-of-stock books cannot be added to cart/order
+
+---
+
+- [x] UI-4. Notification System Bug Fixes
+  > Fix notifications not appearing for most staff roles and branches.
+
+  - [x] UI-4.1 Fix `components/NotificationBell.tsx` — stale closure & mount issues
+    - `fetchList()` called directly on mount (no longer waits for SSE `connected` event)
+    - Rewrote SSE connection as single `openStream` function; `scheduleReconnect` as plain closure inside it
+    - `AbortController` for clean stream teardown; `mountedRef` guard prevents updates on unmounted component
+    - Added "→ Go to [Module]" hint on each notification item
+
+  - [x] UI-4.2 Fix `modules/notifications/notifications.routes.ts` — branch filter too narrow
+    - All 5 endpoints (list, stream unread count, unread-count, mark-read, mark-all-read) updated
+    - Admin and Super_Admin see notifications across all branches: `OR $2 IN ('Admin', 'Super_Admin')`
+    - Other roles see their branch + system-wide (`branch_id IS NULL`) notifications
+
+  **Definition of Done:**
+  - All staff roles see relevant notifications on login
+  - Admin/Super_Admin see cross-branch notifications
+  - Clicking a notification navigates to the relevant module
+  - Notification list loads immediately on mount without waiting for SSE

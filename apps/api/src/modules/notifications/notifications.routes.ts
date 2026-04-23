@@ -35,7 +35,14 @@ router.get('/stream', authenticate, (req: Request, res: Response) => {
      WHERE is_read = false
        AND (
          target_staff_id = $1
-         OR ($2 = ANY(target_roles) AND (branch_id IS NULL OR branch_id = $3))
+         OR (
+           $2 = ANY(target_roles)
+           AND (
+             branch_id IS NULL
+             OR branch_id = $3
+             OR $2 IN ('Admin', 'Super_Admin')
+           )
+         )
        )`,
     [staff.staffId, staff.role, staff.branchId],
   )
@@ -73,7 +80,17 @@ router.get('/', authenticate, async (req: Request, res: Response, next: NextFunc
     const severityFilter = qs(req.query.severity);
 
     const conditions: string[] = [
-      `(n.target_staff_id = $1 OR ($2 = ANY(n.target_roles) AND (n.branch_id IS NULL OR n.branch_id = $3)))`,
+      `(
+        n.target_staff_id = $1
+        OR (
+          $2 = ANY(n.target_roles)
+          AND (
+            n.branch_id IS NULL
+            OR n.branch_id = $3
+            OR $2 IN ('Admin', 'Super_Admin')
+          )
+        )
+      )`,
     ];
     const params: unknown[] = [staff.staffId, staff.role, staff.branchId];
     let p = 4;
@@ -133,7 +150,14 @@ router.get('/unread-count', authenticate, async (req: Request, res: Response, ne
        WHERE is_read = false
          AND (
            target_staff_id = $1
-           OR ($2 = ANY(target_roles) AND (branch_id IS NULL OR branch_id = $3))
+           OR (
+             $2 = ANY(target_roles)
+             AND (
+               branch_id IS NULL
+               OR branch_id = $3
+               OR $2 IN ('Admin', 'Super_Admin')
+             )
+           )
          )`,
       [staff.staffId, staff.role, staff.branchId],
     );
@@ -161,7 +185,14 @@ router.put('/:id/read', authenticate, async (req: Request, res: Response, next: 
          AND is_read = false
          AND (
            target_staff_id = $2
-           OR ($3 = ANY(target_roles) AND (branch_id IS NULL OR branch_id = $4))
+           OR (
+             $3 = ANY(target_roles)
+             AND (
+               branch_id IS NULL
+               OR branch_id = $4
+               OR $3 IN ('Admin', 'Super_Admin')
+             )
+           )
          )`,
       [id, staff.staffId, staff.role, staff.branchId],
     );
@@ -183,7 +214,14 @@ router.put('/read-all', authenticate, async (req: Request, res: Response, next: 
        WHERE is_read = false
          AND (
            target_staff_id = $1
-           OR ($2 = ANY(target_roles) AND (branch_id IS NULL OR branch_id = $3))
+           OR (
+             $2 = ANY(target_roles)
+             AND (
+               branch_id IS NULL
+               OR branch_id = $3
+               OR $2 IN ('Admin', 'Super_Admin')
+             )
+           )
          )`,
       [staff.staffId, staff.role, staff.branchId],
     );

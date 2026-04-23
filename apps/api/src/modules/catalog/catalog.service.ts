@@ -664,6 +664,14 @@ export async function searchBooks(filters: SearchFilters): Promise<{
   const total = parseInt(countResult.rows[0].count as string, 10);
 
   // Data query — aggregate authors, categories, tags per book
+  // p is the next available param index after all WHERE conditions.
+  // We need: locationId ($p), branchId ($p+1), branchId ($p+2), branchId ($p+3), pageSize ($p+4), offset ($p+5)
+  const locParam    = p;       // $p   — locationId (for specific-location stock)
+  const branchParam = p + 1;   // $p+1 — branchId (for branch-wide stock)
+  const bbpParam    = p + 2;   // $p+2 — branchId (for branch price join)
+  const limitParam  = p + 3;   // $p+3 — pageSize
+  const offsetParam = p + 4;   // $p+4 — offset
+
   const dataResult = await db.query(
     `SELECT
        b.id, b.isbn, b.sku, b.title, b.genre, b.publisher, b.publisher_id,
@@ -691,7 +699,19 @@ export async function searchBooks(filters: SearchFilters): Promise<{
          ARRAY_AGG(DISTINCT bt.tag ORDER BY bt.tag) FILTER (WHERE bt.tag IS NOT NULL),
          '{}'
        ) AS tags,
-       bbp.price AS branch_price
+       bbp.price AS branch_price,
+       (
+         SELECT COALESCE(SUM(inv.quantity), 0)
+         FROM inventory inv
+         WHERE inv.book_id = b.id
+           AND CASE
+             WHEN $${locParam}::integer IS NOT NULL THEN inv.location_id = $${locParam}::integer
+             WHEN $${branchParam}::integer IS NOT NULL THEN inv.location_id IN (
+               SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
+             )
+             ELSE false
+           END
+       ) AS stock_quantity
      FROM books b
      LEFT JOIN book_formats bf ON bf.id = b.format_id
      LEFT JOIN book_editions be ON be.id = b.edition_id
@@ -700,14 +720,13 @@ export async function searchBooks(filters: SearchFilters): Promise<{
      LEFT JOIN book_categories bc ON bc.book_id = b.id
      LEFT JOIN categories c ON c.id = bc.category_id
      LEFT JOIN book_tags bt ON bt.book_id = b.id
-     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $${p++}
+     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $${bbpParam}::integer
        AND bbp.format_id = 0 AND bbp.edition_id = 0
-     LEFT JOIN inventory inv ON inv.book_id = b.id AND inv.location_id = $${p++}
      ${whereClause}
      GROUP BY b.id, bf.code, bf.label, be.code, be.label, bbp.price
      ORDER BY ${sortCol} ${sortDir}
-     LIMIT $${p++} OFFSET $${p++}`,
-    [...params, filters.branchId ?? null, filters.locationId ?? null, pageSize, offset],
+     LIMIT $${limitParam} OFFSET $${offsetParam}`,
+    [...params, filters.locationId ?? null, filters.branchId ?? null, filters.branchId ?? null, pageSize, offset],
   );
 
   return {

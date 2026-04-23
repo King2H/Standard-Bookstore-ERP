@@ -36,6 +36,7 @@ See: `.kiro/specs/bookstore-management-system/notification-spec.md` for full eve
 - `NotificationBell` component in Layout header with real-time badge and dropdown
 - All 9 service modules wired with `insertOutbox()` calls
 - 12 integration tests passing
+- **Bug fixes applied:** `fetchList()` called on mount (not just on SSE connected event); stale closure chain in reconnect logic eliminated; Admin/Super_Admin now see notifications across all branches via `OR $2 IN ('Admin', 'Super_Admin')` in all 5 query endpoints
 
 **Impact:** Transforms the system from "pull" (staff must check) to "push" (system tells staff what needs attention).
 

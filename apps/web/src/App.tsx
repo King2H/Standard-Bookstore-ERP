@@ -100,7 +100,7 @@ export default function App() {
                   <span>You must change your password before continuing. Please update it in your profile.</span>
                 </div>
               )}
-              {currentPage === 'dashboard' && <DashboardPage userRole={userRole ?? undefined} />}
+              {currentPage === 'dashboard' && <DashboardPage userRole={userRole ?? undefined} onNavigate={(page) => handleNavigate(page as Page)} />}
               {currentPage === 'branches' && <BranchesPage userRole={userRole ?? undefined} />}
               {currentPage === 'staff' && <StaffPage />}
               {currentPage === 'audit-log' && <AuditLogPage />}
