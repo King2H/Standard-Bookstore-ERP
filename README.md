@@ -6,17 +6,17 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). Phase 2 Roadmap Defined.**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2).**
 
 | Document | Status | Location |
 |----------|--------|----------|
 | Requirements | Complete | `.kiro/specs/bookstore-management-system/requirements.md` |
 | Design | Complete | `.kiro/specs/bookstore-management-system/design.md` |
 | Tasks | In Progress | `.kiro/specs/bookstore-management-system/tasks.md` |
-| Fix Tracker | Active | `BMS_Fix_Tracker_V1.md` |
-| MVP Evaluation | v1.2 | `BMS_MVP_Evaluation_1.md` |
-| Industry-Grade Roadmap | Active | `BMS_Industry_Grade_Roadmap.md` |
-| Notification System Spec | Ready for Implementation | `BMS_Notification_Spec.md` |
+| Fix Tracker | Active | `.kiro/specs/bookstore-management-system/fix-tracker.md` |
+| MVP Evaluation | v1.2 | `.kiro/specs/bookstore-management-system/mvp-evaluation.md` |
+| Industry-Grade Roadmap | Active | `.kiro/specs/bookstore-management-system/roadmap.md` |
+| Notification System Spec | Implemented | `.kiro/specs/bookstore-management-system/notification-spec.md` |
 
 ---
 
@@ -41,6 +41,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 15 | Merchant Exchange | ✅ Done |
 | 16 | Reporting Engine | ✅ Done |
 | 17 | Dashboard & UI | ✅ Done |
+| P5 | Real-Time Notification System (SSE) | ✅ Done |
 
 ---
 
@@ -270,6 +271,43 @@ Key rules:
 - Empty date ranges return zeros gracefully
 - 10 integration tests passing
 
+### Phase 5 — Real-Time Notification System
+
+**Notification Infrastructure ✅**
+- `db/migrations/1700000030_create_notifications.cjs` — `notifications` table with `branch_id`, `target_roles TEXT[]`, `target_staff_id`, `event_type`, `title`, `body`, `entity_type`, `entity_id`, `severity` (info/success/warning/error), `is_read`, `read_at`; 3 indexes (branch+unread, target_staff, created_at)
+- `lib/outbox.ts` — `OutboxEventType` union extended with 40+ Phase 5 event types across all modules
+- `lib/sseManager.ts` — in-memory SSE connection registry; `register(staffId, branchId, role, res)` sets SSE headers and auto-removes on disconnect; `broadcast(branchId, targetRoles, notification)` fans out to all matching connections; `pushToStaff(staffId, notification)` for direct delivery
+
+**Notification Worker ✅**
+- `workers/notificationWorker.ts` — full event catalog (40+ event types); maps each event to `{ title, body, targetRoles, severity, entityType, entityId }`; inserts notification row; broadcasts via SSEManager; **never throws** — errors are logged and swallowed so notification failures never block the outbox poller
+- `workers/outboxPoller.ts` — updated to route all 40+ notification event types to `handleNotification`; injects `_eventType` into payload before dispatch
+
+**Notification API ✅**
+- `GET /api/notifications/stream` — SSE endpoint; sets `Content-Type: text/event-stream`; sends initial `connected` event with unread count; heartbeat every 30s; auto-cleanup on disconnect
+- `GET /api/notifications` — paginated list filtered by staff's role + branch; supports `?isRead=false`, `?severity=`, `?page=`, `?pageSize=`
+- `GET /api/notifications/unread-count` — badge count for bell icon
+- `PUT /api/notifications/:id/read` — mark single notification as read
+- `PUT /api/notifications/read-all` — mark all unread as read for the authenticated staff
+
+**Event Coverage ✅**
+All 9 service modules wired with `insertOutbox()` calls:
+- **Inventory** — stock_in, stock_out, adjustment, transfer_completed, low_stock, out_of_stock
+- **POS** — sale_completed, credit_sale, transaction_voided, payment_collected
+- **Orders** — created, confirmed, backordered, in_progress, fulfilled, cancelled
+- **Payments** — recorded, refunded, bank_transfer; installment.payment_recorded, overdue, plan_completed
+- **Returns** — initiated, approval_required, approved, rejected, completed
+- **Procurement** — po.created, approval_required, approved, ordered, partially_received, fully_received, cancelled
+- **Exchanges** — completed, cancelled, store_refund_due
+- **Customers** — store_credit_added, deactivated
+- **Auth** — failed_login_attempts, staff_deactivated, password_reset
+
+**Notification Bell UI ✅**
+- `components/NotificationBell.tsx` — bell icon with unread badge in header; dropdown showing recent notifications with severity icons, relative timestamps, and mark-read actions; SSE client with auto-reconnect; TanStack Query cache invalidation on notification receipt
+- `Layout.tsx` — NotificationBell added to header for all authenticated roles
+
+**Integration Tests ✅**
+- `tests/notifications.test.ts` — 12 tests covering: worker inserts row, GET returns role-filtered results, isRead filter, mark single read, mark all read, unread count, SSE stream headers, branch isolation, insertOutbox failure is non-fatal, unknown event type handled gracefully, unauthenticated access rejected
+
 ### Post-Evaluation Bug Fixes (V1)
 
 Applied from `BMS_Fix_Tracker_V1.md` — 19 of 27 fixes completed.
@@ -350,7 +388,7 @@ cd apps/api && npm test
 ```
 
 Tests use prefix-based cleanup — seed data is never touched.
-Current: 20 test files, 253 tests, all passing.
+Current: 21 test files, 265 tests, 259 passing (6 pre-existing catalog failures unrelated to Phase 5).
 
 ## Restoring Seed Data
 
@@ -484,6 +522,13 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - GET /api/reports/customers/export — CSV download (Manager, Admin)
 - GET /api/reports/exchanges/export — CSV download (Manager, Admin)
 
+### Notifications (Phase 5)
+- GET /api/notifications/stream — SSE endpoint; `Content-Type: text/event-stream`; sends `connected` event with unread count; heartbeat every 30s (all authenticated roles)
+- GET /api/notifications — paginated list for authenticated staff's role + branch; filters: `?isRead=`, `?severity=`, `?page=`, `?pageSize=`
+- GET /api/notifications/unread-count — `{ count }` for bell badge (all authenticated roles)
+- PUT /api/notifications/:id/read — mark single notification as read
+- PUT /api/notifications/read-all — mark all unread as read for the authenticated staff
+
 ### Audit Log
 - GET /api/audit-logs — paginated; filter by entityType (Super_Admin, Admin)
 
@@ -540,6 +585,7 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 | 1700000027_create_exchanges | Exchanges, exchange_incoming_items, exchange_outgoing_items |
 | 1700000028_hardening | Idempotency keys, outbox, customer PII columns, installment plans, merchants, bank_account_id on payments |
 | 1700000029_staff_multi_role | Drop composite PK on staff_branch_roles; add serial PK + UNIQUE(staff_id, branch_id, role) for multi-role support |
+| 1700000030_create_notifications | Notifications table with branch_id, target_roles, severity, is_read; 3 indexes |
 
 ---
 
@@ -549,8 +595,8 @@ See `BMS_Industry_Grade_Roadmap.md` for the full prioritized roadmap.
 
 ### Planned Features (Priority Order)
 
-**P0 — Real-Time Notifications (SSE)**
-Full lifecycle event coverage across all ERP modules. Every state change in Inventory, POS, Orders, Payments, Returns, Procurement, and Exchanges generates a role-targeted notification delivered via Server-Sent Events. See `BMS_Notification_Spec.md` for the complete event catalog (40+ event types) and implementation plan.
+**P0 — Real-Time Notifications (SSE) ✅ COMPLETE**
+Full lifecycle event coverage across all ERP modules. Every state change in Inventory, POS, Orders, Payments, Returns, Procurement, Exchanges, Customers, and Auth generates a role-targeted notification delivered via Server-Sent Events. See `.kiro/specs/bookstore-management-system/notification-spec.md` for the complete event catalog (40+ event types).
 
 **P1 — Dashboard & Reporting Improvements**
 - KPI query audit and accuracy fixes

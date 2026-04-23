@@ -20,11 +20,22 @@ The BMS core is solid. All 17 slices are implemented, 28 of 27 tracked bugs are 
 ## Improvement Categories
 
 ### Category A — Real-Time Notifications (SSE)
-**Priority: CRITICAL**
+**Priority: CRITICAL — ✅ COMPLETE (Phase 5)**
 
 The outbox table and workers exist. The missing piece is surfacing events to staff in real-time. Every lifecycle event in the ERP should generate a notification to the relevant role(s).
 
-See: `BMS_Notification_Spec.md` for full event catalog and implementation plan.
+See: `.kiro/specs/bookstore-management-system/notification-spec.md` for full event catalog.
+
+**Implemented:**
+- `notifications` table (migration 1700000030) with branch/role targeting, severity, read state
+- `lib/sseManager.ts` — SSE connection registry with broadcast and direct push
+- `workers/notificationWorker.ts` — 40+ event type catalog; resilient (never throws)
+- `workers/outboxPoller.ts` — routes all notification event types to the worker
+- `GET /api/notifications/stream` — SSE endpoint with heartbeat and initial unread count
+- REST endpoints: list, unread-count, mark-read, mark-all-read
+- `NotificationBell` component in Layout header with real-time badge and dropdown
+- All 9 service modules wired with `insertOutbox()` calls
+- 12 integration tests passing
 
 **Impact:** Transforms the system from "pull" (staff must check) to "push" (system tells staff what needs attention).
 

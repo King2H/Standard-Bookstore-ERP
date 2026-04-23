@@ -38,6 +38,7 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 | Slice 15 / Task 15 | Merchant Exchange | Phase 3 | design.md §3.15, §4.5 |
 | Slice 16 / Task 16 | Reporting & Analytics | Phase 4 | design.md §6.8 |
 | Slice 17 / Task 17 | UI & Data Presentation | Phase 4 | design.md §7.4 |
+| Phase 5 / Task 5.x | Real-Time Notification System (SSE) | Phase 5 | notification-spec.md |
 
 **Notes on ordering deviations from strict Slice 1→17 sequence:**
 - Task 0B covers Slices 2+3 together — auth is untestable without at least one RBAC-protected entity
