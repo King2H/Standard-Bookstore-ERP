@@ -3,6 +3,7 @@ import { BusinessError, ConflictError, NotFoundError, ValidationError } from '..
 
 export type ReferenceType = 'purchase_order' | 'return' | 'adjustment' | 'manual' | 'initial_stock';
 import { isNegativeStockAllowed } from '../config/config.service.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -200,6 +201,38 @@ export async function adjustStock(opts: {
 
     await client.query('COMMIT');
 
+    // Emit notification event (non-blocking — failure must not affect the business operation)
+    const locationRes = await db.query('SELECT name, branch_id FROM locations WHERE id = $1', [locationId]);
+    const locationName = locationRes.rows[0]?.name ?? String(locationId);
+    const branchIdForNotif = locationRes.rows[0]?.branch_id ?? staffCtx.branchId;
+    const bookRes = await db.query('SELECT title FROM books WHERE id = $1', [bookId]);
+    const bookTitle = bookRes.rows[0]?.title ?? String(bookId);
+    try {
+      const notifClient = await db.connect();
+      try {
+        await notifClient.query('BEGIN');
+        await insertOutbox(notifClient, 'inventory.adjustment', {
+          bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif,
+          delta, reasonCode, notes: notes ?? null,
+        });
+        // Check low-stock / out-of-stock after adjustment
+        const invCheck = await notifClient.query(
+          'SELECT quantity, reorder_point FROM inventory WHERE book_id = $1 AND location_id = $2',
+          [bookId, locationId],
+        );
+        if (invCheck.rows.length) {
+          const qty = invCheck.rows[0].quantity as number;
+          const rp = invCheck.rows[0].reorder_point as number;
+          if (qty === 0) {
+            await insertOutbox(notifClient, 'inventory.out_of_stock', { bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif, quantity: qty });
+          } else if (qty <= rp) {
+            await insertOutbox(notifClient, 'inventory.low_stock', { bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif, quantity: qty, reorderPoint: rp });
+          }
+        }
+        await notifClient.query('COMMIT');
+      } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+    } catch { /* notification failure is non-fatal */ }
+
     // Return updated row
     const row = await getInventoryRow(bookId, locationId);
     return row!;
@@ -313,6 +346,27 @@ export async function transferStock(opts: {
     );
 
     await client.query('COMMIT');
+
+    // Emit notification event (non-blocking)
+    try {
+      const locRes = await db.query('SELECT id, name, branch_id FROM locations WHERE id = ANY($1)', [[fromLocationId, toLocationId]]);
+      const locMap = new Map(locRes.rows.map((r: Record<string, unknown>) => [r.id as number, r]));
+      const fromLoc = locMap.get(fromLocationId);
+      const toLoc = locMap.get(toLocationId);
+      const bookRes = await db.query('SELECT title FROM books WHERE id = $1', [bookId]);
+      const bookTitle = bookRes.rows[0]?.title ?? String(bookId);
+      const notifClient = await db.connect();
+      try {
+        await notifClient.query('BEGIN');
+        await insertOutbox(notifClient, 'inventory.transfer_completed', {
+          bookId, bookTitle,
+          fromLocationId, fromLocationName: fromLoc?.name ?? String(fromLocationId),
+          toLocationId, toLocationName: toLoc?.name ?? String(toLocationId),
+          branchId: fromLoc?.branch_id ?? staffCtx.branchId, quantity,
+        });
+        await notifClient.query('COMMIT');
+      } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+    } catch { /* non-fatal */ }
 
     const [fromRow, toRow] = await Promise.all([
       getInventoryRow(bookId, fromLocationId),
@@ -568,6 +622,28 @@ export async function stockIn(opts: {
     );
 
     await client.query('COMMIT');
+
+    // Emit notification event (non-blocking)
+    try {
+      const locRes = await db.query('SELECT name, branch_id FROM locations WHERE id = $1', [locationId]);
+      const locationName = locRes.rows[0]?.name ?? String(locationId);
+      const branchIdForNotif = locRes.rows[0]?.branch_id ?? staffCtx.branchId;
+      const bookRes = await db.query('SELECT title FROM books WHERE id = $1', [bookId]);
+      const bookTitle = bookRes.rows[0]?.title ?? String(bookId);
+      const notifClient = await db.connect();
+      try {
+        await notifClient.query('BEGIN');
+        await insertOutbox(notifClient, 'inventory.stock_in', {
+          bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif, quantity,
+        });
+        // Check low-stock threshold
+        if (newQty === 0) {
+          await insertOutbox(notifClient, 'inventory.out_of_stock', { bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif, quantity: newQty });
+        }
+        await notifClient.query('COMMIT');
+      } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+    } catch { /* non-fatal */ }
+
     return (await getInventoryRow(bookId, locationId))!;
   } catch (err) {
     await client.query('ROLLBACK');
@@ -657,6 +733,33 @@ export async function stockOut(opts: {
     );
 
     await client.query('COMMIT');
+
+    // Emit notification event (non-blocking)
+    try {
+      const locRes = await db.query('SELECT name, branch_id FROM locations WHERE id = $1', [locationId]);
+      const locationName = locRes.rows[0]?.name ?? String(locationId);
+      const branchIdForNotif = locRes.rows[0]?.branch_id ?? staffCtx.branchId;
+      const bookRes = await db.query('SELECT title FROM books WHERE id = $1', [bookId]);
+      const bookTitle = bookRes.rows[0]?.title ?? String(bookId);
+      const notifClient = await db.connect();
+      try {
+        await notifClient.query('BEGIN');
+        await insertOutbox(notifClient, 'inventory.stock_out', {
+          bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif, quantity, reasonCode: referenceType ?? 'manual',
+        });
+        if (newQty === 0) {
+          await insertOutbox(notifClient, 'inventory.out_of_stock', { bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif, quantity: newQty });
+        } else {
+          const rpRes = await notifClient.query('SELECT reorder_point FROM inventory WHERE book_id = $1 AND location_id = $2', [bookId, locationId]);
+          const rp = rpRes.rows[0]?.reorder_point as number ?? 5;
+          if (newQty <= rp) {
+            await insertOutbox(notifClient, 'inventory.low_stock', { bookId, bookTitle, locationId, locationName, branchId: branchIdForNotif, quantity: newQty, reorderPoint: rp });
+          }
+        }
+        await notifClient.query('COMMIT');
+      } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+    } catch { /* non-fatal */ }
+
     return (await getInventoryRow(bookId, locationId))!;
   } catch (err) {
     await client.query('ROLLBACK');

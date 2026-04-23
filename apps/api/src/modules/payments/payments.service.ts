@@ -1,6 +1,7 @@
 import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import type { PoolClient } from 'pg';
+import { insertOutbox } from '../../lib/outbox.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 
@@ -303,6 +304,18 @@ export async function createPayment(
        JSON.stringify({ paymentReference, orderId: data.orderId, amount: data.amount, paymentMethod: data.paymentMethod, newPaymentStatus })],
     );
 
+    // Emit payment notification
+    const orderNumRes = await client.query('SELECT order_number FROM orders WHERE id = $1', [data.orderId]);
+    const orderNumber = orderNumRes.rows[0]?.order_number ?? String(data.orderId);
+    await insertOutbox(client, 'payment.recorded', {
+      paymentId, amount: data.amount, method: data.paymentMethod, orderNumber, orderId: String(data.orderId), branchId: staffCtx.branchId,
+    });
+    if (data.paymentMethod === 'bank') {
+      await insertOutbox(client, 'payment.bank_transfer', {
+        paymentId, amount: data.amount, orderNumber, orderId: String(data.orderId), branchId: staffCtx.branchId,
+      });
+    }
+
     await client.query('COMMIT');
     return getById(paymentId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -365,6 +378,13 @@ export async function createRefund(
       [staffCtx.staffId, staffCtx.role, refundId, staffCtx.branchId,
        JSON.stringify({ paymentId, orderId: payment.orderId, refundAmount: data.refundAmount, reason: data.reason, newPaymentStatus, newOrderPaymentStatus })],
     );
+
+    // Emit refund notification
+    const orderNumRes = await client.query('SELECT order_number FROM orders WHERE id = $1', [payment.orderId]);
+    const orderNumber = orderNumRes.rows[0]?.order_number ?? String(payment.orderId);
+    await insertOutbox(client, 'payment.refunded', {
+      paymentId: String(paymentId), refundId, amount: data.refundAmount, orderNumber, orderId: payment.orderId, branchId: staffCtx.branchId,
+    });
 
     await client.query('COMMIT');
 

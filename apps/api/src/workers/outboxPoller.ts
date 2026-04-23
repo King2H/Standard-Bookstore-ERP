@@ -9,6 +9,7 @@
 import { db } from '../db/index.js';
 import { handleLoyaltyAccrual } from './loyaltyWorker.js';
 import { handleInstallmentOverdue } from './installmentChecker.js';
+import { handleNotification } from './notificationWorker.js';
 
 const POLL_INTERVAL_MS = 1000;
 const BATCH_SIZE = 50;
@@ -20,7 +21,49 @@ type EventHandler = (payload: Record<string, unknown>) => Promise<void>;
 
 const HANDLERS: Record<string, EventHandler> = {
   LoyaltyAccrualRequested: handleLoyaltyAccrual,
-  // Future: add more handlers here as workers are implemented
+  // Phase 5 — Notification system: all notification event types route to handleNotification
+  'inventory.stock_in': handleNotification,
+  'inventory.stock_out': handleNotification,
+  'inventory.adjustment': handleNotification,
+  'inventory.transfer_completed': handleNotification,
+  'inventory.low_stock': handleNotification,
+  'inventory.out_of_stock': handleNotification,
+  'pos.sale_completed': handleNotification,
+  'pos.credit_sale': handleNotification,
+  'pos.transaction_voided': handleNotification,
+  'pos.payment_collected': handleNotification,
+  'order.created': handleNotification,
+  'order.confirmed': handleNotification,
+  'order.backordered': handleNotification,
+  'order.in_progress': handleNotification,
+  'order.fulfilled': handleNotification,
+  'order.cancelled': handleNotification,
+  'payment.recorded': handleNotification,
+  'payment.refunded': handleNotification,
+  'payment.bank_transfer': handleNotification,
+  'installment.payment_recorded': handleNotification,
+  'installment.overdue': handleNotification,
+  'installment.plan_completed': handleNotification,
+  'return.initiated': handleNotification,
+  'return.approval_required': handleNotification,
+  'return.approved': handleNotification,
+  'return.rejected': handleNotification,
+  'return.completed': handleNotification,
+  'po.created': handleNotification,
+  'po.approval_required': handleNotification,
+  'po.approved': handleNotification,
+  'po.ordered': handleNotification,
+  'po.partially_received': handleNotification,
+  'po.fully_received': handleNotification,
+  'po.cancelled': handleNotification,
+  'exchange.completed': handleNotification,
+  'exchange.cancelled': handleNotification,
+  'exchange.store_refund_due': handleNotification,
+  'customer.store_credit_added': handleNotification,
+  'customer.deactivated': handleNotification,
+  'auth.failed_login_attempts': handleNotification,
+  'auth.staff_deactivated': handleNotification,
+  'auth.password_reset': handleNotification,
 };
 
 async function pollOnce(): Promise<void> {
@@ -51,7 +94,9 @@ async function pollOnce(): Promise<void> {
       const handler = HANDLERS[eventType];
       if (handler) {
         try {
-          await handler(payload);
+          // Inject routing metadata so handlers can access event_type without a separate param
+          const enrichedPayload = { ...payload, _eventType: eventType, _outboxId: id };
+          await handler(enrichedPayload);
           await client.query(
             `UPDATE outbox SET status = 'published', published_at = now() WHERE id = $1`,
             [id],

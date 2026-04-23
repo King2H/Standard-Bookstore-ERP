@@ -5,6 +5,7 @@ import {
   getLoyaltyMinTransactionAmount,
 } from '../config/config.service.js';
 import { encryptPii, decryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ export async function updateCustomer(
 
 export async function deactivateCustomer(id: number, staffCtx: StaffCtx): Promise<void> {
   const result = await db.query(
-    `UPDATE customers SET is_active = false WHERE id = $1 RETURNING id`,
+    `UPDATE customers SET is_active = false WHERE id = $1 RETURNING id, full_name, customer_code, branch_id`,
     [id],
   );
   if (!result.rows.length) throw new NotFoundError('Customer');
@@ -299,6 +300,20 @@ export async function deactivateCustomer(id: number, staffCtx: StaffCtx): Promis
      VALUES ($1, $2, 'UPDATE', 'customer', $3, $4, $5)`,
     [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'deactivate' })],
   );
+
+  // Emit notification (non-blocking)
+  try {
+    const row = result.rows[0];
+    const notifClient = await db.connect();
+    try {
+      await notifClient.query('BEGIN');
+      await insertOutbox(notifClient, 'customer.deactivated', {
+        customerId: id, customerName: row.full_name, customerCode: row.customer_code,
+        branchId: row.branch_id ?? staffCtx.branchId,
+      });
+      await notifClient.query('COMMIT');
+    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+  } catch { /* non-fatal */ }
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
@@ -485,6 +500,19 @@ export async function creditStoreCredit(
      VALUES ($1, $2, $3, $4, 'credit')`,
     [customerId, refType, refId, amount],
   );
+
+  // Emit notification (non-blocking)
+  try {
+    const custRes = await db.query('SELECT full_name, branch_id FROM customers WHERE id = $1', [customerId]);
+    const customerName = custRes.rows[0]?.full_name ?? String(customerId);
+    const branchId = custRes.rows[0]?.branch_id ?? staffCtx.branchId;
+    const notifClient = await db.connect();
+    try {
+      await notifClient.query('BEGIN');
+      await insertOutbox(notifClient, 'customer.store_credit_added', { customerId, customerName, amount, branchId });
+      await notifClient.query('COMMIT');
+    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+  } catch { /* non-fatal */ }
 }
 
 // ── Store Credit: Debit ───────────────────────────────────────────────────────

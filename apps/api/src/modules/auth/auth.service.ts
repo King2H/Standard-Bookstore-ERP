@@ -9,6 +9,7 @@ import {
   ConflictError,
   ValidationError,
 } from '../../lib/errors.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '15m';
@@ -97,6 +98,18 @@ export async function login(
     );
 
     if (shouldLock) {
+      // Emit lockout notification (non-blocking)
+      try {
+        const notifClient = await db.connect();
+        try {
+          await notifClient.query('BEGIN');
+          await insertOutbox(notifClient, 'auth.failed_login_attempts', {
+            username, attemptCount: newAttempts, branchId: null,
+          });
+          await notifClient.query('COMMIT');
+        } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+      } catch { /* non-fatal */ }
+
       throw new AuthError(
         'ACCOUNT_LOCKED',
         `Too many failed attempts. Account locked for ${policy.lockoutMinutes} minute(s).`,
@@ -265,9 +278,23 @@ export async function createStaff(data: {
 // ── Deactivate ───────────────────────────────────────────────────────────────
 
 export async function deactivateStaff(staffId: number): Promise<void> {
-  await db.query(`UPDATE staff SET is_active = false WHERE id = $1`, [staffId]);
+  const result = await db.query(
+    `UPDATE staff SET is_active = false WHERE id = $1 RETURNING username`,
+    [staffId],
+  );
   // Revoke all refresh tokens immediately
   await db.query(`UPDATE refresh_tokens SET revoked = true WHERE staff_id = $1`, [staffId]);
+
+  // Emit notification (non-blocking)
+  try {
+    const username = result.rows[0]?.username ?? String(staffId);
+    const notifClient = await db.connect();
+    try {
+      await notifClient.query('BEGIN');
+      await insertOutbox(notifClient, 'auth.staff_deactivated', { username, branchId: null });
+      await notifClient.query('COMMIT');
+    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+  } catch { /* non-fatal */ }
 }
 
 // ── Reactivate ───────────────────────────────────────────────────────────────
@@ -334,6 +361,13 @@ export async function adminResetPassword(
         JSON.stringify({ action: 'admin_password_reset', mustChangePassword: true }),
       ],
     );
+
+    // Emit notification (non-blocking)
+    const targetRes = await client.query('SELECT username FROM staff WHERE id = $1', [targetStaffId]);
+    const targetUsername = targetRes.rows[0]?.username ?? String(targetStaffId);
+    const adminRes = await client.query('SELECT username FROM staff WHERE id = $1', [staffCtx.staffId]);
+    const adminName = adminRes.rows[0]?.username ?? String(staffCtx.staffId);
+    await insertOutbox(client, 'auth.password_reset', { username: targetUsername, adminName, branchId: null });
 
     await client.query('COMMIT');
   } catch (err) {

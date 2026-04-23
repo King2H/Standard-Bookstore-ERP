@@ -9,6 +9,7 @@
 import type { PoolClient } from 'pg';
 
 export type OutboxEventType =
+  // ── Legacy / existing ────────────────────────────────────────────────────
   | 'TransactionCompleted'
   | 'TransactionVoided'
   | 'LoyaltyAccrualRequested'
@@ -18,7 +19,59 @@ export type OutboxEventType =
   | 'InstallmentOverdue'
   | 'LowStockAlert'
   | 'ExchangeCompleted'
-  | 'ConfigChanged';
+  | 'ConfigChanged'
+  // ── Phase 5 — Notification system events ─────────────────────────────────
+  // Inventory
+  | 'inventory.stock_in'
+  | 'inventory.stock_out'
+  | 'inventory.adjustment'
+  | 'inventory.transfer_completed'
+  | 'inventory.low_stock'
+  | 'inventory.out_of_stock'
+  // POS
+  | 'pos.sale_completed'
+  | 'pos.credit_sale'
+  | 'pos.transaction_voided'
+  | 'pos.payment_collected'
+  // Orders
+  | 'order.created'
+  | 'order.confirmed'
+  | 'order.backordered'
+  | 'order.in_progress'
+  | 'order.fulfilled'
+  | 'order.cancelled'
+  // Payments
+  | 'payment.recorded'
+  | 'payment.refunded'
+  | 'payment.bank_transfer'
+  | 'installment.payment_recorded'
+  | 'installment.overdue'
+  | 'installment.plan_completed'
+  // Returns
+  | 'return.initiated'
+  | 'return.approval_required'
+  | 'return.approved'
+  | 'return.rejected'
+  | 'return.completed'
+  // Procurement
+  | 'po.created'
+  | 'po.approval_required'
+  | 'po.approved'
+  | 'po.ordered'
+  | 'po.partially_received'
+  | 'po.fully_received'
+  | 'po.cancelled'
+  // Exchanges
+  | 'exchange.completed'
+  | 'exchange.cancelled'
+  | 'exchange.store_refund_due'
+  // Customers
+  | 'customer.store_credit_added'
+  | 'customer.deactivated'
+  // Auth / Security
+  | 'auth.failed_login_attempts'
+  | 'auth.staff_deactivated'
+  | 'auth.password_reset';
 
 /**
  * Insert an outbox event within an existing DB transaction.

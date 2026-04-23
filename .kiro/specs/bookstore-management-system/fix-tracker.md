@@ -487,15 +487,16 @@ This table defines which TanStack Query keys must be invalidated when each opera
 
 | Status | Count | Fix IDs |
 |--------|-------|---------|
-| ✅ Done | 22 | F-001, F-002, F-003, F-004, F-006, F-007, F-008, F-009, F-013, F-014, F-015, F-016, F-017, F-018, F-023, F-025, F-026, F-027 + Dashboard UI + Staff Multi-Role + Catalog Search Fix + Inventory Transfer |
-| ⬜ Pending | 9 | F-005, F-010, F-011, F-012, F-019, F-020, F-021, F-022, F-024 |
+| ✅ Done/Verified | 28 | F-001, F-002, F-003, F-004, F-006, F-007, F-008, F-009, F-010(v), F-011(v), F-012(v), F-013, F-014, F-015, F-016, F-017, F-018, F-021, F-022, F-023, F-024(v), F-025, F-026, F-027 + Dashboard UI + Staff Multi-Role + Catalog Search Fix + Inventory Transfer |
+| ⬜ Remaining | 3 | F-005 (ISBN search verified working via catalog fix), F-019 (cache invalidation confirmed in place), F-020 (primary supplier UI — deferred) |
 
-### Pending Items Notes
-- **F-005** (ISBN validation): The `validateIsbn13` function is correct; the issue was the search filter bug (now fixed). ISBN search via `?isbn=` now works correctly.
-- **F-019** (Inventory search stale): Cache invalidation is in place for all stock operations. Confirmed working.
-- **F-010, F-011, F-012** (POS/Returns/Exchange UI gaps): Deferred — require significant UI work.
-- **F-020, F-021, F-022** (Supplier/POS/Discount): Deferred — medium priority UI/logic work.
-- **F-024** (Bank reconciliation UI): Deferred — requires dedicated reconciliation UI work.
+### Verified Items (Already Implemented)
+- **F-005**: ISBN search works via `?isbn=` param after catalog search fix.
+- **F-010**: POS History tab has "Collect" button for partial/credit transactions.
+- **F-011**: Customer profile has Store Credit tab with balance + full transaction history.
+- **F-012**: ExchangesPage has Cancel button for non-Completed/Cancelled exchanges.
+- **F-019**: Cache invalidation in place for all stock operations.
+- **F-024**: BankAccountsPage has full reconciliation panel with Clear button, status filter, pagination.
 
 ### Known Limitations (Deferred to Next Phase)
 - Stock transfer is within-branch only (location to location). Cross-branch transfer requires a separate inter-branch transfer workflow with approval.

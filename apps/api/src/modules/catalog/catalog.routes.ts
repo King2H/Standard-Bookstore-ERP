@@ -51,21 +51,22 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await catalogService.searchBooks({
-        q:        qs(req.query.q),
-        isbn:     qs(req.query.isbn),
-        sku:      qs(req.query.sku),
-        author:   qs(req.query.author),
-        genre:    qs(req.query.genre),
-        category: qs(req.query.category),
-        tag:      qs(req.query.tag),
-        isActive: req.query.is_active !== undefined
+        q:          qs(req.query.q),
+        isbn:       qs(req.query.isbn),
+        sku:        qs(req.query.sku),
+        author:     qs(req.query.author),
+        genre:      qs(req.query.genre),
+        category:   qs(req.query.category),
+        tag:        qs(req.query.tag),
+        isActive:   req.query.is_active !== undefined
           ? req.query.is_active === 'true'
           : undefined,
-        branchId: req.query.branchId ? qi(req.query.branchId, 0) : undefined,
-        sortBy:   qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
-        sortDir:  qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
-        page:     qi(req.query.page, 1),
-        pageSize: qi(req.query.pageSize, 25),
+        branchId:   req.query.branchId  ? qi(req.query.branchId, 0)  : undefined,
+        locationId: req.query.locationId ? qi(req.query.locationId, 0) : undefined,
+        sortBy:     qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
+        sortDir:    qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
+        page:       qi(req.query.page, 1),
+        pageSize:   qi(req.query.pageSize, 25),
       });
       res.json(result);
     } catch (err) {

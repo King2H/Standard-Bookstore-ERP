@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTheme } from '../lib/theme.js';
 import { logout } from '../lib/auth.js';
+import NotificationBell from './NotificationBell.js';
 
 type Page = 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments' | 'installments' | 'exchanges' | 'profile';
 type Role = string;
@@ -174,6 +175,9 @@ export default function Layout({ currentPage, onNavigate, onLogout, userRole, ch
               {userRole}
             </span>
           )}
+
+          {/* Notification bell */}
+          <NotificationBell onNavigate={(page) => onNavigate(page as Page)} />
 
           {/* Dark mode quick toggle */}
           <button

@@ -64,6 +64,7 @@ export interface BookRecord {
   categoryIds: number[];
   tags: string[];
   branchPrice?: number | null;
+  stockQuantity?: number | null;
 }
 
 export interface SearchFilters {
@@ -76,6 +77,7 @@ export interface SearchFilters {
   tag?: string;
   isActive?: boolean;
   branchId?: number;
+  locationId?: number;
   sortBy?: 'title' | 'isbn' | 'created_at' | 'default_price';
   sortDir?: 'asc' | 'desc';
   page?: number;
@@ -170,6 +172,7 @@ function mapBook(row: Record<string, unknown>): BookRecord {
     categoryIds: (row.category_ids as number[] | null) ?? [],
     tags: (row.tags as string[] | null) ?? [],
     branchPrice: row.branch_price != null ? parseFloat(row.branch_price as string) : null,
+    stockQuantity: row.stock_quantity != null ? parseInt(row.stock_quantity as string, 10) : null,
   };
 }
 
@@ -206,7 +209,8 @@ async function fetchBookById(
          ARRAY_AGG(DISTINCT bt.tag ORDER BY bt.tag) FILTER (WHERE bt.tag IS NOT NULL),
          '{}'
        ) AS tags,
-       bbp.price AS branch_price
+       bbp.price AS branch_price,
+
      FROM books b
      LEFT JOIN book_formats bf ON bf.id = b.format_id
      LEFT JOIN book_editions be ON be.id = b.edition_id
@@ -698,11 +702,12 @@ export async function searchBooks(filters: SearchFilters): Promise<{
      LEFT JOIN book_tags bt ON bt.book_id = b.id
      LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $${p++}
        AND bbp.format_id = 0 AND bbp.edition_id = 0
+     LEFT JOIN inventory inv ON inv.book_id = b.id AND inv.location_id = $${p++}
      ${whereClause}
      GROUP BY b.id, bf.code, bf.label, be.code, be.label, bbp.price
      ORDER BY ${sortCol} ${sortDir}
      LIMIT $${p++} OFFSET $${p++}`,
-    [...params, filters.branchId ?? null, pageSize, offset],
+    [...params, filters.branchId ?? null, filters.locationId ?? null, pageSize, offset],
   );
 
   return {

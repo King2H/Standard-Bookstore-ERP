@@ -2,6 +2,7 @@ import pg from 'pg';
 import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { getEffectiveConfig } from '../config/config.service.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 export interface OrderLineInput { bookId: number; quantity: number; discountAmount?: number; }
@@ -141,6 +142,9 @@ export async function create(
       await client.query('INSERT INTO order_line_items (order_id, book_id, quantity, unit_price, discount_amount, total_price) VALUES ($1,$2,$3,$4,$5,$6)', [orderId, item.bookId, item.quantity, item.unitPrice.toFixed(2), item.discountAmount.toFixed(2), item.totalPrice.toFixed(2)]);
     }
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'CREATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, orderId, staffCtx.branchId, JSON.stringify({ orderNumber, total, itemCount: resolvedItems.length })]);
+    await insertOutbox(client, 'order.created', {
+      orderId, orderNumber, branchId: staffCtx.branchId, total, channel: data.channel ?? 'in_store',
+    });
     await client.query('COMMIT');
     return getById(orderId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -181,6 +185,14 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx): Pro
     }
     await client.query("UPDATE orders SET status = 'Confirmed', updated_at = now() WHERE id = $1", [orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'confirm' })]);
+    // Check if any lines are backordered
+    const confirmedOrder = await getById(orderId);
+    const hasBackorder = confirmedOrder.lineItems?.some(li => li.isBackordered) ?? false;
+    if (hasBackorder) {
+      await insertOutbox(client, 'order.backordered', { orderId: String(orderId), orderNumber: confirmedOrder.orderNumber, branchId: staffCtx.branchId });
+    } else {
+      await insertOutbox(client, 'order.confirmed', { orderId: String(orderId), orderNumber: confirmedOrder.orderNumber, branchId: staffCtx.branchId });
+    }
     await client.query('COMMIT');
     return getById(orderId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -189,9 +201,15 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx): Pro
 export async function progress(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
   const order = await getById(orderId);
   if (order.status !== 'Confirmed') throw new BusinessError('INVALID_STATE', "Cannot progress order in status '" + order.status + "'");
-  await db.query("UPDATE orders SET status = 'In_Progress', updated_at = now() WHERE id = $1", [orderId]);
-  await db.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'progress' })]);
-  return getById(orderId);
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("UPDATE orders SET status = 'In_Progress', updated_at = now() WHERE id = $1", [orderId]);
+    await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'progress' })]);
+    await insertOutbox(client, 'order.in_progress', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId });
+    await client.query('COMMIT');
+    return getById(orderId);
+  } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
 }
 
 export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
@@ -215,6 +233,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
     }
     await client.query("UPDATE orders SET status = 'Fulfilled', updated_at = now() WHERE id = $1", [orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'fulfill' })]);
+    await insertOutbox(client, 'order.fulfilled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId });
     await client.query('COMMIT');
     return getById(orderId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -234,6 +253,7 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
     }
     await client.query("UPDATE orders SET status = 'Cancelled', cancel_reason = $1, updated_at = now() WHERE id = $2", [reason, orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'cancel', reason })]);
+    await insertOutbox(client, 'order.cancelled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId, reason });
     await client.query('COMMIT');
     return getById(orderId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }

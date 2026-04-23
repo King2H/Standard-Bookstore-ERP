@@ -429,6 +429,20 @@ export async function createTransaction(
       [staffCtx.staffId, staffCtx.role, txId, staffCtx.branchId, JSON.stringify({ transactionNumber, grandTotal, amountPaid, amountDue, paymentStatus, itemCount: resolvedItems.length })],
     );
 
+    // Emit notification event for POS sale
+    if (paymentStatus === 'paid') {
+      await insertOutbox(client, 'pos.sale_completed', {
+        txId, txNumber: transactionNumber, branchId: data.branchId, amount: grandTotal,
+      });
+    } else if (paymentStatus === 'credit' || paymentStatus === 'partial') {
+      const custName = data.customerId
+        ? (await db.query('SELECT full_name FROM customers WHERE id = $1', [data.customerId])).rows[0]?.full_name ?? null
+        : null;
+      await insertOutbox(client, 'pos.credit_sale', {
+        txId, txNumber: transactionNumber, branchId: data.branchId, amountDue, customerId: data.customerId ?? null, customerName: custName,
+      });
+    }
+
     await client.query('COMMIT');
     return getById(txId);
   } catch (err) {
@@ -524,6 +538,11 @@ export async function recordPayment(
       [staffCtx.staffId, staffCtx.role, String(txId), staffCtx.branchId, JSON.stringify({ action: 'record_payment', incoming: incomingTotal, newAmountDue, newPaymentStatus })],
     );
 
+    // Emit payment collected notification
+    await insertOutbox(client, 'pos.payment_collected', {
+      txId: String(txId), txNumber: tx.transactionNumber, branchId: staffCtx.branchId, amount: incomingTotal,
+    });
+
     await client.query('COMMIT');
     return getById(txId);
   } catch (err) {
@@ -580,6 +599,13 @@ export async function voidTransaction(id: string | number, staffCtx: StaffCtx): 
       `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1, $2, 'UPDATE', 'transaction', $3, $4, $5)`,
       [staffCtx.staffId, staffCtx.role, String(tx.id), staffCtx.branchId, JSON.stringify({ action: 'void', transactionNumber: tx.transactionNumber })],
     );
+
+    // Emit void notification
+    const staffRes = await db.query('SELECT username FROM staff WHERE id = $1', [staffCtx.staffId]);
+    const staffName = staffRes.rows[0]?.username ?? String(staffCtx.staffId);
+    await insertOutbox(client, 'pos.transaction_voided', {
+      txId: String(tx.id), txNumber: tx.transactionNumber, branchId: tx.branchId, staffId: staffCtx.staffId, staffName,
+    });
 
     await client.query('COMMIT');
     return getById(id);

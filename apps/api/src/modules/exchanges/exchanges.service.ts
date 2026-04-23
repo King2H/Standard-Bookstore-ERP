@@ -1,5 +1,6 @@
 import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 
@@ -244,6 +245,16 @@ export async function createExchange(
 
     await client.query("INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'CREATE','exchange',$3,$4,$5)", [staffCtx.staffId, staffCtx.role, exchangeId, staffCtx.branchId, JSON.stringify({ exchangeReference, totalIncoming, totalOutgoing, netBalance, settlementType })]);
 
+    // Emit exchange notifications
+    await insertOutbox(client, 'exchange.completed', {
+      exchangeId, exchangeRef: exchangeReference, settlementType, netBalance, branchId: staffCtx.branchId,
+    });
+    if (settlementType === 'Store_Refunds') {
+      await insertOutbox(client, 'exchange.store_refund_due', {
+        exchangeId, exchangeRef: exchangeReference, amount: Math.abs(netBalance), branchId: staffCtx.branchId,
+      });
+    }
+
     await client.query('COMMIT');
     return getById(exchangeId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -255,5 +266,17 @@ export async function cancelExchange(id: string | number, staffCtx: StaffCtx): P
   if (exchange.status === 'Cancelled') throw new BusinessError('ALREADY_CANCELLED', 'Exchange is already cancelled');
   await db.query("UPDATE exchanges SET status = 'Cancelled', updated_at = now() WHERE id = $1", [id]);
   await db.query("INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','exchange',$3,$4,$5)", [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'cancel' })]);
+
+  try {
+    const notifClient = await db.connect();
+    try {
+      await notifClient.query('BEGIN');
+      await insertOutbox(notifClient, 'exchange.cancelled', {
+        exchangeId: String(id), exchangeRef: exchange.exchangeReference, branchId: staffCtx.branchId,
+      });
+      await notifClient.query('COMMIT');
+    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+  } catch { /* non-fatal */ }
+
   return getById(id);
 }

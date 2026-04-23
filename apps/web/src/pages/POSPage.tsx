@@ -4,7 +4,7 @@ import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 
 type Role = string;
-interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; }
+interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; stockQuantity?: number | null; }
 interface CartItem { bookId: number; bookTitle: string; bookIsbn: string; quantity: number; unitPrice: number; discountPct: number; discountAmount: number; lineTotal: number; }
 interface Customer { id: number; customerCode: string; fullName: string; loyaltyBalance: number; storeCreditBalance: number; }
 interface Location { id: number; name: string; isDefaultFulfillment: boolean; }
@@ -31,11 +31,17 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
 };
 
 function calcCart(items: CartItem[]) {
-  const subtotal     = items.reduce((s, i) => s + i.lineTotal, 0);
-  const discountTotal = items.reduce((s, i) => s + i.discountAmount, 0);
-  const taxTotal     = parseFloat((subtotal * 0.10).toFixed(2));
-  const grandTotal   = parseFloat((subtotal + taxTotal).toFixed(2));
-  return { subtotal, discountTotal, taxTotal, grandTotal };
+  // Use integer arithmetic (cents) to avoid floating-point accumulation
+  const subtotalCents     = items.reduce((s, i) => s + Math.round(i.lineTotal * 100), 0);
+  const discountTotalCents = items.reduce((s, i) => s + Math.round(i.discountAmount * 100), 0);
+  const taxTotalCents     = Math.round(subtotalCents * 0.10);
+  const grandTotalCents   = subtotalCents + taxTotalCents;
+  return {
+    subtotal:      subtotalCents / 100,
+    discountTotal: discountTotalCents / 100,
+    taxTotal:      taxTotalCents / 100,
+    grandTotal:    grandTotalCents / 100,
+  };
 }
 
 type Tab = 'pos' | 'history';
@@ -73,8 +79,8 @@ export default function POSPage({ userRole }: POSPageProps) {
   });
 
   const { data: bookResults } = useQuery<{ items: BookResult[] }>({
-    queryKey: ['pos-books', bookSearch],
-    queryFn: () => api.get(`/books?q=${encodeURIComponent(bookSearch)}&pageSize=10&branchId=${branchId}`),
+    queryKey: ['pos-books', bookSearch, locationId],
+    queryFn: () => api.get(`/books?q=${encodeURIComponent(bookSearch)}&pageSize=10&branchId=${branchId}${locationId ? `&locationId=${locationId}` : ''}`),
     enabled: bookSearch.length > 1,
   });
 
@@ -126,9 +132,15 @@ export default function POSPage({ userRole }: POSPageProps) {
 
   // ── Cart helpers ──────────────────────────────────────────────────────────────
   function recalcItem(item: CartItem): CartItem {
-    const discountAmount = parseFloat((item.unitPrice * item.quantity * (item.discountPct / 100)).toFixed(2));
-    const lineTotal      = parseFloat((item.unitPrice * item.quantity - discountAmount).toFixed(2));
-    return { ...item, discountAmount, lineTotal };
+    // Integer arithmetic to avoid floating-point errors
+    const unitPriceCents   = Math.round(item.unitPrice * 100);
+    const discountAmtCents = Math.round(unitPriceCents * item.quantity * (item.discountPct / 100));
+    const lineTotalCents   = unitPriceCents * item.quantity - discountAmtCents;
+    return {
+      ...item,
+      discountAmount: discountAmtCents / 100,
+      lineTotal:      lineTotalCents / 100,
+    };
   }
 
   function addToCart(book: BookResult) {
@@ -306,9 +318,17 @@ export default function POSPage({ userRole }: POSPageProps) {
             </div>
             <div className="flex-1 overflow-y-auto">
               {(bookResults?.items ?? []).map(b => (
-                <button key={b.id} onClick={() => addToCart(b)} className="w-full text-left px-3 py-2.5 border-b border-gray-100 dark:border-gray-800 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
+                <button key={b.id} onClick={() => addToCart(b)} disabled={b.stockQuantity === 0}
+                  className={`w-full text-left px-3 py-2.5 border-b border-gray-100 dark:border-gray-800 transition-colors ${b.stockQuantity === 0 ? 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50' : 'hover:bg-blue-50 dark:hover:bg-blue-950/30'}`}>
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                    {b.stockQuantity != null && (
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${b.stockQuantity === 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' : b.stockQuantity <= 3 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400'}`}>
+                        {b.stockQuantity === 0 ? 'Out of stock' : `${b.stockQuantity} in stock`}
+                      </span>
+                    )}
+                  </div>
                 </button>
               ))}
               {bookSearch.length > 1 && (bookResults?.items ?? []).length === 0 && (

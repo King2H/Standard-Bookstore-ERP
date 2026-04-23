@@ -5,6 +5,7 @@ import {
   getReturnWindowDays, getMaxReturnValueWithoutAuth, getRefundMethodAfterWindow,
   getLoyaltyAccrualRate, getLoyaltyMinTransactionAmount,
 } from '../config/config.service.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 export interface ReturnLineInput { transactionLineItemId: number; quantity: number; }
@@ -172,6 +173,10 @@ export async function createReturn(
       }
     }
     await client.query(`INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'CREATE','return',$3,$4,$5)`, [staffCtx.staffId, staffCtx.role, returnId, staffCtx.branchId, JSON.stringify({ returnNumber, transactionId: data.transactionId, totalRefundAmount, refundMethod: data.refundMethod })]);
+    // Emit return notification
+    await insertOutbox(client, 'return.initiated', {
+      returnId, returnNumber, txNumber: String(data.transactionId), branchId: staffCtx.branchId, amount: totalRefundAmount,
+    });
     await client.query('COMMIT');
     return getById(returnId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }

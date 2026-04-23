@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1).**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). Phase 2 Roadmap Defined.**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -14,7 +14,9 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | Design | Complete | `.kiro/specs/bookstore-management-system/design.md` |
 | Tasks | In Progress | `.kiro/specs/bookstore-management-system/tasks.md` |
 | Fix Tracker | Active | `BMS_Fix_Tracker_V1.md` |
-| MVP Evaluation | v1.1 | `BMS_MVP_Evaluation_1.md` |
+| MVP Evaluation | v1.2 | `BMS_MVP_Evaluation_1.md` |
+| Industry-Grade Roadmap | Active | `BMS_Industry_Grade_Roadmap.md` |
+| Notification System Spec | Ready for Implementation | `BMS_Notification_Spec.md` |
 
 ---
 
@@ -538,3 +540,40 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 | 1700000027_create_exchanges | Exchanges, exchange_incoming_items, exchange_outgoing_items |
 | 1700000028_hardening | Idempotency keys, outbox, customer PII columns, installment plans, merchants, bank_account_id on payments |
 | 1700000029_staff_multi_role | Drop composite PK on staff_branch_roles; add serial PK + UNIQUE(staff_id, branch_id, role) for multi-role support |
+
+---
+
+## Phase 2 — Industry-Grade Improvements
+
+See `BMS_Industry_Grade_Roadmap.md` for the full prioritized roadmap.
+
+### Planned Features (Priority Order)
+
+**P0 — Real-Time Notifications (SSE)**
+Full lifecycle event coverage across all ERP modules. Every state change in Inventory, POS, Orders, Payments, Returns, Procurement, and Exchanges generates a role-targeted notification delivered via Server-Sent Events. See `BMS_Notification_Spec.md` for the complete event catalog (40+ event types) and implementation plan.
+
+**P1 — Dashboard & Reporting Improvements**
+- KPI query audit and accuracy fixes
+- 4 new KPI cards: POs Awaiting Approval, Overdue Installments, Today's Returns, Today's Credit Sales
+- Procurement analytics report (`GET /api/reports/procurement`)
+- Returns analytics report (`GET /api/reports/returns`)
+- Customer transaction history tab in Customer profile
+
+**P2 — Financial & Security Hardening**
+- Overdue installments list for Finance_Officer
+- Return approval queue UI for Manager
+- Bank reconciliation running balance
+- HMAC audit log signing (tamper-evident)
+- Redis token revocation cache
+- API rate limiting beyond login endpoint
+- Session invalidation on role change
+
+**P3 — Operational Completeness**
+- Cross-branch stock transfer request workflow
+- Book reorder automation (draft PO on low stock)
+- Supplier performance tracking
+
+**P4 — Infrastructure**
+- Audit log monthly partitioning
+- PgBouncer connection pooling
+- Read replica for report queries

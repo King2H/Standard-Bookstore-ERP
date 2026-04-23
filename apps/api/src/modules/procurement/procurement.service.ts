@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { validateSupplierForProcurement } from '../supplier/supplier.service.js';
 import { getPOApprovalThreshold } from '../config/config.service.js';
+import { insertOutbox } from '../../lib/outbox.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -360,6 +361,13 @@ export async function createPO(
       [staffCtx.staffId, staffCtx.role, poId, staffCtx.branchId, JSON.stringify({ supplierId: data.supplierId, totalAmount })],
     );
 
+    // Emit PO notification
+    const supplierRes = await client.query('SELECT name FROM suppliers WHERE id = $1', [data.supplierId]);
+    const supplierName = supplierRes.rows[0]?.name ?? String(data.supplierId);
+    await insertOutbox(client, 'po.created', {
+      poId, poNumber: poRes.rows[0].id, supplierName, total: totalAmount, branchId: data.branchId,
+    });
+
     await client.query('COMMIT');
     return getById(poId);
   } catch (err) {
@@ -504,6 +512,23 @@ export async function submitForApproval(id: number | string, staffCtx: StaffCtx)
      JSON.stringify({ action: 'submit_for_approval', newStatus, totalAmount, threshold })],
   );
 
+  // Emit notification if approval required
+  if (newStatus === 'pending_approval') {
+    try {
+      const notifClient = await db.connect();
+      try {
+        await notifClient.query('BEGIN');
+        const poRes = await notifClient.query('SELECT po.id, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id WHERE po.id = $1', [id]);
+        const supplierName = poRes.rows[0]?.supplier_name ?? '';
+        const poNumber = `PO-${String(id).padStart(6, '0')}`;
+        await insertOutbox(notifClient, 'po.approval_required', {
+          poId: String(id), poNumber, supplierName, total: totalAmount, branchId: staffCtx.branchId,
+        });
+        await notifClient.query('COMMIT');
+      } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+    } catch { /* non-fatal */ }
+  }
+
   return getById(id);
 }
 
@@ -530,6 +555,16 @@ export async function approvePO(id: number | string, staffCtx: StaffCtx): Promis
     [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'approve' })],
   );
 
+  try {
+    const notifClient = await db.connect();
+    try {
+      await notifClient.query('BEGIN');
+      const poNumber = `PO-${String(id).padStart(6, '0')}`;
+      await insertOutbox(notifClient, 'po.approved', { poId: String(id), poNumber, branchId: staffCtx.branchId });
+      await notifClient.query('COMMIT');
+    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+  } catch { /* non-fatal */ }
+
   return getById(id);
 }
 
@@ -555,6 +590,18 @@ export async function markAsOrdered(id: number | string, staffCtx: StaffCtx): Pr
      VALUES ($1, $2, 'UPDATE', 'purchase_order', $3, $4, $5)`,
     [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'mark_as_ordered' })],
   );
+
+  try {
+    const notifClient = await db.connect();
+    try {
+      await notifClient.query('BEGIN');
+      const poRes = await notifClient.query('SELECT s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id WHERE po.id = $1', [id]);
+      const supplierName = poRes.rows[0]?.supplier_name ?? '';
+      const poNumber = `PO-${String(id).padStart(6, '0')}`;
+      await insertOutbox(notifClient, 'po.ordered', { poId: String(id), poNumber, supplierName, branchId: staffCtx.branchId });
+      await notifClient.query('COMMIT');
+    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+  } catch { /* non-fatal */ }
 
   return getById(id);
 }
@@ -617,6 +664,16 @@ export async function cancelPO(id: number | string, staffCtx: StaffCtx): Promise
      VALUES ($1, $2, 'UPDATE', 'purchase_order', $3, $4, $5)`,
     [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'cancel' })],
   );
+
+  try {
+    const notifClient = await db.connect();
+    try {
+      await notifClient.query('BEGIN');
+      const poNumber = `PO-${String(id).padStart(6, '0')}`;
+      await insertOutbox(notifClient, 'po.cancelled', { poId: String(id), poNumber, branchId: staffCtx.branchId });
+      await notifClient.query('COMMIT');
+    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
+  } catch { /* non-fatal */ }
 
   return getById(id);
 }
@@ -769,6 +826,18 @@ export async function receivePO(
       [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId,
        JSON.stringify({ action: 'receive', locationId: effectiveLocationId, itemCount: items.length, newStatus })],
     );
+
+    // 9. Emit receiving notification
+    const poNumber = `PO-${String(id).padStart(6, '0')}`;
+    const totalQtyReceived = items.reduce((s, i) => s + i.quantityReceived, 0);
+    const totalQtyOrdered = allLinesRes.rows.reduce((s: number, r: { quantity: number }) => s + r.quantity, 0);
+    if (newStatus === 'received') {
+      await insertOutbox(client, 'po.fully_received', { poId: String(id), poNumber, branchId: staffCtx.branchId });
+    } else {
+      await insertOutbox(client, 'po.partially_received', {
+        poId: String(id), poNumber, qtyReceived: totalQtyReceived, qtyOrdered: totalQtyOrdered, branchId: staffCtx.branchId,
+      });
+    }
 
     await client.query('COMMIT');
     return getById(id);

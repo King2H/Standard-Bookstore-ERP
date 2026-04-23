@@ -1568,3 +1568,283 @@ Every task in this plan corresponds to exactly one vertical slice from `design.m
 - Each task includes seed data for immediate developer testing
 - Seed script at `apps/api/src/db/seed.ts`; run with `npm run seed`
 - Seed creates: 1 Super_Admin, 1 Admin, 1 Manager, 1 Finance_Officer, 1 Stock_Clerk, 1 Sales, 1 Purchasor staff; 2 branches; 2 locations per branch; 10 books; 3 suppliers; 5 customers
+
+
+---
+
+## Phase 5 — Real-Time Notification System (SSE)
+> Goal: Transform the BMS from a "pull" system (staff must refresh) to a "push" system (system tells staff what needs attention). Every lifecycle event generates a role-targeted, branch-scoped, persistent notification delivered via Server-Sent Events.
+> _Spec reference: notification-spec.md | Roadmap: roadmap.md §Category A_
+
+---
+
+- [x] 5.1 Database Migration — notifications table
+  > Create the persistent notification store. This is the foundation everything else builds on.
+  > _Spec: notification-spec.md §Database Schema_
+
+  - [x] 5.1.1 Create migration `1700000030_create_notifications`
+    - `notifications (id BIGSERIAL PK, branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE, target_roles TEXT[] NOT NULL DEFAULT '{}', target_staff_id INTEGER REFERENCES staff(id) ON DELETE CASCADE, event_type TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, entity_type TEXT, entity_id TEXT, severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info','success','warning','error')), is_read BOOLEAN NOT NULL DEFAULT false, read_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+    - Index: `idx_notif_branch_roles` — GIN on `target_roles` WHERE `branch_id IS NOT NULL`
+    - Index: `idx_notif_staff` — btree on `(target_staff_id, is_read, created_at DESC)` WHERE `target_staff_id IS NOT NULL`
+    - Index: `idx_notif_branch_unread` — btree on `(branch_id, is_read, created_at DESC)` WHERE `is_read = false`
+    - Run migration; verify table and indexes created cleanly
+
+  - [x] 5.1.2 Verify outbox table exists (migration 1700000028)
+    - Confirm `outbox (id, event_type, payload, status, created_at, processed_at)` table is present
+    - Confirm `insertOutbox(client, eventType, payload)` helper exists in `lib/outbox.ts` (or equivalent)
+    - If missing: create migration `1700000029_create_outbox` and the helper before proceeding
+
+  **Definition of Done:**
+  - `notifications` table created with all indexes
+  - `outbox` table confirmed present
+  - `npm run migrate` runs cleanly with no errors
+
+---
+
+- [x] 5.2 Backend Infrastructure — SSEManager + OutboxPoller + NotificationWorker
+  > Core server-side plumbing: connection registry, event polling, notification creation.
+  > _Spec: notification-spec.md §Architecture, §Key Components_
+
+  - [x] 5.2.1 Implement `lib/sseManager.ts` — SSE connection registry
+    - `SSEManager` class with `Map<string, Set<Response>>` keyed by `staffId`
+    - `register(staffId: string, res: Response): void` — add to set; auto-remove on `res.on('close')`; set SSE headers on `res` (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no`)
+    - `broadcast(branchId: number | null, roles: string[], notification: NotificationPayload): void` — iterate all registered connections; for each: check if staff's role is in `roles` AND (branchId is null OR staff's branchId matches); write `event: notification\ndata: {json}\n\n`
+    - `pushToStaff(staffId: string, notification: NotificationPayload): void` — push directly to a specific staff member's connections
+    - `getConnectionCount(): number` — for health/metrics
+    - Export singleton instance `sseManager`
+
+  - [x] 5.2.2 Implement `workers/notificationWorker.ts` — event → notification mapper
+    - `NotificationWorker` class with `handle(event: OutboxEvent): Promise<void>`
+    - Map each `event_type` to: `{ title, body, targetRoles, severity, entityType }` using the full event catalog from `notification-spec.md §Full Event Catalog`
+    - For each mapped event: `INSERT INTO notifications (branch_id, target_roles, event_type, title, body, entity_type, entity_id, severity)` using a DB client
+    - After INSERT: call `sseManager.broadcast(branchId, targetRoles, notification)` to push to active connections
+    - Handle all event categories: inventory, pos, order, payment, return, procurement, exchange, customer, auth/system
+    - Unknown event types: log warning and skip (do not throw)
+
+  - [x] 5.2.3 Implement `workers/outboxPoller.ts` — polls outbox and routes to workers
+    - `OutboxPoller` class; `start()` sets a 1-second `setInterval`
+    - Each tick: `BEGIN; SELECT * FROM outbox WHERE status='pending' ORDER BY created_at LIMIT 50 FOR UPDATE SKIP LOCKED; UPDATE outbox SET status='processing' WHERE id = ANY($ids); COMMIT`
+    - For each event: route to `notificationWorker.handle(event)`; on success: `UPDATE outbox SET status='processed', processed_at=now()`; on error: `UPDATE outbox SET status='failed'` + log error
+    - `stop()` clears the interval (for clean shutdown)
+    - Export singleton `outboxPoller`; call `outboxPoller.start()` in `server.ts` after DB connection confirmed
+
+  - [x] 5.2.4 Register OutboxPoller in `server.ts`
+    - Import and call `outboxPoller.start()` after the server starts listening
+    - On `SIGTERM`/`SIGINT`: call `outboxPoller.stop()` before `server.close()`
+    - Log: `[OutboxPoller] started` on init, `[OutboxPoller] stopped` on shutdown
+
+  **Definition of Done:**
+  - `sseManager` registers/deregisters connections correctly; no memory leaks on disconnect
+  - `notificationWorker` maps all event types from the spec to correct title/body/roles/severity
+  - `outboxPoller` polls every 1s; processes pending events; marks processed/failed correctly
+  - Poller starts with server; stops cleanly on shutdown signal
+
+---
+
+- [x] 5.3 Notification API Routes
+  > REST endpoints for notification management + the SSE streaming endpoint.
+  > _Spec: notification-spec.md §SSE Endpoint Specification_
+
+  - [x] 5.3.1 Create `modules/notifications/notifications.routes.ts`
+    - `GET /api/notifications/stream` — SSE endpoint
+      - Authenticate staff from JWT (use existing `authenticate` middleware)
+      - Extract `staffId`, `branchId`, `role` from `req.staff`
+      - Call `sseManager.register(staffId, res)` — this sets headers and keeps connection open
+      - Immediately send `event: connected\ndata: {"unreadCount": N}\n\n` (query unread count from DB)
+      - Set 30s heartbeat: `setInterval(() => res.write(': ping\n\n'), 30000)`; clear on `res.on('close')`
+    - `GET /api/notifications` — paginated list
+      - Query: `SELECT * FROM notifications WHERE (target_staff_id = $staffId OR ($role = ANY(target_roles) AND (branch_id IS NULL OR branch_id = $branchId))) ORDER BY created_at DESC LIMIT $pageSize OFFSET $offset`
+      - Query params: `page` (default 1), `pageSize` (default 20, max 100), `isRead` (optional boolean), `severity` (optional)
+      - Returns: `{ data: Notification[], total, page, pageSize }`
+    - `GET /api/notifications/unread-count` — returns `{ count: number }`
+    - `PUT /api/notifications/:id/read` — `UPDATE notifications SET is_read=true, read_at=now() WHERE id=$1 AND (target_staff_id=$staffId OR ($role = ANY(target_roles) AND branch_id=$branchId))`
+    - `PUT /api/notifications/read-all` — bulk mark read for authenticated staff
+    - All routes require `authenticate` middleware; no additional RBAC (all roles can read their own notifications)
+
+  - [x] 5.3.2 Register notification routes in `app.ts`
+    - `import notificationRoutes from './modules/notifications/notifications.routes'`
+    - `app.use('/api/notifications', notificationRoutes)`
+    - Ensure route is registered AFTER auth middleware setup
+
+  **Definition of Done:**
+  - `GET /api/notifications/stream` returns `text/event-stream` response; stays open; sends ping every 30s
+  - `GET /api/notifications` returns paginated list filtered to authenticated staff's role + branch
+  - `PUT /api/notifications/:id/read` marks single notification read
+  - `PUT /api/notifications/read-all` marks all read
+  - `GET /api/notifications/unread-count` returns correct count
+
+---
+
+- [x] 5.4 Outbox Emission Points — Add `insertOutbox()` to All Services
+  > Wire every business event to the outbox so the poller can pick it up and create notifications.
+  > _Spec: notification-spec.md §Outbox Event Emission Points_
+
+  - [x] 5.4.1 Inventory service emission points (`inventory.service.ts`)
+    - `stockIn()` → `insertOutbox(client, 'inventory.stock_in', { bookId, bookTitle, locationId, locationName, branchId, quantity })`
+    - `stockOut()` → `insertOutbox(client, 'inventory.stock_out', { bookId, bookTitle, locationId, locationName, branchId, quantity, reasonCode })`
+    - `adjustStock()` → `insertOutbox(client, 'inventory.adjustment', { bookId, bookTitle, locationId, locationName, branchId, delta, reasonCode })`
+    - `transferStock()` → `insertOutbox(client, 'inventory.transfer_completed', { bookId, bookTitle, fromLocationId, fromLocationName, toLocationId, toLocationName, branchId, quantity })`
+    - After any stock change: if `newQuantity <= reorderPoint && newQuantity > 0` → also emit `inventory.low_stock`; if `newQuantity === 0` → emit `inventory.out_of_stock`
+
+  - [x] 5.4.2 POS service emission points (`pos.service.ts`)
+    - `createTransaction()` on paid completion → `insertOutbox(client, 'pos.sale_completed', { txNumber, branchId, amount, staffId })`
+    - `createTransaction()` on credit balance → `insertOutbox(client, 'pos.credit_sale', { txNumber, branchId, amountDue, customerId, customerName })`
+    - `voidTransaction()` → `insertOutbox(client, 'pos.transaction_voided', { txNumber, branchId, staffId, staffName })`
+    - `recordPayment()` (collect outstanding) → `insertOutbox(client, 'pos.payment_collected', { txNumber, branchId, amount })`
+
+  - [x] 5.4.3 Orders service emission points (`orders.service.ts`)
+    - `create()` → `insertOutbox(client, 'order.created', { orderNumber, branchId, total, channel })`
+    - `confirm()` on success → `insertOutbox(client, 'order.confirmed', { orderNumber, branchId })`
+    - `confirm()` when any line backordered → `insertOutbox(client, 'order.backordered', { orderNumber, branchId, backorderedLines })`
+    - `progress()` → `insertOutbox(client, 'order.in_progress', { orderNumber, branchId })`
+    - `fulfill()` → `insertOutbox(client, 'order.fulfilled', { orderNumber, branchId })`
+    - `cancel()` → `insertOutbox(client, 'order.cancelled', { orderNumber, branchId, reason })`
+
+  - [x] 5.4.4 Payments service emission points (`payments.service.ts`)
+    - `createPayment()` → `insertOutbox(client, 'payment.recorded', { amount, method, orderNumber, branchId })`
+    - `createPayment()` when method='bank' → also emit `payment.bank_transfer`
+    - `createRefund()` → `insertOutbox(client, 'payment.refunded', { amount, orderNumber, branchId })`
+
+  - [x] 5.4.5 Returns service emission points (`returns.service.ts`)
+    - `createReturn()` when auto-approved → `insertOutbox(client, 'return.initiated', { returnNumber, txNumber, branchId, amount })`
+    - `createReturn()` when approval required → `insertOutbox(client, 'return.approval_required', { returnNumber, txNumber, branchId, amount })`
+    - `approveReturn()` → `insertOutbox(client, 'return.approved', { returnNumber, refundMethod, branchId })`
+    - `rejectReturn()` → `insertOutbox(client, 'return.rejected', { returnNumber, reason, branchId })`
+
+  - [x] 5.4.6 Procurement service emission points (`procurement.service.ts`)
+    - `createPO()` when auto-approved → `insertOutbox(client, 'po.created', { poNumber, supplierName, total, branchId })`
+    - `createPO()` when approval required → `insertOutbox(client, 'po.approval_required', { poNumber, supplierName, total, branchId })`
+    - `approvePO()` → `insertOutbox(client, 'po.approved', { poNumber, branchId })`
+    - `markAsOrdered()` → `insertOutbox(client, 'po.ordered', { poNumber, supplierName, branchId })`
+    - `receivePO()` partial → `insertOutbox(client, 'po.partially_received', { poNumber, qtyReceived, qtyOrdered, branchId })`
+    - `receivePO()` fully received → `insertOutbox(client, 'po.fully_received', { poNumber, branchId })`
+    - `cancelPO()` → `insertOutbox(client, 'po.cancelled', { poNumber, branchId })`
+
+  - [x] 5.4.7 Exchanges service emission points (`exchanges.service.ts`)
+    - `createExchange()` → `insertOutbox(client, 'exchange.completed', { exchangeRef, settlementType, netBalance, branchId })`
+    - `createExchange()` when `settlementType = 'Store_Refunds'` → also emit `exchange.store_refund_due`
+    - `cancelExchange()` → `insertOutbox(client, 'exchange.cancelled', { exchangeRef, branchId })`
+
+  - [x] 5.4.8 Customer service emission points (`customer.service.ts`)
+    - Store credit adjustment → `insertOutbox(client, 'customer.store_credit_added', { customerId, customerName, amount, branchId })`
+    - `deactivateCustomer()` → `insertOutbox(client, 'customer.deactivated', { customerId, customerName, customerCode, branchId })`
+
+  - [x] 5.4.9 Auth service emission points (`auth.service.ts`)
+    - Account lockout triggered → `insertOutbox(client, 'auth.failed_login_attempts', { username, attemptCount, branchId })`
+    - `deactivateStaff()` → `insertOutbox(client, 'auth.staff_deactivated', { username, branchId })`
+    - `adminResetPassword()` → `insertOutbox(client, 'auth.password_reset', { username, adminName, branchId })`
+
+  **Definition of Done:**
+  - Every service listed above calls `insertOutbox()` within its DB transaction at the correct point
+  - Outbox rows are created atomically with the business operation (same transaction)
+  - No service throws if `insertOutbox()` fails — wrap in try/catch and log; business operation must not be blocked by notification failure
+  - All `insertOutbox()` calls include `branchId` in payload for branch-scoped routing
+
+---
+
+- [x] 5.5 Frontend — NotificationBell Component + SSE Client
+  > Real-time notification UI: bell icon with badge, dropdown, SSE connection management.
+  > _Spec: notification-spec.md §Frontend Implementation_
+
+  - [x] 5.5.1 Implement `hooks/useSSENotifications.ts`
+    - Opens `EventSource('/api/notifications/stream')` with auth header
+    - On `event: connected`: set initial unread count from `data.unreadCount`
+    - On `event: notification`: prepend to local notification list; increment unread count; if `severity === 'warning' || severity === 'error'`: show toast
+    - On `event: notification`: invalidate relevant TanStack Query keys based on `entityType`:
+      - `order` → invalidate `['orders']`
+      - `pos_transaction` → invalidate `['pos-transactions']`
+      - `inventory` → invalidate `['inventory']`, `['inventory-low-stock']`
+      - `purchase_order` → invalidate `['purchase-orders']`
+      - `return` → invalidate `['returns']`
+      - `payment` → invalidate `['payments']`, `['orders']`
+      - `exchange` → invalidate `['exchanges']`
+      - `customer` → invalidate `['customers']`
+    - Auto-reconnect on error: exponential backoff starting at 1s, max 30s
+    - Close `EventSource` on component unmount / logout
+    - Returns: `{ notifications, unreadCount, markRead, markAllRead }`
+
+  - [x] 5.5.2 Implement `components/NotificationBell.tsx`
+    - Bell icon (Heroicons `BellIcon`) in Layout header, right side next to user menu
+    - Red badge showing `unreadCount` (hidden when 0; capped display at "99+")
+    - Click toggles dropdown panel (max-height scrollable, ~400px)
+    - Dropdown header: "Notifications" title + "Mark all read" button (disabled when unreadCount=0)
+    - Notification list: last 20 notifications, each showing:
+      - Severity icon: ✅ success (green), ℹ️ info (blue), ⚠️ warning (amber), ❌ error (red)
+      - `title` in bold, `body` in muted text, `time ago` (e.g. "2 min ago") right-aligned
+      - Unread notifications: slightly highlighted background
+      - Click: mark as read + navigate to entity if `entityType` + `entityId` present
+    - Empty state: "No notifications yet" centered message
+    - Click outside dropdown: close
+    - Dark mode compatible (use existing Tailwind dark: classes)
+
+  - [x] 5.5.3 Add `NotificationBell` to `Layout.tsx`
+    - Import and render `<NotificationBell />` in the header bar, between the page title area and the user menu
+    - Only render when staff is authenticated (inside the auth guard)
+
+  - [x] 5.5.4 Implement entity navigation from notification click
+    - Map `entityType` → page navigation in `App.tsx`:
+      - `order` → navigate to Orders page (filter by entityId if possible)
+      - `pos_transaction` → navigate to POS history
+      - `purchase_order` → navigate to Procurement page
+      - `return` → navigate to Returns page
+      - `inventory` → navigate to Inventory page
+      - `payment` → navigate to Payments page
+      - `exchange` → navigate to Exchanges page
+      - `customer` → navigate to Customers page
+
+  **Definition of Done:**
+  - Bell icon visible in header for all authenticated roles
+  - SSE connection established on login; closed on logout
+  - Unread badge updates in real time when notifications arrive
+  - Toast shown for warning/error severity notifications
+  - Mark as read / mark all read works
+  - TanStack Query cache invalidated on notification receipt (relevant pages auto-refresh)
+  - Auto-reconnect works after network interruption
+  - Dark mode renders correctly
+
+---
+
+- [x] 5.6 Integration Tests — Notification System
+  > Verify the full notification pipeline end-to-end.
+  > _Spec: notification-spec.md §Implementation Checklist_
+
+  - [x] 5.6.1 Write `tests/notifications.test.ts`
+    - **Test 1:** OutboxPoller picks up pending outbox event → NotificationWorker inserts notification row
+      - Insert a test outbox event directly; wait for poller tick; assert `notifications` row created with correct `event_type`, `title`, `target_roles`, `severity`
+    - **Test 2:** `GET /api/notifications` returns notifications for authenticated staff's role + branch
+      - Insert notifications for different roles; assert staff only sees their own
+    - **Test 3:** `GET /api/notifications` with `?isRead=false` returns only unread
+    - **Test 4:** `PUT /api/notifications/:id/read` marks notification as read; subsequent GET reflects change
+    - **Test 5:** `PUT /api/notifications/read-all` marks all unread as read
+    - **Test 6:** `GET /api/notifications/unread-count` returns correct count before and after mark-read
+    - **Test 7:** `GET /api/notifications/stream` returns `Content-Type: text/event-stream`; sends `connected` event
+    - **Test 8:** Notification for branch A is NOT returned for staff in branch B
+    - **Test 9:** `insertOutbox()` failure does NOT cause the parent business transaction to fail (resilience test)
+    - **Test 10:** Duplicate outbox events (same event_type + entity_id within 1s) produce at most one notification (idempotency)
+
+  **Definition of Done:**
+  - All 10 tests pass
+  - No test leaves orphaned outbox rows or notification rows (cleanup via testDb helper)
+  - Tests run in < 10 seconds total
+
+---
+
+**Phase 5 Traceability:**
+
+| Task | Spec Section | Roadmap Item |
+|------|-------------|--------------|
+| 5.1 | notification-spec.md §Database Schema | roadmap.md §A (SSE Notifications) |
+| 5.2 | notification-spec.md §Architecture, §Key Components | roadmap.md §A |
+| 5.3 | notification-spec.md §SSE Endpoint Specification | roadmap.md §A |
+| 5.4 | notification-spec.md §Outbox Event Emission Points | roadmap.md §A |
+| 5.5 | notification-spec.md §Frontend Implementation | roadmap.md §A |
+| 5.6 | notification-spec.md §Implementation Checklist | roadmap.md §A |
+
+**Phase 5 Definition of Done:**
+- Every business event listed in `notification-spec.md §Full Event Catalog` generates a notification row in the DB
+- Notifications are delivered to active SSE connections within 2 seconds of the business event
+- Staff only receive notifications for their role and branch
+- Notifications persist in DB; staff can see history after reconnect
+- Unread badge count is accurate in real time
+- All 10 integration tests pass
+- No business operation is blocked or fails due to notification system errors

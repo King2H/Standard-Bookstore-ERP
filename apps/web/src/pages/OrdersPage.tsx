@@ -10,7 +10,7 @@ interface OrderLine { id: string; bookId: number; bookTitle: string; quantity: n
 interface Order { id: string; orderNumber: string; customerId: number | null; branchId: number; channel: string; status: string; paymentStatus: string; currency: string; subtotal: number; taxAmount: number; total: number; cancelReason: string | null; createdAt: string; lineItems?: OrderLine[]; }
 interface OrderListResponse { items: Order[]; total: number; page: number; totalPages: number; }
 interface Customer { id: number; customerCode: string; fullName: string; }
-interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; }
+interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; stockQuantity?: number | null; }
 
 const STATUS_COLORS: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
@@ -235,7 +235,14 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
                   {(bookResults?.items ?? []).map(b => (
                     <button key={b.id} onClick={() => addItem(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                        {b.stockQuantity != null && (
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${b.stockQuantity === 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' : b.stockQuantity <= 3 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400'}`}>
+                            {b.stockQuantity === 0 ? 'Out of stock' : `${b.stockQuantity} in stock`}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>
