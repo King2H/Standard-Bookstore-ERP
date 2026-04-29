@@ -19,5 +19,5 @@ WORKDIR /app/apps/api
 
 EXPOSE 3000
 
-# Run TypeScript directly with tsx — no build step needed
-CMD ["node_modules/.bin/tsx", "src/server.ts"]
+# Run TypeScript directly with tsx — tsx is hoisted to root node_modules by npm workspaces
+CMD ["/app/node_modules/.bin/tsx", "src/server.ts"]
