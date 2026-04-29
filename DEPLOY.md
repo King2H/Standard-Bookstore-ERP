@@ -118,13 +118,17 @@ After the API deploys, run migrations to create all tables and seed data.
 3. Fill in:
    - **Name:** `bms-web`
    - **Branch:** `main`
-   - **Build Command:** `npm install && npm run build --workspace=apps/web`
+   - **Build Command:** `npm install && VITE_API_URL=https://YOUR-API-URL.onrender.com npm run build --workspace=apps/web`
+     > Replace `YOUR-API-URL` with your actual API service name from Step 4.
+     > Example: `npm install && VITE_API_URL=https://bms-api-gwf2.onrender.com npm run build --workspace=apps/web`
    - **Publish Directory:** `apps/web/dist`
-4. Under **"Environment Variables"**, add:
+4. Under **"Environment Variables"**, also add (as a backup):
 
    | Key | Value |
    |-----|-------|
-   | `VITE_API_URL` | `https://bms-api.onrender.com` *(your API URL from Step 4)* |
+   | `VITE_API_URL` | `https://YOUR-API-URL.onrender.com` |
+
+   > ⚠️ **Critical:** Vite bakes environment variables into the bundle at **build time**. Simply setting `VITE_API_URL` as a runtime env var is NOT enough — it must be present when `vite build` runs. That's why it's in the build command above.
 
 5. Click **"Create Static Site"**
 6. Render builds the React app (~3 minutes)
@@ -198,9 +202,11 @@ Once connected to GitHub, every `git push` to `main` automatically:
 - Run them again from the Shell tab
 - Check that `DATABASE_URL` is set correctly in the API env vars
 
-**Frontend shows blank page**
-- Open browser DevTools → Console tab — look for errors
-- Make sure `VITE_API_URL` is set correctly (no trailing slash, no `/api` suffix)
+**Frontend shows blank page or branch dropdown is empty**
+- Open browser DevTools → Network tab — check what URL the `/branches/public` request goes to
+- If it's hitting `https://bms-web.onrender.com/api/...` instead of your API URL, `VITE_API_URL` wasn't set at build time
+- Fix: Go to the `bms-web` Static Site → Settings → Build & Deploy → update the **Build Command** to include `VITE_API_URL=https://YOUR-API-URL.onrender.com` before `npm run build`
+- Then trigger a **Manual Deploy** from the Render dashboard
 - After changing env vars, trigger a manual redeploy of the Static Site
 
 **Login works but pages show errors**

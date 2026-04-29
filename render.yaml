@@ -31,12 +31,12 @@ services:
   - type: web
     name: bms-web
     runtime: static
-    buildCommand: npm install && npm run build --workspace=apps/web
+    buildCommand: npm install && VITE_API_URL=https://bms-api-gwf2.onrender.com npm run build --workspace=apps/web
     staticPublishPath: ./apps/web/dist
     plan: free
     envVars:
       - key: VITE_API_URL
-        value: https://bms-api.onrender.com
+        value: https://bms-api-gwf2.onrender.com
 
 databases:
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
