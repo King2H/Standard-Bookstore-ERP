@@ -5,6 +5,11 @@ import { z } from 'zod';
 import { login } from '../lib/auth.js';
 import { useTheme } from '../lib/theme.js';
 
+// Same base URL logic as api.ts — works in both dev (proxy) and production
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)
+  ? `${import.meta.env.VITE_API_URL as string}/api`
+  : '/api';
+
 interface BranchOption { id: number; name: string }
 
 const schema = z.object({
@@ -27,7 +32,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   const [branchesLoading, setBranchesLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/branches/public')
+    fetch(`${API_BASE}/branches/public`)
       .then(r => r.json())
       .then(data => { setBranches(data.items ?? []); setBranchesLoading(false); })
       .catch(() => setBranchesLoading(false));
