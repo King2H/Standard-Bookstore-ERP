@@ -237,7 +237,6 @@ function StockLevelsTab({ userRole, onNavigate }: { userRole?: Role; onNavigate?
 // ── Adjust Tab ────────────────────────────────────────────────────────────────
 function AdjustTab({ userRole }: { userRole?: Role }) {
   const qc = useQueryClient();
-  const { showToast } = useToast();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedBook, setSelectedBook] = useState<InventoryRow | null>(null);
   const [delta, setDelta] = useState('');
@@ -385,7 +384,6 @@ function AdjustTab({ userRole }: { userRole?: Role }) {
 // ── Transfer Tab ──────────────────────────────────────────────────────────────
 function TransferTab({ userRole }: { userRole?: Role }) {
   const qc = useQueryClient();
-  const { showToast } = useToast();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedBook, setSelectedBook] = useState<InventoryRow | null>(null);
   const [toLocationId, setToLocationId] = useState('');
@@ -778,7 +776,6 @@ function QuickStockButton({ row: _row, type, onNavigate }: {
 // ── Stock In Tab ──────────────────────────────────────────────────────────────
 function StockInTab({ userRole }: { userRole?: Role }) {
   const qc = useQueryClient();
-  const { showToast } = useToast();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedRow, setSelectedRow] = useState<InventoryRow | null>(null);
   const [quantity, setQuantity] = useState('');
@@ -944,7 +941,6 @@ function StockInTab({ userRole }: { userRole?: Role }) {
 // ── Stock Out Tab ─────────────────────────────────────────────────────────────
 function StockOutTab({ userRole }: { userRole?: Role }) {
   const qc = useQueryClient();
-  const { showToast } = useToast();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedRow, setSelectedRow] = useState<InventoryRow | null>(null);
   const [quantity, setQuantity] = useState('');

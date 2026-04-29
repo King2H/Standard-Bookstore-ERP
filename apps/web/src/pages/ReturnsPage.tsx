@@ -41,7 +41,6 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
   const [quantities, setQuantities]     = useState<Record<string, number>>({});
   const [refundMethod, setRefundMethod] = useState<'cash' | 'store_credit'>('cash');
   const [reason, setReason]             = useState('');
-  const [useApproval, setUseApproval]   = useState(false);
 
   // ── List state ────────────────────────────────────────────────────────────────
   const [listPage, setListPage] = useState(1);
@@ -75,7 +74,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
     onSuccess: (ret) => {
       showToast(`Return ${ret.returnNumber} processed`, 'success');
       setSelectedTx(null); setTxSearch(''); setTxSearchInput('');
-      setQuantities({}); setReason(''); setUseApproval(false);
+      setQuantities({}); setReason('');
       qc.invalidateQueries({ queryKey: ['returns-list'] });
     },
     onError: (e: Error) => {
