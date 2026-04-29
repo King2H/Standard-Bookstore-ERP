@@ -3,20 +3,20 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy workspace root package files
-COPY package.json ./
+COPY package.json package-lock.json* ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
-# Install all dependencies (including devDeps needed for build)
+# Install ALL dependencies (including devDeps — tsc is needed to build)
 RUN npm install --workspace=apps/api --workspace=packages/shared
 
-# Copy source
+# Copy source files
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 
-# Build TypeScript → JavaScript
+# Compile TypeScript → JavaScript
 WORKDIR /app/apps/api
-RUN npm run build
+RUN npx tsc
 
 # ── Production image ──────────────────────────────────────────────────────────
 FROM node:20-alpine AS production
@@ -24,14 +24,14 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Copy workspace root package files
-COPY package.json ./
+COPY package.json package-lock.json* ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
 # Install production dependencies only
 RUN npm install --workspace=apps/api --workspace=packages/shared --omit=dev
 
-# Copy compiled output from builder
+# Copy compiled JS from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/packages/shared ./packages/shared
 
