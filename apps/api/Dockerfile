@@ -7,7 +7,7 @@ COPY package.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
-# Install all dependencies including devDeps (tsx and typescript are devDeps)
+# Install all dependencies (tsx, typescript, node-pg-migrate are devDeps in apps/api)
 RUN npm install --workspace=apps/api --workspace=packages/shared
 
 # Copy source files
@@ -15,9 +15,10 @@ COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 
-WORKDIR /app/apps/api
+# Make startup script executable
+RUN chmod +x /app/apps/api/start.sh
 
 EXPOSE 3000
 
-# Run TypeScript directly with tsx — tsx is hoisted to root node_modules by npm workspaces
-CMD ["/app/node_modules/.bin/tsx", "src/server.ts"]
+# Run migrations then start server
+CMD ["/bin/sh", "/app/apps/api/start.sh"]
