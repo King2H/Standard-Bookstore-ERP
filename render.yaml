@@ -1,6 +1,6 @@
-# Render.com deployment configuration
-# Free tier: Web Service (API) + PostgreSQL + Redis + Static Site (Frontend)
-# Deploy from GitHub: connect repo → Render auto-detects this file
+# Render.com deployment configuration (reference only)
+# Redis is NOT included — Render removed it from the free tier.
+# The app works without Redis (config caching falls back to DB).
 
 services:
   # ── Backend API ──────────────────────────────────────────────────────────────
@@ -19,17 +19,12 @@ services:
         fromDatabase:
           name: bms-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: bms-redis
-          property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: COLUMN_ENCRYPTION_KEY
         generateValue: true
       - key: FRONTEND_URL
-        value: https://bms-web.onrender.com   # update after frontend deploys
+        value: https://bms-web.onrender.com
     healthCheckPath: /api/health
 
   # ── Frontend (Static Site) ───────────────────────────────────────────────────
@@ -41,7 +36,7 @@ services:
     plan: free
     envVars:
       - key: VITE_API_URL
-        value: https://bms-api.onrender.com   # update after API deploys
+        value: https://bms-api.onrender.com
 
 databases:
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
@@ -49,7 +44,3 @@ databases:
     plan: free
     databaseName: bms
     user: bms
-
-  # ── Redis ────────────────────────────────────────────────────────────────────
-  - name: bms-redis
-    plan: free

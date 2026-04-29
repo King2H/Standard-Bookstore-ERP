@@ -5,10 +5,11 @@
 Render offers a free tier that covers everything this app needs:
 - **Web Service** (Docker) — the Node.js API
 - **Static Site** — the React frontend
-- **PostgreSQL** — free managed database (90-day retention on free tier)
-- **Redis** — free managed Redis
+- **PostgreSQL** — free managed database
 
-> **Free tier note:** Services spin down after 15 minutes of inactivity and take ~30s to wake up on the first request. This is fine for internal/demo use. Upgrade to the $7/month Starter plan to keep services always-on.
+> **Redis note:** Render removed Redis from their free tier in 2024. This app works perfectly without Redis — it's only used for optional config caching and falls back to the database automatically when `REDIS_URL` is not set.
+
+> **Free tier note:** Web Services spin down after 15 minutes of inactivity and take ~30s to wake up on the first request. This is fine for internal/demo use. Upgrade to the $7/month Starter plan to keep services always-on.
 
 ---
 
@@ -52,85 +53,65 @@ dist/
 
 ---
 
-## Step 3 — Deploy the Database (PostgreSQL)
+## Step 3 — You Already Have the Database ✅
 
-1. In Render dashboard → click **"New +"** → **"PostgreSQL"**
-2. Fill in:
-   - **Name:** `bms-db`
-   - **Database:** `bms`
-   - **User:** `bms`
-   - **Region:** Choose closest to you (e.g. Frankfurt for Ethiopia)
-   - **Plan:** Free
-3. Click **"Create Database"**
-4. Wait ~2 minutes for it to provision
-5. **Copy the "Internal Database URL"** — you'll need it in Step 5
+You've already created the PostgreSQL database. Go to it in Render and copy the **"Internal Database URL"** — you'll need it in the next step.
 
 ---
 
-## Step 4 — Deploy Redis
-
-1. In Render dashboard → click **"New +"** → **"Redis"**
-2. Fill in:
-   - **Name:** `bms-redis`
-   - **Plan:** Free
-   - **Region:** Same as your database
-3. Click **"Create Redis"**
-4. **Copy the "Internal Redis URL"** — you'll need it in Step 5
-
----
-
-## Step 5 — Deploy the Backend API
+## Step 4 — Deploy the Backend API
 
 1. In Render dashboard → click **"New +"** → **"Web Service"**
 2. Connect your GitHub repo
 3. Fill in:
    - **Name:** `bms-api`
-   - **Region:** Same as database
+   - **Region:** Same region as your database
    - **Branch:** `main`
    - **Runtime:** **Docker**
    - **Dockerfile Path:** `./apps/api/Dockerfile`
-   - **Docker Context:** `.` (the root)
+   - **Docker Context:** `.` (the root — important!)
    - **Plan:** Free
-4. Under **"Environment Variables"**, add:
+4. Under **"Environment Variables"**, add these:
 
    | Key | Value |
    |-----|-------|
    | `NODE_ENV` | `production` |
    | `PORT` | `3000` |
    | `DATABASE_URL` | *(paste Internal Database URL from Step 3)* |
-   | `REDIS_URL` | *(paste Internal Redis URL from Step 4)* |
    | `JWT_SECRET` | *(click "Generate" — Render creates a random secret)* |
-   | `COLUMN_ENCRYPTION_KEY` | *(64 hex chars — generate with command below)* |
+   | `COLUMN_ENCRYPTION_KEY` | *(64 hex chars — see below)* |
    | `FRONTEND_URL` | `https://bms-web.onrender.com` *(update after Step 6)* |
 
-   **Generate COLUMN_ENCRYPTION_KEY** (run this on your local machine):
+   > `REDIS_URL` is **not needed** — skip it entirely.
+
+   **Generate COLUMN_ENCRYPTION_KEY** — run this on your local machine:
    ```bash
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
-   Copy the output (64 hex characters) and paste it as the value.
+   Copy the 64-character output and paste it as the value.
 
 5. Click **"Create Web Service"**
-6. Render will build the Docker image and deploy (~5 minutes)
+6. Render builds the Docker image and deploys (~5–10 minutes first time)
 7. Once deployed, **copy your API URL** (e.g. `https://bms-api.onrender.com`)
 
 ---
 
-## Step 6 — Run Database Migrations
+## Step 5 — Run Database Migrations
 
-After the API deploys, you need to run migrations to create all tables.
+After the API deploys, run migrations to create all tables and seed data.
 
 1. In Render dashboard → click on `bms-api` service
-2. Click **"Shell"** tab (top right)
+2. Click the **"Shell"** tab (in the top navigation of the service page)
 3. In the shell, run:
    ```bash
    npm run migrate
    ```
-4. You should see all 30 migrations run successfully
-5. The database is now ready with all tables and seed data (superadmin/admin accounts)
+4. You should see all 30 migrations complete successfully
+5. The database now has all tables + seed data (superadmin and admin accounts)
 
 ---
 
-## Step 7 — Deploy the Frontend
+## Step 6 — Deploy the Frontend
 
 1. In Render dashboard → click **"New +"** → **"Static Site"**
 2. Connect your GitHub repo
@@ -143,33 +124,34 @@ After the API deploys, you need to run migrations to create all tables.
 
    | Key | Value |
    |-----|-------|
-   | `VITE_API_URL` | `https://bms-api.onrender.com` *(your API URL from Step 5)* |
+   | `VITE_API_URL` | `https://bms-api.onrender.com` *(your API URL from Step 4)* |
 
 5. Click **"Create Static Site"**
 6. Render builds the React app (~3 minutes)
-7. Your frontend URL will be `https://bms-web.onrender.com`
+7. Your frontend URL will be something like `https://bms-web.onrender.com`
 
 ---
 
-## Step 8 — Update FRONTEND_URL in the API
+## Step 7 — Update FRONTEND_URL in the API
 
-Now that you have the frontend URL:
+Now that you have the real frontend URL:
 
 1. Go to `bms-api` service → **"Environment"** tab
-2. Update `FRONTEND_URL` to your actual frontend URL (e.g. `https://bms-web.onrender.com`)
-3. Click **"Save Changes"** — the API will redeploy automatically
+2. Update `FRONTEND_URL` to your actual frontend URL (no trailing slash)
+   - Example: `https://bms-web.onrender.com`
+3. Click **"Save Changes"** — the API redeploys automatically (~2 minutes)
 
 ---
 
-## Step 9 — Test Your Deployment
+## Step 8 — Test Your Deployment
 
-1. Open `https://bms-web.onrender.com` in your browser
+1. Open your frontend URL in a browser (e.g. `https://bms-web.onrender.com`)
 2. Login with:
    - **Username:** `superadmin` | **Password:** `password` | **Branch:** Main Branch
    - **Username:** `admin` | **Password:** `password` | **Branch:** Main Branch
 3. Verify the dashboard loads and you can navigate all modules
 
-> **First load may take 30 seconds** if the free-tier service has spun down. This is normal.
+> **First load may take 30 seconds** if the free-tier service has spun down. This is normal — just wait and refresh.
 
 ---
 
@@ -178,75 +160,69 @@ Now that you have the frontend URL:
 Once connected to GitHub, every `git push` to `main` automatically:
 1. Rebuilds the Docker image (API)
 2. Rebuilds the React app (Frontend)
-3. Deploys both with zero downtime
+3. Deploys both — no manual steps needed
 
 ---
 
 ## Environment Variables Summary
 
-| Variable | Where | Description |
-|----------|-------|-------------|
-| `DATABASE_URL` | API | PostgreSQL connection string |
-| `REDIS_URL` | API | Redis connection string |
-| `JWT_SECRET` | API | Secret for signing JWTs (keep secret!) |
-| `COLUMN_ENCRYPTION_KEY` | API | 64-char hex key for AES-256-GCM encryption |
-| `NODE_ENV` | API | Set to `production` |
-| `PORT` | API | `3000` |
-| `FRONTEND_URL` | API | Your frontend URL (for CORS) |
-| `VITE_API_URL` | Frontend | Your API URL (set at build time) |
+| Variable | Where | Required | Description |
+|----------|-------|----------|-------------|
+| `DATABASE_URL` | API | ✅ Yes | PostgreSQL connection string |
+| `JWT_SECRET` | API | ✅ Yes | Secret for signing JWTs (keep secret!) |
+| `COLUMN_ENCRYPTION_KEY` | API | ✅ Yes | 64-char hex key for AES-256-GCM encryption |
+| `NODE_ENV` | API | ✅ Yes | Set to `production` |
+| `PORT` | API | ✅ Yes | `3000` |
+| `FRONTEND_URL` | API | ✅ Yes | Your frontend URL (for CORS) |
+| `VITE_API_URL` | Frontend | ✅ Yes | Your API URL (set at build time) |
+| `REDIS_URL` | API | ❌ No | Optional — app works without it |
 
 ---
 
 ## Troubleshooting
 
-**"Application failed to respond"**
-- Check the Render logs for the API service
-- Most common cause: `DATABASE_URL` is wrong or migrations haven't run
+**"Application failed to respond" / API won't start**
+- Check the Render logs for the `bms-api` service (Logs tab)
+- Most common cause: `DATABASE_URL` is wrong or migrations haven't run yet
+- Make sure you used the **Internal** Database URL (not the External one)
 
 **"CORS error" in browser console**
-- Make sure `FRONTEND_URL` in the API matches your exact frontend URL (no trailing slash)
+- Make sure `FRONTEND_URL` in the API exactly matches your frontend URL (no trailing slash)
 - Redeploy the API after updating the env var
 
 **"Cannot connect to database"**
-- Make sure you used the **Internal** Database URL (not the External one)
-- Internal URLs only work between Render services in the same region
+- Internal URLs only work between Render services in the **same region**
+- Make sure API and database are in the same region
 
 **Migrations failed**
 - Run them again from the Shell tab
-- Check that `DATABASE_URL` is set correctly
+- Check that `DATABASE_URL` is set correctly in the API env vars
 
 **Frontend shows blank page**
-- Check browser console for errors
-- Make sure `VITE_API_URL` is set correctly (no trailing slash)
-- Rebuild the static site after updating env vars
+- Open browser DevTools → Console tab — look for errors
+- Make sure `VITE_API_URL` is set correctly (no trailing slash, no `/api` suffix)
+- After changing env vars, trigger a manual redeploy of the Static Site
+
+**Login works but pages show errors**
+- Migrations may not have run — go to Shell and run `npm run migrate` again
 
 ---
 
-## Upgrading from Free Tier
+## Security Checklist Before Sharing with Users
 
-When you're ready to go production:
-- **API:** Upgrade to Starter ($7/month) — always-on, no spin-down
-- **Database:** Upgrade to Starter ($7/month) — persistent storage, no 90-day limit
-- **Redis:** Upgrade to Starter ($10/month) — persistent, no data loss on restart
-
-Total cost for always-on: ~$24/month — still very affordable.
-
----
-
-## Alternative: Railway.app
-
-If Render doesn't work for you, Railway.app is another free option:
-- $5 free credit/month (enough for small usage)
-- Supports Docker, PostgreSQL, Redis
-- Similar setup process
-- Visit https://railway.app
+- [ ] Change default passwords for `superadmin` and `admin` accounts (via My Profile page)
+- [ ] `JWT_SECRET` is set to a generated random value (not the dev default)
+- [ ] `COLUMN_ENCRYPTION_KEY` is set to a proper 64-char hex value
+- [ ] `FRONTEND_URL` is set to your exact frontend domain
+- [ ] Review and remove any test staff accounts
 
 ---
 
-## Security Checklist Before Going Live
+## Upgrading from Free Tier (When Ready)
 
-- [ ] Change default passwords for `superadmin` and `admin` accounts
-- [ ] Set a strong, unique `JWT_SECRET` (Render's "Generate" button does this)
-- [ ] Set a proper `COLUMN_ENCRYPTION_KEY` (64 random hex chars)
-- [ ] Set `FRONTEND_URL` to your exact frontend domain
-- [ ] Review staff accounts and remove any test accounts
+| Service | Free | Starter | Benefit |
+|---------|------|---------|---------|
+| API (Web Service) | Spins down | $7/month | Always-on, no cold starts |
+| Database | 90-day limit | $7/month | Persistent, no expiry |
+
+Total for always-on: ~$14/month.
