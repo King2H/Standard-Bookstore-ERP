@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "migrate": "dotenv -e ../../.env -- node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
+    "migrate": "node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
     "migrate:down": "dotenv -e ../../.env -- node-pg-migrate down --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
     "migrate:create": "dotenv -e ../../.env -- node-pg-migrate create --migrations-dir src/db/migrations",
     "test": "vitest run",
@@ -38,6 +38,7 @@
     "node-pg-migrate": "^7.3.2",
     "supertest": "^7.0.0",
     "tsx": "^4.11.0",
+    "typescript": "^5.4.5",
     "vitest": "^1.6.0"
   }
 }
