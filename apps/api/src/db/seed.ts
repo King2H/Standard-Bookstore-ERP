@@ -32,15 +32,16 @@ export async function ensureSeedData(): Promise<void> {
     `);
 
     // ── 2. Staff accounts ─────────────────────────────────────────────────────
-    // bcrypt hash of 'Admin@1234' (cost 12) — generated offline
+    // bcrypt hash of 'Admin@1234' (cost 12) — generated offline and verified
     await client.query(`
       INSERT INTO staff (id, username, password_hash, full_name, is_active)
       VALUES
-        (1, 'superadmin', '$2b$12$RdYA.4ckO0/DTMFCVFD.UOSIidUfkxmO2vnr/JuxfjLLZnsrEQyQO', 'Super Admin', true),
-        (2, 'admin',      '$2b$12$RdYA.4ckO0/DTMFCVFD.UOSIidUfkxmO2vnr/JuxfjLLZnsrEQyQO', 'Admin User',  true)
+        (1, 'superadmin', '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Super Admin', true),
+        (2, 'admin',      '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Admin User',  true)
       ON CONFLICT (id) DO UPDATE
-        SET is_active = true,
-            username  = EXCLUDED.username
+        SET is_active     = true,
+            username      = EXCLUDED.username,
+            password_hash = EXCLUDED.password_hash
     `);
 
     // ── 3. Role assignments ───────────────────────────────────────────────────
