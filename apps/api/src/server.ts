@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createApp } from './app.js';
 import { checkDbConnection } from './db/index.js';
+import { ensureSeedData } from './db/seed.js';
 import { startOutboxPoller, stopOutboxPoller } from './workers/outboxPoller.js';
 import { startInstallmentChecker, stopInstallmentChecker } from './workers/installmentChecker.js';
 
@@ -15,6 +16,9 @@ async function start() {
   }
 
   console.log(JSON.stringify({ level: 'info', msg: 'Database connection verified' }));
+
+  // Ensure minimum seed data exists (idempotent — safe to run every startup)
+  await ensureSeedData();
 
   const app = createApp();
 

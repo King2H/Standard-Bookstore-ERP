@@ -30,11 +30,22 @@ export function createApp() {
   const app = express();
 
   // ── CORS ──────────────────────────────────────────────────────────────────────
-  // Allow requests from the configured frontend origin (or any origin in dev)
-  const allowedOrigin = process.env.FRONTEND_URL ?? '*';
+  // Allow requests from the configured frontend origin (or any origin in dev).
+  // FRONTEND_URL can be a comma-separated list for multiple allowed origins.
+  const rawOrigins = process.env.FRONTEND_URL ?? '';
+  const allowedOrigins = rawOrigins
+    ? rawOrigins.split(',').map(o => o.trim().replace(/\/$/, '')) // strip trailing slashes
+    : [];
+
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (allowedOrigin === '*' || origin === allowedOrigin) {
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    // In dev (no FRONTEND_URL set), allow all origins
+    // In prod, allow only the listed origins
+    const isAllowed = isDev || !origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin);
+
+    if (isAllowed) {
       res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
