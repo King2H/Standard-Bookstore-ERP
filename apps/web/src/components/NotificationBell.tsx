@@ -26,6 +26,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getAccessToken } from '../lib/api.js';
 import { useToast } from './Toast.js';
 
+// Use the same base URL as the main API client
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)
+  ? `${import.meta.env.VITE_API_URL as string}/api`
+  : '/api';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Notification {
@@ -120,7 +125,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/notifications?pageSize=50', {
+      const res = await fetch(`${API_BASE}/notifications?pageSize=50`, {
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
       });
@@ -163,7 +168,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
     (async () => {
       try {
-        const res = await fetch('/api/notifications/stream', {
+        const res = await fetch(`${API_BASE}/notifications/stream`, {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'text/event-stream',
@@ -279,7 +284,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     setUnreadCount(c => Math.max(0, c - 1));
     try {
-      await fetch(`/api/notifications/${id}/read`, {
+      await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
@@ -294,7 +299,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     setUnreadCount(0);
     try {
-      await fetch('/api/notifications/read-all', {
+      await fetch(`${API_BASE}/notifications/read-all`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',

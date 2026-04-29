@@ -1,0 +1,55 @@
+# Render.com deployment configuration
+# Free tier: Web Service (API) + PostgreSQL + Redis + Static Site (Frontend)
+# Deploy from GitHub: connect repo → Render auto-detects this file
+
+services:
+  # ── Backend API ──────────────────────────────────────────────────────────────
+  - type: web
+    name: bms-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bms-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: bms-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COLUMN_ENCRYPTION_KEY
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://bms-web.onrender.com   # update after frontend deploys
+    healthCheckPath: /api/health
+
+  # ── Frontend (Static Site) ───────────────────────────────────────────────────
+  - type: web
+    name: bms-web
+    runtime: static
+    buildCommand: npm install && npm run build --workspace=apps/web
+    staticPublishPath: ./apps/web/dist
+    plan: free
+    envVars:
+      - key: VITE_API_URL
+        value: https://bms-api.onrender.com   # update after API deploys
+
+databases:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  - name: bms-db
+    plan: free
+    databaseName: bms
+    user: bms
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  - name: bms-redis
+    plan: free

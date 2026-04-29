@@ -1,4 +1,9 @@
 // Typed API client — all requests go through here
+// In production, VITE_API_URL points to the deployed backend (e.g. https://bms-api.onrender.com)
+// In development, requests go to /api (proxied by Vite to localhost:3000)
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)
+  ? `${import.meta.env.VITE_API_URL as string}/api`
+  : '/api';
 
 let accessToken: string | null = null;
 let currentBranchId: number | null = null;
@@ -46,7 +51,7 @@ async function request<T>(
 ): Promise<T> {
   const csrfToken = !SAFE_METHODS.has(method) ? getCsrfToken() : null;
 
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: 'include',
     headers: {

@@ -29,6 +29,24 @@ import { csrfMiddleware } from './middleware/csrf.js';
 export function createApp() {
   const app = express();
 
+  // ── CORS ──────────────────────────────────────────────────────────────────────
+  // Allow requests from the configured frontend origin (or any origin in dev)
+  const allowedOrigin = process.env.FRONTEND_URL ?? '*';
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (allowedOrigin === '*' || origin === allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Branch-Id,X-CSRF-Token,Idempotency-Key');
+    }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
   // â”€â”€ Core middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   app.use(express.json());
   app.use(cookieParser());
