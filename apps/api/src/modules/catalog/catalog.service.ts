@@ -209,7 +209,7 @@ async function fetchBookById(
          ARRAY_AGG(DISTINCT bt.tag ORDER BY bt.tag) FILTER (WHERE bt.tag IS NOT NULL),
          '{}'
        ) AS tags,
-       bbp.price AS branch_price,
+       bbp.price AS branch_price
 
      FROM books b
      LEFT JOIN book_formats bf ON bf.id = b.format_id
@@ -702,6 +702,16 @@ export async function searchBooks(filters: SearchFilters): Promise<{
        bbp.price AS branch_price,
        (
          SELECT COALESCE(SUM(inv.quantity), 0)
+              - COALESCE((
+                  SELECT SUM(r.quantity) FROM inventory_reservations r
+                  WHERE r.book_id = b.id AND r.status = 'reserved'
+                    AND CASE
+                      WHEN $${locParam}::integer IS NOT NULL THEN r.location_id = $${locParam}::integer
+                      WHEN $${branchParam}::integer IS NOT NULL THEN r.location_id IN (
+                        SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
+                      )
+                      ELSE false END
+                ), 0)
          FROM inventory inv
          WHERE inv.book_id = b.id
            AND CASE
@@ -1096,3 +1106,5 @@ export async function listBookEditions(): Promise<BookEditionRecord[]> {
   const result = await db.query(`SELECT id, code, label, sort_order FROM book_editions ORDER BY sort_order ASC`);
   return result.rows.map(r => ({ id: r.id as number, code: r.code as string, label: r.label as string, sortOrder: r.sort_order as number }));
 }
+
+

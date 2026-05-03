@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2).**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). ERP Production Hardening Complete. Multi-Role/Multi-Branch Auth Refactor Applied (May 2026).**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -17,6 +17,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | MVP Evaluation | v1.2 | `.kiro/specs/bookstore-management-system/mvp-evaluation.md` |
 | Industry-Grade Roadmap | Active | `.kiro/specs/bookstore-management-system/roadmap.md` |
 | Notification System Spec | Implemented | `.kiro/specs/bookstore-management-system/notification-spec.md` |
+| ERP Hardening Spec | Complete | `.kiro/specs/erp-production-hardening/` |
 
 ---
 
@@ -47,23 +48,37 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Role-Based Access Control
 
-| Role | Can Do | Cannot Do |
-|------|--------|-----------|
-| Super_Admin | System config, staff, audit log, branches | Any operational activity |
-| Admin | All operational management | System-level config writes |
-| Manager | Daily operations: catalog, inventory, orders, returns, dashboard | System config, staff creation |
-| Finance_Officer | Bank accounts, reconciliation, reports, payments, returns (view+create), dashboard | Catalog writes, inventory mutations |
-| Stock_Clerk | Stock in/out, adjust, transfer, order fulfillment | PO creation, cash handling |
-| Sales | POS, orders, returns (initiate), customer service | Inventory adjust/transfer, suppliers |
-| Purchasor | Supplier CRUD, PO creation and tracking | Receiving inventory, approving payments |
+All access control is **permission-based** (not role-name checks). Permissions are computed as the union of all roles assigned to a staff member for their active branch session.
+
+| Role | Permissions |
+|------|-------------|
+| Super_Admin | All 9 permissions |
+| Admin | All 9 permissions + `is_all_branches = true` by default |
+| Manager | All except `MANAGE_BRANCH` |
+| Finance_Officer | `PROCESS_PAYMENT`, `PROCESS_REFUND`, `VIEW_REPORTS` |
+| Stock_Clerk | `MANAGE_INVENTORY` |
+| Sales | `CREATE_SALE`, `PROCESS_PAYMENT` |
+| Purchasor | `MANAGE_INVENTORY`, `VIEW_REPORTS` |
+
+**Multi-Role Support**: A staff member can hold multiple roles per branch. Their effective permissions are the union of all assigned roles. No profile switching required.
+
+**Multi-Branch Support**: Staff can be assigned to multiple branches with different roles per branch. The `is_all_branches` flag grants cross-branch access without per-branch role assignments.
+
+**Branch Switcher**: After login, staff can switch their active branch from the top navigation bar. Permissions are recomputed for the new branch context.
+
+**Login Flow**:
+1. Enter credentials → system validates and returns available branches
+2. If single branch → auto-selects and logs in
+3. If multiple branches → branch picker shown with roles per branch
+4. `is_all_branches` staff see all branches with a 🌐 indicator
 
 Key rules:
-- Super_Admin manages platform only — no operational access
-- Finance_Officer has full read access to all financial reports and can create/view payments and returns
-- Manager/Admin self-approve high-value returns automatically
-- All restrictions enforced at the API layer
+- All API routes use `requirePermission(...)` — never `requireRole(...)`
+- JWT carries `permissions` array (union of all branch roles) + `role` (primary, for compat)
 - Deactivated staff are immediately locked out (auth middleware checks `is_active` on every request)
 - `must_change_password` flag forces password change before any other navigation
+- 15-minute inactivity timeout with 1-minute warning overlay
+- 8-hour refresh token cookie (covers a full work shift)
 
 ---
 
@@ -390,6 +405,29 @@ Additional fixes applied in a follow-up session:
 
 ---
 
+## What's New — May 2026
+
+### ERP Production Hardening (Complete)
+
+- **Order Lifecycle State Machine** — `DRAFT → CONFIRMED → PAID → FULFILLED → COMPLETED / CANCELLED` with inventory reservations, financial transactions, and `allowedActions` in every response
+- **Exchange Lifecycle State Machine** — `INITIATED → REVIEWED → APPROVED → SETTLED → COMPLETED / CANCELLED` with multi-entry hybrid settlement, returned item condition classification (resellable/damaged), and atomic inventory + finance updates
+- **Permission-Based Access Control** — all routes use `requirePermission(...)` instead of `requireRole(...)`; permissions are the union of all roles for the active branch
+- **Financial Transactions Table** — `financial_transactions` with idempotency key, order/exchange linkage, and DB-level constraint ensuring every record references an order or exchange
+- **Inventory Reservations** — soft holds on stock at order confirmation; released on cancel, converted to deductions on fulfillment
+- **Property-Based Tests** — 7 correctness properties validated (status monotonicity, inventory conservation, settlement balance, financial traceability, idempotency, permission union, reservation availability)
+
+### Multi-Role / Multi-Branch Auth Refactor (May 2026)
+
+- **Two-Step Login** — credentials first, then branch picker (auto-selects if single branch)
+- **Branch Switcher** — top navigation dropdown; switches active branch without re-login; recomputes permissions
+- **`roles` Array in JWT** — all roles for the active branch included alongside primary `role` field
+- **`is_all_branches` Flag** — Admin/Super_Admin have cross-branch access by default; any staff can be granted this via the Staff page
+- **Permission-Based Form Visibility** — New Order / Exchange forms shown based on `CREATE_SALE` permission, not role name
+- **Staff Management** — All Branches toggle in staff creation form and staff list actions
+- **Bug Fixes** — catalog `GET /api/books` 500 (missing `$` prefix on SQL params), React key warning in OrdersPage, CSRF on pre-login endpoint, session restore on F5
+
+---
+
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18 + TypeScript + Vite |
@@ -397,9 +435,9 @@ Additional fixes applied in a follow-up session:
 | State / Data | TanStack Query v5 |
 | Backend | Node.js 20 + Express 5 + TypeScript |
 | Database | PostgreSQL 16 (raw pg driver, no ORM) |
-| Auth | JWT (15 min) + httpOnly refresh cookie (7 days) |
+| Auth | JWT (15 min) + httpOnly refresh cookie (8 hours) |
 | Encryption | AES-256-GCM (column-level, bank account data) |
-| Migrations | node-pg-migrate (.cjs format, 29 migrations) |
+| Migrations | node-pg-migrate (.cjs format, 34 migrations) |
 | Testing | Vitest + Supertest (integration tests, real DB) |
 | Container | Docker + Docker Compose |
 
@@ -415,9 +453,15 @@ npm run dev:api   # terminal 1
 npm run dev:web   # terminal 2
 ```
 
-Open http://localhost:5173 — login with superadmin / password / Main Branch.
+Open http://localhost:5173
 
-Note: superadmin only sees Settings, Staff, Branches, and Audit Log. Use admin / password for all operational pages.
+**Default credentials** (password: `Admin@1234`):
+- `superadmin` — all permissions, all branches
+- `admin` — all permissions, all branches
+
+**Login flow**: Enter username + password → system shows available branches → select branch (or auto-selects if only one) → logged in.
+
+Note: superadmin and admin both have `is_all_branches = true` and land on the Dashboard after login.
 
 ## Running Tests
 
@@ -453,13 +497,18 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 ## API Reference
 
 ### Auth & Staff
-- POST /api/auth/login — login with branch selection
+- POST /api/auth/pre-login — step 1: validate credentials, return available branches (no auth required)
+- POST /api/auth/login — step 2: complete login with selected branch
 - POST /api/auth/logout / POST /api/auth/refresh
+- GET /api/auth/branches — branches for authenticated user (branch switcher)
+- POST /api/auth/switch-branch — issue new access token for a different branch
 - GET/POST /api/staff — list / create (Super_Admin, Admin, Manager)
 - GET /api/staff/me — own profile + location access scope (all roles)
 - PUT /api/staff/me/password — change own password (all roles)
 - GET/PUT /api/staff/:id / POST .../deactivate|reactivate|reset-password|unlock
 - GET/PUT /api/staff/:id/locations — location access assignments
+- PUT /api/staff/:id/roles — update branch-role assignments
+- PUT /api/staff/:id/all-branches — grant/revoke all-branch access (Admin/Super_Admin)
 
 ### Branches & Locations
 - GET /api/branches/public — no auth, for login dropdown

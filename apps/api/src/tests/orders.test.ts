@@ -31,6 +31,7 @@ async function ensureInventory(bookId: number, locationId: number, qty = 50) {
 }
 
 async function cleanOrders(branchId: number) {
+  await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
 }
@@ -84,7 +85,7 @@ describe('Orders — Lifecycle', () => {
       .send({ locationId, channel: 'in_store', items: [{ bookId, quantity: 2 }] });
 
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe('Pending');
+    expect(res.body.status).toBe('DRAFT');
     expect(res.body.currency).toBe('ETB');
     expect(res.body.orderNumber).toMatch(/^ORD-\d{8}-\d{4}$/);
     expect(Number(res.body.subtotal)).toBeCloseTo(bookPrice * 2, 1);
@@ -113,7 +114,7 @@ describe('Orders — Lifecycle', () => {
       .set('X-Branch-Id', String(branchId));
 
     expect(confirmRes.status).toBe(200);
-    expect(confirmRes.body.status).toBe('Confirmed');
+    expect(confirmRes.body.status).toBe('CONFIRMED');
     // qty_reserved is tracked on order_line_items, not inventory
     expect(confirmRes.body.lineItems[0].qtyReserved).toBe(3);
   });
@@ -143,7 +144,7 @@ describe('Orders — Lifecycle', () => {
       .set('X-Branch-Id', String(branchId));
 
     expect(fulfillRes.status).toBe(200);
-    expect(fulfillRes.body.status).toBe('Fulfilled');
+    expect(fulfillRes.body.status).toBe('FULFILLED');
 
     const invAfter = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
     expect(invAfter.rows[0].quantity).toBe(qtyBefore - 2);
@@ -172,7 +173,7 @@ describe('Orders — Lifecycle', () => {
       .send({ reason: 'Customer changed mind' });
 
     expect(cancelRes.status).toBe(200);
-    expect(cancelRes.body.status).toBe('Cancelled');
+    expect(cancelRes.body.status).toBe('CANCELLED');
     // qty_reserved released on order_line_items
     expect(cancelRes.body.lineItems[0].qtyReserved).toBe(0);
   });
@@ -238,7 +239,7 @@ describe('Orders — Lifecycle', () => {
       .set('X-Branch-Id', String(branchId));
 
     expect(confirmRes.status).toBe(200);
-    expect(confirmRes.body.status).toBe('Confirmed');
+    expect(confirmRes.body.status).toBe('CONFIRMED');
     expect(confirmRes.body.lineItems[0].isBackordered).toBe(true);
     expect(confirmRes.body.lineItems[0].qtyReserved).toBe(0);
 

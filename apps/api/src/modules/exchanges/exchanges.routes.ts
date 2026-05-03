@@ -1,9 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as exchangesService from './exchanges.service.js';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
+import { computeExchangeAllowedActions } from './exchanges.service.js';
+import type { Permission } from '../../lib/permissions.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -14,7 +16,7 @@ const qi = (v: unknown, fb: number): number => { const s = qs(v); return s ? par
 router.post(
   '/exchanges',
   authenticate,
-  requireRole('Sales', 'Manager', 'Admin'),
+  requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { incomingItems, outgoingItems } = req.body;
@@ -44,6 +46,24 @@ router.post(
   },
 );
 
+// ── POST /api/exchanges/initiate ──────────────────────────────────────────────
+
+router.post(
+  '/exchanges/initiate',
+  authenticate,
+  requirePermission('CREATE_SALE'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const exchange = await exchangesService.initiateExchange(req.body, req.staff!);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.status(201).json({
+        ...exchange,
+        allowedActions: computeExchangeAllowedActions(exchange.lifecycleStatus ?? null, exchange.status, permissions),
+      });
+    } catch (err) { next(err); }
+  },
+);
+
 // ── GET /api/exchanges ────────────────────────────────────────────────────────
 
 router.get(
@@ -60,7 +80,12 @@ router.get(
         page:       qi(req.query.page, 1),
         pageSize:   qi(req.query.pageSize, 25),
       });
-      res.json(result);
+      const permissions = (req.staff?.permissions ?? []) as Permission[];
+      const itemsWithActions = result.items.map(exchange => ({
+        ...exchange,
+        allowedActions: computeExchangeAllowedActions(exchange.lifecycleStatus ?? null, exchange.status, permissions),
+      }));
+      res.json({ ...result, items: itemsWithActions });
     } catch (err) { next(err); }
   },
 );
@@ -72,8 +97,78 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const exchange = await exchangesService.getById(parseInt(req.params.id, 10));
-      res.json(exchange);
+      const exchange = await exchangesService.getById(parseInt(req.params.id as string, 10));
+      const permissions = (req.staff?.permissions ?? []) as Permission[];
+      res.json({
+        ...exchange,
+        allowedActions: computeExchangeAllowedActions(exchange.lifecycleStatus ?? null, exchange.status, permissions),
+      });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/exchanges/:id/review ────────────────────────────────────────────
+
+router.post(
+  '/exchanges/:id/review',
+  authenticate,
+  requirePermission('APPROVE_EXCHANGE'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const exchange = await exchangesService.reviewExchange(parseInt(req.params.id as string, 10), req.staff!);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({
+        ...exchange,
+        allowedActions: computeExchangeAllowedActions(exchange.lifecycleStatus ?? null, exchange.status, permissions),
+      });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/exchanges/:id/approve ───────────────────────────────────────────
+
+router.post(
+  '/exchanges/:id/approve',
+  authenticate,
+  requirePermission('APPROVE_EXCHANGE'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const exchange = await exchangesService.approveExchange(parseInt(req.params.id as string, 10), req.staff!);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({
+        ...exchange,
+        allowedActions: computeExchangeAllowedActions(exchange.lifecycleStatus ?? null, exchange.status, permissions),
+      });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/exchanges/:id/settle ────────────────────────────────────────────
+
+router.post(
+  '/exchanges/:id/settle',
+  authenticate,
+  requirePermission('APPROVE_EXCHANGE'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { entries, idempotencyKey } = req.body as { entries: exchangesService.SettlementEntry[]; idempotencyKey: string };
+      if (!entries || !Array.isArray(entries) || entries.length === 0) {
+        throw new ValidationError('Settlement entries are required');
+      }
+      if (!idempotencyKey) {
+        throw new ValidationError('idempotencyKey is required for settlement');
+      }
+      const exchange = await exchangesService.settleExchange(
+        parseInt(req.params.id as string, 10),
+        entries,
+        idempotencyKey,
+        req.staff!,
+      );
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({
+        ...exchange,
+        allowedActions: computeExchangeAllowedActions(exchange.lifecycleStatus ?? null, exchange.status, permissions),
+      });
     } catch (err) { next(err); }
   },
 );
@@ -83,10 +178,10 @@ router.get(
 router.post(
   '/exchanges/:id/cancel',
   authenticate,
-  requireRole('Manager', 'Admin'),
+  requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const exchange = await exchangesService.cancelExchange(parseInt(req.params.id, 10), req.staff!);
+      const exchange = await exchangesService.cancelExchange(parseInt(req.params.id as string, 10), req.staff!);
       res.json(exchange);
     } catch (err) { next(err); }
   },

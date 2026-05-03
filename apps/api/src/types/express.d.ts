@@ -6,8 +6,10 @@ declare global {
       requestId: string;
       staff?: {
         staffId: number;
-        role: Role;
+        role: Role;          // primary role (backward compat)
+        roles?: string[];    // all roles for the active branch
         branchId: number;
+        permissions?: string[];
       };
     }
   }

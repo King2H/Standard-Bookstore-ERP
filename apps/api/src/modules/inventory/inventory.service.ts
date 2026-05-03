@@ -768,3 +768,66 @@ export async function stockOut(opts: {
     client.release();
   }
 }
+
+// ── Inventory Reservation Helpers ────────────────────────────────────────────
+// Used by the order lifecycle to soft-reserve stock on confirmation.
+
+/**
+ * Compute available stock = inventory.quantity - SUM(active reservations).
+ */
+export async function getAvailableStock(bookId: number, locationId: number): Promise<number> {
+  const result = await db.query(
+    `SELECT i.quantity - COALESCE(SUM(r.quantity), 0) AS available
+     FROM inventory i
+     LEFT JOIN inventory_reservations r
+       ON r.book_id = i.book_id
+       AND r.location_id = i.location_id
+       AND r.status = 'reserved'
+     WHERE i.book_id = $1 AND i.location_id = $2
+     GROUP BY i.quantity`,
+    [bookId, locationId],
+  );
+  if (!result.rows.length) return 0;
+  return Math.max(0, parseFloat(result.rows[0].available as string));
+}
+
+/**
+ * Create a reservation for an order line item.
+ */
+export async function createReservation(
+  orderId: number | string,
+  bookId: number,
+  locationId: number,
+  quantity: number,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status)
+     VALUES ($1, $2, $3, $4, 'reserved')`,
+    [orderId, bookId, locationId, quantity],
+  );
+}
+
+/**
+ * Release all reserved (not yet deducted) reservations for an order.
+ * Called when an order is cancelled from CONFIRMED status.
+ */
+export async function releaseReservations(orderId: number | string): Promise<void> {
+  await db.query(
+    `UPDATE inventory_reservations
+     SET status = 'released', updated_at = now()
+     WHERE order_id = $1 AND status = 'reserved'`,
+    [orderId],
+  );
+}
+
+/**
+ * Convert reserved → deducted for an order (called on fulfilment).
+ */
+export async function deductReservations(orderId: number | string): Promise<void> {
+  await db.query(
+    `UPDATE inventory_reservations
+     SET status = 'deducted', updated_at = now()
+     WHERE order_id = $1 AND status = 'reserved'`,
+    [orderId],
+  );
+}

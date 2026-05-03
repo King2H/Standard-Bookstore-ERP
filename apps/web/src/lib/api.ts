@@ -9,6 +9,12 @@ let accessToken: string | null = null;
 let currentBranchId: number | null = null;
 let csrfTokenMemory: string | null = null; // In-memory fallback for CSRF token
 
+// Lazy import to avoid circular dependency (session.ts imports api.ts indirectly)
+let _notifyActivity: (() => void) | null = null;
+export function setActivityNotifier(fn: () => void) {
+  _notifyActivity = fn;
+}
+
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }
@@ -68,6 +74,9 @@ async function request<T>(
     const err = await res.json().catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
     throw Object.assign(new Error(err.message), { code: err.error, status: res.status, details: err.details });
   }
+
+  // Any successful API call counts as user activity
+  _notifyActivity?.();
 
   return res.json() as Promise<T>;
 }

@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "migrate": "node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
+    "migrate": "dotenv -e ../../.env -- node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
     "migrate:down": "dotenv -e ../../.env -- node-pg-migrate down --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
     "migrate:create": "dotenv -e ../../.env -- node-pg-migrate create --migrations-dir src/db/migrations",
     "test": "vitest run",

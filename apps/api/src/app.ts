@@ -20,6 +20,7 @@ import returnsRouter from './modules/returns/returns.routes.js';
 import ordersRouter from './modules/orders/orders.routes.js';
 import paymentsRouter from './modules/payments/payments.routes.js';
 import exchangesRouter from './modules/exchanges/exchanges.routes.js';
+import financialTransactionsRouter from './modules/financialTransactions/financialTransactions.routes.js';
 import reportsRouter from './modules/reports/reports.routes.js';
 import installmentsRouter from './modules/payments/installments.routes.js';
 import notificationsRouter from './modules/notifications/notifications.routes.js';
@@ -82,6 +83,7 @@ export function createApp() {
   app.use('/api', ordersRouter);
   app.use('/api', paymentsRouter);
   app.use('/api', exchangesRouter);
+  app.use('/api', financialTransactionsRouter);
   app.use('/api', reportsRouter);
   app.use('/api', installmentsRouter);
   app.use('/api/notifications', notificationsRouter);

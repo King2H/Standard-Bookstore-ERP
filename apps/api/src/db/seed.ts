@@ -15,6 +15,13 @@ export async function ensureSeedData(): Promise<void> {
   try {
     await client.query('BEGIN');
 
+    // ── 0. Ensure schema columns exist (idempotent guards) ────────────────────
+    // These run before any data operations to prevent 500 errors on older DBs
+    // that haven't run the latest migrations yet.
+    await client.query(`
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS is_all_branches BOOLEAN NOT NULL DEFAULT false;
+    `);
+
     // ── 1. Main Branch ────────────────────────────────────────────────────────
     await client.query(`
       INSERT INTO branches (id, name, address, contact_info, operating_hours, is_active)
@@ -33,6 +40,8 @@ export async function ensureSeedData(): Promise<void> {
 
     // ── 2. Staff accounts ─────────────────────────────────────────────────────
     // bcrypt hash of 'Admin@1234' (cost 12) — generated offline and verified
+    // Note: is_all_branches is added by migration 33/34. We try to set it here
+    // but fall back gracefully if the column doesn't exist yet.
     await client.query(`
       INSERT INTO staff (id, username, password_hash, full_name, is_active)
       VALUES
@@ -44,11 +53,29 @@ export async function ensureSeedData(): Promise<void> {
             password_hash = EXCLUDED.password_hash
     `);
 
+    // Set is_all_branches for superadmin and admin — best-effort (column may not
+    // exist on older DBs that haven't run migration 33/34 yet).
+    try {
+      await client.query(`
+        UPDATE staff SET is_all_branches = true
+        WHERE id IN (1, 2)
+      `);
+    } catch {
+      // Column doesn't exist yet — migration 33/34 will add it on next startup
+    }
+
     // ── 3. Role assignments ───────────────────────────────────────────────────
+    // Assign superadmin and admin to ALL active branches so they're not locked
+    // to just the default Main Branch. Uses INSERT ... SELECT to pick up any
+    // branches created after the initial seed.
     await client.query(`
       INSERT INTO staff_branch_roles (staff_id, branch_id, role)
-      VALUES (1, 1, 'Super_Admin'),
-             (2, 1, 'Admin')
+      SELECT 1, id, 'Super_Admin' FROM branches WHERE is_active = true
+      ON CONFLICT (staff_id, branch_id, role) DO NOTHING
+    `);
+    await client.query(`
+      INSERT INTO staff_branch_roles (staff_id, branch_id, role)
+      SELECT 2, id, 'Admin' FROM branches WHERE is_active = true
       ON CONFLICT (staff_id, branch_id, role) DO NOTHING
     `);
 

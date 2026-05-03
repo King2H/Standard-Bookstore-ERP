@@ -13,6 +13,7 @@ interface StaffMember {
   username: string;
   fullName: string;
   isActive: boolean;
+  isAllBranches: boolean;
   createdAt: string;
   roles: StaffRole[];
   failedLoginAttempts?: number;
@@ -30,10 +31,17 @@ const createSchema = z.object({
   username: z.string().min(3, 'Min 3 characters').max(50),
   password: z.string().min(10, 'Min 10 characters'),
   fullName: z.string().min(1, 'Full name is required'),
+  isAllBranches: z.boolean().default(false),
+  // When isAllBranches=true, branchId can be 0 (placeholder) — we strip it before submitting.
+  // When isAllBranches=false, at least one valid assignment is required.
+  allBranchesRole: z.enum(ROLES).default('Sales'),
   assignments: z.array(z.object({
-    branchId: z.coerce.number().int().positive('Select a branch'),
+    branchId: z.coerce.number().int().min(0),
     role: z.enum(ROLES, { errorMap: () => ({ message: 'Select a role' }) }),
-  })).min(1, 'At least one branch-role assignment is required'),
+  })).default([]),
+}).refine(data => data.isAllBranches || data.assignments.some(a => a.branchId > 0), {
+  message: 'At least one branch-role assignment is required (or enable All Branches)',
+  path: ['assignments'],
 });
 type CreateForm = z.infer<typeof createSchema>;
 
@@ -68,7 +76,23 @@ export default function StaffPage() {
       const { staffId } = await api.post<{ staffId: number }>('/staff', {
         username: body.username, password: body.password, fullName: body.fullName,
       });
-      await api.put(`/staff/${staffId}/roles`, body.assignments);
+
+      if (body.isAllBranches) {
+        // Grant all-branch access
+        await api.put(`/staff/${staffId}/all-branches`, { isAllBranches: true });
+        // Assign the selected role to the first available branch so the staff
+        // has at least one role entry (needed for login branch selection).
+        // The is_all_branches flag bypasses the branch check in branchCtx.
+        if (branches.length > 0) {
+          await api.put(`/staff/${staffId}/roles`, [{ branchId: branches[0].id, role: body.allBranchesRole }]);
+        }
+      } else {
+        // Normal per-branch assignment — filter out any placeholder rows (branchId=0)
+        const validAssignments = body.assignments.filter(a => a.branchId > 0);
+        if (validAssignments.length > 0) {
+          await api.put(`/staff/${staffId}/roles`, validAssignments);
+        }
+      }
       return staffId;
     },
     onSuccess: () => {
@@ -135,12 +159,23 @@ export default function StaffPage() {
     onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to update location access', 'error'); },
   });
 
-  const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<CreateForm>({
+  const setAllBranchesMutation = useMutation({
+    mutationFn: ({ id, isAllBranches }: { id: number; isAllBranches: boolean }) =>
+      api.put(`/staff/${id}/all-branches`, { isAllBranches }),
+    onSuccess: (_, { isAllBranches }) => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      showToast(isAllBranches ? 'All-branch access granted' : 'All-branch access revoked');
+    },
+    onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to update all-branch access', 'error'); },
+  });
+
+  const { register, handleSubmit, reset, control, watch, formState: { errors, isSubmitting } } = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
-    defaultValues: { username: '', password: '', fullName: '', assignments: [{ branchId: branches[0]?.id ?? 0, role: 'Sales' }] },
+    defaultValues: { username: '', password: '', fullName: '', isAllBranches: false, allBranchesRole: 'Sales', assignments: [{ branchId: 0, role: 'Sales' }] },
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'assignments' });
+  const watchIsAllBranches = watch('isAllBranches');
 
   return (
     <div className="p-6">
@@ -184,41 +219,69 @@ export default function StaffPage() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                Branch & Role Assignments <span className="text-red-500">*</span>
-                <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">(multiple roles per branch allowed)</span>
+            {/* All Branches toggle */}
+            <div className="flex items-center gap-3 mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer select-none flex-shrink-0">
+                <input type="checkbox" {...register('isAllBranches')} className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                <span className="text-xs font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">🌐 All Branches</span>
               </label>
-              <button type="button"
-                onClick={() => {
-                  const firstBranch = branches[0];
-                  if (firstBranch) append({ branchId: firstBranch.id, role: 'Sales' });
-                }}
-                disabled={branches.length === 0}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                + Add Role Assignment
-              </button>
+              <span className="text-xs text-amber-700 dark:text-amber-400">
+                {watchIsAllBranches
+                  ? 'Staff can access every branch. Select a role below — no per-branch assignment needed.'
+                  : 'Enable to grant access to all current and future branches without per-branch assignment.'}
+              </span>
             </div>
-            {errors.assignments?.root && <p className="text-red-500 text-xs mb-2">{errors.assignments.root.message}</p>}
-            <div className="space-y-2">
-              {fields.map((field, index) => (
-                <div key={field.id} className="flex items-center gap-2">
-                  <select {...register(`assignments.${index}.branchId`)} className={inputCls}>
-                    <option value="">Select branch...</option>
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                  <select {...register(`assignments.${index}.role`)} className={inputCls}>
+
+            {watchIsAllBranches ? (
+              /* When All Branches is on: just pick a role, no branch selector needed */
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  Role <span className="text-red-500">*</span>
+                  <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">(applies to all branches)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <select {...register('allBranchesRole')} className={inputCls} style={{ maxWidth: 240 }}>
                     {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
-                  {fields.length > 1 && (
-                    <button type="button" onClick={() => remove(index)}
-                      className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 text-xs px-1 transition-colors">✕</button>
-                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              /* Normal per-branch assignment */
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    Branch & Role Assignments <span className="text-red-500">*</span>
+                    <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">(multiple roles per branch allowed)</span>
+                  </label>
+                  <button type="button"
+                    onClick={() => { const firstBranch = branches[0]; if (firstBranch) append({ branchId: firstBranch.id, role: 'Sales' }); }}
+                    disabled={branches.length === 0}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    + Add Role Assignment
+                  </button>
+                </div>
+                {errors.assignments && !Array.isArray(errors.assignments) && (
+                  <p className="text-red-500 text-xs mb-2">{(errors.assignments as { message?: string }).message}</p>
+                )}
+                <div className="space-y-2">
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex items-center gap-2">
+                      <select {...register(`assignments.${index}.branchId`)} className={inputCls}>
+                        <option value="">Select branch...</option>
+                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                      <select {...register(`assignments.${index}.role`)} className={inputCls}>
+                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                      {fields.length > 1 && (
+                        <button type="button" onClick={() => remove(index)}
+                          className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 text-xs px-1 transition-colors">✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -264,16 +327,22 @@ export default function StaffPage() {
 
                   {/* Branch column */}
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {staff.roles.map((r, i) => {
-                        const displayName = r.branchName ?? `Branch ${r.branchId}`;
-                        return (
-                          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                            {displayName}
-                          </span>
-                        );
-                      })}
-                    </div>
+                    {staff.isAllBranches ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                        🌐 All Branches
+                      </span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {staff.roles.map((r, i) => {
+                          const displayName = r.branchName ?? `Branch ${r.branchId}`;
+                          return (
+                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                              {displayName}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </td>
 
                   <td className="px-4 py-3">
@@ -328,6 +397,20 @@ export default function StaffPage() {
                           </svg>
                         </button>
                       )}
+                      {/* All Branches toggle */}
+                      <button
+                        type="button"
+                        title={staff.isAllBranches ? 'Revoke all-branch access' : 'Grant all-branch access'}
+                        onClick={() => setAllBranchesMutation.mutate({ id: staff.id, isAllBranches: !staff.isAllBranches })}
+                        disabled={setAllBranchesMutation.isPending}
+                        className={`transition-colors disabled:opacity-40 text-xs font-bold px-1.5 py-0.5 rounded ${
+                          staff.isAllBranches
+                            ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/60'
+                            : 'text-gray-400 dark:text-gray-500 hover:text-amber-600 dark:hover:text-amber-400'
+                        }`}
+                      >
+                        🌐
+                      </button>
                       {/* Location access button */}
                       <button type="button" title="Manage location access"
                         onClick={() => setEditingLocations(editingLocations === staff.id ? null : staff.id)}

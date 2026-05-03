@@ -19,6 +19,12 @@ const loginSchema = z.object({
   branchId: z.number().int().positive(),
 });
 
+// Schema for credential-only pre-auth (returns available branches)
+const preAuthSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
+
 const createStaffSchema = z.object({
   username: z.string().min(3).max(50),
   password: z.string().min(10),
@@ -32,6 +38,70 @@ const assignRolesSchema = z.array(
   }),
 );
 
+// ── POST /api/auth/pre-login ──────────────────────────────────────────────────
+// Step 1 of the smart login flow: validates credentials and returns the list
+// of branches the user has access to. The client then either:
+//   - Auto-selects if only one branch
+//   - Shows a branch picker if multiple branches
+//   - Shows an "All Branches" option if is_all_branches = true
+// After branch selection, the client calls POST /api/auth/login with branchId.
+
+router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = preAuthSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid payload', { issues: parsed.error.issues });
+    }
+
+    const { username, password } = parsed.data;
+
+    // Validate credentials (reuse the same checks as login, but don't issue tokens)
+    const staffResult = await db.query(
+      `SELECT id, password_hash, is_active, failed_login_attempts, locked_until
+       FROM staff WHERE username = $1`,
+      [username],
+    );
+
+    if (staffResult.rows.length === 0) {
+      throw new ValidationError('Invalid username or password');
+    }
+
+    const staff = staffResult.rows[0];
+
+    if (!staff.is_active) {
+      throw new ValidationError('This account has been deactivated');
+    }
+
+    if (staff.locked_until && new Date(staff.locked_until) > new Date()) {
+      const minutesLeft = Math.ceil((new Date(staff.locked_until).getTime() - Date.now()) / 60000);
+      throw new ValidationError(`Account locked. Try again in ${minutesLeft} minute(s).`);
+    }
+
+    const passwordValid = await bcrypt.compare(password, staff.password_hash);
+    if (!passwordValid) {
+      // Increment failed attempts (same logic as login)
+      const newAttempts = (staff.failed_login_attempts ?? 0) + 1;
+      await db.query(
+        `UPDATE staff SET failed_login_attempts = $1 WHERE id = $2`,
+        [newAttempts, staff.id],
+      );
+      throw new ValidationError('Invalid username or password');
+    }
+
+    // Credentials valid — return available branches
+    const branches = await authService.getBranchesForUser(staff.id);
+
+    res.json({
+      staffId: staff.id,
+      branches,
+      // If only one branch, client can auto-proceed to login
+      autoSelectBranchId: branches.length === 1 ? branches[0].branchId : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 
 router.post('/auth/login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
@@ -44,12 +114,16 @@ router.post('/auth/login', loginRateLimit, async (req: Request, res: Response, n
     const { username, password, branchId } = parsed.data;
     const result = await authService.login(username, password, branchId);
 
-    // Set refresh token as httpOnly cookie
+    // Set refresh token as httpOnly cookie (8-hour expiry).
+    // Using a fixed maxAge rather than a session cookie ensures the token
+    // survives page reloads and dev server hot-reloads reliably across all
+    // browsers. 8 hours covers a full work shift; the inactivity timer (15 min)
+    // handles security within a session.
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       sameSite: 'strict',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 8 * 60 * 60 * 1000, // 8 hours
     });
 
     res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn, mustChangePassword: result.mustChangePassword, csrfToken: setCsrfCookie(res) });
@@ -89,6 +163,36 @@ router.post('/auth/refresh', async (req: Request, res: Response, next: NextFunct
   }
 });
 
+// ── GET /api/auth/branches ────────────────────────────────────────────────────
+// Returns branches the authenticated user has access to (for branch switcher).
+// Also used by login page after credential validation to show branch options.
+
+router.get('/auth/branches', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const branches = await authService.getBranchesForUser(req.staff!.staffId);
+    res.json({ branches });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /api/auth/switch-branch ──────────────────────────────────────────────
+// Issues a new access token for a different branch without requiring re-login.
+// The refresh token cookie is preserved — only the access token changes.
+
+router.post('/auth/switch-branch', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { branchId } = req.body;
+    if (!branchId || typeof branchId !== 'number') {
+      throw new ValidationError('branchId is required');
+    }
+    const result = await authService.switchBranch(req.staff!.staffId, branchId);
+    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn, csrfToken: setCsrfCookie(res) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── GET /api/staff/me ─────────────────────────────────────────────────────────
 // Any authenticated staff member can view their own profile
 
@@ -99,6 +203,13 @@ router.get(
     try {
       const staffId = req.staff!.staffId;
       const currentBranchId = req.staff!.branchId;
+
+      // Try to fetch is_all_branches; fall back gracefully if column doesn't exist yet
+      let isAllBranchesValue = false;
+      try {
+        const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staffId]);
+        isAllBranchesValue = abRes.rows[0]?.is_all_branches === true;
+      } catch { /* column not yet added — migration pending */ }
 
       const result = await db.query(
         `SELECT s.id, s.username, s.full_name, s.is_active, s.created_at,
@@ -152,6 +263,7 @@ router.get(
         lastLoginAt: r.last_login_at,
         passwordChangedAt: r.password_changed_at,
         isLocked: r.locked_until && new Date(r.locked_until) > new Date(),
+        isAllBranches: isAllBranchesValue,
         roles: r.roles,
         currentRole: req.staff!.role,
         currentBranchId,
@@ -262,6 +374,15 @@ router.get(
         params,
       );
 
+      // Fetch is_all_branches separately — resilient to missing column on older DBs
+      let allBranchesMap: Record<number, boolean> = {};
+      try {
+        const abRes = await db.query(`SELECT id, is_all_branches FROM staff`);
+        for (const row of abRes.rows) {
+          allBranchesMap[row.id as number] = row.is_all_branches === true;
+        }
+      } catch { /* column not yet added */ }
+
       const countResult = await db.query(
         `SELECT COUNT(DISTINCT s.id) FROM staff s
          ${branchFilter}`,
@@ -278,6 +399,7 @@ router.get(
           mustChangePassword: r.must_change_password,
           lockedUntil: r.locked_until,
           failedLoginAttempts: r.failed_login_attempts,
+          isAllBranches: allBranchesMap[r.id as number] ?? false,
           roles: r.roles,
         })),
         total: parseInt(countResult.rows[0].count, 10),
@@ -411,6 +533,53 @@ router.post(
       const staffId = parseInt(req.params.id as string, 10);
       await authService.reactivateStaff(staffId);
       res.json({ message: 'Staff reactivated' });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── PUT /api/staff/:id/all-branches ──────────────────────────────────────────
+// Admin/Super_Admin can grant or revoke all-branch access for any staff member.
+
+router.put(
+  '/staff/:id/all-branches',
+  authenticate,
+  requireRole('Super_Admin', 'Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const staffId = parseInt(req.params.id as string, 10);
+      const { isAllBranches } = req.body;
+      if (typeof isAllBranches !== 'boolean') {
+        throw new ValidationError('isAllBranches must be a boolean');
+      }
+
+      await db.query(
+        `UPDATE staff SET is_all_branches = $1 WHERE id = $2`,
+        [isAllBranches, staffId],
+      ).catch(async (colErr: unknown) => {
+        // Column may not exist on older DBs — add it and retry once
+        const msg = (colErr as { message?: string }).message ?? '';
+        if (msg.includes('column') && msg.includes('is_all_branches')) {
+          await db.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS is_all_branches BOOLEAN NOT NULL DEFAULT false`);
+          await db.query(`UPDATE staff SET is_all_branches = $1 WHERE id = $2`, [isAllBranches, staffId]);
+        } else {
+          throw colErr;
+        }
+      });
+
+      await db.query(
+        `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
+         VALUES ($1, $2, 'UPDATE', 'staff', $3, $4)`,
+        [
+          req.staff!.staffId,
+          req.staff!.role,
+          String(staffId),
+          JSON.stringify({ action: 'set_all_branches', isAllBranches }),
+        ],
+      );
+
+      res.json({ message: isAllBranches ? 'All-branch access granted' : 'All-branch access revoked' });
     } catch (err) {
       next(err);
     }

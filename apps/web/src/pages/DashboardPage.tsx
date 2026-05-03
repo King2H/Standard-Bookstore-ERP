@@ -114,17 +114,26 @@ function buildQs(filters: Filters): string {
 // ── Main DashboardPage ────────────────────────────────────────────────────────
 
 export default function DashboardPage({ userRole, onNavigate }: DashboardPageProps) {
-  const canView = ['Manager', 'Admin', 'Finance_Officer'].includes(userRole ?? '');
+  const canView = ['Manager', 'Admin', 'Finance_Officer', 'Super_Admin'].includes(userRole ?? '');
+  const isAllBranches = ['Super_Admin', 'Admin'].includes(userRole ?? '');
 
-  // F-025: Pre-populate branchId for Manager role from JWT
+  // Pre-populate branchId: Manager gets their own branch; Admin/Super_Admin get all branches (empty = all)
   const getInitialBranchId = () => {
-    if (userRole !== 'Manager') return '';
+    if (isAllBranches) return ''; // empty = all branches
     const branchId = getCurrentBranchId();
     return branchId ? String(branchId) : '';
   };
 
   const [filters, setFilters] = useState<Filters>({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() });
   const qs = buildQs(filters);
+
+  // Load branches for the branch selector (Admin/Super_Admin only)
+  const { data: branchesData } = useQuery<{ items: Array<{ id: number; name: string }> }>({
+    queryKey: ['dashboard-branches'],
+    queryFn: () => api.get('/branches?pageSize=100'),
+    enabled: isAllBranches,
+    staleTime: 5 * 60_000,
+  });
 
   // F-026: CSV export function
   const exportReport = async (type: string) => {
@@ -193,7 +202,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-2">
           <p className="text-4xl">🔒</p>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Dashboard is available to Manager and Admin roles only.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Dashboard is available to Manager, Admin, and Finance Officer roles.</p>
         </div>
       </div>
     );
@@ -243,6 +252,19 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           <option value="week">Weekly</option>
           <option value="month">Monthly</option>
         </select>
+        {/* Branch selector — visible to Admin/Super_Admin who can see all branches */}
+        {isAllBranches && (
+          <select
+            value={filters.branchId}
+            onChange={e => setFilters(f => ({ ...f, branchId: e.target.value }))}
+            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">🏢 All Branches</option>
+            {(branchesData?.items ?? []).map(b => (
+              <option key={b.id} value={String(b.id)}>{b.name}</option>
+            ))}
+          </select>
+        )}
         <button onClick={() => setFilters({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() })}
           className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
           Clear

@@ -45,9 +45,15 @@ async function reseed() {
     `, [adminHash]);
 
     // ── Restore role assignments ─────────────────────────────────────────
+    // Assign superadmin and admin to ALL active branches
     await client.query(`
       INSERT INTO staff_branch_roles (staff_id, branch_id, role)
-      VALUES (1, 1, 'Super_Admin'), (2, 1, 'Admin')
+      SELECT 1, id, 'Super_Admin' FROM branches WHERE is_active = true
+      ON CONFLICT DO NOTHING
+    `);
+    await client.query(`
+      INSERT INTO staff_branch_roles (staff_id, branch_id, role)
+      SELECT 2, id, 'Admin' FROM branches WHERE is_active = true
       ON CONFLICT DO NOTHING
     `);
 

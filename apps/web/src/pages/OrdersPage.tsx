@@ -1,38 +1,74 @@
 import { useState } from 'react';
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 
 type Role = string;
-interface OrdersPageProps { userRole?: Role; }
+interface OrdersPageProps { userRole?: Role; userPermissions?: string[]; }
 
 interface OrderLine { id: string; bookId: number; bookTitle: string; quantity: number; unitPrice: number; totalPrice: number; qtyReserved: number; qtyFulfilled: number; isBackordered: boolean; }
-interface Order { id: string; orderNumber: string; customerId: number | null; branchId: number; channel: string; status: string; paymentStatus: string; currency: string; subtotal: number; taxAmount: number; total: number; cancelReason: string | null; createdAt: string; lineItems?: OrderLine[]; }
+interface Order {
+  id: string; orderNumber: string; customerId: number | null; branchId: number;
+  channel: string; status: string; paymentStatus: string; currency: string;
+  subtotal: number; taxAmount: number; total: number; cancelReason: string | null;
+  createdAt: string; lineItems?: OrderLine[];
+  allowedActions?: string[];
+}
 interface OrderListResponse { items: Order[]; total: number; page: number; totalPages: number; }
 interface Customer { id: number; customerCode: string; fullName: string; }
 interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; stockQuantity?: number | null; }
 
+// Lifecycle status colours — covers both legacy and new values
 const STATUS_COLORS: Record<string, string> = {
-  Pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-  Confirmed: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+  // Legacy (backward compat)
+  Pending:     'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
+  Confirmed:   'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
   In_Progress: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
-  Fulfilled: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  Cancelled: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+  Fulfilled:   'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+  Cancelled:   'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+  // New lifecycle values
+  DRAFT:       'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+  CONFIRMED:   'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+  PAID:        'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+  FULFILLED:   'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+  COMPLETED:   'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+  CANCELLED:   'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
 };
+
 const PAY_COLORS: Record<string, string> = {
-  unpaid: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-  partial: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-  paid: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+  unpaid:   'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+  partial:  'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+  paid:     'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
   refunded: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
-const canCreate  = (r?: Role) => ['Sales', 'Manager', 'Admin'].includes(r ?? '');
-const canConfirm = (r?: Role) => ['Manager', 'Admin'].includes(r ?? '');
-const canCancel  = (r?: Role) => ['Manager', 'Admin'].includes(r ?? '');
+// Action button styles
+const ACTION_STYLES: Record<string, string> = {
+  confirm:     'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200',
+  pay:         'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 hover:bg-indigo-200',
+  fulfill:     'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200',
+  complete:    'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-200',
+  cancel:      'text-red-600 hover:bg-red-50 dark:hover:bg-red-950',
+  print:       'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800',
+  // legacy
+  progress:    'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200',
+};
+const ACTION_LABELS: Record<string, string> = {
+  confirm: 'Confirm', pay: 'Take Payment', fulfill: 'Fulfill',
+  complete: 'Complete', cancel: 'Cancel', print: '🖨 Print', progress: 'Progress',
+};
+
+const canCreate = (r?: Role, perms?: string[]) =>
+  (perms && perms.includes('CREATE_SALE')) ||
+  ['Sales', 'Manager', 'Admin', 'Super_Admin'].includes(r ?? '');
 
 type Tab = 'list' | 'new';
 
-export default function OrdersPage({ userRole }: OrdersPageProps) {
+// Payment modal state
+interface PayModalState { orderId: string; orderNumber: string; total: number; }
+
+export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [tab, setTab] = useState<Tab>('list');
@@ -44,6 +80,9 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [payModal, setPayModal] = useState<PayModalState | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payMethod, setPayMethod] = useState<'cash' | 'bank'>('cash');
 
   // New order state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -101,6 +140,8 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
   }
 
   const subtotal = orderItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+  // userPermissions available for future fine-grained checks
+  void userPermissions;
 
   return (
     <div className="flex flex-col h-full">
@@ -119,7 +160,8 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setListPage(1); }}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">All statuses</option>
-              {['Pending','Confirmed','In_Progress','Fulfilled','Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+              {['DRAFT','CONFIRMED','PAID','FULFILLED','COMPLETED','CANCELLED',
+                'Pending','Confirmed','In_Progress','Fulfilled','Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
@@ -130,7 +172,7 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {(listData?.items ?? []).map(order => (
-                    <>
+                    <React.Fragment key={order.id}>
                       <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{order.orderNumber}</td>
                         <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{order.channel.replace('_', ' ')}</td>
@@ -140,19 +182,63 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(order.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1 flex-wrap">
-                            {canConfirm(userRole) && order.status === 'Pending' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'confirm' }); }} className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded hover:bg-blue-200 transition-colors">Confirm</button>}
-                            {canConfirm(userRole) && order.status === 'Confirmed' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'progress' }); }} className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-2 py-0.5 rounded hover:bg-purple-200 transition-colors">Progress</button>}
-                            {canConfirm(userRole) && ['Confirmed','In_Progress'].includes(order.status) && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'fulfill' }); }} className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 px-2 py-0.5 rounded hover:bg-green-200 transition-colors">Fulfill</button>}
-                            {canCancel(userRole) && !['Fulfilled','Cancelled'].includes(order.status) && (
-                              cancelingId === order.id ? (
-                                <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                                  <input value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason..." className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-28" />
-                                  <button onClick={() => actionMut.mutate({ id: order.id, action: 'cancel', body: { reason: cancelReason || 'No reason' } })} className="text-xs bg-red-600 text-white px-2 py-0.5 rounded">OK</button>
-                                  <button onClick={() => setCancelingId(null)} className="text-xs text-gray-500 px-1">✕</button>
-                                </div>
-                              ) : (
-                                <button onClick={e => { e.stopPropagation(); setCancelingId(order.id); }} className="text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950 px-2 py-0.5 rounded transition-colors">Cancel</button>
-                              )
+                            {/* Render buttons from allowedActions returned by the API */}
+                            {(order.allowedActions ?? []).map(action => {
+                              if (action === 'cancel') {
+                                return cancelingId === order.id ? (
+                                  <div key="cancel-confirm" className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                    <input value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason..." className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-28" />
+                                    <button onClick={() => actionMut.mutate({ id: order.id, action: 'cancel', body: { reason: cancelReason || 'No reason' } })} className="text-xs bg-red-600 text-white px-2 py-0.5 rounded">OK</button>
+                                    <button onClick={() => setCancelingId(null)} className="text-xs text-gray-500 px-1">✕</button>
+                                  </div>
+                                ) : (
+                                  <button key="cancel" onClick={e => { e.stopPropagation(); setCancelingId(order.id); }}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.cancel}`}>
+                                    Cancel
+                                  </button>
+                                );
+                              }
+                              if (action === 'pay') {
+                                return (
+                                  <button key="pay" onClick={e => { e.stopPropagation(); setPayModal({ orderId: order.id, orderNumber: order.orderNumber, total: Number(order.total) }); setPayAmount(Number(order.total).toFixed(2)); }}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.pay}`}>
+                                    {ACTION_LABELS.pay}
+                                  </button>
+                                );
+                              }
+                              if (action === 'print') {
+                                return (
+                                  <button key="print" onClick={e => { e.stopPropagation(); window.print(); }}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.print}`}>
+                                    {ACTION_LABELS.print}
+                                  </button>
+                                );
+                              }
+                              return (
+                                <button key={action} onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action }); }}
+                                  className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES[action] ?? 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                  {ACTION_LABELS[action] ?? action}
+                                </button>
+                              );
+                            })}
+                            {/* Fallback for legacy orders that don't return allowedActions */}
+                            {!order.allowedActions && (
+                              <>
+                                {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Pending' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'confirm' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>Confirm</button>}
+                                {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Confirmed' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'progress' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.progress}`}>Progress</button>}
+                                {['Manager','Admin'].includes(userRole ?? '') && ['Confirmed','In_Progress'].includes(order.status) && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'fulfill' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.fulfill}`}>Fulfill</button>}
+                                {['Manager','Admin'].includes(userRole ?? '') && !['Fulfilled','Cancelled'].includes(order.status) && (
+                                  cancelingId === order.id ? (
+                                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                      <input value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason..." className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-28" />
+                                      <button onClick={() => actionMut.mutate({ id: order.id, action: 'cancel', body: { reason: cancelReason || 'No reason' } })} className="text-xs bg-red-600 text-white px-2 py-0.5 rounded">OK</button>
+                                      <button onClick={() => setCancelingId(null)} className="text-xs text-gray-500 px-1">✕</button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={e => { e.stopPropagation(); setCancelingId(order.id); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.cancel}`}>Cancel</button>
+                                  )
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
@@ -164,7 +250,7 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -184,7 +270,7 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
       )}
 
       {/* ── New Order ── */}
-      {tab === 'new' && canCreate(userRole) && (
+      {tab === 'new' && canCreate(userRole, userPermissions) && (
         <div className="flex-1 overflow-auto p-4 pb-6 max-w-2xl mx-auto w-full space-y-4">
           {/* Customer */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
@@ -274,6 +360,46 @@ export default function OrdersPage({ userRole }: OrdersPageProps) {
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
             {createMut.isPending ? 'Creating...' : 'Create Order'}
           </button>
+        </div>
+      )}
+
+      {/* ── Take Payment Modal ── */}
+      {payModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setPayModal(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 w-full max-w-sm space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Take Payment</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Order <span className="font-mono font-medium text-gray-900 dark:text-white">{payModal.orderNumber}</span></p>
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Method</label>
+              <div className="flex gap-2">
+                {(['cash', 'bank'] as const).map(m => (
+                  <button key={m} onClick={() => setPayMethod(m)}
+                    className={`flex-1 py-1.5 text-sm rounded-lg transition-colors capitalize ${payMethod === m ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Amount (ETB)</label>
+              <input type="number" min="0" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setPayModal(null)} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Cancel</button>
+              <button
+                onClick={() => {
+                  const amt = parseFloat(payAmount);
+                  if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
+                  actionMut.mutate({ id: payModal.orderId, action: 'pay', body: { amount: amt, method: payMethod } });
+                  setPayModal(null);
+                }}
+                disabled={actionMut.isPending}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+                {actionMut.isPending ? 'Processing...' : 'Confirm Payment'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

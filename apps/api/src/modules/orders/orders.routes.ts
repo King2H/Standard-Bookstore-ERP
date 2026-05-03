@@ -1,9 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as ordersService from './orders.service.js';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
+import { computeOrderAllowedActions } from './orders.service.js';
+import { Permission } from '../../lib/permissions.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -14,7 +16,7 @@ const qi = (v: unknown, fb: number): number => { const s = qs(v); return s ? par
 router.post(
   '/orders',
   authenticate,
-  requireRole('Sales', 'Manager', 'Admin'),
+  requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.body.items || !Array.isArray(req.body.items) || req.body.items.length === 0) {
@@ -61,7 +63,12 @@ router.get(
         page:          qi(req.query.page, 1),
         pageSize:      qi(req.query.pageSize, 25),
       });
-      res.json(result);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      const itemsWithActions = result.items.map(order => ({
+        ...order,
+        allowedActions: computeOrderAllowedActions(order.status, permissions),
+      }));
+      res.json({ ...result, items: itemsWithActions });
     } catch (err) { next(err); }
   },
 );
@@ -73,8 +80,9 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.getById(parseInt(req.params.id, 10));
-      res.json(order);
+      const order = await ordersService.getById(parseInt(req.params.id as string, 10));
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
     } catch (err) { next(err); }
   },
 );
@@ -84,11 +92,12 @@ router.get(
 router.post(
   '/orders/:id/confirm',
   authenticate,
-  requireRole('Manager', 'Admin'),
+  requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.confirm(parseInt(req.params.id, 10), req.staff!);
-      res.json(order);
+      const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
     } catch (err) { next(err); }
   },
 );
@@ -101,8 +110,24 @@ router.post(
   requireRole('Manager', 'Admin', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.progress(parseInt(req.params.id, 10), req.staff!);
+      const order = await ordersService.progress(parseInt(req.params.id as string, 10), req.staff!);
       res.json(order);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/orders/:id/pay ──────────────────────────────────────────────────
+
+router.post(
+  '/orders/:id/pay',
+  authenticate,
+  requirePermission('PROCESS_PAYMENT'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      const order = await ordersService.pay(id, req.staff!);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
     } catch (err) { next(err); }
   },
 );
@@ -112,11 +137,12 @@ router.post(
 router.post(
   '/orders/:id/fulfill',
   authenticate,
-  requireRole('Manager', 'Admin', 'Stock_Clerk'),
+  requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.fulfill(parseInt(req.params.id, 10), req.staff!);
-      res.json(order);
+      const order = await ordersService.fulfill(parseInt(req.params.id as string, 10), req.staff!);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
     } catch (err) { next(err); }
   },
 );
@@ -126,12 +152,13 @@ router.post(
 router.post(
   '/orders/:id/cancel',
   authenticate,
-  requireRole('Manager', 'Admin'),
+  requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const reason = req.body.reason ?? 'No reason provided';
-      const order = await ordersService.cancel(parseInt(req.params.id, 10), reason, req.staff!);
-      res.json(order);
+      const order = await ordersService.cancel(parseInt(req.params.id as string, 10), reason, req.staff!);
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
     } catch (err) { next(err); }
   },
 );

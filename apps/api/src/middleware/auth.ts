@@ -7,7 +7,9 @@ import { db } from '../db/index.js';
 interface JwtPayload {
   staffId: number;
   role: Role;
+  roles?: string[];    // all roles for the active branch (added in refactor)
   branchId: number;
+  permissions?: string[];
 }
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
@@ -36,7 +38,9 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
         req.staff = {
           staffId: payload.staffId,
           role: payload.role,
+          roles: payload.roles ?? [payload.role],
           branchId: payload.branchId,
+          permissions: payload.permissions,
         };
         next();
       })
@@ -45,7 +49,9 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
         req.staff = {
           staffId: payload.staffId,
           role: payload.role,
+          roles: payload.roles ?? [payload.role],
           branchId: payload.branchId,
+          permissions: payload.permissions,
         };
         next();
       });

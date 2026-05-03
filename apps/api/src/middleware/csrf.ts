@@ -16,7 +16,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const EXEMPT_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/health', '/api/branches/public']);
+const EXEMPT_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/pre-login', '/api/health', '/api/branches/public']);
 
 /**
  * Generate a CSRF token and set it as a readable cookie.

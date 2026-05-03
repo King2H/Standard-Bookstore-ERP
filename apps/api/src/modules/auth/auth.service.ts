@@ -10,6 +10,7 @@ import {
   ValidationError,
 } from '../../lib/errors.js';
 import { insertOutbox } from '../../lib/outbox.js';
+import { getPermissionsForRoles } from '../../lib/permissions.js';
 
 const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '15m';
@@ -119,20 +120,22 @@ export async function login(
     throw new AuthError('INVALID_CREDENTIALS', 'Invalid username or password');
   }
 
-  // 4. Verify branch role assignment — pick the first role if multiple exist for this branch
-  const roleResult = await db.query(
-    `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC LIMIT 1`,
+  // 4. Verify branch role assignment — load ALL roles for this staff+branch
+  const allRolesResult = await db.query(
+    `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC`,
     [staff.id, branchId],
   );
 
-  if (roleResult.rows.length === 0) {
+  if (allRolesResult.rows.length === 0) {
     throw new AuthError(
       'BRANCH_ACCESS_DENIED',
       `No role assignment found for branch ${branchId}`,
     );
   }
 
-  const role: Role = roleResult.rows[0].role;
+  const allRoles = allRolesResult.rows.map(r => r.role as string);
+  const role: Role = allRoles[0] as Role; // primary role (backward compat)
+  const permissions = getPermissionsForRoles(allRoles);
 
   // 5. Reset failed attempts + update last_login on successful auth
   await db.query(
@@ -144,22 +147,22 @@ export async function login(
     [staff.id],
   );
 
-  // 6. Issue access token
+  // 6. Issue access token (includes permissions for fine-grained RBAC)
   const accessToken = jwt.sign(
-    { staffId: staff.id, role, branchId },
+    { staffId: staff.id, role, roles: allRoles, branchId, permissions },
     getJwtSecret(),
     { expiresIn: ACCESS_TOKEN_TTL },
   );
-
   // 7. Issue refresh token (store bcrypt hash — never store plaintext)
   const plainRefreshToken = randomUUID();
   const tokenHash = await bcrypt.hash(plainRefreshToken, 10);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
 
+  // Store branch_id + role on the token for reliable refresh (migration 1700000032)
   await db.query(
-    `INSERT INTO refresh_tokens (staff_id, token_hash, expires_at, revoked)
-     VALUES ($1, $2, $3, false)`,
-    [staff.id, tokenHash, expiresAt],
+    `INSERT INTO refresh_tokens (staff_id, token_hash, expires_at, revoked, branch_id, role)
+     VALUES ($1, $2, $3, false, $4, $5)`,
+    [staff.id, tokenHash, expiresAt, branchId, role],
   );
 
   return {
@@ -195,12 +198,19 @@ export async function logout(staffId: number, refreshToken: string): Promise<voi
 export async function refresh(
   refreshToken: string,
 ): Promise<{ accessToken: string; expiresIn: number }> {
-  // Find all non-revoked, non-expired tokens
+  // Fetch all non-revoked, non-expired tokens for active staff.
+  // branch_id and role are stored directly on the token (migration 1700000032).
+  // Fall back to staff_branch_roles JOIN for tokens issued before the migration.
   const tokens = await db.query(
-    `SELECT rt.id, rt.token_hash, rt.staff_id, sbr.role, sbr.branch_id
+    `SELECT rt.id, rt.token_hash, rt.staff_id, rt.branch_id, rt.role,
+            sbr_fallback.role AS fallback_role, sbr_fallback.branch_id AS fallback_branch_id
      FROM refresh_tokens rt
-     JOIN staff_branch_roles sbr ON sbr.staff_id = rt.staff_id
      JOIN staff s ON s.id = rt.staff_id
+     LEFT JOIN LATERAL (
+       SELECT role, branch_id FROM staff_branch_roles
+       WHERE staff_id = rt.staff_id
+       ORDER BY id ASC LIMIT 1
+     ) sbr_fallback ON true
      WHERE rt.revoked = false
        AND rt.expires_at > now()
        AND s.is_active = true
@@ -210,8 +220,25 @@ export async function refresh(
   for (const row of tokens.rows) {
     const matches = await bcrypt.compare(refreshToken, row.token_hash);
     if (matches) {
+      // Use stored context if available, otherwise fall back to first role assignment
+      const role     = (row.role      ?? row.fallback_role)      as string;
+      const branchId = (row.branch_id ?? row.fallback_branch_id) as number;
+
+      if (!role || !branchId) {
+        throw new AuthError('TOKEN_REVOKED', 'Refresh token is invalid or expired');
+      }
+
+      // Load all roles for this staff+branch to compute the full permission set
+      const allRolesResult = await db.query(
+        `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC`,
+        [row.staff_id, branchId],
+      );
+      const allRoles = allRolesResult.rows.map(r => r.role as string);
+      // Fall back to the stored role if no assignments found (edge case)
+      const permissions = getPermissionsForRoles(allRoles.length ? allRoles : [role]);
+
       const accessToken = jwt.sign(
-        { staffId: row.staff_id, role: row.role, branchId: row.branch_id },
+        { staffId: row.staff_id, role, roles: allRoles.length ? allRoles : [role], branchId, permissions },
         getJwtSecret(),
         { expiresIn: ACCESS_TOKEN_TTL },
       );
@@ -220,6 +247,105 @@ export async function refresh(
   }
 
   throw new AuthError('TOKEN_REVOKED', 'Refresh token is invalid or expired');
+}
+
+// ── Get Branches For User ─────────────────────────────────────────────────────
+// Returns all branches the staff member has access to, with their roles per branch.
+// Used by the login page (branch selection) and the branch switcher.
+
+export async function getBranchesForUser(
+  staffId: number,
+): Promise<Array<{ branchId: number; branchName: string; roles: string[]; isAllBranches: boolean }>> {
+  // Check is_all_branches flag
+  let isAllBranches = false;
+  try {
+    const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staffId]);
+    isAllBranches = abRes.rows[0]?.is_all_branches === true;
+  } catch { /* column may not exist yet */ }
+
+  if (isAllBranches) {
+    // Return all active branches with the staff's assigned roles (or empty if none)
+    const branchRes = await db.query(
+      `SELECT b.id, b.name,
+              COALESCE(
+                (SELECT json_agg(sbr.role ORDER BY sbr.id)
+                 FROM staff_branch_roles sbr
+                 WHERE sbr.staff_id = $1 AND sbr.branch_id = b.id),
+                '[]'::json
+              ) AS roles
+       FROM branches b
+       WHERE b.is_active = true
+       ORDER BY b.name ASC`,
+      [staffId],
+    );
+    return branchRes.rows.map(r => ({
+      branchId: r.id as number,
+      branchName: r.name as string,
+      roles: (r.roles as string[]) ?? [],
+      isAllBranches: true,
+    }));
+  }
+
+  // Normal staff: return only branches they have role assignments for
+  const res = await db.query(
+    `SELECT b.id, b.name, json_agg(sbr.role ORDER BY sbr.id) AS roles
+     FROM staff_branch_roles sbr
+     JOIN branches b ON b.id = sbr.branch_id
+     WHERE sbr.staff_id = $1 AND b.is_active = true
+     GROUP BY b.id, b.name
+     ORDER BY b.name ASC`,
+    [staffId],
+  );
+  return res.rows.map(r => ({
+    branchId: r.id as number,
+    branchName: r.name as string,
+    roles: (r.roles as string[]) ?? [],
+    isAllBranches: false,
+  }));
+}
+
+// ── Switch Branch ─────────────────────────────────────────────────────────────
+// Issues a new access token for a different branch.
+// The refresh token cookie is NOT changed — only the access token is reissued.
+
+export async function switchBranch(
+  staffId: number,
+  targetBranchId: number,
+): Promise<{ accessToken: string; expiresIn: number }> {
+  // Verify staff is still active
+  const staffRes = await db.query(`SELECT is_active FROM staff WHERE id = $1`, [staffId]);
+  if (!staffRes.rows.length || !staffRes.rows[0].is_active) {
+    throw new AuthError('ACCOUNT_INACTIVE', 'Account is deactivated');
+  }
+
+  // Check is_all_branches
+  let isAllBranches = false;
+  try {
+    const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staffId]);
+    isAllBranches = abRes.rows[0]?.is_all_branches === true;
+  } catch { /* column may not exist yet */ }
+
+  // Load roles for the target branch
+  const rolesRes = await db.query(
+    `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC`,
+    [staffId, targetBranchId],
+  );
+
+  if (rolesRes.rows.length === 0 && !isAllBranches) {
+    throw new AuthError('BRANCH_ACCESS_DENIED', `No role assignment found for branch ${targetBranchId}`);
+  }
+
+  const allRoles = rolesRes.rows.map(r => r.role as string);
+  const role = (allRoles[0] ?? 'Admin') as import('@bms/shared').Role;
+  const permissions = getPermissionsForRoles(allRoles.length ? allRoles : ['Admin']);
+
+  const accessToken = jwt.sign(
+    { staffId, role, roles: allRoles, branchId: targetBranchId, permissions },
+    getJwtSecret(),
+    { expiresIn: ACCESS_TOKEN_TTL },
+  );
+
+  return { accessToken, expiresIn: 900 };
 }
 
 // ── Create Staff ─────────────────────────────────────────────────────────────

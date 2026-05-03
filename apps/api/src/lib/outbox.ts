@@ -38,7 +38,9 @@ export type OutboxEventType =
   | 'order.confirmed'
   | 'order.backordered'
   | 'order.in_progress'
+  | 'order.paid'
   | 'order.fulfilled'
+  | 'order.completed'
   | 'order.cancelled'
   // Payments
   | 'payment.recorded'
@@ -65,6 +67,10 @@ export type OutboxEventType =
   | 'exchange.completed'
   | 'exchange.cancelled'
   | 'exchange.store_refund_due'
+  | 'exchange.initiated'
+  | 'exchange.reviewed'
+  | 'exchange.approved'
+  | 'exchange.settled'
   // Customers
   | 'customer.store_credit_added'
   | 'customer.deactivated'

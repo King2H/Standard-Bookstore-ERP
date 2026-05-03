@@ -13,8 +13,10 @@
  * Auto-expand: the section containing the active page opens on mount / page change.
  */
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../lib/theme.js';
 import { logout } from '../lib/auth.js';
+import { api } from '../lib/api.js';
 import NotificationBell from './NotificationBell.js';
 
 type Page =
@@ -25,20 +27,25 @@ type Page =
 
 type Role = string;
 
-// ── Menu configuration ────────────────────────────────────────────────────────
+// ── Permission → menu mapping ─────────────────────────────────────────────────
+// Each menu item lists which permissions grant access to it.
+// A user sees an item if they have ANY of the listed permissions.
+// This supports multi-role users: permissions are the union of all their roles.
 
 interface NavLeaf {
   id: Page;
   label: string;
   icon: string;
-  roles: Role[];
+  roles: Role[];           // kept for backward compat / role-badge display
+  permissions?: string[];  // if set, used instead of roles for visibility
 }
 
 interface NavSection {
   id: string;
   label: string;
   icon: string;
-  roles: Role[];          // section visible if user has ANY of these roles
+  roles: Role[];
+  permissions?: string[];
   items: NavLeaf[];
 }
 
@@ -46,31 +53,34 @@ const NAV_SECTIONS: NavSection[] = [
   {
     id: 'sales', label: 'Sales', icon: '🛒',
     roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],
+    permissions: ['CREATE_SALE', 'PROCESS_PAYMENT', 'APPROVE_EXCHANGE', 'PROCESS_REFUND'],
     items: [
-      { id: 'pos',       label: 'POS',       icon: '🛒', roles: ['Admin', 'Manager', 'Sales'] },
-      { id: 'orders',    label: 'Orders',    icon: '📦', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
-      { id: 'returns',   label: 'Returns',   icon: '↩',  roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
-      { id: 'exchanges', label: 'Exchanges', icon: '🔁', roles: ['Admin', 'Manager', 'Sales'] },
-      { id: 'customers', label: 'Customers', icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer', 'Stock_Clerk', 'Purchasor'] },
+      { id: 'pos',       label: 'POS',       icon: '🛒', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE'] },
+      { id: 'orders',    label: 'Orders',    icon: '📦', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_PAYMENT'] },
+      { id: 'returns',   label: 'Returns',   icon: '↩',  roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_REFUND'] },
+      { id: 'exchanges', label: 'Exchanges', icon: '🔁', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE', 'APPROVE_EXCHANGE'] },
+      { id: 'customers', label: 'Customers', icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer', 'Stock_Clerk', 'Purchasor'], permissions: ['CREATE_SALE', 'PROCESS_PAYMENT', 'MANAGE_INVENTORY', 'VIEW_REPORTS'] },
     ],
   },
   {
     id: 'stock', label: 'Stock', icon: '📦',
     roles: ['Admin', 'Manager', 'Stock_Clerk', 'Purchasor', 'Finance_Officer', 'Sales'],
+    permissions: ['MANAGE_INVENTORY', 'VIEW_REPORTS'],
     items: [
-      { id: 'inventory',   label: 'Inventory',   icon: '📦', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
-      { id: 'procurement', label: 'Procurement', icon: '📋', roles: ['Admin', 'Manager', 'Purchasor', 'Stock_Clerk', 'Finance_Officer'] },
-      { id: 'suppliers',   label: 'Suppliers',   icon: '🚚', roles: ['Admin', 'Manager', 'Purchasor'] },
-      { id: 'catalog',     label: 'Catalog',     icon: '📚', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
+      { id: 'inventory',   label: 'Inventory',   icon: '📦', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'], permissions: ['MANAGE_INVENTORY', 'VIEW_REPORTS'] },
+      { id: 'procurement', label: 'Procurement', icon: '📋', roles: ['Admin', 'Manager', 'Purchasor', 'Stock_Clerk', 'Finance_Officer'],           permissions: ['MANAGE_INVENTORY'] },
+      { id: 'suppliers',   label: 'Suppliers',   icon: '🚚', roles: ['Admin', 'Manager', 'Purchasor'],                                             permissions: ['MANAGE_INVENTORY'] },
+      { id: 'catalog',     label: 'Catalog',     icon: '📚', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'],  permissions: ['MANAGE_INVENTORY', 'VIEW_REPORTS', 'CREATE_SALE'] },
     ],
   },
   {
     id: 'finance', label: 'Finance', icon: '💳',
     roles: ['Admin', 'Manager', 'Finance_Officer', 'Sales'],
+    permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'],
     items: [
-      { id: 'payments',     label: 'Payments',     icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
-      { id: 'installments', label: 'Installments', icon: '📅', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'] },
-      { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'] },
+      { id: 'payments',      label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND'] },
+      { id: 'installments',  label: 'Installments',  icon: '📅', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT'] },
+      { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'],           permissions: ['PROCESS_PAYMENT', 'VIEW_REPORTS'] },
     ],
   },
   {
@@ -78,16 +88,17 @@ const NAV_SECTIONS: NavSection[] = [
     roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'],
     items: [
       { id: 'branches',  label: 'Branches',  icon: '🏪', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
-      { id: 'locations', label: 'Locations', icon: '📍', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
-      { id: 'staff',     label: 'Staff',     icon: '👥', roles: ['Super_Admin', 'Admin', 'Manager'] },
+      { id: 'locations', label: 'Locations', icon: '📍', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'],               permissions: ['MANAGE_BRANCH', 'MANAGE_INVENTORY', 'CREATE_SALE'] },
+      { id: 'staff',     label: 'Staff',     icon: '👥', roles: ['Super_Admin', 'Admin', 'Manager'],                                                        permissions: ['MANAGE_STAFF'] },
     ],
   },
   {
     id: 'system', label: 'System', icon: '⚙️',
     roles: ['Super_Admin', 'Admin', 'Manager'],
+    permissions: ['MANAGE_BRANCH', 'MANAGE_STAFF'],
     items: [
-      { id: 'settings',  label: 'Settings',  icon: '⚙️', roles: ['Super_Admin', 'Admin', 'Manager'] },
-      { id: 'audit-log', label: 'Audit Log', icon: '📋', roles: ['Super_Admin', 'Admin'] },
+      { id: 'settings',  label: 'Settings',  icon: '⚙️', roles: ['Super_Admin', 'Admin', 'Manager'], permissions: ['MANAGE_BRANCH'] },
+      { id: 'audit-log', label: 'Audit Log', icon: '📋', roles: ['Super_Admin', 'Admin'],             permissions: ['MANAGE_STAFF', 'MANAGE_BRANCH'] },
     ],
   },
 ];
@@ -146,6 +157,7 @@ function SidebarItem({ item, isActive, expanded, onClick }: SidebarItemProps) {
 interface SidebarSectionProps {
   section: NavSection;
   userRole: Role | null;
+  userPermissions: string[];
   currentPage: Page;
   isOpen: boolean;
   sidebarExpanded: boolean;
@@ -153,12 +165,21 @@ interface SidebarSectionProps {
   onNavigate: (page: Page) => void;
 }
 
+/** Returns true if the user can see this item based on their role OR permissions. */
+function canSeeItem(item: NavLeaf, userRole: Role | null, userPermissions: string[]): boolean {
+  // Permission-based check (preferred — supports multi-role union)
+  if (item.permissions && item.permissions.length > 0) {
+    if (userPermissions.some(p => item.permissions!.includes(p))) return true;
+  }
+  // Role-based fallback (for items without permission mapping, or when permissions not yet loaded)
+  if (userRole && item.roles.includes(userRole)) return true;
+  return false;
+}
+
 function SidebarSection({
-  section, userRole, currentPage, isOpen, sidebarExpanded, onToggle, onNavigate,
+  section, userRole, userPermissions, currentPage, isOpen, sidebarExpanded, onToggle, onNavigate,
 }: SidebarSectionProps) {
-  const visibleItems = section.items.filter(
-    item => userRole && item.roles.includes(userRole)
-  );
+  const visibleItems = section.items.filter(item => canSeeItem(item, userRole, userPermissions));
   if (visibleItems.length === 0) return null;
 
   const hasActiveChild = visibleItems.some(i => i.id === currentPage);
@@ -219,12 +240,44 @@ interface LayoutProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
   userRole: Role | null;
+  userRoles?: string[];           // all roles for the active branch (informational)
+  userPermissions?: string[];
+  activeBranchId?: number | null;
+  onSwitchBranch?: (branchId: number) => void;
   children: React.ReactNode;
 }
 
-export default function Layout({ currentPage, onNavigate, onLogout, userRole, children }: LayoutProps) {
+export default function Layout({
+  currentPage, onNavigate, onLogout, userRole, userRoles = [],
+  userPermissions = [], activeBranchId, onSwitchBranch, children,
+}: LayoutProps) {
   const { theme, toggleTheme } = useTheme();
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [switchingBranch, setSwitchingBranch] = useState(false);
+
+  // Load available branches for the switcher (only when user is logged in)
+  const { data: branchesData } = useQuery<{
+    branches: Array<{ branchId: number; branchName: string; roles: string[]; isAllBranches: boolean }>;
+  }>({
+    queryKey: ['auth-branches'],
+    queryFn: () => api.get('/auth/branches'),
+    staleTime: 5 * 60_000,
+    enabled: !!onSwitchBranch,
+  });
+  const availableBranches = branchesData?.branches ?? [];
+  const activeBranch = availableBranches.find(b => b.branchId === activeBranchId);
+
+  const handleBranchSwitch = async (branchId: number) => {
+    if (branchId === activeBranchId || !onSwitchBranch) return;
+    setSwitchingBranch(true);
+    setBranchMenuOpen(false);
+    try {
+      await onSwitchBranch(branchId);
+    } finally {
+      setSwitchingBranch(false);
+    }
+  };
 
   // Accordion: track which section is open
   const [openSection, setOpenSection] = useState<string | null>(() => findSectionForPage(currentPage));
@@ -275,8 +328,9 @@ export default function Layout({ currentPage, onNavigate, onLogout, userRole, ch
         {/* Nav */}
         <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
 
-          {/* Dashboard — standalone */}
-          {userRole && ['Admin', 'Manager', 'Finance_Officer'].includes(userRole) && (
+          {/* Dashboard — standalone, visible to roles with VIEW_REPORTS or Admin/Manager */}
+          {(userPermissions.some(p => ['VIEW_REPORTS', 'MANAGE_BRANCH'].includes(p)) ||
+            (userRole && ['Admin', 'Manager', 'Finance_Officer', 'Super_Admin'].includes(userRole))) && (
             <button
               onClick={() => onNavigate('dashboard')}
               title={!sidebarExpanded ? 'Dashboard' : undefined}
@@ -303,6 +357,7 @@ export default function Layout({ currentPage, onNavigate, onLogout, userRole, ch
               key={section.id}
               section={section}
               userRole={userRole}
+              userPermissions={userPermissions}
               currentPage={currentPage}
               isOpen={openSection === section.id}
               sidebarExpanded={sidebarExpanded}
@@ -368,16 +423,75 @@ export default function Layout({ currentPage, onNavigate, onLogout, userRole, ch
           </button>
 
           {/* Page title */}
-          <div className="flex-1">
-            <h1 className="text-base font-semibold text-gray-900 dark:text-white">{pageTitle}</h1>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-semibold text-gray-900 dark:text-white truncate">{pageTitle}</h1>
           </div>
 
-          {/* Role badge */}
-          {userRole && (
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ROLE_COLORS[userRole] ?? 'bg-gray-100 text-gray-700'}`}>
-              {userRole}
-            </span>
+          {/* ── Branch switcher ── */}
+          {availableBranches.length > 0 && onSwitchBranch && (
+            <div className="relative">
+              <button
+                onClick={() => setBranchMenuOpen(o => !o)}
+                disabled={switchingBranch}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                title="Switch branch"
+              >
+                <span className="text-xs">🏪</span>
+                <span className="max-w-[120px] truncate text-xs font-medium">
+                  {switchingBranch ? 'Switching…' : (activeBranch?.branchName ?? 'Branch')}
+                </span>
+                <svg className={`w-3 h-3 flex-shrink-0 transition-transform ${branchMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {branchMenuOpen && (
+                <>
+                  {/* Backdrop */}
+                  <div className="fixed inset-0 z-10" onClick={() => setBranchMenuOpen(false)} />
+                  {/* Dropdown */}
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-20 overflow-hidden">
+                    <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Switch Branch</p>
+                    </div>
+                    {availableBranches.map(b => (
+                      <button
+                        key={b.branchId}
+                        onClick={() => handleBranchSwitch(b.branchId)}
+                        className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center gap-2 ${
+                          b.branchId === activeBranchId
+                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <span className="text-xs">{b.isAllBranches ? '🌐' : '🏪'}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{b.branchName}</p>
+                          {b.roles.length > 0 && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{b.roles.join(' · ')}</p>
+                          )}
+                        </div>
+                        {b.branchId === activeBranchId && (
+                          <svg className="w-4 h-4 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
+
+          {/* ── Role tags (informational — all roles for active branch) ── */}
+          <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
+            {(userRoles.length > 0 ? userRoles : (userRole ? [userRole] : [])).map(r => (
+              <span key={r} className={`text-xs font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[r] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>
+                {r.replace('_', ' ')}
+              </span>
+            ))}
+          </div>
 
           {/* Notification bell */}
           <NotificationBell onNavigate={(page) => onNavigate(page as Page)} />

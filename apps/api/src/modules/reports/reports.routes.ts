@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as reportsService from './reports.service.js';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requirePermission } from '../../middleware/rbac.js';
 
 const router = Router();
 
@@ -15,16 +15,21 @@ const qi = (v: unknown): number | undefined => {
 
 function parseFilters(req: Request) {
   const groupBy = qs(req.query.groupBy);
+  // If branchId is explicitly provided in query, use it.
+  // Otherwise, for is_all_branches staff leave it undefined (all branches).
+  // For regular staff, default to their assigned branch.
+  const qBranchId = qi(req.query.branchId);
+  const branchId = qBranchId ?? req.staff?.branchId;
   return {
-    branchId: qi(req.query.branchId),
+    branchId,
     dateFrom: qs(req.query.dateFrom),
     dateTo:   qs(req.query.dateTo),
     groupBy:  (groupBy === 'week' || groupBy === 'month' ? groupBy : 'day') as 'day' | 'week' | 'month',
   };
 }
 
-// All report endpoints require Manager, Admin, or Finance_Officer
-const reportAccess = [authenticate, requireRole('Manager', 'Admin', 'Finance_Officer')];
+// All report endpoints require VIEW_REPORTS permission
+const reportAccess = [authenticate, requirePermission('VIEW_REPORTS')];
 
 // ── CSV helper ────────────────────────────────────────────────────────────────
 

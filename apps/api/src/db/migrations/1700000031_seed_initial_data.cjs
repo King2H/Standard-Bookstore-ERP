@@ -36,25 +36,29 @@ exports.up = function (pgm) {
 
   // ── Staff accounts ─────────────────────────────────────────────────────────
   // Passwords are bcrypt hashes of 'Admin@1234' (cost 12).
-  // Generated offline — no runtime bcrypt dependency needed in migrations.
-  // To change passwords after deployment, use the app's profile page or
-  // run: UPDATE staff SET password_hash = crypt('newpass', gen_salt('bf',12)) WHERE username = '...';
   pgm.sql(`
-    INSERT INTO staff (id, username, password_hash, full_name, is_active)
+    INSERT INTO staff (id, username, password_hash, full_name, is_active, is_all_branches)
     VALUES
-      (1, 'superadmin', '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Super Admin', true),
-      (2, 'admin',      '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Admin User',  true)
+      (1, 'superadmin', '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Super Admin', true, true),
+      (2, 'admin',      '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Admin User',  true, true)
     ON CONFLICT (id) DO UPDATE
-      SET is_active     = true,
-          username      = EXCLUDED.username,
-          password_hash = EXCLUDED.password_hash;
+      SET is_active        = true,
+          username         = EXCLUDED.username,
+          password_hash    = EXCLUDED.password_hash,
+          is_all_branches  = true;
   `);
 
   // ── Role assignments ───────────────────────────────────────────────────────
+  // Assign superadmin and admin to ALL active branches so they're not locked
+  // to just the default Main Branch.
   pgm.sql(`
     INSERT INTO staff_branch_roles (staff_id, branch_id, role)
-    VALUES (1, 1, 'Super_Admin'),
-           (2, 1, 'Admin')
+    SELECT 1, id, 'Super_Admin' FROM branches WHERE is_active = true
+    ON CONFLICT DO NOTHING;
+  `);
+  pgm.sql(`
+    INSERT INTO staff_branch_roles (staff_id, branch_id, role)
+    SELECT 2, id, 'Admin' FROM branches WHERE is_active = true
     ON CONFLICT DO NOTHING;
   `);
 
