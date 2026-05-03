@@ -10,13 +10,10 @@ export type Permission =
   | 'MANAGE_BRANCH';
 
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  // Super_Admin: governance-only role — manages staff, branches, and system config.
+  // Intentionally excluded from operational permissions (sales, inventory, finance)
+  // so the sidebar correctly shows only Dashboard, Organization, and System.
   Super_Admin: [
-    'CREATE_SALE',
-    'PROCESS_PAYMENT',
-    'APPROVE_EXCHANGE',
-    'PROCESS_REFUND',
-    'ADJUST_PRICE',
-    'MANAGE_INVENTORY',
     'VIEW_REPORTS',
     'MANAGE_STAFF',
     'MANAGE_BRANCH',

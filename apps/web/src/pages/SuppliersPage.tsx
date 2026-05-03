@@ -10,7 +10,7 @@ interface SupplierListResponse { items: Supplier[]; total: number; page: number;
 interface SupplierPayload { name: string; contactInfo: { phone: string; email: string }; leadTimeDays: number; pricingTerms: string | null; supplierType: 'external' | 'publisher'; publisherId: number | null; }
 interface SuppliersPageProps { userRole?: Role; }
 
-const canWrite = (r?: Role) => ['Super_Admin', 'Admin', 'Manager', 'Purchasor'].includes(r ?? '');
+const canWrite = (r?: Role) => ['Admin', 'Manager', 'Purchasor', 'Stock_Clerk'].includes(r ?? '');
 const canBlacklist = (r?: Role) => ['Super_Admin', 'Admin', 'Manager'].includes(r ?? '');
 const EMPTY = { name: '', contactPhone: '', contactEmail: '', leadTimeDays: 7, pricingTerms: '', supplierType: 'external' as 'external' | 'publisher', publisherId: null as number | null };
 

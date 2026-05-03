@@ -94,7 +94,83 @@ export async function ensureSeedData(): Promise<void> {
       ON CONFLICT (branch_id, name) DO NOTHING
     `);
 
-    // ── 6. System config defaults ─────────────────────────────────────────────
+    // ── 6. Sample catalog data (books, authors, categories) ───────────────────
+    // Ensures the catalog is never empty on a fresh install.
+    // All inserts are idempotent — safe to run on an existing DB.
+
+    // Authors
+    await client.query(`
+      INSERT INTO authors (name, normalized_name) VALUES
+        ('George Orwell',           'george orwell'),
+        ('J.K. Rowling',            'j.k. rowling'),
+        ('Frank Herbert',           'frank herbert'),
+        ('Harper Lee',              'harper lee'),
+        ('F. Scott Fitzgerald',     'f. scott fitzgerald'),
+        ('J.R.R. Tolkien',          'j.r.r. tolkien'),
+        ('Gabriel García Márquez',  'gabriel garcía márquez'),
+        ('Aldous Huxley',           'aldous huxley')
+      ON CONFLICT (normalized_name) DO NOTHING
+    `);
+
+    // Categories
+    await client.query(`
+      INSERT INTO categories (name, normalized_name) VALUES
+        ('Fiction',          'fiction'),
+        ('Classic',          'classic'),
+        ('Science Fiction',  'science fiction'),
+        ('Fantasy',          'fantasy'),
+        ('Dystopian',        'dystopian'),
+        ('Literary Fiction', 'literary fiction'),
+        ('Magical Realism',  'magical realism')
+      ON CONFLICT (normalized_name) DO NOTHING
+    `);
+
+    // Books
+    await client.query(`
+      INSERT INTO books (isbn, title, genre, publisher, language, format, default_price, trade_value, is_active)
+      VALUES
+        ('9780451524935', 'Nineteen Eighty-Four',                    'Fiction',        'Secker & Warburg',    'English', 'Paperback', 12.99, 4.00, true),
+        ('9780439708180', 'Harry Potter and the Sorcerer''s Stone',  'Fantasy',        'Scholastic',          'English', 'Hardcover', 19.99, 6.00, true),
+        ('9780441013593', 'Dune',                                    'Science Fiction','Chilton Books',       'English', 'Paperback', 14.99, 5.00, true),
+        ('9780061743528', 'To Kill a Mockingbird',                   'Fiction',        'J. B. Lippincott',    'English', 'Paperback', 11.99, 3.50, true),
+        ('9780743273565', 'The Great Gatsby',                        'Fiction',        'Charles Scribner''s', 'English', 'Paperback', 10.99, 3.00, true),
+        ('9780618640157', 'The Lord of the Rings',                   'Fantasy',        'Allen & Unwin',       'English', 'Hardcover', 29.99, 9.00, true),
+        ('9780060883287', 'One Hundred Years of Solitude',           'Fiction',        'Harper & Row',        'English', 'Paperback', 13.99, 4.50, true),
+        ('9780060850524', 'Brave New World',                         'Science Fiction','Chatto & Windus',     'English', 'Paperback', 11.99, 3.50, true)
+      ON CONFLICT (isbn) DO NOTHING
+    `);
+
+    // Book–author links
+    await client.query(`
+      INSERT INTO book_authors (book_id, author_id, sort_order)
+      SELECT b.id, a.id, 0 FROM books b, authors a
+      WHERE (b.isbn='9780451524935' AND a.normalized_name='george orwell')
+         OR (b.isbn='9780439708180' AND a.normalized_name='j.k. rowling')
+         OR (b.isbn='9780441013593' AND a.normalized_name='frank herbert')
+         OR (b.isbn='9780061743528' AND a.normalized_name='harper lee')
+         OR (b.isbn='9780743273565' AND a.normalized_name='f. scott fitzgerald')
+         OR (b.isbn='9780618640157' AND a.normalized_name='j.r.r. tolkien')
+         OR (b.isbn='9780060883287' AND a.normalized_name='gabriel garcía márquez')
+         OR (b.isbn='9780060850524' AND a.normalized_name='aldous huxley')
+      ON CONFLICT DO NOTHING
+    `);
+
+    // Book–category links
+    await client.query(`
+      INSERT INTO book_categories (book_id, category_id)
+      SELECT b.id, c.id FROM books b, categories c
+      WHERE (b.isbn='9780451524935' AND c.normalized_name IN ('fiction','classic','dystopian'))
+         OR (b.isbn='9780439708180' AND c.normalized_name IN ('fantasy','fiction'))
+         OR (b.isbn='9780441013593' AND c.normalized_name IN ('science fiction','classic'))
+         OR (b.isbn='9780061743528' AND c.normalized_name IN ('fiction','classic','literary fiction'))
+         OR (b.isbn='9780743273565' AND c.normalized_name IN ('fiction','classic','literary fiction'))
+         OR (b.isbn='9780618640157' AND c.normalized_name IN ('fantasy','classic'))
+         OR (b.isbn='9780060883287' AND c.normalized_name IN ('fiction','magical realism','literary fiction'))
+         OR (b.isbn='9780060850524' AND c.normalized_name IN ('science fiction','classic','dystopian'))
+      ON CONFLICT DO NOTHING
+    `);
+
+    // ── 7. System config defaults ─────────────────────────────────────────────
     const configDefaults: Array<[string, string]> = [
       ['base_currency',                    '"ETB"'],
       ['tax_rate',                         '0.15'],

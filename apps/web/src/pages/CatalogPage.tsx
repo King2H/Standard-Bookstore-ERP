@@ -29,7 +29,8 @@ interface BookFormat { id: number; code: string; label: string; sortOrder: numbe
 interface BookEdition { id: number; code: string; label: string; sortOrder: number; }
 interface ConfigRow { key: string; value: unknown; }
 
-const canWrite = (role: Role | undefined) => role === 'Admin' || role === 'Manager';
+const canWrite = (role: Role | undefined) =>
+  role === 'Admin' || role === 'Manager' || role === 'Stock_Clerk';
 
 function useDebounce<T>(v: T, ms: number): T {
   const [d, setD] = useState(v);

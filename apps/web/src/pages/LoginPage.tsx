@@ -67,7 +67,9 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         return;
       }
 
-      // Auto-select if only one branch
+      // Auto-select when: only one branch, OR staff has all-branch access.
+      // All-branch users (Admin/Super_Admin/global staff) skip the branch picker
+      // entirely — they log in against the first branch and can switch later.
       if (body.autoSelectBranchId) {
         await doLogin(data.username, data.password, body.autoSelectBranchId);
         return;

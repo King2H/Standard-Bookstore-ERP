@@ -91,11 +91,26 @@ router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Respons
     // Credentials valid — return available branches
     const branches = await authService.getBranchesForUser(staff.id);
 
+    // Check is_all_branches flag — these users skip branch selection entirely.
+    // They log in against the first available branch; the branch switcher in the
+    // app lets them move between branches after login.
+    let isAllBranches = false;
+    try {
+      const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staff.id]);
+      isAllBranches = abRes.rows[0]?.is_all_branches === true;
+    } catch { /* column may not exist yet */ }
+
     res.json({
       staffId: staff.id,
       branches,
-      // If only one branch, client can auto-proceed to login
-      autoSelectBranchId: branches.length === 1 ? branches[0].branchId : null,
+      isAllBranches,
+      // Auto-select when: only one branch, OR staff has all-branch access (skip picker)
+      autoSelectBranchId:
+        branches.length === 1
+          ? branches[0].branchId
+          : isAllBranches && branches.length > 0
+            ? branches[0].branchId
+            : null,
     });
   } catch (err) {
     next(err);

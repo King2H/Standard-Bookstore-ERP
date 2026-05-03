@@ -15,7 +15,7 @@ const pi = (v: string | string[]): number => parseInt(Array.isArray(v) ? v[0] : 
 router.get(
   '/suppliers',
   authenticate,
-  requireRole('Admin', 'Manager', 'Purchasor'),
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await supplierService.list({
@@ -36,7 +36,7 @@ router.get(
 router.post(
   '/suppliers',
   authenticate,
-  requireRole('Admin', 'Manager', 'Purchasor'),
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const supplier = await supplierService.create(req.body, req.staff!);
@@ -50,7 +50,7 @@ router.post(
 router.get(
   '/suppliers/:id',
   authenticate,
-  requireRole('Admin', 'Manager', 'Purchasor'),
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const supplier = await supplierService.getById(pi(req.params.id));
@@ -64,7 +64,7 @@ router.get(
 router.put(
   '/suppliers/:id',
   authenticate,
-  requireRole('Admin', 'Manager', 'Purchasor'),
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const supplier = await supplierService.update(pi(req.params.id), req.body, req.staff!);
@@ -78,7 +78,7 @@ router.put(
 router.post(
   '/suppliers/:id/deactivate',
   authenticate,
-  requireRole('Admin', 'Manager', 'Purchasor'),
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await supplierService.deactivate(pi(req.params.id), req.staff!);

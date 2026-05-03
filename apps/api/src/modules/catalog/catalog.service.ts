@@ -4,6 +4,25 @@ import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors.
 
 type PoolClient = pg.PoolClient;
 
+// ── Feature flag: inventory_reservations table ────────────────────────────────
+// Migration 1700000033 adds this table. On older DBs that haven't run it yet,
+// the stock subquery must omit the reservation deduction to avoid a 500 error.
+// We check once and cache the result for the lifetime of the process.
+let _hasReservationsTable: boolean | null = null;
+async function hasReservationsTable(): Promise<boolean> {
+  if (_hasReservationsTable !== null) return _hasReservationsTable;
+  try {
+    const r = await db.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
+    );
+    _hasReservationsTable = r.rows.length > 0;
+  } catch {
+    _hasReservationsTable = false;
+  }
+  return _hasReservationsTable;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface StaffCtx {
@@ -665,12 +684,53 @@ export async function searchBooks(filters: SearchFilters): Promise<{
 
   // Data query — aggregate authors, categories, tags per book
   // p is the next available param index after all WHERE conditions.
-  // We need: locationId ($p), branchId ($p+1), branchId ($p+2), branchId ($p+3), pageSize ($p+4), offset ($p+5)
-  const locParam    = p;       // $p   — locationId (for specific-location stock)
-  const branchParam = p + 1;   // $p+1 — branchId (for branch-wide stock)
-  const bbpParam    = p + 2;   // $p+2 — branchId (for branch price join)
-  const limitParam  = p + 3;   // $p+3 — pageSize
-  const offsetParam = p + 4;   // $p+4 — offset
+  // locParam=$p, branchParam=$p+1, bbpParam=$p+2, limitParam=$p+3, offsetParam=$p+4
+  const locParam    = p;
+  const branchParam = p + 1;
+  const bbpParam    = p + 2;
+  const limitParam  = p + 3;
+  const offsetParam = p + 4;
+
+  // Build the stock subquery depending on whether inventory_reservations exists.
+  // On older DBs (migration 33 not yet run) we fall back to raw inventory sum
+  // so the catalog never returns a 500 due to a missing table.
+  const useReservations = await hasReservationsTable();
+
+  const stockSubquery = useReservations
+    ? `(
+         SELECT COALESCE(SUM(inv.quantity), 0)
+              - COALESCE((
+                  SELECT SUM(r.quantity) FROM inventory_reservations r
+                  WHERE r.book_id = b.id AND r.status = 'reserved'
+                    AND CASE
+                      WHEN $${locParam}::integer IS NOT NULL THEN r.location_id = $${locParam}::integer
+                      WHEN $${branchParam}::integer IS NOT NULL THEN r.location_id IN (
+                        SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
+                      )
+                      ELSE false END
+                ), 0)
+         FROM inventory inv
+         WHERE inv.book_id = b.id
+           AND CASE
+             WHEN $${locParam}::integer IS NOT NULL THEN inv.location_id = $${locParam}::integer
+             WHEN $${branchParam}::integer IS NOT NULL THEN inv.location_id IN (
+               SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
+             )
+             ELSE false
+           END
+       ) AS stock_quantity`
+    : `(
+         SELECT COALESCE(SUM(inv.quantity), 0)
+         FROM inventory inv
+         WHERE inv.book_id = b.id
+           AND CASE
+             WHEN $${locParam}::integer IS NOT NULL THEN inv.location_id = $${locParam}::integer
+             WHEN $${branchParam}::integer IS NOT NULL THEN inv.location_id IN (
+               SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
+             )
+             ELSE false
+           END
+       ) AS stock_quantity`;
 
   const dataResult = await db.query(
     `SELECT
@@ -700,28 +760,7 @@ export async function searchBooks(filters: SearchFilters): Promise<{
          '{}'
        ) AS tags,
        bbp.price AS branch_price,
-       (
-         SELECT COALESCE(SUM(inv.quantity), 0)
-              - COALESCE((
-                  SELECT SUM(r.quantity) FROM inventory_reservations r
-                  WHERE r.book_id = b.id AND r.status = 'reserved'
-                    AND CASE
-                      WHEN $${locParam}::integer IS NOT NULL THEN r.location_id = $${locParam}::integer
-                      WHEN $${branchParam}::integer IS NOT NULL THEN r.location_id IN (
-                        SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
-                      )
-                      ELSE false END
-                ), 0)
-         FROM inventory inv
-         WHERE inv.book_id = b.id
-           AND CASE
-             WHEN $${locParam}::integer IS NOT NULL THEN inv.location_id = $${locParam}::integer
-             WHEN $${branchParam}::integer IS NOT NULL THEN inv.location_id IN (
-               SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
-             )
-             ELSE false
-           END
-       ) AS stock_quantity
+       ${stockSubquery}
      FROM books b
      LEFT JOIN book_formats bf ON bf.id = b.format_id
      LEFT JOIN book_editions be ON be.id = b.edition_id

@@ -5,6 +5,23 @@ export type ReferenceType = 'purchase_order' | 'return' | 'adjustment' | 'manual
 import { isNegativeStockAllowed } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
 
+// ── Feature flag: inventory_reservations table ────────────────────────────────
+// Checked once and cached. Falls back gracefully when migration 33 hasn't run.
+let _hasReservationsTable: boolean | null = null;
+async function hasReservationsTable(): Promise<boolean> {
+  if (_hasReservationsTable !== null) return _hasReservationsTable;
+  try {
+    const r = await db.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
+    );
+    _hasReservationsTable = r.rows.length > 0;
+  } catch {
+    _hasReservationsTable = false;
+  }
+  return _hasReservationsTable;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
@@ -774,25 +791,36 @@ export async function stockOut(opts: {
 
 /**
  * Compute available stock = inventory.quantity - SUM(active reservations).
+ * Falls back to raw inventory quantity if inventory_reservations doesn't exist yet.
  */
 export async function getAvailableStock(bookId: number, locationId: number): Promise<number> {
+  if (await hasReservationsTable()) {
+    const result = await db.query(
+      `SELECT i.quantity - COALESCE(SUM(r.quantity), 0) AS available
+       FROM inventory i
+       LEFT JOIN inventory_reservations r
+         ON r.book_id = i.book_id
+         AND r.location_id = i.location_id
+         AND r.status = 'reserved'
+       WHERE i.book_id = $1 AND i.location_id = $2
+       GROUP BY i.quantity`,
+      [bookId, locationId],
+    );
+    if (!result.rows.length) return 0;
+    return Math.max(0, parseFloat(result.rows[0].available as string));
+  }
+  // Fallback: no reservations table yet — return raw quantity
   const result = await db.query(
-    `SELECT i.quantity - COALESCE(SUM(r.quantity), 0) AS available
-     FROM inventory i
-     LEFT JOIN inventory_reservations r
-       ON r.book_id = i.book_id
-       AND r.location_id = i.location_id
-       AND r.status = 'reserved'
-     WHERE i.book_id = $1 AND i.location_id = $2
-     GROUP BY i.quantity`,
+    `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
     [bookId, locationId],
   );
   if (!result.rows.length) return 0;
-  return Math.max(0, parseFloat(result.rows[0].available as string));
+  return Math.max(0, parseInt(result.rows[0].quantity as string, 10));
 }
 
 /**
  * Create a reservation for an order line item.
+ * No-op if inventory_reservations table doesn't exist yet.
  */
 export async function createReservation(
   orderId: number | string,
@@ -800,6 +828,7 @@ export async function createReservation(
   locationId: number,
   quantity: number,
 ): Promise<void> {
+  if (!(await hasReservationsTable())) return;
   await db.query(
     `INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status)
      VALUES ($1, $2, $3, $4, 'reserved')`,
@@ -810,8 +839,10 @@ export async function createReservation(
 /**
  * Release all reserved (not yet deducted) reservations for an order.
  * Called when an order is cancelled from CONFIRMED status.
+ * No-op if inventory_reservations table doesn't exist yet.
  */
 export async function releaseReservations(orderId: number | string): Promise<void> {
+  if (!(await hasReservationsTable())) return;
   await db.query(
     `UPDATE inventory_reservations
      SET status = 'released', updated_at = now()
@@ -822,8 +853,10 @@ export async function releaseReservations(orderId: number | string): Promise<voi
 
 /**
  * Convert reserved → deducted for an order (called on fulfilment).
+ * No-op if inventory_reservations table doesn't exist yet.
  */
 export async function deductReservations(orderId: number | string): Promise<void> {
+  if (!(await hasReservationsTable())) return;
   await db.query(
     `UPDATE inventory_reservations
      SET status = 'deducted', updated_at = now()

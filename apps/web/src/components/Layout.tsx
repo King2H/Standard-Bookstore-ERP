@@ -167,6 +167,15 @@ interface SidebarSectionProps {
 
 /** Returns true if the user can see this item based on their role OR permissions. */
 function canSeeItem(item: NavLeaf, userRole: Role | null, userPermissions: string[]): boolean {
+  // Super_Admin is a governance-only role: Dashboard, Organization, System only.
+  // Block all operational sections regardless of any permission union.
+  if (userRole === 'Super_Admin') {
+    const SUPER_ADMIN_ALLOWED: Page[] = [
+      'dashboard', 'branches', 'locations', 'staff', 'settings', 'audit-log', 'profile',
+    ];
+    return SUPER_ADMIN_ALLOWED.includes(item.id);
+  }
+
   // Permission-based check (preferred — supports multi-role union)
   if (item.permissions && item.permissions.length > 0) {
     if (userPermissions.some(p => item.permissions!.includes(p))) return true;

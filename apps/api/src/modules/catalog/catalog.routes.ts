@@ -61,7 +61,11 @@ router.get(
         isActive:   req.query.is_active !== undefined
           ? req.query.is_active === 'true'
           : undefined,
-        branchId:   req.query.branchId  ? qi(req.query.branchId, 0)  : undefined,
+        // Use explicit query param if provided, otherwise fall back to the JWT branch
+        // so stock quantities are always scoped to the user's active branch.
+        branchId:   req.query.branchId
+          ? qi(req.query.branchId, 0)
+          : (req.staff?.branchId ?? undefined),
         locationId: req.query.locationId ? qi(req.query.locationId, 0) : undefined,
         sortBy:     qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
         sortDir:    qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
@@ -80,7 +84,7 @@ router.get(
 router.post(
   '/books',
   authenticate,
-  requireRole('Admin', 'Manager'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = bookWriteSchema.safeParse(req.body);
@@ -119,7 +123,7 @@ router.get(
 router.put(
   '/books/:id',
   authenticate,
-  requireRole('Admin', 'Manager'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -140,7 +144,7 @@ router.put(
 router.post(
   '/books/:id/deactivate',
   authenticate,
-  requireRole('Admin', 'Manager'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -157,7 +161,7 @@ router.post(
 router.post(
   '/books/:id/reactivate',
   authenticate,
-  requireRole('Admin', 'Manager'),
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -281,7 +285,7 @@ router.get('/authors', authenticate, async (req: Request, res: Response, next: N
   } catch (err) { next(err); }
 });
 
-router.post('/authors', authenticate, requireRole('Admin', 'Manager'),
+router.post('/authors', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = nameSchema.safeParse(req.body);
@@ -292,7 +296,7 @@ router.post('/authors', authenticate, requireRole('Admin', 'Manager'),
   },
 );
 
-router.put('/authors/:id', authenticate, requireRole('Admin', 'Manager'),
+router.put('/authors/:id', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params['id'] as string, 10);
@@ -326,7 +330,7 @@ router.get('/categories', authenticate, async (req: Request, res: Response, next
   } catch (err) { next(err); }
 });
 
-router.post('/categories', authenticate, requireRole('Admin', 'Manager'),
+router.post('/categories', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = categoryWriteSchema.safeParse(req.body);
@@ -337,7 +341,7 @@ router.post('/categories', authenticate, requireRole('Admin', 'Manager'),
   },
 );
 
-router.put('/categories/:id', authenticate, requireRole('Admin', 'Manager'),
+router.put('/categories/:id', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params['id'] as string, 10);
@@ -371,7 +375,7 @@ router.get('/publishers', authenticate, async (req: Request, res: Response, next
   } catch (err) { next(err); }
 });
 
-router.post('/publishers', authenticate, requireRole('Admin', 'Manager'),
+router.post('/publishers', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = nameSchema.safeParse(req.body);
@@ -382,7 +386,7 @@ router.post('/publishers', authenticate, requireRole('Admin', 'Manager'),
   },
 );
 
-router.put('/publishers/:id', authenticate, requireRole('Admin', 'Manager'),
+router.put('/publishers/:id', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params['id'] as string, 10);
