@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 interface ReturnsPageProps { userRole?: Role; }
@@ -30,6 +31,7 @@ function getStaffIdFromToken(): number | null {
 export default function ReturnsPage({ userRole }: ReturnsPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const currency = useCurrency();
   const [tab, setTab] = useState<Tab>('new');
   const branchId = getCurrentBranchId() ?? 1;
   const currentStaffId = getStaffIdFromToken();
@@ -162,8 +164,8 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
             {txData && !selectedTx && (
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1">
                 <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Tx #</span><span className="font-mono text-gray-900 dark:text-white">{txData.transactionNumber}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Total</span><span className="text-gray-900 dark:text-white">ETB {Number(txData.grandTotal).toFixed(2)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Paid</span><span className="text-gray-900 dark:text-white">ETB {Number(txData.amountPaid ?? txData.grandTotal).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Total</span><span className="text-gray-900 dark:text-white">{currency} {Number(txData.grandTotal).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Paid</span><span className="text-gray-900 dark:text-white">{currency} {Number(txData.amountPaid ?? txData.grandTotal).toFixed(2)}</span></div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 dark:text-gray-400">Status</span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${txData.status === 'voided' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>{txData.status}</span>
@@ -193,7 +195,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
                   <div key={li.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{li.bookTitle}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">ETB {Number(li.unitPrice).toFixed(2)} × {li.quantity} sold</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{currency} {Number(li.unitPrice).toFixed(2)} × {li.quantity} sold</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500 dark:text-gray-400">Return:</span>
@@ -203,7 +205,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
                       <span className="text-xs text-gray-400">/ {li.quantity}</span>
                     </div>
                     <div className="text-sm font-medium text-gray-900 dark:text-white w-24 text-right">
-                      ETB {(li.unitPrice * (quantities[li.id] ?? 0) * (1 - (li.discountPct ?? 0) / 100)).toFixed(2)}
+                      {currency} {(li.unitPrice * (quantities[li.id] ?? 0) * (1 - (li.discountPct ?? 0) / 100)).toFixed(2)}
                     </div>
                   </div>
                 ))}
@@ -240,7 +242,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
                 <div className="rounded-lg p-3 border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
                   <p className="text-sm font-medium text-amber-800 dark:text-amber-300">⚠ Approval Policy</p>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                    Refunds over ETB 500 must be processed by a Manager or Admin. Ask them to log in and process this return directly.
+                    Refunds over {currency} 500 must be processed by a Manager or Admin. Ask them to log in and process this return directly.
                   </p>
                 </div>
               )}
@@ -248,7 +250,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total Refund</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">ETB {totalRefund.toFixed(2)}</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{currency} {totalRefund.toFixed(2)}</p>
                 </div>
                 {canCreate(userRole) && (
                   <button onClick={submitReturn}
@@ -278,7 +280,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
                       <tr key={ret.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === ret.id ? null : ret.id)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{ret.returnNumber}</td>
                         <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">#{ret.transactionId}</td>
-                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(ret.totalRefundAmount).toFixed(2)}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(ret.totalRefundAmount).toFixed(2)}</td>
                         <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{ret.refundMethod.replace('_', ' ')}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ret.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>{ret.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(ret.createdAt).toLocaleString()}</td>
@@ -322,6 +324,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
 }
 
 function ReturnDetailLoader({ returnId }: { returnId: string }) {
+  const currency = useCurrency();
   const { data } = useQuery<{ lineItems?: ReturnLine[] }>({
     queryKey: ['return-detail', returnId],
     queryFn: () => api.get(`/returns/${returnId}`),
@@ -330,7 +333,7 @@ function ReturnDetailLoader({ returnId }: { returnId: string }) {
   return (
     <table className="text-xs w-full max-w-lg">
       <thead><tr className="text-gray-500 dark:text-gray-400">{['Book', 'Qty', 'Refund'].map(h => <th key={h} className="text-left pr-4 pb-1">{h}</th>)}</tr></thead>
-      <tbody>{data.lineItems.map((li, i) => <tr key={i}><td className="pr-4 text-gray-900 dark:text-white">{li.bookTitle}</td><td className="pr-4 text-gray-600 dark:text-gray-400">{li.quantity}</td><td className="text-gray-900 dark:text-white">ETB {Number(li.lineRefundAmount).toFixed(2)}</td></tr>)}</tbody>
+      <tbody>{data.lineItems.map((li, i) => <tr key={i}><td className="pr-4 text-gray-900 dark:text-white">{li.bookTitle}</td><td className="pr-4 text-gray-600 dark:text-gray-400">{li.quantity}</td><td className="text-gray-900 dark:text-white">{currency} {Number(li.lineRefundAmount).toFixed(2)}</td></tr>)}</tbody>
     </table>
   );
 }

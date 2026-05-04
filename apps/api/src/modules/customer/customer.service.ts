@@ -337,6 +337,7 @@ export async function searchCustomers(opts: {
   if (opts.q) {
     const qTrimmed = opts.q.trim();
     const lookupHash = piiLookupHash(qTrimmed);
+    // Use $p for ILIKE (wildcard match) and $(p+1) for exact hash lookup
     conditions.push(
       `(c.full_name ILIKE $${p} OR c.phone ILIKE $${p} OR c.email ILIKE $${p} OR c.customer_code ILIKE $${p} OR c.phone_lookup = $${p + 1} OR c.email_lookup = $${p + 1})`,
     );
@@ -360,6 +361,10 @@ export async function searchCustomers(opts: {
     ${where}
   `;
 
+  // Capture param positions before they change
+  const limitParam = p;
+  const offsetParam = p + 1;
+
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) ${baseQuery}`, params),
     db.query(
@@ -369,7 +374,7 @@ export async function searchCustomers(opts: {
          COALESCE(sca.balance, 0) AS store_credit_balance
        ${baseQuery}
        ORDER BY c.full_name ASC
-       LIMIT $${p++} OFFSET $${p++}`,
+       LIMIT $${limitParam} OFFSET $${offsetParam}`,
       [...params, pageSize, offset],
     ),
   ]);
@@ -378,7 +383,7 @@ export async function searchCustomers(opts: {
 
   // Fetch groups for all returned customers
   const customerIds = dataRes.rows.map(r => r.id as number);
-  let groupsMap = new Map<number, Array<{ id: number; name: string; discountPct: number }>>();
+  const groupsMap = new Map<number, Array<{ id: number; name: string; discountPct: number }>>();
   if (customerIds.length) {
     const groupsRes = await db.query(
       `SELECT cgm.customer_id, cg.id, cg.name, cg.discount_pct
@@ -409,7 +414,7 @@ export async function accruePoints(
   customerId: number,
   transactionAmount: number,
   transactionRef: string | null,
-  staffCtx: StaffCtx,
+  _staffCtx: StaffCtx,
 ): Promise<void> {
   const rate = await getLoyaltyAccrualRate();
   const minAmount = await getLoyaltyMinTransactionAmount();
@@ -441,7 +446,7 @@ export async function redeemPoints(
   customerId: number,
   points: number,
   transactionRef: string | null,
-  staffCtx: StaffCtx,
+  _staffCtx: StaffCtx,
 ): Promise<void> {
   const client = await db.connect();
   try {
@@ -522,7 +527,7 @@ export async function debitStoreCredit(
   amount: number,
   refType: string | null,
   refId: string | null,
-  staffCtx: StaffCtx,
+  _staffCtx: StaffCtx,
 ): Promise<void> {
   const client = await db.connect();
   try {

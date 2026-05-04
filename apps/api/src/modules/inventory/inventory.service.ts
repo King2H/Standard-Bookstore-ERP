@@ -1,4 +1,4 @@
-import { db } from '../../db/index.js';
+﻿import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
 
 export type ReferenceType = 'purchase_order' | 'return' | 'adjustment' | 'manual' | 'initial_stock';
@@ -103,6 +103,9 @@ export async function listInventory(opts: {
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
+  const limitParam = p;
+  const offsetParam = p + 1;
+
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id JOIN books b ON b.id = i.book_id ${where}`, params),
     db.query(
@@ -115,7 +118,7 @@ export async function listInventory(opts: {
        JOIN books b ON b.id = i.book_id
        ${where}
        ORDER BY b.title ASC, l.name ASC
-       LIMIT $${p++} OFFSET $${p++}`,
+       LIMIT $${limitParam} OFFSET $${offsetParam}`,
       [...params, pageSize, offset],
     ),
   ]);
@@ -446,6 +449,9 @@ export async function getInventoryHistory(opts: {
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
+  const limitParam = p;
+  const offsetParam = p + 1;
+
   const [countRes, dataRes] = await Promise.all([
     db.query(
       `SELECT COUNT(*) FROM inventory_history ih
@@ -467,7 +473,7 @@ export async function getInventoryHistory(opts: {
        JOIN staff s ON s.id = ih.staff_id
        ${where}
        ORDER BY ih.created_at DESC
-       LIMIT $${p++} OFFSET $${p++}`,
+       LIMIT $${limitParam} OFFSET $${offsetParam}`,
       [...params, pageSize, offset],
     ),
   ]);

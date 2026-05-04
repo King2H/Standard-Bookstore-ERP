@@ -1,8 +1,9 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 interface ExchangesPageProps { userRole?: Role; userPermissions?: string[]; }
@@ -67,6 +68,7 @@ type Tab = 'list' | 'new' | 'initiate';
 export default function ExchangesPage({ userRole, userPermissions = [] }: ExchangesPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const currency = useCurrency();
   const branchId = getCurrentBranchId() ?? 1;
   const [tab, setTab] = useState<Tab>('list');
 
@@ -319,8 +321,8 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                     <React.Fragment key={exc.id}>
                       <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === exc.id ? null : exc.id)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{exc.exchangeReference}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(exc.totalIncomingValue).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(exc.totalOutgoingValue).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(exc.totalIncomingValue).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(exc.totalOutgoingValue).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm font-medium whitespace-nowrap" style={{ color: Number(exc.netBalance) > 0 ? '#d97706' : Number(exc.netBalance) < 0 ? '#2563eb' : '#6b7280' }}>
                           {Number(exc.netBalance) > 0 ? '+' : ''}{Number(exc.netBalance).toFixed(2)}
                         </td>
@@ -452,7 +454,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   {(bookResults?.items ?? []).map(b => (
                     <button key={b.id} onClick={() => addBook(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · {currency} {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
                     </button>
                   ))}
                 </div>
@@ -473,7 +475,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   <button onClick={() => setIncomingItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
                 </div>
               ))}
-              <div className="text-xs font-semibold text-green-700 dark:text-green-400 pt-1 border-t border-green-100 dark:border-green-900">Total: ETB {incomingTotal.toFixed(2)}</div>
+              <div className="text-xs font-semibold text-green-700 dark:text-green-400 pt-1 border-t border-green-100 dark:border-green-900">Total: {currency} {incomingTotal.toFixed(2)}</div>
             </div>
             {/* Outgoing */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-200 dark:border-blue-800 p-4 space-y-2">
@@ -486,14 +488,14 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   <button onClick={() => setOutgoingItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
                 </div>
               ))}
-              <div className="text-xs font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-blue-100 dark:border-blue-900">Total: ETB {outgoingTotal.toFixed(2)}</div>
+              <div className="text-xs font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-blue-100 dark:border-blue-900">Total: {currency} {outgoingTotal.toFixed(2)}</div>
             </div>
           </div>
 
           {/* Summary */}
           {(incomingItems.length > 0 || outgoingItems.length > 0) && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">Net Balance</span><span className={`font-semibold ${Math.abs(netBalance) < 0.01 ? 'text-gray-600 dark:text-gray-400' : netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>ETB {netBalance.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">Net Balance</span><span className={`font-semibold ${Math.abs(netBalance) < 0.01 ? 'text-gray-600 dark:text-gray-400' : netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>{currency} {netBalance.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">Settlement</span><span className="font-medium text-gray-900 dark:text-white">{settlementType}</span></div>
               <button onClick={submitExchange} disabled={createMut.isPending}
                 className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm mt-2">
@@ -558,7 +560,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   {(initBookResults?.items ?? []).map(b => (
                     <button key={b.id} onClick={() => addInitBook(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · {currency} {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
                     </button>
                   ))}
                 </div>
@@ -580,7 +582,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   <div className="flex items-center gap-2">
                     <label className="text-gray-500 dark:text-gray-400 w-6">Qty</label>
                     <input type="number" min="1" value={item.quantity} onChange={e => setReturnedItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
-                    <label className="text-gray-500 dark:text-gray-400">ETB</label>
+                    <label className="">{currency}</label>
                     <input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => setReturnedItems(items => items.map(i => i.bookId === item.bookId ? { ...i, unitPrice: parseFloat(e.target.value) || 0 } : i))} className="w-20 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                   </div>
                   {/* Condition selector */}
@@ -594,7 +596,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   </div>
                 </div>
               ))}
-              <div className="text-xs font-semibold text-green-700 dark:text-green-400 pt-1 border-t border-green-100 dark:border-green-900">Total: ETB {returnedTotal.toFixed(2)}</div>
+              <div className="text-xs font-semibold text-green-700 dark:text-green-400 pt-1 border-t border-green-100 dark:border-green-900">Total: {currency} {returnedTotal.toFixed(2)}</div>
             </div>
             {/* New items */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-200 dark:border-blue-800 p-4 space-y-2">
@@ -607,7 +609,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   <button onClick={() => setNewItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
                 </div>
               ))}
-              <div className="text-xs font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-blue-100 dark:border-blue-900">Total: ETB {newItemsTotal.toFixed(2)}</div>
+              <div className="text-xs font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-blue-100 dark:border-blue-900">Total: {currency} {newItemsTotal.toFixed(2)}</div>
             </div>
           </div>
 
@@ -621,12 +623,12 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
           {/* Summary */}
           {(returnedItems.length > 0 || newItems.length > 0) && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">Returned Value</span><span className="text-green-600 dark:text-green-400">ETB {returnedTotal.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">New Items Value</span><span className="text-blue-600 dark:text-blue-400">ETB {newItemsTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">Returned Value</span><span className="text-green-600 dark:text-green-400">{currency} {returnedTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">New Items Value</span><span className="text-blue-600 dark:text-blue-400">{currency} {newItemsTotal.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm font-semibold border-t border-gray-200 dark:border-gray-700 pt-2">
                 <span className="text-gray-700 dark:text-gray-300">Net Balance</span>
                 <span className={Math.abs(initNetBalance) < 0.01 ? 'text-gray-600 dark:text-gray-400' : initNetBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}>
-                  {initNetBalance > 0 ? '+' : ''}{initNetBalance.toFixed(2)} ETB
+                  {initNetBalance > 0 ? '+' : ''}{currency} {initNetBalance.toFixed(2)}
                   {Math.abs(initNetBalance) > 0.01 && <span className="text-xs font-normal ml-1">({initNetBalance > 0 ? 'Customer pays' : 'Store refunds'})</span>}
                 </span>
               </div>
@@ -647,7 +649,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
             <p className="text-sm text-gray-500 dark:text-gray-400">
               <span className="font-mono font-medium text-gray-900 dark:text-white">{settleModal.ref}</span>
               {' · '}Net balance: <span className={`font-semibold ${Math.abs(settleModal.netBalance) < 0.01 ? 'text-gray-600' : settleModal.netBalance > 0 ? 'text-amber-600' : 'text-blue-600'}`}>
-                {settleModal.netBalance > 0 ? '+' : ''}{settleModal.netBalance.toFixed(2)} ETB
+                {settleModal.netBalance > 0 ? '+' : ''}{currency} {settleModal.netBalance.toFixed(2)}
               </span>
             </p>
 
@@ -669,7 +671,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">Amount (ETB)</label>
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">{`Amount (${currency})`}</label>
                       <input type="number" min="0" step="0.01" value={entry.amount} onChange={e => setSettlementEntries(prev => prev.map((en, i) => i === idx ? { ...en, amount: e.target.value } : en))}
                         className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500" />
                     </div>
@@ -699,7 +701,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
             <div className="flex justify-between text-sm font-semibold border-t border-gray-200 dark:border-gray-700 pt-2">
               <span className="text-gray-700 dark:text-gray-300">Settlement Total</span>
               <span className={`${Math.abs(settlementTotal - Math.abs(settleModal.netBalance)) < 0.01 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                ETB {settlementTotal.toFixed(2)}
+                {currency} {settlementTotal.toFixed(2)}
               </span>
             </div>
 
@@ -720,6 +722,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
 }
 
 function ExchangeDetailLoader({ exchangeId }: { exchangeId: string }) {
+  const currency = useCurrency();
   const { data } = useQuery<{ incomingItems?: ExchangeItem[]; outgoingItems?: ExchangeItem[] }>({
     queryKey: ['exchange-detail', exchangeId],
     queryFn: () => api.get(`/exchanges/${exchangeId}`),
@@ -729,11 +732,11 @@ function ExchangeDetailLoader({ exchangeId }: { exchangeId: string }) {
     <div className="grid grid-cols-2 gap-4 text-xs">
       <div>
         <p className="font-semibold text-green-700 dark:text-green-400 mb-1">Incoming</p>
-        {(data.incomingItems ?? []).map((i, idx) => <p key={idx} className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ ETB {Number(i.unitPrice).toFixed(2)}</p>)}
+        {(data.incomingItems ?? []).map((i, idx) => <p key={idx} className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ {currency} {Number(i.unitPrice).toFixed(2)}</p>)}
       </div>
       <div>
         <p className="font-semibold text-blue-700 dark:text-blue-400 mb-1">Outgoing</p>
-        {(data.outgoingItems ?? []).map((i, idx) => <p key={idx} className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ ETB {Number(i.unitPrice).toFixed(2)}</p>)}
+        {(data.outgoingItems ?? []).map((i, idx) => <p key={idx} className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ {currency} {Number(i.unitPrice).toFixed(2)}</p>)}
       </div>
     </div>
   );

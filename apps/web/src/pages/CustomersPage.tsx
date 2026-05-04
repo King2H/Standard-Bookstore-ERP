@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 
@@ -34,6 +35,7 @@ type ProfileTab = 'profile' | 'loyalty' | 'store-credit';
 export default function CustomersPage({ userRole }: CustomersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const currency = useCurrency();
 
   // List state
   const [view, setView] = useState<View>('list');
@@ -205,7 +207,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{c.fullName}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{c.phone ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{c.loyaltyBalance.toFixed(0)}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">${c.storeCreditBalance.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{currency} {c.storeCreditBalance.toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
                         {c.isActive ? 'Active' : 'Inactive'}
@@ -423,7 +425,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
             {/* Pre-paid store credit balance */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 text-center">
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Pre-paid Store Credit</p>
-              <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">ETB {c.storeCreditBalance.toFixed(2)}</p>
+              <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{currency} {c.storeCreditBalance.toFixed(2)}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Available to spend</p>
             </div>
             {/* Outstanding POS credit debt */}
@@ -439,7 +441,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
                 <div className={`bg-white dark:bg-gray-900 rounded-xl border p-6 text-center ${outstanding > 0 ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-800'}`}>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Outstanding Credit Sales</p>
                   <p className={`text-3xl font-bold ${outstanding > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                    ETB {outstanding.toFixed(2)}
+                    {currency} {outstanding.toFixed(2)}
                   </p>
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                     {outstanding > 0 ? '⚠️ Amount owed to store' : '✓ No outstanding debt'}
@@ -491,7 +493,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
                   {creditHistory.items.map((h: StoreCreditHistoryItem) => (
                     <tr key={h.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs">{new Date(h.createdAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-2 font-medium text-gray-900 dark:text-white">${h.amount.toFixed(2)}</td>
+                      <td className="px-4 py-2 font-medium text-gray-900 dark:text-white">{currency} {h.amount.toFixed(2)}</td>
                       <td className="px-4 py-2">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${h.direction === 'credit' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>
                           {h.direction === 'credit' ? '+ Credit' : '− Debit'}

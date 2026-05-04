@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; stockQuantity?: number | null; }
@@ -49,6 +50,7 @@ type Tab = 'pos' | 'history';
 export default function POSPage({ userRole }: POSPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const currency = useCurrency();
   const [tab, setTab] = useState<Tab>('pos');
 
   const [bookSearch, setBookSearch]           = useState('');
@@ -183,7 +185,7 @@ export default function POSPage({ userRole }: POSPageProps) {
   function completeSale() {
     if (!locationId) { showToast('Select a location', 'error'); return; }
     if (cart.length === 0) { showToast('Cart is empty', 'error'); return; }
-    if (Math.abs(remaining) > 0.01) { showToast(`Remaining balance: ETB ${remaining.toFixed(2)}`, 'error'); return; }
+    if (Math.abs(remaining) > 0.01) { showToast(`Remaining balance: ${currency} ${remaining.toFixed(2)}`, 'error'); return; }
     createMut.mutate({ branchId, locationId, customerId: selectedCustomer?.id ?? null, items: cart.map(i => ({ bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct })), payments: buildPaymentPayload(), allowCredit: false });
   }
 
@@ -209,7 +211,7 @@ export default function POSPage({ userRole }: POSPageProps) {
             <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(receipt.createdAt).toLocaleString()}</p>
             {receipt.paymentStatus !== 'paid' && (
               <span className="inline-block mt-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
-                {receipt.paymentStatus === 'partial' ? `Partial — ETB ${Number(receipt.amountDue).toFixed(2)} due` : `Credit — ETB ${Number(receipt.amountDue).toFixed(2)} due`}
+                {receipt.paymentStatus === 'partial' ? `Partial — ${currency} ${Number(receipt.amountDue).toFixed(2)} due` : `Credit — ${currency} ${Number(receipt.amountDue).toFixed(2)} due`}
               </span>
             )}
           </div>
@@ -218,12 +220,12 @@ export default function POSPage({ userRole }: POSPageProps) {
             <tbody>{(receipt.lineItems ?? []).map((li, i) => <tr key={i} className="border-b border-gray-100 dark:border-gray-800"><td className="py-1 text-gray-900 dark:text-white text-xs">{li.bookTitle}</td><td className="py-1 text-gray-600 dark:text-gray-400 text-xs">{li.quantity}</td><td className="py-1 text-gray-600 dark:text-gray-400 text-xs">{Number(li.unitPrice).toFixed(2)}</td><td className="py-1 text-gray-900 dark:text-white text-xs font-medium">{Number(li.lineTotal).toFixed(2)}</td></tr>)}</tbody>
           </table>
           <div className="space-y-1 text-sm border-t border-gray-200 dark:border-gray-700 pt-3">
-            <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Subtotal</span><span>ETB {Number(receipt.subtotal).toFixed(2)}</span></div>
-            {Number(receipt.discountTotal) > 0 && <div className="flex justify-between text-green-600 dark:text-green-400"><span>Discount</span><span>-ETB {Number(receipt.discountTotal).toFixed(2)}</span></div>}
-            <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tax (10%)</span><span>ETB {Number(receipt.taxTotal).toFixed(2)}</span></div>
-            <div className="flex justify-between font-bold text-gray-900 dark:text-white text-base border-t border-gray-200 dark:border-gray-700 pt-1"><span>Total</span><span>ETB {Number(receipt.grandTotal).toFixed(2)}</span></div>
+            <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Subtotal</span><span>{currency} {Number(receipt.subtotal).toFixed(2)}</span></div>
+            {Number(receipt.discountTotal) > 0 && <div className="flex justify-between text-green-600 dark:text-green-400"><span>Discount</span><span>-{currency} {Number(receipt.discountTotal).toFixed(2)}</span></div>}
+            <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tax (10%)</span><span>{currency} {Number(receipt.taxTotal).toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold text-gray-900 dark:text-white text-base border-t border-gray-200 dark:border-gray-700 pt-1"><span>Total</span><span>{currency} {Number(receipt.grandTotal).toFixed(2)}</span></div>
           </div>
-          <div className="space-y-1 text-sm">{(receipt.payments ?? []).map((p, i) => <div key={i} className="flex justify-between text-gray-600 dark:text-gray-400"><span className="capitalize">{p.method.replace(/_/g, ' ')}</span><span>ETB {Number(p.amount).toFixed(2)}</span></div>)}</div>
+          <div className="space-y-1 text-sm">{(receipt.payments ?? []).map((p, i) => <div key={i} className="flex justify-between text-gray-600 dark:text-gray-400"><span className="capitalize">{p.method.replace(/_/g, ' ')}</span><span>{currency} {Number(p.amount).toFixed(2)}</span></div>)}</div>
           <div className="flex gap-3 pt-2">
             <button onClick={() => window.print()} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Print</button>
             <button onClick={newSale} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors">New Sale</button>
@@ -258,9 +260,9 @@ export default function POSPage({ userRole }: POSPageProps) {
                   {(histData?.items ?? []).map(tx => (
                     <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{tx.transactionNumber}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(tx.grandTotal).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-green-700 dark:text-green-400 whitespace-nowrap">ETB {Number(tx.amountPaid ?? tx.grandTotal).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-amber-700 dark:text-amber-400 whitespace-nowrap">{Number(tx.amountDue ?? 0) > 0 ? `ETB ${Number(tx.amountDue).toFixed(2)}` : '—'}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(tx.grandTotal).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-green-700 dark:text-green-400 whitespace-nowrap">{currency} {Number(tx.amountPaid ?? tx.grandTotal).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-amber-700 dark:text-amber-400 whitespace-nowrap">{Number(tx.amountDue ?? 0) > 0 ? `${currency} ${Number(tx.amountDue).toFixed(2)}` : '—'}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${tx.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>{tx.status}</span>
                       </td>
@@ -275,7 +277,7 @@ export default function POSPage({ userRole }: POSPageProps) {
                           )}
                           {tx.status === 'completed' && tx.paymentStatus !== 'paid' && (
                             <button onClick={() => {
-                              const amt = prompt(`Collect payment\n${tx.transactionNumber}\nOutstanding: ETB ${Number(tx.amountDue).toFixed(2)}\n\nEnter amount:`);
+                              const amt = prompt(`Collect payment\n${tx.transactionNumber}\nOutstanding: ${currency} ${Number(tx.amountDue).toFixed(2)}\n\nEnter amount:`);
                               if (!amt) return;
                               const parsed = parseFloat(amt);
                               if (!parsed || parsed <= 0) return;
@@ -321,7 +323,7 @@ export default function POSPage({ userRole }: POSPageProps) {
                 <button key={b.id} onClick={() => addToCart(b)} disabled={b.stockQuantity === 0}
                   className={`w-full text-left px-3 py-2.5 border-b border-gray-100 dark:border-gray-800 transition-colors ${b.stockQuantity === 0 ? 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50' : 'hover:bg-blue-50 dark:hover:bg-blue-950/30'}`}>
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.isbn} · {currency} {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
                   {b.stockQuantity != null && (
                     <p className={`text-xs font-medium mt-0.5 ${b.stockQuantity === 0 ? 'text-red-600 dark:text-red-400' : b.stockQuantity <= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
                       {b.stockQuantity === 0 ? '⚠ Out of stock' : b.stockQuantity <= 3 ? `⚠ Only ${b.stockQuantity} left` : `✓ ${b.stockQuantity} in stock`}
@@ -340,7 +342,7 @@ export default function POSPage({ userRole }: POSPageProps) {
                 <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 rounded-lg px-3 py-2">
                   <div>
                     <p className="text-xs font-medium text-gray-900 dark:text-white">{selectedCustomer.fullName}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Pts: {selectedCustomer.loyaltyBalance} · Credit: ETB {Number(selectedCustomer.storeCreditBalance).toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Pts: {selectedCustomer.loyaltyBalance} · Credit: {currency} {Number(selectedCustomer.storeCreditBalance).toFixed(2)}</p>
                   </div>
                   <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm">×</button>
                 </div>
@@ -380,7 +382,7 @@ export default function POSPage({ userRole }: POSPageProps) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.bookTitle}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.bookIsbn} · ETB {item.unitPrice.toFixed(2)} each</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.bookIsbn} · {currency} {item.unitPrice.toFixed(2)} each</p>
                     </div>
                     <button onClick={() => removeFromCart(item.bookId)} className="text-gray-400 hover:text-red-500 transition-colors text-sm flex-shrink-0">×</button>
                   </div>
@@ -395,7 +397,7 @@ export default function POSPage({ userRole }: POSPageProps) {
                       <input type="number" min="0" max="100" value={item.discountPct} onChange={e => updateDiscount(item.bookId, Number(e.target.value))}
                         className="w-14 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
                     </div>
-                    <div className="ml-auto text-sm font-semibold text-gray-900 dark:text-white">ETB {item.lineTotal.toFixed(2)}</div>
+                    <div className="ml-auto text-sm font-semibold text-gray-900 dark:text-white">{currency} {item.lineTotal.toFixed(2)}</div>
                   </div>
                 </div>
               ))}
@@ -415,10 +417,10 @@ export default function POSPage({ userRole }: POSPageProps) {
             </div>
             {/* Totals */}
             <div className="p-3 border-b border-gray-200 dark:border-gray-800 space-y-1 text-sm flex-shrink-0">
-              <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Subtotal</span><span>ETB {subtotal.toFixed(2)}</span></div>
-              {discountTotal > 0 && <div className="flex justify-between text-green-600 dark:text-green-400"><span>Discount</span><span>-ETB {discountTotal.toFixed(2)}</span></div>}
-              <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tax (10%)</span><span>ETB {taxTotal.toFixed(2)}</span></div>
-              <div className="flex justify-between font-bold text-gray-900 dark:text-white text-base border-t border-gray-200 dark:border-gray-700 pt-1"><span>Total</span><span>ETB {grandTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Subtotal</span><span>{currency} {subtotal.toFixed(2)}</span></div>
+              {discountTotal > 0 && <div className="flex justify-between text-green-600 dark:text-green-400"><span>Discount</span><span>-{currency} {discountTotal.toFixed(2)}</span></div>}
+              <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>Tax (10%)</span><span>{currency} {taxTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between font-bold text-gray-900 dark:text-white text-base border-t border-gray-200 dark:border-gray-700 pt-1"><span>Total</span><span>{currency} {grandTotal.toFixed(2)}</span></div>
             </div>
             {/* Payment */}
             <div className="p-3 border-b border-gray-200 dark:border-gray-800 flex-1 overflow-y-auto space-y-2">
@@ -441,13 +443,13 @@ export default function POSPage({ userRole }: POSPageProps) {
               {remaining > 0.01 && (
                 <button onClick={() => setPayAmount(remaining.toFixed(2))}
                   className="w-full text-xs py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors font-medium">
-                  ↙ Fill ETB {remaining.toFixed(2)}
+                  ↙ Fill {currency} {remaining.toFixed(2)}
                 </button>
               )}
               <div className="flex gap-2">
                 <input type="number" min="0" step="0.01" value={payAmount}
                   onChange={e => setPayAmount(e.target.value)}
-                  placeholder={`ETB ${remaining > 0 ? remaining.toFixed(2) : '0.00'}`}
+                  placeholder={`${currency} ${remaining > 0 ? remaining.toFixed(2) : '0.00'}`}
                   onKeyDown={e => e.key === 'Enter' && addPayment()}
                   className="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <button onClick={addPayment} className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Add</button>
@@ -456,7 +458,7 @@ export default function POSPage({ userRole }: POSPageProps) {
                 <div key={i} className="flex items-center justify-between text-sm">
                   <span className="text-gray-600 dark:text-gray-400 capitalize">{p.method.replace(/_/g, ' ')}</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900 dark:text-white">ETB {parseFloat(p.amount).toFixed(2)}</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{currency} {parseFloat(p.amount).toFixed(2)}</span>
                     <button onClick={() => removePayment(i)} className="text-gray-400 hover:text-red-500 text-xs transition-colors">×</button>
                   </div>
                 </div>
@@ -464,7 +466,7 @@ export default function POSPage({ userRole }: POSPageProps) {
               {cart.length > 0 && (
                 <div className={`flex justify-between text-sm font-semibold pt-2 border-t border-gray-200 dark:border-gray-700 ${remaining > 0.01 ? 'text-amber-600 dark:text-amber-400' : remaining < -0.01 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                   <span>{remaining > 0.01 ? 'Pending Balance' : remaining < -0.01 ? 'Overpaid' : '✓ Paid'}</span>
-                  <span>ETB {Math.abs(remaining).toFixed(2)}</span>
+                  <span>{currency} {Math.abs(remaining).toFixed(2)}</span>
                 </div>
               )}
             </div>
@@ -481,7 +483,7 @@ export default function POSPage({ userRole }: POSPageProps) {
                     disabled={createMut.isPending || cart.length === 0 || !locationId || !selectedCustomer}
                     title={!selectedCustomer ? 'Select a customer to allow credit sale' : ''}
                     className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm">
-                    {createMut.isPending ? 'Processing...' : `Credit Sale · Due ETB ${remaining.toFixed(2)}`}
+                    {createMut.isPending ? 'Processing...' : `Credit Sale · Due ${currency} ${remaining.toFixed(2)}`}
                   </button>
                 )}
                 {!locationId && cart.length > 0 && <p className="text-xs text-amber-600 dark:text-amber-400 text-center">Select a location to continue</p>}

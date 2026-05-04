@@ -11,7 +11,7 @@ const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
 const qi = (v: unknown, fb: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fb : fb; };
 
-// ── POST /api/orders ──────────────────────────────────────────────────────────
+// â”€â”€ POST /api/orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post(
   '/orders',
@@ -45,7 +45,7 @@ router.post(
   },
 );
 
-// ── GET /api/orders ───────────────────────────────────────────────────────────
+// â”€â”€ GET /api/orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.get(
   '/orders',
@@ -66,14 +66,14 @@ router.get(
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       const itemsWithActions = result.items.map(order => ({
         ...order,
-        allowedActions: computeOrderAllowedActions(order.status, permissions),
+        allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus),
       }));
       res.json({ ...result, items: itemsWithActions });
     } catch (err) { next(err); }
   },
 );
 
-// ── GET /api/orders/:id ───────────────────────────────────────────────────────
+// â”€â”€ GET /api/orders/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.get(
   '/orders/:id',
@@ -82,12 +82,12 @@ router.get(
     try {
       const order = await ordersService.getById(parseInt(req.params.id as string, 10));
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
     } catch (err) { next(err); }
   },
 );
 
-// ── POST /api/orders/:id/confirm ──────────────────────────────────────────────
+// â”€â”€ POST /api/orders/:id/confirm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post(
   '/orders/:id/confirm',
@@ -97,12 +97,12 @@ router.post(
     try {
       const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
     } catch (err) { next(err); }
   },
 );
 
-// ── POST /api/orders/:id/progress ─────────────────────────────────────────────
+// â”€â”€ POST /api/orders/:id/progress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post(
   '/orders/:id/progress',
@@ -116,7 +116,7 @@ router.post(
   },
 );
 
-// ── POST /api/orders/:id/pay ──────────────────────────────────────────────────
+// â”€â”€ POST /api/orders/:id/pay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post(
   '/orders/:id/pay',
@@ -127,12 +127,12 @@ router.post(
       const id = parseInt(req.params.id as string, 10);
       const order = await ordersService.pay(id, req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
     } catch (err) { next(err); }
   },
 );
 
-// ── POST /api/orders/:id/fulfill ──────────────────────────────────────────────
+// â”€â”€ POST /api/orders/:id/fulfill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post(
   '/orders/:id/fulfill',
@@ -142,12 +142,12 @@ router.post(
     try {
       const order = await ordersService.fulfill(parseInt(req.params.id as string, 10), req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
     } catch (err) { next(err); }
   },
 );
 
-// ── POST /api/orders/:id/cancel ───────────────────────────────────────────────
+// â”€â”€ POST /api/orders/:id/cancel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post(
   '/orders/:id/cancel',
@@ -158,7 +158,7 @@ router.post(
       const reason = req.body.reason ?? 'No reason provided';
       const order = await ordersService.cancel(parseInt(req.params.id as string, 10), reason, req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
     } catch (err) { next(err); }
   },
 );

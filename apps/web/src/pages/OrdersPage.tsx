@@ -3,6 +3,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 interface OrdersPageProps { userRole?: Role; userPermissions?: string[]; }
@@ -71,6 +72,7 @@ interface PayModalState { orderId: string; orderNumber: string; total: number; }
 export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const currency = useCurrency();
   const [tab, setTab] = useState<Tab>('list');
   const branchId = getCurrentBranchId() ?? 1;
 
@@ -178,7 +180,7 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
                         <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{order.channel.replace('_', ' ')}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? ''}`}>{order.status}</span></td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PAY_COLORS[order.paymentStatus] ?? ''}`}>{order.paymentStatus}</span></td>
-                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(order.total).toFixed(2)}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(order.total).toFixed(2)}</td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(order.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1 flex-wrap">
@@ -321,7 +323,7 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
                   {(bookResults?.items ?? []).map(b => (
                     <button key={b.id} onClick={() => addItem(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.isbn} · ETB {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.isbn} · {currency} {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
                       {b.stockQuantity != null && (
                         <p className={`text-xs font-medium mt-0.5 ${b.stockQuantity === 0 ? 'text-red-600 dark:text-red-400' : b.stockQuantity <= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
                           {b.stockQuantity === 0 ? '⚠ Out of stock' : b.stockQuantity <= 3 ? `⚠ Only ${b.stockQuantity} left` : `✓ ${b.stockQuantity} in stock`}
@@ -338,19 +340,19 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
                   <div key={item.bookId} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.bookTitle}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">ETB {item.unitPrice.toFixed(2)} each</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{currency} {item.unitPrice.toFixed(2)} each</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i))} className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold">-</button>
                       <span className="w-8 text-center text-sm">{item.quantity}</span>
                       <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: i.quantity + 1 } : i))} className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold">+</button>
                     </div>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white w-20 text-right">ETB {(item.unitPrice * item.quantity).toFixed(2)}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white w-20 text-right">{currency} {(item.unitPrice * item.quantity).toFixed(2)}</span>
                     <button onClick={() => setOrderItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-gray-400 hover:text-red-500 text-sm">×</button>
                   </div>
                 ))}
                 <div className="flex justify-between text-sm font-semibold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span>Subtotal (excl. tax)</span><span>ETB {subtotal.toFixed(2)}</span>
+                  <span>Subtotal (excl. tax)</span><span>{currency} {subtotal.toFixed(2)}</span>
                 </div>
               </div>
             )}
@@ -381,7 +383,7 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
               </div>
             </div>
             <div className="space-y-1">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Amount (ETB)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">{`Amount (${currency})`}</label>
               <input type="number" min="0" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
@@ -407,6 +409,7 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
 }
 
 function OrderDetailLoader({ orderId }: { orderId: string }) {
+  const currency = useCurrency();
   const { data } = useQuery<{ lineItems?: OrderLine[] }>({
     queryKey: ['order-detail', orderId],
     queryFn: () => api.get(`/orders/${orderId}`),
@@ -422,7 +425,7 @@ function OrderDetailLoader({ orderId }: { orderId: string }) {
           <td className="pr-4 text-blue-600 dark:text-blue-400">{li.qtyReserved}</td>
           <td className="pr-4 text-green-600 dark:text-green-400">{li.qtyFulfilled}</td>
           <td className="pr-4">{li.isBackordered ? <span className="text-amber-600 dark:text-amber-400">Yes</span> : '—'}</td>
-          <td className="text-gray-900 dark:text-white">ETB {Number(li.totalPrice).toFixed(2)}</td>
+          <td className="text-gray-900 dark:text-white">{currency} {Number(li.totalPrice).toFixed(2)}</td>
         </tr>
       ))}</tbody>
     </table>

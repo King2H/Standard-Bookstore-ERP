@@ -1,7 +1,8 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 interface InstallmentsPageProps { userRole?: Role; }
@@ -43,6 +44,7 @@ type Tab = 'lookup' | 'new';
 export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const currency = useCurrency();
   const [tab, setTab] = useState<Tab>('lookup');
 
   // Lookup tab state
@@ -169,8 +171,8 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Order', value: `#${plan.orderId}` },
-                    { label: 'Total', value: `ETB ${plan.totalAmount.toFixed(2)}` },
-                    { label: 'Deposit', value: `ETB ${plan.depositAmount.toFixed(2)}` },
+                    { label: 'Total', value: `${currency} ${plan.totalAmount.toFixed(2)}` },
+                    { label: 'Deposit', value: `${currency} ${plan.depositAmount.toFixed(2)}` },
                     { label: 'Installments', value: plan.numInstallments },
                   ].map(c => (
                     <div key={c.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
@@ -182,8 +184,8 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
                 {/* Progress bar */}
                 <div className="mt-3">
                   <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    <span>Paid: ETB {totalPaid.toFixed(2)}</span>
-                    <span>Remaining: ETB {totalRemaining.toFixed(2)}</span>
+                    <span>Paid: {currency} {totalPaid.toFixed(2)}</span>
+                    <span>Remaining: {currency} {totalRemaining.toFixed(2)}</span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
                     <div
@@ -209,7 +211,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-gray-900 dark:text-white">
-                            ETB {inst.amount.toFixed(2)}
+                            {currency} {inst.amount.toFixed(2)}
                           </span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[inst.status]}`}>
                             {inst.status}
@@ -217,7 +219,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                           Due: {new Date(inst.dueDate).toLocaleDateString()}
-                          {inst.paidAmount > 0 && inst.status !== 'paid' && ` · Paid: ETB ${inst.paidAmount.toFixed(2)}`}
+                          {inst.paidAmount > 0 && inst.status !== 'paid' && ` · Paid: ${currency} ${inst.paidAmount.toFixed(2)}`}
                           {inst.paidAt && ` · Settled: ${new Date(inst.paidAt).toLocaleDateString()}`}
                         </p>
                       </div>
@@ -278,7 +280,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Deposit Amount (ETB) — optional</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Deposit Amount (${currency}) — optional</label>
               <input type="number" min="0" step="0.01" value={depositAmount} onChange={e => setDepositAmount(e.target.value)}
                 placeholder="Leave blank to use minimum from config"
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />

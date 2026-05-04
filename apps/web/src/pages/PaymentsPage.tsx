@@ -3,6 +3,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 interface PaymentsPageProps { userRole?: Role; }
@@ -51,6 +52,7 @@ type Tab = 'pending' | 'history' | 'collect';
 export default function PaymentsPage({ userRole }: PaymentsPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
+  const currency = useCurrency();
   const branchId = getCurrentBranchId() ?? 1;
   const [tab, setTab] = useState<Tab>('pending');
 
@@ -241,9 +243,9 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                         ) : <span className="text-gray-400 italic">Walk-in</span>}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 capitalize">{order.channel.replace('_', ' ')}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">ETB {order.total.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-green-600 dark:text-green-400 whitespace-nowrap">ETB {order.totalPaid.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm font-bold text-red-600 dark:text-red-400 whitespace-nowrap">ETB {order.outstanding.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {order.total.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-green-600 dark:text-green-400 whitespace-nowrap">{currency} {order.totalPaid.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm font-bold text-red-600 dark:text-red-400 whitespace-nowrap">{currency} {order.outstanding.toFixed(2)}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PAY_STATUS_COLORS[order.paymentStatus] ?? ''}`}>
                           {order.paymentStatus}
@@ -298,12 +300,12 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
               <div className="mt-3 text-xs text-blue-500">Loading balance...</div>
             ) : orderBalance && (
               <div className="mt-3 space-y-1 text-sm border-t border-blue-200 dark:border-blue-800 pt-3">
-                <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Order Total</span><span className="font-medium text-blue-900 dark:text-blue-200">ETB {orderBalance.orderTotal.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Already Paid</span><span className="text-green-600 dark:text-green-400">ETB {orderBalance.totalPaid.toFixed(2)}</span></div>
-                {orderBalance.totalRefunded > 0 && <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Refunded</span><span className="text-amber-600 dark:text-amber-400">ETB {orderBalance.totalRefunded.toFixed(2)}</span></div>}
+                <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Order Total</span><span className="font-medium text-blue-900 dark:text-blue-200">{currency} {orderBalance.orderTotal.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Already Paid</span><span className="text-green-600 dark:text-green-400">{currency} {orderBalance.totalPaid.toFixed(2)}</span></div>
+                {orderBalance.totalRefunded > 0 && <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Refunded</span><span className="text-amber-600 dark:text-amber-400">{currency} {orderBalance.totalRefunded.toFixed(2)}</span></div>}
                 <div className="flex justify-between font-bold border-t border-blue-200 dark:border-blue-800 pt-1">
                   <span className="text-blue-900 dark:text-blue-200">Outstanding</span>
-                  <span className="text-red-600 dark:text-red-400">ETB {orderBalance.outstanding.toFixed(2)}</span>
+                  <span className="text-red-600 dark:text-red-400">{currency} {orderBalance.outstanding.toFixed(2)}</span>
                 </div>
               </div>
             )}
@@ -362,7 +364,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                 ) : customerData ? (
                   <div className="space-y-0.5">
                     <p className="font-medium">{customerData.fullName}</p>
-                    <p>Available Store Credit: <strong>ETB {Number(customerData.storeCreditBalance).toFixed(2)}</strong></p>
+                    <p>Available Store Credit: <strong>{currency} {Number(customerData.storeCreditBalance).toFixed(2)}</strong></p>
                     {parseFloat(amount || '0') > customerData.storeCreditBalance && (
                       <p className="text-red-600 dark:text-red-400 font-medium">⚠️ Requested amount exceeds available balance</p>
                     )}
@@ -387,7 +389,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                 ) : customerData ? (
                   <div className="space-y-0.5">
                     <p className="font-medium">{customerData.fullName}</p>
-                    <p>Available Points: <strong>{Number(customerData.loyaltyBalance).toFixed(0)} pts</strong> (ETB {Number(customerData.loyaltyBalance).toFixed(2)} value)</p>
+                    <p>Available Points: <strong>{Number(customerData.loyaltyBalance).toFixed(0)} pts</strong> ({currency} {Number(customerData.loyaltyBalance).toFixed(2)} value)</p>
                     {parseFloat(amount || '0') > customerData.loyaltyBalance && (
                       <p className="text-red-600 dark:text-red-400 font-medium">⚠️ Requested amount exceeds available points</p>
                     )}
@@ -399,14 +401,14 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
             )}
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Amount (ETB)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{`Amount (${currency})`}</label>
               <div className="flex gap-2">
                 <input type="number" min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 {orderBalance && orderBalance.outstanding > 0 && (
                   <button onClick={() => setAmount(orderBalance.outstanding.toFixed(2))}
                     className="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
-                    Full ETB {orderBalance.outstanding.toFixed(2)}
+                    Full {currency} {orderBalance.outstanding.toFixed(2)}
                   </button>
                 )}
               </div>
@@ -427,7 +429,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
               (paymentMethod === 'loyalty_points' && (!selectedOrder?.customerName || (customerData != null && parseFloat(amount) > customerData.loyaltyBalance)))
             }
               className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
-              {createMut.isPending ? 'Processing...' : `✓ Record Payment — ETB ${parseFloat(amount || '0').toFixed(2)}`}
+              {createMut.isPending ? 'Processing...' : `✓ Record Payment — ${currency} ${parseFloat(amount || '0').toFixed(2)}`}
             </button>
           </div>
         </div>
@@ -460,7 +462,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                       <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === pay.id ? null : pay.id)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{pay.paymentReference}</td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">#{pay.orderId}</td>
-                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(pay.amount).toFixed(2)}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(pay.amount).toFixed(2)}</td>
                         <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">{METHOD_LABELS[pay.paymentMethod] ?? pay.paymentMethod}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[pay.status] ?? ''}`}>{pay.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(pay.createdAt).toLocaleString()}</td>

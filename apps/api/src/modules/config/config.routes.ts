@@ -30,6 +30,24 @@ router.get(
   },
 );
 
+// ── GET /api/config/currency ──────────────────────────────────────────────────
+// Returns the effective currency for the authenticated user's branch.
+// Any authenticated staff can call this (needed for POS, Orders, etc.)
+
+router.get(
+  '/config/currency',
+  authenticate,
+  async (req: Request, res: Response, _next: NextFunction) => {
+    try {
+      const branchId = req.staff?.branchId;
+      const currency = await configService.getEffectiveConfig(branchId ?? 0, 'base_currency');
+      res.json({ currency: String(currency ?? 'ETB') });
+    } catch {
+      res.json({ currency: 'ETB' });
+    }
+  },
+);
+
 // ── PUT /api/config/system/:key ───────────────────────────────────────────────
 // Super_Admin only (enforced in service layer too)
 

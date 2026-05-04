@@ -414,13 +414,18 @@ export async function updatePaymentStatus(orderId: string | number, paymentStatu
  * Computes the list of allowed actions for an order based on its current status
  * and the permissions of the requesting staff member.
  */
-export function computeOrderAllowedActions(status: string, permissions: Permission[]): string[] {
+export function computeOrderAllowedActions(status: string, permissions: Permission[], paymentStatus?: string): string[] {
   const can = (p: Permission) => permissions.includes(p);
+  // Don't show 'pay' if already fully paid
+  const alreadyPaid = paymentStatus === 'paid';
   switch (status) {
     case 'DRAFT':
       return [...(can('CREATE_SALE') ? ['confirm', 'cancel'] : [])];
     case 'CONFIRMED':
-      return [...(can('PROCESS_PAYMENT') ? ['pay'] : []), ...(can('CREATE_SALE') ? ['cancel'] : [])];
+      return [
+        ...(!alreadyPaid && can('PROCESS_PAYMENT') ? ['pay'] : []),
+        ...(can('CREATE_SALE') ? ['cancel'] : []),
+      ];
     case 'PAID':
       return [...(can('PROCESS_PAYMENT') ? ['fulfill'] : [])];
     case 'FULFILLED':
@@ -434,7 +439,10 @@ export function computeOrderAllowedActions(status: string, permissions: Permissi
       return [...(can('CREATE_SALE') ? ['confirm', 'cancel'] : [])];
     case 'Confirmed':
     case 'In_Progress':
-      return [...(can('PROCESS_PAYMENT') ? ['pay'] : []), ...(can('CREATE_SALE') ? ['cancel'] : [])];
+      return [
+        ...(!alreadyPaid && can('PROCESS_PAYMENT') ? ['pay'] : []),
+        ...(can('CREATE_SALE') ? ['cancel'] : []),
+      ];
     case 'Fulfilled':
       return ['print'];
     case 'Cancelled':

@@ -55,7 +55,7 @@ type GroupBy = 'day' | 'week' | 'month';
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; value: string; sub?: string; icon: string; color: string; onClick?: () => void }) {
+function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; value: string; sub?: string; icon: React.ReactNode; color: string; onClick?: () => void }) {
   return (
     <div
       onClick={onClick}
@@ -74,7 +74,7 @@ function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; v
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
 function Section({ title, icon, children, loading, error, updatedAt, onRefresh }: {
-  title: string; icon: string; children: React.ReactNode;
+  title: React.ReactNode; icon: React.ReactNode; children: React.ReactNode;
   loading?: boolean; error?: boolean;
   updatedAt?: number; onRefresh?: () => void;
 }) {
@@ -247,7 +247,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-2">
-          <p className="text-4xl">🔒</p>
+          <div className="mx-auto mb-3 text-gray-300 dark:text-gray-600"><svg className="w-12 h-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg></div>
           <p className="text-gray-500 dark:text-gray-400 text-sm">Dashboard is available to Manager, Admin, and Finance Officer roles.</p>
         </div>
       </div>
@@ -266,10 +266,10 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       {/* ── Quick Actions ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'New Sale',        icon: '🛒', page: 'pos',         color: 'from-blue-500 to-blue-600',    desc: 'Open POS terminal' },
-          { label: 'New Purchase',    icon: '📋', page: 'procurement', color: 'from-indigo-500 to-indigo-600', desc: 'Create purchase order' },
-          { label: 'Add Customer',    icon: '👤', page: 'customers',   color: 'from-purple-500 to-purple-600', desc: 'Register new customer' },
-          { label: 'Record Payment',  icon: '💳', page: 'payments',    color: 'from-green-500 to-green-600',   desc: 'Record order payment' },
+          { label: 'New Sale', icon: (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>), page: 'pos',         color: 'from-blue-500 to-blue-600',    desc: 'Open POS terminal' },
+          { label: 'New Purchase', icon: (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>), page: 'procurement', color: 'from-indigo-500 to-indigo-600', desc: 'Create purchase order' },
+          { label: 'Add Customer', icon: (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>), page: 'customers',   color: 'from-purple-500 to-purple-600', desc: 'Register new customer' },
+          { label: 'Record Payment', icon: (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>), page: 'payments',    color: 'from-green-500 to-green-600',   desc: 'Record order payment' },
         ].map(action => (
           <button
             key={action.page}
@@ -305,7 +305,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             onChange={e => setFilters(f => ({ ...f, branchId: e.target.value }))}
             className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="">🏢 All Branches</option>
+            <option value="">All Branches</option>
             {(branchesData?.items ?? []).map(b => (
               <option key={b.id} value={String(b.id)}>{b.name}</option>
             ))}
@@ -332,7 +332,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             <svg className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            {isRefreshing ? 'Refreshing…' : '↻ Refresh'}
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </div>
@@ -342,11 +342,11 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Export CSV</span>
         <div className="w-px h-4 bg-gray-200 dark:bg-gray-700" />
         {[
-          { type: 'sales',     label: '📊 Sales' },
-          { type: 'payments',  label: '💳 Payments' },
-          { type: 'inventory', label: '📦 Inventory' },
-          { type: 'customers', label: '👤 Customers' },
-          { type: 'exchanges', label: '🔁 Exchanges' },
+          { type: 'sales', label: 'Sales' },
+          { type: 'payments', label: 'Payments' },
+          { type: 'inventory', label: 'Inventory' },
+          { type: 'customers', label: 'Customers' },
+          { type: 'exchanges', label: 'Exchanges' },
         ].map(({ type, label }) => (
           <button key={type} onClick={() => exportReport(type)}
             className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
@@ -376,13 +376,13 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             ))
           ) : kpis ? (
             <>
-              <KpiCard label="Today's Revenue"  value={fmtShort(kpis.dailyRevenue)}         icon="💰" color="bg-green-100 dark:bg-green-900/30"   onClick={() => onNavigate?.('payments')} />
-              <KpiCard label="Monthly Revenue"  value={fmtShort(kpis.monthlyRevenue)}        icon="📈" color="bg-blue-100 dark:bg-blue-900/30"    onClick={() => onNavigate?.('payments')} />
-              <KpiCard label="Avg Order Value"  value={fmtShort(kpis.averageOrderValue)}     icon="🧾" color="bg-indigo-100 dark:bg-indigo-900/30" onClick={() => onNavigate?.('orders')} />
-              <KpiCard label="Active Customers" value={kpis.totalActiveCustomers.toString()} icon="👤" color="bg-purple-100 dark:bg-purple-900/30"  onClick={() => onNavigate?.('customers')} />
-              <KpiCard label="Low Stock"        value={kpis.lowStockAlerts.toString()}       icon="⚠️" color="bg-amber-100 dark:bg-amber-900/30"   sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'} onClick={() => onNavigate?.('inventory')} />
-              <KpiCard label="Pending Orders"   value={kpis.pendingOrders.toString()}        icon="📋" color="bg-orange-100 dark:bg-orange-900/30"  onClick={() => onNavigate?.('orders')} />
-              <KpiCard label="Exchanges Today"  value={kpis.totalExchangesToday.toString()}  icon="🔁" color="bg-teal-100 dark:bg-teal-900/30"     onClick={() => onNavigate?.('exchanges')} />
+              <KpiCard label="Today's Revenue"  value={fmtShort(kpis.dailyRevenue)}         icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} color="bg-green-100 dark:bg-green-900/30" onClick={() => onNavigate?.('payments')} />
+              <KpiCard label="Monthly Revenue"  value={fmtShort(kpis.monthlyRevenue)}        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} color="bg-blue-100 dark:bg-blue-900/30" onClick={() => onNavigate?.('payments')} />
+              <KpiCard label="Avg Order Value"  value={fmtShort(kpis.averageOrderValue)}     icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>} color="bg-indigo-100 dark:bg-indigo-900/30" onClick={() => onNavigate?.('orders')} />
+              <KpiCard label="Active Customers" value={kpis.totalActiveCustomers.toString()} icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>} color="bg-purple-100 dark:bg-purple-900/30" onClick={() => onNavigate?.('customers')} />
+              <KpiCard label="Low Stock"        value={kpis.lowStockAlerts.toString()}       icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>} color="bg-amber-100 dark:bg-amber-900/30" sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'} onClick={() => onNavigate?.('inventory')} />
+              <KpiCard label="Pending Orders"   value={kpis.pendingOrders.toString()}        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} color="bg-orange-100 dark:bg-orange-900/30" onClick={() => onNavigate?.('orders')} />
+              <KpiCard label="Exchanges Today"  value={kpis.totalExchangesToday.toString()}  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>} color="bg-teal-100 dark:bg-teal-900/30" onClick={() => onNavigate?.('exchanges')} />
             </>
           ) : null}
         </div>
@@ -398,7 +398,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               onClick={() => onNavigate?.('inventory')}
             >
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-base">⚠️</span>
+                <span className="text-amber-600 dark:text-amber-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></span>
                 <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Low Stock Items</h3>
                 <span className="ml-auto text-xs font-medium bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full">
                   {kpis?.lowStockAlerts}
@@ -413,7 +413,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   </div>
                 ))}
                 {inventory.lowStockItems.length > 4 && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">+{inventory.lowStockItems.length - 4} more → View Inventory</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">+{inventory.lowStockItems.length - 4} more — View Inventory View Inventory</p>
                 )}
               </div>
             </div>
@@ -426,8 +426,8 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               onClick={() => onNavigate?.('orders')}
             >
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-base">📋</span>
-                <h3 className="text-sm font-semibold text-orange-800 dark:text-orange-300">Pending Orders</h3>
+                <span className="text-orange-600 dark:text-orange-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></span>
+              <h3 className="text-sm font-semibold text-orange-800 dark:text-orange-300">Pending Orders</h3>
                 <span className="ml-auto text-xs font-medium bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 px-2 py-0.5 rounded-full">
                   {kpis?.pendingOrders}
                 </span>
@@ -435,7 +435,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 {kpis?.pendingOrders} order{(kpis?.pendingOrders ?? 0) !== 1 ? 's' : ''} awaiting confirmation or fulfillment.
               </p>
-              <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-medium">→ Go to Orders</p>
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-medium">View Orders</p>
             </div>
           )}
         </div>
@@ -446,7 +446,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
 
         {/* Sales trend (2/3 width) */}
         <div className="lg:col-span-2">
-          <Section title="Sales Trend" icon="📈" loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
+          <Section title="Sales Trend" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
             {sales?.byPeriod && sales.byPeriod.length > 0 ? (
               <>
                 <div className="grid grid-cols-3 gap-3 mb-4">
@@ -471,7 +471,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </div>
 
         {/* Payment method distribution (1/3 width) */}
-        <Section title="Payment Methods" icon="💳" loading={payLoading} error={payError} updatedAt={payUpdatedAt} onRefresh={() => refetchPayments()}>
+        <Section title="Payment Methods" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>} loading={payLoading} error={payError} updatedAt={payUpdatedAt} onRefresh={() => refetchPayments()}>
           {payments?.byMethod && payments.byMethod.length > 0 ? (
             <>
               <div className="grid grid-cols-2 gap-2 mb-3 text-center">
@@ -509,7 +509,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Sales by branch */}
-        <Section title="Sales by Branch" icon="🏪" loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
+        <Section title="Sales by Branch" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
           {sales?.byBranch && sales.byBranch.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={sales.byBranch} layout="vertical">
@@ -524,7 +524,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </Section>
 
         {/* Exchange summary */}
-        <Section title="Exchange Activity" icon="🔁" loading={excLoading} error={excError} updatedAt={excUpdatedAt} onRefresh={() => refetchExchanges()}>
+        <Section title="Exchange Activity" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>} loading={excLoading} error={excError} updatedAt={excUpdatedAt} onRefresh={() => refetchExchanges()}>
           {exchanges ? (
             <>
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -568,7 +568,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Inventory panel */}
-        <Section title="Inventory Insights" icon="📦" loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
+        <Section title="Inventory Insights" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
           {inventory ? (
             <>
               <div className="grid grid-cols-4 gap-2 mb-4">
@@ -601,7 +601,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               )}
               {inventory.lowStockItems.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-2">⚠️ Low Stock Alerts</p>
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-2">Low Stock Alerts</p>
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {inventory.lowStockItems.slice(0, 6).map(item => (
                       <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">
@@ -618,7 +618,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </Section>
 
         {/* Customer insights */}
-        <Section title="Customer Insights" icon="👤" loading={custLoading} error={custError} updatedAt={custUpdatedAt} onRefresh={() => refetchCustomers()}>
+        <Section title="Customer Insights" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>} loading={custLoading} error={custError} updatedAt={custUpdatedAt} onRefresh={() => refetchCustomers()}>
           {customers ? (
             <>
               <div className="grid grid-cols-2 gap-2 mb-4">
@@ -658,7 +658,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Stock movement */}
-        <Section title="Stock Movement" icon="📊" loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
+        <Section title="Stock Movement" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>} loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
           {inventory?.stockMovement && inventory.stockMovement.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={inventory.stockMovement.map(r => ({ ...r, period: fmtPeriod(r.period) }))}>
@@ -675,7 +675,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </Section>
 
         {/* Payment collected vs refunded trend */}
-        <Section title="Payment Trend" icon="💰" loading={payLoading} error={payError} updatedAt={payUpdatedAt} onRefresh={() => refetchPayments()}>
+        <Section title="Payment Trend" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} loading={payLoading} error={payError} updatedAt={payUpdatedAt} onRefresh={() => refetchPayments()}>
           {payments?.byPeriod && payments.byPeriod.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={payments.byPeriod.map(r => ({ ...r, period: fmtPeriod(r.period) }))}>
