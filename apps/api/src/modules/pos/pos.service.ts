@@ -438,6 +438,25 @@ export async function createTransaction(
       const custName = data.customerId
         ? (await db.query('SELECT full_name FROM customers WHERE id = $1', [data.customerId])).rows[0]?.full_name ?? null
         : null;
+
+      // Record the outstanding amount as a store credit debt on the customer's account.
+      // This makes the credit sale visible in the customer's Store Credit tab as money owed.
+      // direction = 'debit' means the customer owes this amount to the store.
+      if (data.customerId && amountDue > 0.01) {
+        // Ensure store_credit_accounts row exists (created on customer creation, but guard anyway)
+        await client.query(
+          `INSERT INTO store_credit_accounts (customer_id, balance)
+           VALUES ($1, 0)
+           ON CONFLICT (customer_id) DO NOTHING`,
+          [data.customerId],
+        );
+        await client.query(
+          `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+           VALUES ($1, 'pos_credit_sale', $2, $3, 'debit')`,
+          [data.customerId, transactionNumber, amountDue.toFixed(2)],
+        );
+      }
+
       await insertOutbox(client, 'pos.credit_sale', {
         txId, txNumber: transactionNumber, branchId: data.branchId, amountDue, customerId: data.customerId ?? null, customerName: custName,
       });
@@ -521,6 +540,18 @@ export async function recordPayment(
           await client.query(`UPDATE loyalty_accounts SET points_balance = points_balance - $1, updated_at = now() WHERE customer_id = $2`, [payment.amount, tx.customerId]);
           await client.query(`INSERT INTO loyalty_history (customer_id, transaction_ref, points_delta, reason) VALUES ($1, $2, $3, 'REDEMPTION')`, [tx.customerId, tx.transactionNumber, -payment.amount]);
         }
+      }
+      // When a credit sale is settled (fully or partially), record a credit entry
+      // in store_credit_history to show the debt is being paid off.
+      // This keeps the Store Credit tab consistent: debit = debt created, credit = debt paid.
+      const cashOrBankPayments = payments.filter(p => p.method === 'cash' || p.method === 'bank');
+      const cashOrBankTotal = parseFloat(cashOrBankPayments.reduce((s, p) => s + p.amount, 0).toFixed(2));
+      if (cashOrBankTotal > 0.01) {
+        await client.query(
+          `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+           VALUES ($1, 'pos_credit_settlement', $2, $3, 'credit')`,
+          [tx.customerId, tx.transactionNumber, cashOrBankTotal.toFixed(2)],
+        );
       }
       // Emit loyalty accrual event via outbox when fully settled
       if (newPaymentStatus === 'paid') {

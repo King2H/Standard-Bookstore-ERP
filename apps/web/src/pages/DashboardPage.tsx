@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import WelcomeBanner from '../components/WelcomeBanner.js';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -73,12 +73,33 @@ function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; v
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
-function Section({ title, icon, children, loading, error }: { title: string; icon: string; children: React.ReactNode; loading?: boolean; error?: boolean }) {
+function Section({ title, icon, children, loading, error, updatedAt, onRefresh }: {
+  title: string; icon: string; children: React.ReactNode;
+  loading?: boolean; error?: boolean;
+  updatedAt?: number; onRefresh?: () => void;
+}) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
         <span className="text-base">{icon}</span>
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h2>
+        {updatedAt && updatedAt > 0 && (
+          <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">
+            · {new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            title="Refresh"
+            className="ml-auto p-1 rounded-md text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors disabled:opacity-40"
+          >
+            <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        )}
       </div>
       <div className="p-4">
         {loading && <div className="h-32 flex items-center justify-center text-gray-400 text-sm">Loading...</div>}
@@ -116,6 +137,7 @@ function buildQs(filters: Filters): string {
 export default function DashboardPage({ userRole, onNavigate }: DashboardPageProps) {
   const canView = ['Manager', 'Admin', 'Finance_Officer', 'Super_Admin'].includes(userRole ?? '');
   const isAllBranches = ['Super_Admin', 'Admin'].includes(userRole ?? '');
+  const queryClient = useQueryClient();
 
   // Pre-populate branchId: Manager gets their own branch; Admin/Super_Admin get all branches (empty = all)
   const getInitialBranchId = () => {
@@ -125,7 +147,25 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
   };
 
   const [filters, setFilters] = useState<Filters>({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() });
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const qs = buildQs(filters);
+
+  // Global refresh — invalidates and refetches all dashboard queries at once
+  const handleRefreshAll = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['report-kpis'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-sales'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-payments'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-exchanges'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-inventory'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-customers'], exact: false }),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [queryClient]);
 
   // Load branches for the branch selector (Admin/Super_Admin only)
   const { data: branchesData } = useQuery<{ items: Array<{ id: number; name: string }> }>({
@@ -154,47 +194,53 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
     URL.revokeObjectURL(a.href);
   };
 
-  const { data: kpis, isLoading: kpiLoading, dataUpdatedAt } = useQuery<KpiReport>({
+  const { data: kpis, isLoading: kpiLoading, dataUpdatedAt: kpiUpdatedAt } = useQuery<KpiReport>({
     queryKey: ['report-kpis', filters.branchId],
     queryFn: () => api.get(`/reports/kpis${filters.branchId ? `?branchId=${filters.branchId}` : ''}`),
     enabled: canView,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: 15_000,          // 15s — KPIs refresh frequently
+    refetchInterval: 30_000,    // auto-refresh every 30s
+    refetchOnWindowFocus: true,
   });
 
-  const { data: sales, isLoading: salesLoading, isError: salesError } = useQuery<SalesReport>({
+  const { data: sales, isLoading: salesLoading, isError: salesError, dataUpdatedAt: salesUpdatedAt, refetch: refetchSales } = useQuery<SalesReport>({
     queryKey: ['report-sales', qs],
     queryFn: () => api.get(`/reports/sales${qs}`),
     enabled: canView,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
-  const { data: payments, isLoading: payLoading, isError: payError } = useQuery<PaymentReport>({
+  const { data: payments, isLoading: payLoading, isError: payError, dataUpdatedAt: payUpdatedAt, refetch: refetchPayments } = useQuery<PaymentReport>({
     queryKey: ['report-payments', qs],
     queryFn: () => api.get(`/reports/payments${qs}`),
     enabled: canView,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
-  const { data: exchanges, isLoading: excLoading, isError: excError } = useQuery<ExchangeReport>({
+  const { data: exchanges, isLoading: excLoading, isError: excError, dataUpdatedAt: excUpdatedAt, refetch: refetchExchanges } = useQuery<ExchangeReport>({
     queryKey: ['report-exchanges', qs],
     queryFn: () => api.get(`/reports/exchanges${qs}`),
     enabled: canView,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
-  const { data: inventory, isLoading: invLoading, isError: invError } = useQuery<InventoryReport>({
+  const { data: inventory, isLoading: invLoading, isError: invError, dataUpdatedAt: invUpdatedAt, refetch: refetchInventory } = useQuery<InventoryReport>({
     queryKey: ['report-inventory', qs],
     queryFn: () => api.get(`/reports/inventory${qs}`),
     enabled: canView,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
-  const { data: customers, isLoading: custLoading, isError: custError } = useQuery<CustomerReport>({
+  const { data: customers, isLoading: custLoading, isError: custError, dataUpdatedAt: custUpdatedAt, refetch: refetchCustomers } = useQuery<CustomerReport>({
     queryKey: ['report-customers', qs],
     queryFn: () => api.get(`/reports/customers${qs}`),
     enabled: canView,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   if (!canView) {
@@ -238,7 +284,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         ))}
       </div>
 
-      {/* ── Filters row ── */}
+      {/* ── Filters + Refresh row ── */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3 flex flex-wrap gap-3 items-center">
         <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
         <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
@@ -269,6 +315,26 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
           Clear
         </button>
+
+        {/* ── Refresh button — always visible ── */}
+        <div className="ml-auto flex items-center gap-2">
+          {kpiUpdatedAt > 0 && (
+            <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
+              Updated {new Date(kpiUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={handleRefreshAll}
+            disabled={isRefreshing}
+            title="Refresh all dashboard data"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {isRefreshing ? 'Refreshing…' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* ── Export row ── */}
@@ -291,17 +357,15 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
 
       {/* ── KPI Cards ── */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">Live Overview</span>
-            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-              Live · 30s
-            </span>
-          </div>
-          {dataUpdatedAt > 0 && (
-            <span className="text-xs text-gray-400 dark:text-gray-500">
-              Updated {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">Live Overview</span>
+          <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+            Live · 30s
+          </span>
+          {kpiUpdatedAt > 0 && (
+            <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">
+              {new Date(kpiUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
         </div>
@@ -382,7 +446,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
 
         {/* Sales trend (2/3 width) */}
         <div className="lg:col-span-2">
-          <Section title="Sales Trend" icon="📈" loading={salesLoading} error={salesError}>
+          <Section title="Sales Trend" icon="📈" loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
             {sales?.byPeriod && sales.byPeriod.length > 0 ? (
               <>
                 <div className="grid grid-cols-3 gap-3 mb-4">
@@ -407,7 +471,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </div>
 
         {/* Payment method distribution (1/3 width) */}
-        <Section title="Payment Methods" icon="💳" loading={payLoading} error={payError}>
+        <Section title="Payment Methods" icon="💳" loading={payLoading} error={payError} updatedAt={payUpdatedAt} onRefresh={() => refetchPayments()}>
           {payments?.byMethod && payments.byMethod.length > 0 ? (
             <>
               <div className="grid grid-cols-2 gap-2 mb-3 text-center">
@@ -445,7 +509,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Sales by branch */}
-        <Section title="Sales by Branch" icon="🏪" loading={salesLoading} error={salesError}>
+        <Section title="Sales by Branch" icon="🏪" loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
           {sales?.byBranch && sales.byBranch.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={sales.byBranch} layout="vertical">
@@ -460,7 +524,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </Section>
 
         {/* Exchange summary */}
-        <Section title="Exchange Activity" icon="🔁" loading={excLoading} error={excError}>
+        <Section title="Exchange Activity" icon="🔁" loading={excLoading} error={excError} updatedAt={excUpdatedAt} onRefresh={() => refetchExchanges()}>
           {exchanges ? (
             <>
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -504,7 +568,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Inventory panel */}
-        <Section title="Inventory Insights" icon="📦" loading={invLoading} error={invError}>
+        <Section title="Inventory Insights" icon="📦" loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
           {inventory ? (
             <>
               <div className="grid grid-cols-4 gap-2 mb-4">
@@ -554,7 +618,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </Section>
 
         {/* Customer insights */}
-        <Section title="Customer Insights" icon="👤" loading={custLoading} error={custError}>
+        <Section title="Customer Insights" icon="👤" loading={custLoading} error={custError} updatedAt={custUpdatedAt} onRefresh={() => refetchCustomers()}>
           {customers ? (
             <>
               <div className="grid grid-cols-2 gap-2 mb-4">
@@ -594,7 +658,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Stock movement */}
-        <Section title="Stock Movement" icon="📊" loading={invLoading} error={invError}>
+        <Section title="Stock Movement" icon="📊" loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
           {inventory?.stockMovement && inventory.stockMovement.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={inventory.stockMovement.map(r => ({ ...r, period: fmtPeriod(r.period) }))}>
@@ -611,7 +675,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </Section>
 
         {/* Payment collected vs refunded trend */}
-        <Section title="Payment Trend" icon="💰" loading={payLoading} error={payError}>
+        <Section title="Payment Trend" icon="💰" loading={payLoading} error={payError} updatedAt={payUpdatedAt} onRefresh={() => refetchPayments()}>
           {payments?.byPeriod && payments.byPeriod.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={payments.byPeriod.map(r => ({ ...r, period: fmtPeriod(r.period) }))}>

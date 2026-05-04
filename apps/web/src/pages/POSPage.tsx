@@ -22,8 +22,8 @@ interface Transaction {
 interface TxListResponse { items: Transaction[]; total: number; page: number; totalPages: number; }
 interface POSPageProps { userRole?: Role; }
 
-const canCreate = (r?: Role) => ['Sales', 'Manager'].includes(r ?? '');
-const canVoid   = (r?: Role) => ['Manager', 'Admin'].includes(r ?? '');
+const canCreate = (r?: Role) => ['Sales', 'Manager', 'Admin', 'Super_Admin'].includes(r ?? '');
+const canVoid   = (r?: Role) => ['Manager', 'Admin', 'Super_Admin'].includes(r ?? '');
 
 type PaymentMethod = 'cash' | 'bank' | 'store_credit' | 'loyalty_points';
 const METHOD_LABELS: Record<PaymentMethod, string> = {

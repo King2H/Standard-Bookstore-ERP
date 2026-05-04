@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
@@ -455,8 +456,8 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {(historyData?.items ?? []).map(pay => (
-                    <>
-                      <tr key={pay.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === pay.id ? null : pay.id)}>
+                    <React.Fragment key={pay.id}>
+                      <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === pay.id ? null : pay.id)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{pay.paymentReference}</td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">#{pay.orderId}</td>
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(pay.amount).toFixed(2)}</td>
@@ -492,7 +493,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>

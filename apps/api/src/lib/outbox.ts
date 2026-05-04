@@ -82,15 +82,25 @@ export type OutboxEventType =
 /**
  * Insert an outbox event within an existing DB transaction.
  * The event will be picked up by the Outbox_Poller and routed to the appropriate worker.
+ * Silently no-ops if the outbox table doesn't exist yet (migration 28 pending).
  */
 export async function insertOutbox(
   client: PoolClient,
   eventType: OutboxEventType,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  await client.query(
-    `INSERT INTO outbox (event_type, payload, status, created_at)
-     VALUES ($1, $2::jsonb, 'pending', now())`,
-    [eventType, JSON.stringify(payload)],
-  );
+  try {
+    await client.query(
+      `INSERT INTO outbox (event_type, payload, status, created_at)
+       VALUES ($1, $2::jsonb, 'pending', now())`,
+      [eventType, JSON.stringify(payload)],
+    );
+  } catch (err) {
+    // Silently ignore if outbox table doesn't exist (migration 28 not yet run)
+    const msg = (err as { message?: string }).message ?? '';
+    if (msg.includes('outbox') || msg.includes('relation') || msg.includes('does not exist')) {
+      return; // non-fatal — outbox is best-effort
+    }
+    throw err;
+  }
 }

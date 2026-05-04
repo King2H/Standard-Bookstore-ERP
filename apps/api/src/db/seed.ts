@@ -204,6 +204,38 @@ export async function ensureSeedData(): Promise<void> {
       );
     }
 
+    // ── 8. Backfill store_credit_history for existing POS credit/partial sales ─
+    // Ensures historical credit transactions are visible in the customer's
+    // Store Credit tab. Idempotent — uses ON CONFLICT DO NOTHING on a unique
+    // combination of customer_id + ref_id + ref_type.
+    try {
+      await client.query(`
+        INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+        SELECT
+          t.customer_id,
+          'pos_credit_sale'       AS ref_type,
+          t.transaction_number    AS ref_id,
+          t.amount_due            AS amount,
+          'debit'                 AS direction
+        FROM transactions t
+        WHERE t.customer_id IS NOT NULL
+          AND t.payment_status IN ('credit', 'partial')
+          AND t.amount_due > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM store_credit_history sch
+            WHERE sch.customer_id = t.customer_id
+              AND sch.ref_id = t.transaction_number
+              AND sch.ref_type = 'pos_credit_sale'
+          )
+      `);
+    } catch (backfillErr) {
+      // Non-fatal — transactions table may not exist yet on fresh installs
+      const msg = (backfillErr as { message?: string }).message ?? '';
+      if (!msg.includes('transactions') && !msg.includes('store_credit_history')) {
+        throw backfillErr;
+      }
+    }
+
     await client.query('COMMIT');
     console.log(JSON.stringify({ level: 'info', msg: 'Seed data verified/applied' }));
   } catch (err) {

@@ -5,6 +5,59 @@ import { getEffectiveConfig } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import { Permission } from '../../lib/permissions.js';
 
+// ── Status value compatibility ────────────────────────────────────────────────
+// Migration 33 extends the orders.status CHECK constraint to include new lifecycle
+// values (DRAFT, CONFIRMED, PAID, etc.). On DBs where migration 33 hasn't run yet,
+// we fall back to the legacy values (Pending, Confirmed, etc.).
+// Checked once and cached for the process lifetime.
+let _usesNewStatusValues: boolean | null = null;
+async function usesNewStatusValues(): Promise<boolean> {
+  if (_usesNewStatusValues !== null) return _usesNewStatusValues;
+  try {
+    const r = await db.query(
+      `SELECT pg_get_constraintdef(c.oid) AS def
+       FROM pg_constraint c
+       JOIN pg_class t ON t.oid = c.conrelid
+       WHERE t.relname = 'orders' AND c.conname = 'orders_status_check'`,
+    );
+    const def: string = r.rows[0]?.def ?? '';
+    _usesNewStatusValues = def.includes("'DRAFT'");
+  } catch {
+    _usesNewStatusValues = false;
+  }
+  return _usesNewStatusValues;
+}
+
+// Map new lifecycle status → legacy status (for DBs without migration 33)
+const NEW_TO_LEGACY: Record<string, string> = {
+  DRAFT:     'Pending',
+  CONFIRMED: 'Confirmed',
+  PAID:      'Confirmed',   // no PAID in legacy — treat as Confirmed
+  FULFILLED: 'Fulfilled',
+  COMPLETED: 'Fulfilled',
+  CANCELLED: 'Cancelled',
+};
+
+// Map legacy status → new lifecycle status (for display/logic)
+const LEGACY_TO_NEW: Record<string, string> = {
+  Pending:     'DRAFT',
+  Confirmed:   'CONFIRMED',
+  In_Progress: 'CONFIRMED',
+  Fulfilled:   'FULFILLED',
+  Cancelled:   'CANCELLED',
+};
+
+/** Normalise any status value to the new lifecycle format for business logic. */
+function normaliseStatus(status: string): string {
+  return LEGACY_TO_NEW[status] ?? status;
+}
+
+/** Get the status value to write to the DB, respecting the constraint. */
+async function dbStatus(newStatus: string): Promise<string> {
+  if (await usesNewStatusValues()) return newStatus;
+  return NEW_TO_LEGACY[newStatus] ?? newStatus;
+}
+
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 export interface OrderLineInput { bookId: number; quantity: number; discountAmount?: number; }
 
@@ -131,6 +184,8 @@ export async function create(
   try { taxRate = Number(await getEffectiveConfig(staffCtx.branchId, 'tax_rate')); } catch {}
   const taxAmount = parseFloat((subtotal * taxRate).toFixed(2));
   const total = parseFloat((subtotal + taxAmount).toFixed(2));
+  // Resolve the initial status value against the actual DB constraint
+  const initialStatus = await dbStatus('DRAFT');
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -138,8 +193,8 @@ export async function create(
     const cntRes = await client.query('SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURRENT_DATE');
     const orderNumber = 'ORD-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count, 10) + 1).padStart(4, '0');
     const orderRes = await client.query(
-      "INSERT INTO orders (order_number, customer_id, branch_id, location_id, channel, status, payment_status, currency, subtotal, discount_amount, tax_rate, tax_amount, total, notes, created_by) VALUES ($1,$2,$3,$4,$5,'DRAFT','unpaid','ETB',$6,$7,$8,$9,$10,$11,$12) RETURNING id",
-      [orderNumber, data.customerId ?? null, staffCtx.branchId, data.locationId ?? null, data.channel ?? 'in_store', subtotal.toFixed(2), discountTotal.toFixed(2), taxRate.toFixed(4), taxAmount.toFixed(2), total.toFixed(2), data.notes ?? null, staffCtx.staffId],
+      `INSERT INTO orders (order_number, customer_id, branch_id, location_id, channel, status, payment_status, currency, subtotal, discount_amount, tax_rate, tax_amount, total, notes, created_by) VALUES ($1,$2,$3,$4,$5,$6,'unpaid','ETB',$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      [orderNumber, data.customerId ?? null, staffCtx.branchId, data.locationId ?? null, data.channel ?? 'in_store', initialStatus, subtotal.toFixed(2), discountTotal.toFixed(2), taxRate.toFixed(4), taxAmount.toFixed(2), total.toFixed(2), data.notes ?? null, staffCtx.staffId],
     );
     const orderId = String(orderRes.rows[0].id);
     for (const item of resolvedItems) {
@@ -174,34 +229,63 @@ async function resolveLocationId(client: pg.PoolClient, order: OrderRow, staffCt
 
 export async function confirm(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
   const order = await getById(orderId);
-  if (order.status !== 'DRAFT') throw new BusinessError('INVALID_STATE', "Cannot confirm order in status '" + order.status + "'");
+  if (normaliseStatus(order.status) !== 'DRAFT') throw new BusinessError('INVALID_STATE', "Cannot confirm order in status '" + order.status + "'");
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     const locationId = await resolveLocationId(client, order, staffCtx);
-    for (const item of order.lineItems ?? []) {
-      // Check available stock = inventory.quantity - SUM(active reservations)
-      const availRes = await client.query(
-        `SELECT i.quantity - COALESCE(SUM(r.quantity), 0) AS available
-         FROM inventory i
-         LEFT JOIN inventory_reservations r ON r.book_id = i.book_id AND r.location_id = $2 AND r.status = 'reserved'
-         WHERE i.book_id = $1 AND i.location_id = $2
-         GROUP BY i.quantity`,
-        [item.bookId, locationId],
+
+    // Check if inventory_reservations table exists (migration 33 may not have run)
+    let hasReservationsTable = false;
+    try {
+      const tblCheck = await client.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='inventory_reservations' LIMIT 1`,
       );
-      const available = availRes.rows.length ? parseFloat(availRes.rows[0].available) : 0;
+      hasReservationsTable = tblCheck.rows.length > 0;
+    } catch { /* non-fatal */ }
+
+    for (const item of order.lineItems ?? []) {
+      let available = 0;
+      if (hasReservationsTable) {
+        // Check available stock = inventory.quantity - SUM(active reservations)
+        const availRes = await client.query(
+          `SELECT i.quantity - COALESCE(SUM(r.quantity), 0) AS available
+           FROM inventory i
+           LEFT JOIN inventory_reservations r ON r.book_id = i.book_id AND r.location_id = $2 AND r.status = 'reserved'
+           WHERE i.book_id = $1 AND i.location_id = $2
+           GROUP BY i.quantity`,
+          [item.bookId, locationId],
+        );
+        available = availRes.rows.length ? parseFloat(availRes.rows[0].available) : 0;
+      } else {
+        // Fallback: use raw inventory quantity
+        const invRes = await client.query(
+          `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+          [item.bookId, locationId],
+        );
+        available = invRes.rows.length ? parseInt(invRes.rows[0].quantity as string, 10) : 0;
+      }
+
       if (available < item.quantity) {
         await client.query('UPDATE order_line_items SET is_backordered = true WHERE id = $1', [item.id]);
       } else {
         await client.query('UPDATE order_line_items SET qty_reserved = $1 WHERE id = $2', [item.quantity, item.id]);
-        // Insert inventory reservation for non-backordered items
-        await client.query(
-          "INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status) VALUES ($1, $2, $3, $4, 'reserved')",
-          [orderId, item.bookId, locationId, item.quantity],
-        );
+        // Insert inventory reservation for non-backordered items (only if table exists)
+        if (hasReservationsTable) {
+          try {
+            await client.query(
+              "INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status) VALUES ($1, $2, $3, $4, 'reserved')",
+              [orderId, item.bookId, locationId, item.quantity],
+            );
+          } catch (invResErr) {
+            const msg = (invResErr as { message?: string }).message ?? '';
+            if (!msg.includes('inventory_reservations')) throw invResErr;
+          }
+        }
       }
     }
-    await client.query("UPDATE orders SET status = 'CONFIRMED', updated_at = now() WHERE id = $1", [orderId]);
+    const confirmedStatus = await dbStatus('CONFIRMED');
+    await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [confirmedStatus, orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'confirm', fromStatus: 'DRAFT', toStatus: 'CONFIRMED' })]);
     // Check if any lines are backordered
     const confirmedOrder = await getById(orderId);
@@ -218,11 +302,12 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx): Pro
 
 export async function pay(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
   const order = await getById(orderId);
-  if (order.status !== 'CONFIRMED') throw new BusinessError('INVALID_STATE', "Cannot pay order in status '" + order.status + "'");
+  if (!['CONFIRMED', 'Confirmed', 'In_Progress'].includes(order.status)) throw new BusinessError('INVALID_STATE', "Cannot pay order in status '" + order.status + "'");
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    await client.query("UPDATE orders SET status = 'PAID', updated_at = now() WHERE id = $1", [orderId]);
+    const paidStatus = await dbStatus('PAID');
+    await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [paidStatus, orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'pay', fromStatus: 'CONFIRMED', toStatus: 'PAID' })]);
     await insertOutbox(client, 'order.paid', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId });
     await client.query('COMMIT');
@@ -246,7 +331,7 @@ export async function progress(orderId: string | number, staffCtx: StaffCtx): Pr
 
 export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
   const order = await getById(orderId);
-  if (!['PAID', 'CONFIRMED', 'In_Progress'].includes(order.status)) throw new BusinessError('INVALID_STATE', "Cannot fulfill order in status '" + order.status + "'");
+  if (!['PAID', 'CONFIRMED', 'Confirmed', 'In_Progress'].includes(order.status)) throw new BusinessError('INVALID_STATE', "Cannot fulfill order in status '" + order.status + "'");
   const client = await db.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -263,17 +348,24 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
       await client.query("INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id) VALUES ($1,$2,$3,$4,$5,'stock_out','stock_out','order',$6,'Order fulfillment',$7)", [item.bookId, locationId, qtyBefore, qtyAfter, -item.qtyReserved, orderId, staffCtx.staffId]);
       await client.query('UPDATE order_line_items SET qty_fulfilled = qty_fulfilled + $1, qty_reserved = 0 WHERE id = $2', [item.qtyReserved, item.id]);
     }
-    // Convert inventory reservations from 'reserved' to 'deducted'
-    await client.query(
-      "UPDATE inventory_reservations SET status = 'deducted', updated_at = now() WHERE order_id = $1 AND status = 'reserved'",
-      [orderId],
-    );
-    await client.query("UPDATE orders SET status = 'FULFILLED', updated_at = now() WHERE id = $1", [orderId]);
+    // Convert inventory reservations from 'reserved' to 'deducted' (if table exists)
+    try {
+      await client.query(
+        "UPDATE inventory_reservations SET status = 'deducted', updated_at = now() WHERE order_id = $1 AND status = 'reserved'",
+        [orderId],
+      );
+    } catch (invResErr) {
+      const msg = (invResErr as { message?: string }).message ?? '';
+      if (!msg.includes('inventory_reservations')) throw invResErr;
+    }
+    const fulfilledStatus = await dbStatus('FULFILLED');
+    await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [fulfilledStatus, orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'fulfill', fromStatus: order.status, toStatus: 'FULFILLED' })]);
     await insertOutbox(client, 'order.fulfilled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId });
     // Auto-transition to COMPLETED if payment status is 'paid'
     if (order.paymentStatus === 'paid') {
-      await client.query("UPDATE orders SET status = 'COMPLETED', updated_at = now() WHERE id = $1", [orderId]);
+      const completedStatus = await dbStatus('COMPLETED');
+      await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [completedStatus, orderId]);
       await insertOutbox(client, 'order.completed', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId });
     }
     await client.query('COMMIT');
@@ -293,14 +385,20 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
         await client.query('UPDATE order_line_items SET qty_reserved = 0 WHERE id = $1', [item.id]);
       }
     }
-    // Release inventory reservations when cancelling a CONFIRMED order
-    if (order.status === 'CONFIRMED') {
-      await client.query(
-        "UPDATE inventory_reservations SET status = 'released', updated_at = now() WHERE order_id = $1 AND status = 'reserved'",
-        [orderId],
-      );
+    // Release inventory reservations when cancelling a CONFIRMED/Confirmed order
+    if (['CONFIRMED', 'Confirmed', 'In_Progress'].includes(order.status)) {
+      try {
+        await client.query(
+          "UPDATE inventory_reservations SET status = 'released', updated_at = now() WHERE order_id = $1 AND status = 'reserved'",
+          [orderId],
+        );
+      } catch (invResErr) {
+        const msg = (invResErr as { message?: string }).message ?? '';
+        if (!msg.includes('inventory_reservations')) throw invResErr;
+      }
     }
-    await client.query("UPDATE orders SET status = 'CANCELLED', cancel_reason = $1, updated_at = now() WHERE id = $2", [reason, orderId]);
+    const cancelledStatus = await dbStatus('CANCELLED');
+    await client.query('UPDATE orders SET status = $1, cancel_reason = $2, updated_at = now() WHERE id = $3', [cancelledStatus, reason, orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'cancel', fromStatus: order.status, toStatus: 'CANCELLED', reason })]);
     await insertOutbox(client, 'order.cancelled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId, reason });
     await client.query('COMMIT');
@@ -320,18 +418,28 @@ export function computeOrderAllowedActions(status: string, permissions: Permissi
   const can = (p: Permission) => permissions.includes(p);
   switch (status) {
     case 'DRAFT':
-      return [...(can('CREATE_SALE') ? ['confirm', 'cancel'] : []), 'view'];
+      return [...(can('CREATE_SALE') ? ['confirm', 'cancel'] : [])];
     case 'CONFIRMED':
-      return [...(can('PROCESS_PAYMENT') ? ['take_payment'] : []), ...(can('CREATE_SALE') ? ['cancel'] : []), 'view'];
+      return [...(can('PROCESS_PAYMENT') ? ['pay'] : []), ...(can('CREATE_SALE') ? ['cancel'] : [])];
     case 'PAID':
-      return [...(can('PROCESS_PAYMENT') ? ['fulfill'] : []), 'view'];
+      return [...(can('PROCESS_PAYMENT') ? ['fulfill'] : [])];
     case 'FULFILLED':
-      return ['view'];
+      return [];
     case 'COMPLETED':
-      return ['view', 'print'];
+      return ['print'];
     case 'CANCELLED':
-      return ['view'];
+      return [];
+    // Legacy status values
+    case 'Pending':
+      return [...(can('CREATE_SALE') ? ['confirm', 'cancel'] : [])];
+    case 'Confirmed':
+    case 'In_Progress':
+      return [...(can('PROCESS_PAYMENT') ? ['pay'] : []), ...(can('CREATE_SALE') ? ['cancel'] : [])];
+    case 'Fulfilled':
+      return ['print'];
+    case 'Cancelled':
+      return [];
     default:
-      return ['view'];
+      return [];
   }
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
@@ -59,7 +60,7 @@ const canCreate = (r?: Role, perms?: string[]) =>
   ['Sales', 'Manager', 'Admin', 'Super_Admin'].includes(r ?? '');
 
 // ── Settlement entry type ─────────────────────────────────────────────────────
-interface SettlementEntry { entryType: 'payment' | 'refund' | 'adjustment'; amount: string; method: string; note: string; }
+interface SettlementEntry { entryType: 'cash_payment' | 'cash_refund' | 'item_value_adjustment'; amount: string; method: string; note: string; }
 
 type Tab = 'list' | 'new' | 'initiate';
 
@@ -76,7 +77,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   // Settle modal state
   const [settleModal, setSettleModal] = useState<{ id: string; ref: string; netBalance: number } | null>(null);
   const [settlementEntries, setSettlementEntries] = useState<SettlementEntry[]>([
-    { entryType: 'payment', amount: '', method: 'cash', note: '' },
+    { entryType: 'cash_payment', amount: '', method: 'cash', note: '' },
   ]);
 
   // New exchange (legacy single-step) state
@@ -192,12 +193,12 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   const settleMut = useMutation({
     mutationFn: ({ id, entries }: { id: string; entries: SettlementEntry[] }) =>
       api.post<Exchange>(`/exchanges/${id}/settle`, {
+        idempotencyKey: `settle-${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         entries: entries.map(e => ({
           entryType: e.entryType,
           amount: parseFloat(e.amount) || 0,
           method: e.method,
           note: e.note || undefined,
-          idempotencyKey: `settle-${id}-${e.entryType}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         })),
       }),
     onSuccess: () => {
@@ -205,7 +206,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
       qc.invalidateQueries({ queryKey: ['inventory'] });
       showToast('Exchange settled', 'success');
       setSettleModal(null);
-      setSettlementEntries([{ entryType: 'payment', amount: '', method: 'cash', note: '' }]);
+      setSettlementEntries([{ entryType: 'cash_payment', amount: '', method: 'cash', note: '' }]);
     },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
@@ -280,14 +281,14 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
 
   // Settlement entry helpers
   function addSettlementEntry() {
-    setSettlementEntries(prev => [...prev, { entryType: 'payment', amount: '', method: 'cash', note: '' }]);
+    setSettlementEntries(prev => [...prev, { entryType: 'cash_payment', amount: '', method: 'cash', note: '' }]);
   }
   function removeSettlementEntry(idx: number) {
     setSettlementEntries(prev => prev.filter((_, i) => i !== idx));
   }
   const settlementTotal = settlementEntries.reduce((s, e) => {
     const amt = parseFloat(e.amount) || 0;
-    return e.entryType === 'refund' ? s - amt : s + amt;
+    return e.entryType === 'cash_refund' ? s - amt : s + amt;
   }, 0);
 
   return (
@@ -315,8 +316,8 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {(listData?.items ?? []).map(exc => (
-                    <>
-                      <tr key={exc.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === exc.id ? null : exc.id)}>
+                    <React.Fragment key={exc.id}>
+                      <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === exc.id ? null : exc.id)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{exc.exchangeReference}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(exc.totalIncomingValue).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">ETB {Number(exc.totalOutgoingValue).toFixed(2)}</td>
@@ -340,7 +341,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                               }
                               if (action === 'settle') {
                                 return (
-                                  <button key="settle" onClick={e => { e.stopPropagation(); setSettleModal({ id: exc.id, ref: exc.exchangeReference, netBalance: Number(exc.netBalance) }); setSettlementEntries([{ entryType: Number(exc.netBalance) < 0 ? 'refund' : 'payment', amount: Math.abs(Number(exc.netBalance)).toFixed(2), method: 'cash', note: '' }]); }}
+                                  <button key="settle" onClick={e => { e.stopPropagation(); setSettleModal({ id: exc.id, ref: exc.exchangeReference, netBalance: Number(exc.netBalance) }); setSettlementEntries([{ entryType: Number(exc.netBalance) < 0 ? 'cash_refund' : 'cash_payment', amount: Math.abs(Number(exc.netBalance)).toFixed(2), method: 'cash', note: '' }]); }}
                                     className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.settle}`}>
                                     Settle
                                   </button>
@@ -378,7 +379,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -662,9 +663,9 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">Type</label>
                       <select value={entry.entryType} onChange={e => setSettlementEntries(prev => prev.map((en, i) => i === idx ? { ...en, entryType: e.target.value as SettlementEntry['entryType'] } : en))}
                         className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500">
-                        <option value="payment">Payment</option>
-                        <option value="refund">Refund</option>
-                        <option value="adjustment">Adjustment</option>
+                        <option value="cash_payment">Payment (Customer Pays)</option>
+                        <option value="cash_refund">Refund (Store Refunds)</option>
+                        <option value="item_value_adjustment">Value Adjustment</option>
                       </select>
                     </div>
                     <div>

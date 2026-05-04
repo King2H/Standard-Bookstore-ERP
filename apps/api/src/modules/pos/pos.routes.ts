@@ -18,7 +18,7 @@ const pi = (v: string | string[]): number => parseInt(Array.isArray(v) ? v[0] : 
 router.post(
   '/pos/transactions',
   authenticate,
-  requireRole('Sales', 'Manager'),
+  requireRole('Sales', 'Manager', 'Admin', 'Super_Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tx = await posService.createTransaction(

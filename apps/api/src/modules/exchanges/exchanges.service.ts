@@ -322,22 +322,30 @@ export function computeExchangeAllowedActions(
   switch (ls) {
     case 'INITIATED':
       return [
-        ...(can('APPROVE_EXCHANGE') ? ['review', 'cancel'] : []),
-        ...(can('CREATE_SALE') ? ['cancel'] : []),
-        'view',
+        ...(can('APPROVE_EXCHANGE') ? ['review'] : []),
+        ...(can('APPROVE_EXCHANGE') || can('CREATE_SALE') ? ['cancel'] : []),
       ];
     case 'REVIEWED':
-      return [...(can('APPROVE_EXCHANGE') ? ['approve', 'adjust', 'cancel'] : []), 'view'];
+      return [...(can('APPROVE_EXCHANGE') ? ['approve', 'cancel'] : [])];
     case 'APPROVED':
-      return [...(can('APPROVE_EXCHANGE') ? ['settle', 'cancel'] : []), 'view'];
+      return [...(can('APPROVE_EXCHANGE') ? ['settle', 'cancel'] : [])];
     case 'SETTLED':
-      return ['view'];
+      return [];
     case 'COMPLETED':
-      return ['view', 'print'];
+      return ['print'];
     case 'CANCELLED':
-      return ['view'];
+      return [];
+    // Legacy status values
+    case 'Initiated':
+      return [...(can('APPROVE_EXCHANGE') || can('CREATE_SALE') ? ['cancel'] : [])];
+    case 'Evaluated':
+      return [...(can('APPROVE_EXCHANGE') ? ['cancel'] : [])];
+    case 'Completed':
+      return ['print'];
+    case 'Cancelled':
+      return [];
     default:
-      return ['view'];
+      return [];
   }
 }
 
@@ -794,6 +802,41 @@ export async function settleExchange(
         JSON.stringify({ action: 'settle', lifecycleStatus: 'COMPLETED', idempotencyKey }),
       ],
     );
+
+    // ── Customer store credit integration ────────────────────────────────────
+    // When the store owes the customer (Store_Refunds), credit their store credit account.
+    // When the customer owes the store (Customer_Pays), record the debt in store credit history.
+    if (exchange.customerId) {
+      const absBalance = Math.abs(exchange.netBalance);
+      if (absBalance > 0.01) {
+        // Ensure store_credit_accounts row exists
+        await client.query(
+          `INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0)
+           ON CONFLICT (customer_id) DO NOTHING`,
+          [exchange.customerId],
+        );
+
+        if (exchange.settlementType === 'Store_Refunds') {
+          // Store owes customer — add to their store credit balance
+          await client.query(
+            `UPDATE store_credit_accounts SET balance = balance + $1 WHERE customer_id = $2`,
+            [absBalance.toFixed(2), exchange.customerId],
+          );
+          await client.query(
+            `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+             VALUES ($1, 'exchange_refund', $2, $3, 'credit')`,
+            [exchange.customerId, exchange.exchangeReference, absBalance.toFixed(2)],
+          );
+        } else if (exchange.settlementType === 'Customer_Pays') {
+          // Customer owes store — record as debt in store credit history (informational)
+          await client.query(
+            `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+             VALUES ($1, 'exchange_payment', $2, $3, 'debit')`,
+            [exchange.customerId, exchange.exchangeReference, absBalance.toFixed(2)],
+          );
+        }
+      }
+    }
 
     // Outbox events
     await insertOutbox(client, 'exchange.settled', {

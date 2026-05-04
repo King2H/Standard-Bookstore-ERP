@@ -103,15 +103,16 @@ function buildDateConditions(
   }
   if (filters.dateFrom) {
     params.push(filters.dateFrom);
-    conditions.push(`${prefix}${colName} >= $${params.length}`);
+    // Cast to date so the comparison works regardless of timezone/time component
+    conditions.push(`${prefix}${colName}::date >= $${params.length}::date`);
   }
   if (filters.dateTo) {
     params.push(filters.dateTo);
-    conditions.push(`${prefix}${colName} <= $${params.length}`);
+    // Inclusive end: use ::date so the full dateTo day is included
+    conditions.push(`${prefix}${colName}::date <= $${params.length}::date`);
   }
   return { conditions, params };
 }
-
 // ── Sales Report ──────────────────────────────────────────────────────────────
 
 export async function getSalesReport(filters: ReportFilters): Promise<SalesReport> {
@@ -119,7 +120,10 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
   const truncExpr = `date_trunc('${groupBy}', o.created_at)`;
 
   const { conditions: oConds, params: oParams } = buildDateConditions(filters, 'o');
-  const oWhere = oConds.length ? 'WHERE ' + oConds.join(' AND ') + " AND o.status != 'Cancelled'" : "WHERE o.status != 'Cancelled'";
+  const cancelledStatuses = `('Cancelled','CANCELLED')`;
+  const oWhere = oConds.length
+    ? 'WHERE ' + oConds.join(' AND ') + ` AND o.status NOT IN ${cancelledStatuses}`
+    : `WHERE o.status NOT IN ${cancelledStatuses}`;
 
   // Orders summary
   const summaryRes = await db.query(
@@ -610,51 +614,93 @@ export async function getCustomerReport(filters: ReportFilters): Promise<Custome
 // ── KPI Report ────────────────────────────────────────────────────────────────
 
 export async function getKpis(branchId?: number): Promise<KpiReport> {
-  const branchCond = branchId ? `AND branch_id = ${branchId}` : '';
+  // Build parameterized branch condition — never interpolate user input into SQL
+  const branchParams: unknown[] = [];
+  const branchCond = branchId
+    ? (() => { branchParams.push(branchId); return `AND branch_id = $${branchParams.length}`; })()
+    : '';
 
-  const [dailyRes, monthlyRes, aovRes, custRes, lowStockRes, pendingRes, excRes] = await Promise.all([
-    // Daily revenue (orders, today)
+  // Order status values: support both legacy ('Pending','Confirmed','In_Progress')
+  // and new lifecycle values ('DRAFT','CONFIRMED','PAID') introduced in migration 33.
+  const ACTIVE_ORDER_STATUSES = `('Pending','Confirmed','In_Progress','DRAFT','CONFIRMED','PAID')`;
+  const CANCELLED_STATUSES    = `('Cancelled','CANCELLED')`;
+
+  const [dailyRes, monthlyRes, aovRes, custRes, lowStockRes, pendingRes, excRes, posRes] = await Promise.all([
+    // Daily revenue — orders (non-cancelled) created today
     db.query(
       `SELECT COALESCE(SUM(total), 0)::NUMERIC AS val
        FROM orders
-       WHERE DATE(created_at) = CURRENT_DATE AND status != 'Cancelled' ${branchCond}`,
+       WHERE DATE(created_at) = CURRENT_DATE
+         AND status NOT IN ${CANCELLED_STATUSES}
+         ${branchCond}`,
+      branchParams,
     ),
-    // Monthly revenue (orders, this month)
+    // Monthly revenue — orders this calendar month
     db.query(
       `SELECT COALESCE(SUM(total), 0)::NUMERIC AS val
        FROM orders
-       WHERE date_trunc('month', created_at) = date_trunc('month', now()) AND status != 'Cancelled' ${branchCond}`,
+       WHERE date_trunc('month', created_at) = date_trunc('month', now())
+         AND status NOT IN ${CANCELLED_STATUSES}
+         ${branchCond}`,
+      branchParams,
     ),
-    // Average order value (all time)
+    // Average order value — all completed/paid orders
     db.query(
       `SELECT COALESCE(AVG(total), 0)::NUMERIC AS val
-       FROM orders WHERE status != 'Cancelled' ${branchCond}`,
+       FROM orders
+       WHERE status NOT IN ${CANCELLED_STATUSES}
+         ${branchCond}`,
+      branchParams,
     ),
     // Active customers
     db.query(
-      `SELECT COUNT(*)::INTEGER AS val FROM customers WHERE is_active = true ${branchId ? `AND branch_id = ${branchId}` : ''}`,
+      `SELECT COUNT(*)::INTEGER AS val
+       FROM customers
+       WHERE is_active = true
+         ${branchId ? `AND branch_id = $1` : ''}`,
+      branchId ? [branchId] : [],
     ),
-    // Low stock alerts
+    // Low stock alerts — items at or below reorder point
     db.query(
       `SELECT COUNT(*)::INTEGER AS val
        FROM inventory i
        JOIN locations l ON l.id = i.location_id
-       WHERE i.quantity <= i.reorder_point ${branchId ? `AND l.branch_id = ${branchId}` : ''}`,
+       WHERE i.quantity <= i.reorder_point
+         ${branchId ? `AND l.branch_id = $1` : ''}`,
+      branchId ? [branchId] : [],
     ),
-    // Pending orders
+    // Pending / in-progress orders (need action)
     db.query(
       `SELECT COUNT(*)::INTEGER AS val
-       FROM orders WHERE status IN ('Pending','Confirmed','In_Progress') ${branchCond}`,
+       FROM orders
+       WHERE status IN ${ACTIVE_ORDER_STATUSES}
+         ${branchCond}`,
+      branchParams,
     ),
     // Exchanges today
     db.query(
       `SELECT COUNT(*)::INTEGER AS val
-       FROM exchanges WHERE DATE(created_at) = CURRENT_DATE ${branchCond}`,
+       FROM exchanges
+       WHERE DATE(created_at) = CURRENT_DATE
+         ${branchCond}`,
+      branchParams,
+    ),
+    // POS revenue today (completed transactions)
+    db.query(
+      `SELECT COALESCE(SUM(grand_total), 0)::NUMERIC AS val
+       FROM transactions
+       WHERE DATE(created_at) = CURRENT_DATE
+         AND status = 'completed'
+         ${branchId ? `AND branch_id = $1` : ''}`,
+      branchId ? [branchId] : [],
     ),
   ]);
 
+  const orderDailyRevenue = parseFloat(dailyRes.rows[0].val);
+  const posDailyRevenue   = parseFloat(posRes.rows[0].val);
+
   return {
-    dailyRevenue:         parseFloat(dailyRes.rows[0].val),
+    dailyRevenue:         orderDailyRevenue + posDailyRevenue,
     monthlyRevenue:       parseFloat(monthlyRes.rows[0].val),
     averageOrderValue:    parseFloat(aovRes.rows[0].val),
     totalActiveCustomers: custRes.rows[0].val,
