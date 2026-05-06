@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). ERP Production Hardening Complete. Multi-Role/Multi-Branch Auth Refactor Applied (May 2026).**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). ERP Production Hardening Complete. Multi-Role/Multi-Branch Auth Refactor Applied (May 2026). MVP Pre-Demo Fixes Applied (May 2026): Currency Consistency, SQL Parameterization, Dashboard Icon Fix, Inventory 500 Fix.**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -350,6 +350,10 @@ All 9 service modules wired with `insertOutbox()` calls:
   - `⚠ Only N left` (amber) — low stock (≤3)
   - `⚠ Out of stock` (red) — button disabled, cannot be added
 
+**Currency Utilities ✅**
+- `apps/web/src/lib/currency.ts` — `formatCurrency`, `formatCurrencyShort`, `getCachedCurrency`, `setCachedCurrency` helpers; falls back to `ETB` if config unavailable
+- `apps/web/src/lib/useCurrency.ts` — React hook; fetches `/config/currency`, caches for 5 minutes, returns currency string; used by all pages displaying monetary values
+
 **Notification System Fixes ✅**
 - `components/NotificationBell.tsx` — complete rewrite to fix silent failures:
   - `fetchList()` called directly on mount (no longer waits for SSE `connected` event)
@@ -428,6 +432,48 @@ Additional fixes applied in a follow-up session:
 
 ---
 
+## What's New — May 2026 (Pre-Demo Fixes)
+
+### Currency Consistency — Dynamic Currency from Settings
+
+- **`GET /api/config/currency`** — new endpoint returns the effective currency for the authenticated user's branch (branch override → system default → `ETB` fallback). Any authenticated staff can call this.
+- **`useCurrency()` hook** (`apps/web/src/lib/useCurrency.ts`) — React hook that fetches `/config/currency` and caches the result for 5 minutes. Used by all pages that display monetary values.
+- **`currency.ts` utilities** — `formatCurrency`, `formatCurrencyShort`, `getCachedCurrency`, `setCachedCurrency` helpers.
+- All hardcoded `ETB` and `$` currency symbols replaced with the dynamic `{currency}` value across: POSPage, OrdersPage, PaymentsPage, CustomersPage, ExchangesPage, InstallmentsPage, ReturnsPage, ProcurementPage, DashboardPage.
+- ProcurementPage retains the PO's own `currency` field (purchase orders can be in any currency).
+
+### SQL Parameterization Security Fix
+
+A systematic bug was found and fixed across multiple service files: SQL conditions were using bare JavaScript template literal interpolation (`${p++}`) instead of PostgreSQL parameterized placeholders (`$${p++}`). This caused 500 errors on filtered queries and was a SQL injection risk.
+
+**Fixed files:**
+- `customer.service.ts` — `searchCustomers` conditions + `updateCustomer` SET clauses
+- `catalog.service.ts` — `searchBooks` all conditions (q, isbn, sku, author, genre, category, tag, isActive) + `listAuthors`/`listCategories`/`listPublishers` LIMIT/OFFSET + `updateCategory` SET clauses
+- `inventory.service.ts` — `listInventory` conditions (locationId, bookId, q) + `getInventoryHistory` conditions (bookId, locationId, movementType, reasonCode, dateFrom, dateTo) + LIMIT/OFFSET for both functions
+
+### Dashboard Icon Fix
+
+All emoji icons in `DashboardPage.tsx` were stored as garbled UTF-8 mojibake sequences (e.g. `ðŸ›'` instead of 🛒) due to a file encoding issue. All icons replaced with clean, encoding-safe inline SVG elements:
+- KPI cards: revenue (currency), trend-up, receipt, person, warning, clipboard, exchange arrows
+- Quick action buttons: shopping cart, clipboard, person, credit card
+- Section headers: trend-up, credit card, store, exchange, box, person, bar chart, currency
+- Access denied: lock icon
+- All garbled `Â·` middle-dot separators fixed to proper `·`
+
+### Order "Take Payment" Bug Fix
+
+`computeOrderAllowedActions` in `orders.service.ts` now accepts an optional `paymentStatus` parameter. When `paymentStatus === 'paid'`, the `'pay'` action is excluded from `allowedActions`, preventing the "Take Payment" button from reappearing after payment is collected.
+
+### Inventory 500 Error Fix
+
+`GET /api/inventory` was returning 500 due to two bugs in `inventory.service.ts`:
+1. SQL conditions used bare `${p++}` instead of `$${p++}` (missing `$` prefix)
+2. `LIMIT ${limitParam} OFFSET ${offsetParam}` produced literal numbers in SQL but also passed `pageSize`/`offset` as extra parameters, causing PostgreSQL to reject the query with "too many parameters"
+
+Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`$${offsetParam}` as proper `$N` placeholders.
+
+---
+
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18 + TypeScript + Vite |
@@ -470,7 +516,7 @@ cd apps/api && npm test
 ```
 
 Tests use prefix-based cleanup — seed data is never touched.
-Current: 21 test files, 265 tests, 259 passing (6 pre-existing catalog failures unrelated to Phase 5).
+Current: 21 test files, 265 tests, 259 passing (6 pre-existing catalog failures unrelated to recent changes).
 
 ## Restoring Seed Data
 
@@ -522,6 +568,7 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 ### Configuration
 - GET /api/config/system (Super_Admin, Admin, Manager)
 - PUT /api/config/system/:key (Super_Admin only)
+- GET /api/config/currency — effective currency for authenticated user's branch (all authenticated)
 - GET/PUT /api/config/branches/:branchId/:key (Admin, Manager)
 - DELETE /api/config/branches/:branchId/:key (Admin)
 
@@ -639,7 +686,7 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 
 ---
 
-## Migrations (25 total)
+## Migrations (34 total)
 
 | Migration | Purpose |
 |-----------|---------|
@@ -673,6 +720,10 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 | 1700000028_hardening | Idempotency keys, outbox, customer PII columns, installment plans, merchants, bank_account_id on payments |
 | 1700000029_staff_multi_role | Drop composite PK on staff_branch_roles; add serial PK + UNIQUE(staff_id, branch_id, role) for multi-role support |
 | 1700000030_create_notifications | Notifications table with branch_id, target_roles, severity, is_read; 3 indexes |
+| 1700000031_seed_initial_data | Initial seed data (superadmin, admin, branches, config defaults) |
+| 1700000032_refresh_token_context | Refresh token branch context for multi-branch session management |
+| 1700000033_erp_hardening | Financial transactions, inventory reservations, order/exchange lifecycle state machines, permission-based RBAC |
+| 1700000034_staff_all_branches_flag | `is_all_branches` flag on staff for cross-branch access without per-branch role assignments |
 
 ---
 
