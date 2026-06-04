@@ -41,11 +41,14 @@ const REASON_LABELS: Record<string, string> = {
   stock_in: 'Stock In', stock_out: 'Stock Out',
 };
 
-const canWrite = (role: Role | undefined) =>
+const canWrite = (role: Role | undefined, perms?: string[]) =>
+  (perms && perms.includes('MANAGE_INVENTORY')) ||
   role === 'Admin' || role === 'Manager' || role === 'Stock_Clerk';
-const canManage = (role: Role | undefined) =>
+const canManage = (role: Role | undefined, perms?: string[]) =>
+  (perms && (perms.includes('MANAGE_STAFF') || perms.includes('MANAGE_BRANCH'))) ||
   role === 'Admin' || role === 'Manager';
-const canStockOut = (role: Role | undefined) =>
+const canStockOut = (role: Role | undefined, perms?: string[]) =>
+  (perms && (perms.includes('MANAGE_INVENTORY') || perms.includes('CREATE_SALE'))) ||
   role === 'Admin' || role === 'Manager' || role === 'Stock_Clerk' || role === 'Sales';
 
 function fmtDate(iso: string) {
@@ -55,7 +58,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function InventoryPage({ userRole }: { userRole?: Role }) {
+export default function InventoryPage({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const [tab, setTab] = useState<Tab>('stock');
   const tabs = [
     { id: 'stock' as Tab, label: 'Stock Levels', icon: '📦' },
@@ -79,13 +82,13 @@ export default function InventoryPage({ userRole }: { userRole?: Role }) {
         ))}
       </div>
       <div className="flex-1 min-h-0">
-        {tab === 'stock'    && <StockLevelsTab userRole={userRole} onNavigate={setTab} />}
-        {tab === 'stock-in' && <StockInTab userRole={userRole} />}
-        {tab === 'stock-out' && <StockOutTab userRole={userRole} />}
-        {tab === 'adjust'   && <AdjustTab userRole={userRole} />}
-        {tab === 'transfer' && <TransferTab userRole={userRole} />}
+        {tab === 'stock'    && <StockLevelsTab userRole={userRole} userPermissions={userPermissions} onNavigate={setTab} />}
+        {tab === 'stock-in' && <StockInTab userRole={userRole} userPermissions={userPermissions} />}
+        {tab === 'stock-out' && <StockOutTab userRole={userRole} userPermissions={userPermissions} />}
+        {tab === 'adjust'   && <AdjustTab userRole={userRole} userPermissions={userPermissions} />}
+        {tab === 'transfer' && <TransferTab userRole={userRole} userPermissions={userPermissions} />}
         {tab === 'history'  && <HistoryTab />}
-        {tab === 'alerts'   && <AlertsTab userRole={userRole} />}
+        {tab === 'alerts'   && <AlertsTab userRole={userRole} userPermissions={userPermissions} />}
       </div>
     </div>
   );
@@ -108,7 +111,7 @@ function AlertBadge() {
 }
 
 // ── Stock Levels Tab ──────────────────────────────────────────────────────────
-function StockLevelsTab({ userRole, onNavigate }: { userRole?: Role; onNavigate?: (tab: Tab) => void }) {
+function StockLevelsTab({ userRole, userPermissions, onNavigate }: { userRole?: Role; userPermissions?: string[]; onNavigate?: (tab: Tab) => void }) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [q, setQ] = useState('');
@@ -163,11 +166,11 @@ function StockLevelsTab({ userRole, onNavigate }: { userRole?: Role; onNavigate?
               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Reorder At</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Updated</th>
-              {canManage(userRole) && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>}
+              {canManage(userRole, userPermissions) && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
-            {isLoading ? [...Array(6)].map((_, i) => <SkeletonRow key={i} cols={canManage(userRole) ? 7 : 6} />) :
+            {isLoading ? [...Array(6)].map((_, i) => <SkeletonRow key={i} cols={canManage(userRole, userPermissions) ? 7 : 6} />) :
              !data?.items.length ? (
               <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400 text-sm">No inventory records found</td></tr>
             ) : data.items.map(row => (
@@ -191,7 +194,7 @@ function StockLevelsTab({ userRole, onNavigate }: { userRole?: Role; onNavigate?
                   )}
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-400">{fmtDateShort(row.updatedAt)}</td>
-                {canManage(userRole) && (
+                {canManage(userRole, userPermissions) && (
                   <td className="px-4 py-3 text-right">
                     {editRow?.bookId === row.bookId && editRow?.locationId === row.locationId ? (
                       <div className="flex items-center gap-1 justify-end">
@@ -235,7 +238,7 @@ function StockLevelsTab({ userRole, onNavigate }: { userRole?: Role; onNavigate?
 }
 
 // ── Adjust Tab ────────────────────────────────────────────────────────────────
-function AdjustTab({ userRole }: { userRole?: Role }) {
+function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedBook, setSelectedBook] = useState<InventoryRow | null>(null);
@@ -252,7 +255,7 @@ function AdjustTab({ userRole }: { userRole?: Role }) {
     enabled: bookSearch.length > 1,
   });
 
-  if (!canWrite(userRole)) {
+  if (!canWrite(userRole, userPermissions)) {
     return <AccessDenied />;
   }
 
@@ -382,7 +385,7 @@ function AdjustTab({ userRole }: { userRole?: Role }) {
 }
 
 // ── Transfer Tab ──────────────────────────────────────────────────────────────
-function TransferTab({ userRole }: { userRole?: Role }) {
+function TransferTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedBook, setSelectedBook] = useState<InventoryRow | null>(null);
@@ -414,7 +417,7 @@ function TransferTab({ userRole }: { userRole?: Role }) {
     l => l.id !== selectedBook?.locationId
   );
 
-  if (!canWrite(userRole)) return <AccessDenied />;
+  if (!canWrite(userRole, userPermissions)) return <AccessDenied />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -632,7 +635,7 @@ function HistoryTab() {
 }
 
 // ── Low Stock Alerts Tab ──────────────────────────────────────────────────────
-function AlertsTab({ userRole: _userRole }: { userRole?: Role }) {
+function AlertsTab({ userRole: _userRole, userPermissions: _userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const { data, isLoading, refetch } = useQuery<{ items: InventoryRow[]; total: number }>({
     queryKey: ['inventory-low-stock'],
     queryFn: () => api.get('/inventory/low-stock'),
@@ -774,7 +777,7 @@ function QuickStockButton({ row: _row, type, onNavigate }: {
 }
 
 // ── Stock In Tab ──────────────────────────────────────────────────────────────
-function StockInTab({ userRole }: { userRole?: Role }) {
+function StockInTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedRow, setSelectedRow] = useState<InventoryRow | null>(null);
@@ -799,7 +802,7 @@ function StockInTab({ userRole }: { userRole?: Role }) {
     enabled: referenceType === 'purchase_order',
   });
 
-  if (!canWrite(userRole)) return <AccessDenied />;
+  if (!canWrite(userRole, userPermissions)) return <AccessDenied />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -939,7 +942,7 @@ function StockInTab({ userRole }: { userRole?: Role }) {
 }
 
 // ── Stock Out Tab ─────────────────────────────────────────────────────────────
-function StockOutTab({ userRole }: { userRole?: Role }) {
+function StockOutTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const [bookSearch, setBookSearch] = useState('');
   const [selectedRow, setSelectedRow] = useState<InventoryRow | null>(null);
@@ -957,7 +960,7 @@ function StockOutTab({ userRole }: { userRole?: Role }) {
     enabled: bookSearch.length > 1,
   });
 
-  if (!canStockOut(userRole)) return <AccessDenied />;
+  if (!canStockOut(userRole, userPermissions)) return <AccessDenied />;
 
   const qty = parseInt(quantity, 10);
   const wouldGoNegative = selectedRow && !isNaN(qty) && qty > 0 && selectedRow.quantity - qty < 0;

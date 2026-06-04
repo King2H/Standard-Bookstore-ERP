@@ -24,6 +24,15 @@ const CONFIG_META: Record<string, { label: string; tab: string; type: 'string' |
   max_line_discount_pct:            { label: 'Max Line Discount % (per role)',tab: 'Discounts',    type: 'json',    description: 'JSON object: {"Sales":10,"Manager":25,"Admin":50}' },
   max_transaction_discount_pct:     { label: 'Max Transaction Discount %',   tab: 'Discounts',    type: 'number',  description: 'Maximum total transaction discount allowed' },
   discount_approval_threshold_pct:  { label: 'Discount Approval Threshold %',tab: 'Discounts',    type: 'number',  description: 'Discount % requiring manager approval' },
+  default_discount_type:            { label: 'Default Discount Type',        tab: 'Discounts',    type: 'string',  description: 'Default discount type (Normal, Merchant, Special)' },
+  default_discount_mode:            { label: 'Default Discount Mode',        tab: 'Discounts',    type: 'string',  description: 'Default discount mode (Percentage, Amount)' },
+  default_discount_value:           { label: 'Default Discount Value',       tab: 'Discounts',    type: 'number',  description: 'Default discount value (% or currency amount)' },
+  default_discount_mode_normal:     { label: 'Normal Preset Mode',           tab: 'Discounts',    type: 'string',  description: 'Default mode for Normal discounts' },
+  default_discount_value_normal:    { label: 'Normal Preset Value',          tab: 'Discounts',    type: 'number',  description: 'Default value for Normal discounts' },
+  default_discount_mode_merchant:   { label: 'Merchant Preset Mode',         tab: 'Discounts',    type: 'string',  description: 'Default mode for Merchant discounts' },
+  default_discount_value_merchant:  { label: 'Merchant Preset Value',        tab: 'Discounts',    type: 'number',  description: 'Default value for Merchant discounts' },
+  default_discount_mode_special:    { label: 'Special Preset Mode',          tab: 'Discounts',    type: 'string',  description: 'Default mode for Special discounts' },
+  default_discount_value_special:   { label: 'Special Preset Value',         tab: 'Discounts',    type: 'number',  description: 'Default value for Special discounts' },
   reorder_point_default:            { label: 'Reorder Point Default',        tab: 'Inventory',    type: 'number',  description: 'Default reorder threshold (units)' },
   allow_negative_stock:             { label: 'Allow Negative Stock',         tab: 'Inventory',    type: 'boolean', description: 'Allow stock to go below zero' },
   po_approval_threshold:            { label: 'PO Approval Threshold',        tab: 'Procurement',  type: 'number',  description: 'PO value (currency) requiring approval' },
@@ -104,7 +113,26 @@ function ConfigRowItem({
       <div className="flex items-center gap-2 flex-shrink-0">
         {editing ? (
           <>
-            {meta?.type === 'boolean' ? (
+            {row.key === 'default_discount_type' ? (
+              <select
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32"
+              >
+                <option value="Normal">Normal</option>
+                <option value="Merchant">Merchant</option>
+                <option value="Special">Special</option>
+              </select>
+            ) : row.key === 'default_discount_mode' || row.key.startsWith('default_discount_mode_') ? (
+              <select
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32"
+              >
+                <option value="Percentage">Percentage</option>
+                <option value="Amount">Amount</option>
+              </select>
+            ) : meta?.type === 'boolean' ? (
               <select
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
@@ -196,7 +224,20 @@ function BranchConfigRowItem({
       <div className="flex items-center gap-2 flex-shrink-0">
         {editing ? (
           <>
-            {meta?.type === 'boolean' ? (
+            {row.key === 'default_discount_type' ? (
+              <select value={draft} onChange={e => setDraft(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32">
+                <option value="Normal">Normal</option>
+                <option value="Merchant">Merchant</option>
+                <option value="Special">Special</option>
+              </select>
+            ) : row.key === 'default_discount_mode' || row.key.startsWith('default_discount_mode_') ? (
+              <select value={draft} onChange={e => setDraft(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32">
+                <option value="Percentage">Percentage</option>
+                <option value="Amount">Amount</option>
+              </select>
+            ) : meta?.type === 'boolean' ? (
               <select value={draft} onChange={e => setDraft(e.target.value)}
                 className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-24">
                 <option value="true">true</option>

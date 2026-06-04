@@ -28,14 +28,14 @@ interface Supplier { id: number; name: string; isActive: boolean; isBlacklisted:
 interface Book { id: number; title: string; isbn: string; isActive: boolean; }
 interface Location { id: number; name: string; branchId: number; isDefaultFulfillment: boolean; }
 
-interface ProcurementPageProps { userRole?: Role; }
+interface ProcurementPageProps { userRole?: Role; userPermissions?: string[]; }
 
 // ── RBAC helpers ──────────────────────────────────────────────────────────────
 
-const canWrite = (r?: Role) => ['Admin', 'Manager', 'Purchasor'].includes(r ?? '');
-const canApprove = (r?: Role) => ['Admin', 'Manager'].includes(r ?? '');
-const canReceive = (r?: Role) => ['Admin', 'Manager', 'Stock_Clerk'].includes(r ?? '');
-const canClose = (r?: Role) => ['Admin', 'Manager'].includes(r ?? '');
+const canWrite = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_INVENTORY')) || ['Admin', 'Manager', 'Purchasor'].includes(r ?? '');
+const canApprove = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
+const canReceive = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_INVENTORY')) || ['Admin', 'Manager', 'Stock_Clerk'].includes(r ?? '');
+const canClose = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -373,8 +373,8 @@ function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated:
 
 // ── View 2: PO Detail ─────────────────────────────────────────────────────────
 
-function PODetail({ poId, userRole, onBack, onEdit, onReceive }: {
-  poId: string; userRole?: Role; onBack: () => void;
+function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }: {
+  poId: string; userRole?: Role; userPermissions?: string[]; onBack: () => void;
   onEdit: (po: PO) => void; onReceive: (po: PO) => void;
 }) {
   const { showToast } = useToast();
@@ -429,28 +429,28 @@ function PODetail({ poId, userRole, onBack, onEdit, onReceive }: {
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2">
-        {status === 'draft' && canWrite(userRole) && <>
+        {status === 'draft' && canWrite(userRole, userPermissions) && <>
           <button onClick={() => onEdit(po)} className="px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Edit</button>
           <button onClick={() => submitMut.mutate()} disabled={submitMut.isPending} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">Submit for Approval</button>
           <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>
         </>}
         {status === 'pending_approval' && <>
-          {canApprove(userRole) && <button onClick={() => approveMut.mutate()} disabled={approveMut.isPending} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">Approve</button>}
-          {canWrite(userRole) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
+          {canApprove(userRole, userPermissions) && <button onClick={() => approveMut.mutate()} disabled={approveMut.isPending} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">Approve</button>}
+          {canWrite(userRole, userPermissions) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
         </>}
         {status === 'approved' && <>
-          {canWrite(userRole) && <button onClick={() => orderMut.mutate()} disabled={orderMut.isPending} className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">Mark as Ordered</button>}
-          {canReceive(userRole) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive Goods</button>}
-          {canWrite(userRole) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
+          {canWrite(userRole, userPermissions) && <button onClick={() => orderMut.mutate()} disabled={orderMut.isPending} className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">Mark as Ordered</button>}
+          {canReceive(userRole, userPermissions) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive Goods</button>}
+          {canWrite(userRole, userPermissions) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
         </>}
         {status === 'ordered' && <>
-          {canReceive(userRole) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive Goods</button>}
-          {canWrite(userRole) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
+          {canReceive(userRole, userPermissions) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive Goods</button>}
+          {canWrite(userRole, userPermissions) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
         </>}
-        {status === 'partially_received' && canReceive(userRole) && (
+        {status === 'partially_received' && canReceive(userRole, userPermissions) && (
           <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive More Goods</button>
         )}
-        {status === 'received' && canClose(userRole) && (
+        {status === 'received' && canClose(userRole, userPermissions) && (
           <button onClick={() => closeMut.mutate()} disabled={closeMut.isPending} className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">Close PO</button>
         )}
       </div>
@@ -517,7 +517,7 @@ function PODetail({ poId, userRole, onBack, onEdit, onReceive }: {
 
 type View = 'list' | 'detail' | 'receive' | 'form';
 
-export default function ProcurementPage({ userRole }: ProcurementPageProps) {
+export default function ProcurementPage({ userRole, userPermissions }: ProcurementPageProps) {
   const qc = useQueryClient();
   const [view, setView] = useState<View>('list');
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
@@ -553,6 +553,7 @@ export default function ProcurementPage({ userRole }: ProcurementPageProps) {
       <PODetail
         poId={selectedPO.id}
         userRole={userRole}
+        userPermissions={userPermissions}
         onBack={backToList}
         onEdit={openEdit}
         onReceive={openReceive}
@@ -593,7 +594,7 @@ export default function ProcurementPage({ userRole }: ProcurementPageProps) {
         </select>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} orders</span>
-          {canWrite(userRole) && (
+          {canWrite(userRole, userPermissions) && (
             <button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
               + New PO
             </button>
@@ -626,10 +627,10 @@ export default function ProcurementPage({ userRole }: ProcurementPageProps) {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 text-xs">
                       <button onClick={() => openDetail(po)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">View</button>
-                      {po.status === 'draft' && canWrite(userRole) && (
+                      {po.status === 'draft' && canWrite(userRole, userPermissions) && (
                         <button onClick={() => openEdit(po)} className="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Edit</button>
                       )}
-                      {['approved', 'ordered', 'partially_received'].includes(po.status) && canReceive(userRole) && (
+                      {['approved', 'ordered', 'partially_received'].includes(po.status) && canReceive(userRole, userPermissions) && (
                         <button onClick={() => openReceive(po)} className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">Receive</button>
                       )}
                     </div>

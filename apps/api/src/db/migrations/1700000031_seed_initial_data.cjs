@@ -36,16 +36,16 @@ exports.up = function (pgm) {
 
   // ── Staff accounts ─────────────────────────────────────────────────────────
   // Passwords are bcrypt hashes of 'Admin@1234' (cost 12).
+  // Note: is_all_branches column is added in migration 33; we set it there.
   pgm.sql(`
-    INSERT INTO staff (id, username, password_hash, full_name, is_active, is_all_branches)
+    INSERT INTO staff (id, username, password_hash, full_name, is_active)
     VALUES
-      (1, 'superadmin', '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Super Admin', true, true),
-      (2, 'admin',      '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Admin User',  true, true)
+      (1, 'superadmin', '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Super Admin', true),
+      (2, 'admin',      '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Admin User',  true)
     ON CONFLICT (id) DO UPDATE
       SET is_active        = true,
           username         = EXCLUDED.username,
-          password_hash    = EXCLUDED.password_hash,
-          is_all_branches  = true;
+          password_hash    = EXCLUDED.password_hash;
   `);
 
   // ── Role assignments ───────────────────────────────────────────────────────

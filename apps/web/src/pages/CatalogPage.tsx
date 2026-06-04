@@ -29,7 +29,8 @@ interface BookFormat { id: number; code: string; label: string; sortOrder: numbe
 interface BookEdition { id: number; code: string; label: string; sortOrder: number; }
 interface ConfigRow { key: string; value: unknown; }
 
-const canWrite = (role: Role | undefined) =>
+const canWrite = (role: Role | undefined, perms?: string[]) =>
+  (perms && perms.includes('MANAGE_INVENTORY')) ||
   role === 'Admin' || role === 'Manager' || role === 'Stock_Clerk';
 
 function useDebounce<T>(v: T, ms: number): T {
@@ -46,7 +47,7 @@ function validateIsbn13(isbn: string): boolean {
   return d.split('').reduce((a, c, i) => a + parseInt(c, 10) * (i % 2 === 0 ? 1 : 3), 0) % 10 === 0;
 }
 
-export default function CatalogPage({ userRole }: { userRole?: Role }) {
+export default function CatalogPage({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const [tab, setTab] = useState<Tab>('books');
   const tabs = [
     { id: 'books' as Tab, label: 'Books', icon: '📖' },
@@ -65,10 +66,10 @@ export default function CatalogPage({ userRole }: { userRole?: Role }) {
         ))}
       </div>
       <div className="flex-1 min-h-0">
-        {tab === 'books' && <BooksTab userRole={userRole} />}
-        {tab === 'authors' && <AuthorsTab userRole={userRole} />}
-        {tab === 'categories' && <CategoriesTab userRole={userRole} />}
-        {tab === 'publishers' && <PublishersTab userRole={userRole} />}
+        {tab === 'books' && <BooksTab userRole={userRole} userPermissions={userPermissions} />}
+        {tab === 'authors' && <AuthorsTab userRole={userRole} userPermissions={userPermissions} />}
+        {tab === 'categories' && <CategoriesTab userRole={userRole} userPermissions={userPermissions} />}
+        {tab === 'publishers' && <PublishersTab userRole={userRole} userPermissions={userPermissions} />}
       </div>
     </div>
   );
@@ -76,7 +77,7 @@ export default function CatalogPage({ userRole }: { userRole?: Role }) {
 
 
 // ── BooksTab ──────────────────────────────────────────────────────────────────
-function BooksTab({ userRole }: { userRole?: Role }) {
+function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const { showToast } = useToast();
 
@@ -246,7 +247,7 @@ function BooksTab({ userRole }: { userRole?: Role }) {
         {hasFilters && <button onClick={clearAll} className="text-xs text-gray-400 hover:text-red-500 transition-colors whitespace-nowrap">Reset</button>}
         <div className="flex-1" />
         <span className="text-xs text-gray-400 whitespace-nowrap">{isLoading ? '…' : `${data?.total ?? 0} books`}{isFetching && !isLoading && ' ↻'}</span>
-        {canWrite(userRole) && (
+        {canWrite(userRole, userPermissions) && (
           <button onClick={() => { setEditBook(null); setShowForm(true); }}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex-shrink-0">
             + Add Book
@@ -284,7 +285,7 @@ function BooksTab({ userRole }: { userRole?: Role }) {
                   <span className="text-4xl">📚</span>
                   <p className="text-gray-500 dark:text-gray-400">{hasFilters ? 'No books match your filters' : 'No books yet'}</p>
                   {hasFilters ? <button onClick={clearAll} className="text-sm text-blue-600 hover:underline">Clear filters</button>
-                    : canWrite(userRole) ? <button onClick={() => { setEditBook(null); setShowForm(true); }} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg">Add your first book</button> : null}
+                    : canWrite(userRole, userPermissions) ? <button onClick={() => { setEditBook(null); setShowForm(true); }} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg">Add your first book</button> : null}
                 </div>
               </td></tr>
             ) : data.items.map(book => (
@@ -316,7 +317,7 @@ function BooksTab({ userRole }: { userRole?: Role }) {
                 <td className="px-4 py-3 text-right">
                   <RowMenu items={[
                     { label: 'View details', icon: '👁', onClick: () => setDetailBook(book) },
-                    ...(canWrite(userRole) ? [
+                    ...(canWrite(userRole, userPermissions) ? [
                       { label: 'Edit', icon: '✏️', onClick: () => { setEditBook(book); setShowForm(true); } },
                       book.isActive
                         ? { label: 'Deactivate', icon: '🚫', onClick: () => deactivate.mutate(book.id), danger: true as const }
@@ -357,7 +358,7 @@ function BooksTab({ userRole }: { userRole?: Role }) {
       )}
       {detailBook && (
         <Drawer title={detailBook.title} onClose={() => setDetailBook(null)}
-          footer={canWrite(userRole) ? <Btn onClick={() => { setEditBook(detailBook); setDetailBook(null); setShowForm(true); }}>Edit Book</Btn> : undefined}>
+          footer={canWrite(userRole, userPermissions) ? <Btn onClick={() => { setEditBook(detailBook); setDetailBook(null); setShowForm(true); }}>Edit Book</Btn> : undefined}>
           <div className="space-y-3 text-sm">
             <p className="text-xs text-gray-400">Added {fmtDate(detailBook.createdAt)}</p>
             <DRow label="ISBN" value={detailBook.isbn.startsWith('SKU-') ? '—' : detailBook.isbn} mono />
@@ -583,7 +584,7 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
 
 
 // ── AuthorsTab ────────────────────────────────────────────────────────────────
-function AuthorsTab({ userRole }: { userRole?: Role }) {
+function AuthorsTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [searchRaw, setSearchRaw] = useState('');
@@ -621,14 +622,14 @@ function AuthorsTab({ userRole }: { userRole?: Role }) {
 
   return (
     <SimpleListTab title="Authors" icon="✍️" total={data?.total} searchRaw={searchRaw} onSearch={setSearchRaw}
-      canWrite={canWrite(userRole)} onAdd={() => { setEditItem(null); setName(''); setFormError(''); setShowForm(true); }}
+      canWrite={canWrite(userRole, userPermissions)} onAdd={() => { setEditItem(null); setName(''); setFormError(''); setShowForm(true); }}
       isLoading={isLoading} page={page} totalPages={Math.ceil((data?.total ?? 0) / 25)} onPage={setPage}
       columns={['Name', 'Books', 'Added', '']}
       rows={(data?.items ?? []).map(a => [
         <span key="n" className="font-medium text-gray-900 dark:text-white text-sm">{a.name}</span>,
         <span key="b" className="text-gray-500 text-sm">{a.bookCount ?? 0}</span>,
         <span key="d" className="text-gray-400 text-xs">{fmtDate(a.createdAt)}</span>,
-        canWrite(userRole) ? (
+        canWrite(userRole, userPermissions) ? (
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(a); setName(a.name); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
             <button onClick={() => { if (confirm(`Delete "${a.name}"?`)) deleteMut.mutate(a.id); }} className="text-xs text-red-500 hover:underline">Delete</button>
@@ -649,7 +650,7 @@ function AuthorsTab({ userRole }: { userRole?: Role }) {
 }
 
 // ── CategoriesTab ─────────────────────────────────────────────────────────────
-function CategoriesTab({ userRole }: { userRole?: Role }) {
+function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [searchRaw, setSearchRaw] = useState('');
@@ -690,7 +691,7 @@ function CategoriesTab({ userRole }: { userRole?: Role }) {
 
   return (
     <SimpleListTab title="Categories" icon="🏷️" total={data?.total} searchRaw={searchRaw} onSearch={setSearchRaw}
-      canWrite={canWrite(userRole)} onAdd={() => { setEditItem(null); setCatName(''); setParentId(null); setFormError(''); setShowForm(true); }}
+      canWrite={canWrite(userRole, userPermissions)} onAdd={() => { setEditItem(null); setCatName(''); setParentId(null); setFormError(''); setShowForm(true); }}
       isLoading={isLoading} page={page} totalPages={Math.ceil((data?.total ?? 0) / 25)} onPage={setPage}
       columns={['Name', 'Parent', 'Books', 'Added', '']}
       rows={(data?.items ?? []).map(c => [
@@ -698,7 +699,7 @@ function CategoriesTab({ userRole }: { userRole?: Role }) {
         <span key="p" className="text-gray-500 text-xs">{c.parentName ?? '—'}</span>,
         <span key="b" className="text-gray-500 text-sm">{c.bookCount ?? 0}</span>,
         <span key="d" className="text-gray-400 text-xs">{fmtDate(c.createdAt)}</span>,
-        canWrite(userRole) ? (
+        canWrite(userRole, userPermissions) ? (
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(c); setCatName(c.name); setParentId(c.parentId); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
             <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) deleteMut.mutate(c.id); }} className="text-xs text-red-500 hover:underline">Delete</button>
@@ -727,7 +728,7 @@ function CategoriesTab({ userRole }: { userRole?: Role }) {
 }
 
 // ── PublishersTab ─────────────────────────────────────────────────────────────
-function PublishersTab({ userRole }: { userRole?: Role }) {
+function PublishersTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [searchRaw, setSearchRaw] = useState('');
@@ -765,14 +766,14 @@ function PublishersTab({ userRole }: { userRole?: Role }) {
 
   return (
     <SimpleListTab title="Publishers" icon="🏢" total={data?.total} searchRaw={searchRaw} onSearch={setSearchRaw}
-      canWrite={canWrite(userRole)} onAdd={() => { setEditItem(null); setPubName(''); setFormError(''); setShowForm(true); }}
+      canWrite={canWrite(userRole, userPermissions)} onAdd={() => { setEditItem(null); setPubName(''); setFormError(''); setShowForm(true); }}
       isLoading={isLoading} page={page} totalPages={Math.ceil((data?.total ?? 0) / 25)} onPage={setPage}
       columns={['Name', 'Books', 'Added', '']}
       rows={(data?.items ?? []).map(p => [
         <span key="n" className="font-medium text-gray-900 dark:text-white text-sm">{p.name}</span>,
         <span key="b" className="text-gray-500 text-sm">{p.bookCount ?? 0}</span>,
         <span key="d" className="text-gray-400 text-xs">{fmtDate(p.createdAt)}</span>,
-        canWrite(userRole) ? (
+        canWrite(userRole, userPermissions) ? (
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(p); setPubName(p.name); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
             <button onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteMut.mutate(p.id); }} className="text-xs text-red-500 hover:underline">Delete</button>

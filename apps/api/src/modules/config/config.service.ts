@@ -98,6 +98,29 @@ export async function getEffectiveConfig(branchId: number, key: string): Promise
   throw new NotFoundError(`Config key '${key}'`);
 }
 
+export async function getEffectiveConfigWithSource(
+  branchId: number,
+  key: string,
+): Promise<{ value: unknown; source: 'branch' | 'system' }> {
+  const branchResult = await db.query(
+    `SELECT value FROM branch_config WHERE branch_id = $1 AND key = $2`,
+    [branchId, key],
+  );
+  if (branchResult.rows.length > 0) {
+    return { value: branchResult.rows[0].value, source: 'branch' };
+  }
+
+  const sysResult = await db.query(
+    `SELECT value FROM system_config WHERE key = $1`,
+    [key],
+  );
+  if (sysResult.rows.length > 0) {
+    return { value: sysResult.rows[0].value, source: 'system' };
+  }
+
+  throw new NotFoundError(`Config key '${key}'`);
+}
+
 // ── System config ─────────────────────────────────────────────────────────────
 
 export async function listSystemConfig(): Promise<ConfigRow[]> {

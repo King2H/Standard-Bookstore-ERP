@@ -15,6 +15,12 @@ export interface LineItemInput {
   bookId: number;
   quantity: number;
   discountPct?: number;
+  /** Explicit discount amount (used when discountMode === 'Amount'); authoritative over discountPct for lineTotal */
+  discountAmount?: number;
+  /** 'Percentage' (default) or 'Amount' */
+  discountMode?: string;
+  /** Informational: Normal | Merchant | Special — stored for audit but not used in validation */
+  discountType?: string;
 }
 
 export interface PaymentInput {
@@ -276,9 +282,17 @@ export async function createTransaction(
     const unitPrice = priceRes.rows[0]?.price != null ? parseFloat(priceRes.rows[0].price as string) : null;
     if (unitPrice === null) throw new BusinessError('PRICE_NOT_SET', `Price not set for book ${item.bookId}`);
 
+    const lineBase = parseFloat((unitPrice * item.quantity).toFixed(2));
     const discountPct = item.discountPct ?? 0;
-    const discountAmount = parseFloat((unitPrice * item.quantity * (discountPct / 100)).toFixed(2));
-    const lineTotal = parseFloat((unitPrice * item.quantity - discountAmount).toFixed(2));
+    // When the client sends discountMode='Amount', use the provided discountAmount directly
+    // (clamped to lineBase) so both sides agree on lineTotal. Fall back to pct-derived amount.
+    let discountAmount: number;
+    if (item.discountMode === 'Amount' && item.discountAmount != null) {
+      discountAmount = parseFloat(Math.min(Math.max(0, item.discountAmount), lineBase).toFixed(2));
+    } else {
+      discountAmount = parseFloat((lineBase * (discountPct / 100)).toFixed(2));
+    }
+    const lineTotal = parseFloat((lineBase - discountAmount).toFixed(2));
     resolvedItems.push({ bookId: item.bookId, bookTitle: book.title, bookIsbn: book.isbn, quantity: item.quantity, unitPrice, discountPct, discountAmount, lineTotal });
   }
 
@@ -292,14 +306,25 @@ export async function createTransaction(
   const subtotal = parseFloat(resolvedItems.reduce((s, i) => s + i.lineTotal, 0).toFixed(2));
   const discountTotal = parseFloat(resolvedItems.reduce((s, i) => s + i.discountAmount, 0).toFixed(2));
 
-  let taxRate = 0.10;
-  try { taxRate = Number(await getEffectiveConfig(data.branchId, 'tax_rate')); } catch { /* use default */ }
-  const taxTotal = parseFloat((subtotal * taxRate).toFixed(2));
-  const grandTotal = parseFloat((subtotal + taxTotal).toFixed(2));
+  // Tax is intentionally disabled for this release.
+  // The tax_rate config key is preserved for future use; until re-enabled the rate is forced to 0.
+  const taxTotal = 0;
+  const grandTotal = subtotal; // no tax: grandTotal = subtotal (discounts already applied per line)
 
   const payments = data.payments ?? [];
   const amountPaid = parseFloat(payments.reduce((s, p) => s + p.amount, 0).toFixed(2));
   const amountDue = parseFloat((grandTotal - amountPaid).toFixed(2));
+
+  // Dev-mode diagnostic logging — helps trace calculation mismatches
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(JSON.stringify({
+      level: 'debug', msg: 'POS createTransaction totals',
+      subtotal, discountTotal, taxTotal, grandTotal,
+      amountPaid, amountDue,
+      paymentCount: payments.length,
+      diff: parseFloat((grandTotal - amountPaid).toFixed(2)),
+    }));
+  }
 
   // Validate payment sum — strict for normal sales, relaxed for credit
   if (!data.allowCredit && Math.abs(amountDue) > 0.01) {

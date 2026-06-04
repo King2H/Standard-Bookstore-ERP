@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
-interface ReturnsPageProps { userRole?: Role; }
+interface ReturnsPageProps { userRole?: Role; userPermissions?: string[]; }
 
 interface TxLine { id: string; bookId: number; bookTitle: string; bookIsbn: string; quantity: number; unitPrice: number; discountPct: number; lineTotal: number; }
 interface Transaction { id: string; transactionNumber: string; grandTotal: number; amountPaid: number; status: string; paymentStatus: string; createdAt: string; lineItems?: TxLine[]; }
@@ -13,9 +13,9 @@ interface ReturnLine { id: string; bookTitle: string; quantity: number; unitPric
 interface ReturnRow { id: string; returnNumber: string; transactionId: string; totalRefundAmount: number; refundMethod: string; status: string; reason: string | null; createdAt: string; lineItems?: ReturnLine[]; }
 interface ReturnListResponse { items: ReturnRow[]; total: number; page: number; totalPages: number; }
 
-const canCreate = (r?: Role) => ['Sales', 'Manager', 'Admin'].includes(r ?? '');
-const canApprove = (r?: Role) => ['Manager', 'Admin'].includes(r ?? '');
-const canReject  = (r?: Role) => ['Manager', 'Admin'].includes(r ?? '');
+const canCreate = (r?: Role, perms?: string[]) => (perms?.includes('CREATE_SALE') || perms?.includes('PROCESS_REFUND')) || ['Sales', 'Manager', 'Admin'].includes(r ?? '');
+const canApprove = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin'].includes(r ?? '');
+const canReject  = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin'].includes(r ?? '');
 
 type Tab = 'new' | 'list';
 
@@ -28,7 +28,7 @@ function getStaffIdFromToken(): number | null {
   } catch { return null; }
 }
 
-export default function ReturnsPage({ userRole }: ReturnsPageProps) {
+export default function ReturnsPage({ userRole, userPermissions }: ReturnsPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -231,7 +231,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
               {/* Approval section */}
-              {canApprove(userRole) ? (
+              {canApprove(userRole, userPermissions) ? (
                 <div className="rounded-lg p-3 border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30">
                   <p className="text-sm font-medium text-green-800 dark:text-green-300">✓ Manager/Admin Approval</p>
                   <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
@@ -252,7 +252,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total Refund</p>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">{currency} {totalRefund.toFixed(2)}</p>
                 </div>
-                {canCreate(userRole) && (
+                {canCreate(userRole, userPermissions) && (
                   <button onClick={submitReturn}
                     disabled={createMut.isPending || totalRefund <= 0}
                     className="px-6 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors text-sm">
@@ -285,7 +285,7 @@ export default function ReturnsPage({ userRole }: ReturnsPageProps) {
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ret.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>{ret.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(ret.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
-                          {canReject(userRole) && ret.status === 'completed' && (
+                          {canReject(userRole, userPermissions) && ret.status === 'completed' && (
                             <button onClick={e => { e.stopPropagation(); if (confirm('Reject this return?')) rejectMut.mutate(ret.id); }}
                               className="text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950 px-2 py-1 rounded transition-colors">Reject</button>
                           )}

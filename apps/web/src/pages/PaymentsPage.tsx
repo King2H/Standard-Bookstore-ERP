@@ -6,7 +6,7 @@ import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
-interface PaymentsPageProps { userRole?: Role; }
+interface PaymentsPageProps { userRole?: Role; userPermissions?: string[]; }
 
 interface Payment {
   id: string; paymentReference: string; orderId: string; amount: number;
@@ -15,7 +15,7 @@ interface Payment {
 }
 interface Refund { id: string; paymentId: string; orderId: string; refundAmount: number; reason: string; createdAt: string; }
 interface PaymentListResponse { items: Payment[]; total: number; page: number; totalPages: number; }
-interface OrderBalance { orderTotal: number; totalPaid: number; totalRefunded: number; outstanding: number; paymentStatus: string; }
+interface OrderBalance { orderTotal: number; discountTotal: number; netPayable: number; totalPaid: number; totalRefunded: number; outstanding: number; paymentStatus: string; }
 interface UnpaidOrder {
   id: string; orderNumber: string; customerName: string | null; customerCode: string | null;
   total: number; totalPaid: number; outstanding: number; paymentStatus: string;
@@ -44,12 +44,12 @@ const METHOD_LABELS: Record<string, string> = {
   store_credit: '🏦 Store Credit', loyalty_points: '⭐ Loyalty', other: 'Other',
 };
 
-const canRefund = (r?: Role) => ['Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
-const canPay = (r?: Role) => ['Sales', 'Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
+const canRefund = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
+const canPay = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_PAYMENT')) || ['Sales', 'Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
 
 type Tab = 'pending' | 'history' | 'collect';
 
-export default function PaymentsPage({ userRole }: PaymentsPageProps) {
+export default function PaymentsPage({ userRole, userPermissions }: PaymentsPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -157,7 +157,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
       setOrderBalance(bal);
       setAmount(bal.outstanding.toFixed(2));
     } catch {
-      setOrderBalance({ orderTotal: order.total, totalPaid: order.totalPaid, totalRefunded: 0, outstanding: order.outstanding, paymentStatus: order.paymentStatus });
+      setOrderBalance({ orderTotal: order.total, discountTotal: 0, netPayable: order.total, totalPaid: order.totalPaid, totalRefunded: 0, outstanding: order.outstanding, paymentStatus: order.paymentStatus });
     } finally {
       setLoadingBalance(false);
       setTab('collect');
@@ -253,7 +253,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{new Date(order.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
-                        {canPay(userRole) && (
+                        {canPay(userRole, userPermissions) && (
                           <button
                             onClick={() => selectOrderForPayment(order)}
                             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors whitespace-nowrap">
@@ -301,6 +301,8 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
             ) : orderBalance && (
               <div className="mt-3 space-y-1 text-sm border-t border-blue-200 dark:border-blue-800 pt-3">
                 <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Order Total</span><span className="font-medium text-blue-900 dark:text-blue-200">{currency} {orderBalance.orderTotal.toFixed(2)}</span></div>
+                {orderBalance.discountTotal > 0 && <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Discount</span><span className="text-green-600 dark:text-green-400">-{currency} {orderBalance.discountTotal.toFixed(2)}</span></div>}
+                <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Net Payable</span><span className="font-medium text-blue-900 dark:text-blue-200">{currency} {orderBalance.netPayable.toFixed(2)}</span></div>
                 <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Already Paid</span><span className="text-green-600 dark:text-green-400">{currency} {orderBalance.totalPaid.toFixed(2)}</span></div>
                 {orderBalance.totalRefunded > 0 && <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400">Refunded</span><span className="text-amber-600 dark:text-amber-400">{currency} {orderBalance.totalRefunded.toFixed(2)}</span></div>}
                 <div className="flex justify-between font-bold border-t border-blue-200 dark:border-blue-800 pt-1">
@@ -467,7 +469,7 @@ export default function PaymentsPage({ userRole }: PaymentsPageProps) {
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[pay.status] ?? ''}`}>{pay.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(pay.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
-                          {canRefund(userRole) && pay.status !== 'failed' && pay.status !== 'refunded' && (
+                          {canRefund(userRole, userPermissions) && pay.status !== 'failed' && pay.status !== 'refunded' && (
                             refundingId === pay.id ? (
                               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                                 <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="Amount"

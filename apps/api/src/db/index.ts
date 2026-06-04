@@ -1,6 +1,4 @@
-import pg from 'pg';
-
-const { Pool } = pg;
+import { Pool } from 'pg';
 
 // Pool is created lazily — DATABASE_URL is validated at first use, not at import time
 export const db = new Pool({

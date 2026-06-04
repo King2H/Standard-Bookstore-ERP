@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import * as authService from './auth.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { ValidationError, BusinessError, ForbiddenError } from '../../lib/errors.js';
+import { ValidationError, BusinessError, ForbiddenError, ServiceUnavailableError, AppError } from '../../lib/errors.js';
 import { db } from '../../db/index.js';
 import { loginRateLimit } from '../../middleware/rateLimit.js';
 import { setCsrfCookie } from '../../middleware/csrf.js';
@@ -56,11 +56,17 @@ router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Respons
     const { username, password } = parsed.data;
 
     // Validate credentials (reuse the same checks as login, but don't issue tokens)
-    const staffResult = await db.query(
-      `SELECT id, password_hash, is_active, failed_login_attempts, locked_until
-       FROM staff WHERE username = $1`,
-      [username],
-    );
+    let staffResult: Awaited<ReturnType<typeof db.query>>;
+    try {
+      staffResult = await db.query(
+        `SELECT id, password_hash, is_active, failed_login_attempts, locked_until
+         FROM staff WHERE username = $1`,
+        [username],
+      );
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw new ServiceUnavailableError();
+    }
 
     if (staffResult.rows.length === 0) {
       throw new ValidationError('Invalid username or password');
@@ -77,19 +83,43 @@ router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Respons
       throw new ValidationError(`Account locked. Try again in ${minutesLeft} minute(s).`);
     }
 
+    // Fetch security policy for lockout logic (Task 3.4)
+    let policy: { maxFailedAttempts: number; lockoutMinutes: number };
+    try {
+      policy = await authService.getSecurityPolicy();
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw new ServiceUnavailableError();
+    }
+
     const passwordValid = await bcrypt.compare(password, staff.password_hash);
     if (!passwordValid) {
-      // Increment failed attempts (same logic as login)
+      // Increment failed attempts and potentially lock account (same logic as login)
       const newAttempts = (staff.failed_login_attempts ?? 0) + 1;
+      const shouldLock = newAttempts >= policy.maxFailedAttempts;
+      const lockedUntil = shouldLock
+        ? new Date(Date.now() + policy.lockoutMinutes * 60 * 1000)
+        : null;
       await db.query(
-        `UPDATE staff SET failed_login_attempts = $1 WHERE id = $2`,
-        [newAttempts, staff.id],
+        `UPDATE staff SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3`,
+        [newAttempts, lockedUntil, staff.id],
       );
+      if (shouldLock) {
+        throw new ValidationError(
+          `Account locked. Try again in ${policy.lockoutMinutes} minute(s).`,
+        );
+      }
       throw new ValidationError('Invalid username or password');
     }
 
     // Credentials valid — return available branches
-    const branches = await authService.getBranchesForUser(staff.id);
+    let branches: Awaited<ReturnType<typeof authService.getBranchesForUser>>;
+    try {
+      branches = await authService.getBranchesForUser(staff.id);
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw new ServiceUnavailableError();
+    }
 
     // Check is_all_branches flag — these users skip branch selection entirely.
     // They log in against the first available branch; the branch switcher in the

@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
-interface InstallmentsPageProps { userRole?: Role; }
+interface InstallmentsPageProps { userRole?: Role; userPermissions?: string[]; }
 
 interface Installment {
   id: string;
@@ -37,11 +37,11 @@ const STATUS_COLORS: Record<string, string> = {
   overdue:  'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
 };
 
-const canCreate = (r?: Role) => ['Sales', 'Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
+const canCreate = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_PAYMENT')) || ['Sales', 'Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
 
 type Tab = 'lookup' | 'new';
 
-export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
+export default function InstallmentsPage({ userRole, userPermissions }: InstallmentsPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -153,7 +153,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
           {planError && (
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-sm text-amber-700 dark:text-amber-300">
               No installment plan found for this order.
-              {canCreate(userRole) && (
+              {canCreate(userRole, userPermissions) && (
                 <button onClick={() => { setNewOrderId(lookupOrderId); setTab('new'); }}
                   className="ml-2 underline hover:no-underline">Create one?</button>
               )}
@@ -224,7 +224,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
                         </p>
                       </div>
                       {/* Pay button */}
-                      {inst.status !== 'paid' && canCreate(userRole) && (
+                      {inst.status !== 'paid' && canCreate(userRole, userPermissions) && (
                         payingId === inst.id ? (
                           <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>
                             <input
@@ -261,7 +261,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
       )}
 
       {/* ── New Plan ── */}
-      {tab === 'new' && canCreate(userRole) && (
+      {tab === 'new' && canCreate(userRole, userPermissions) && (
         <div className="flex-1 overflow-auto p-4 pb-6 max-w-xl mx-auto w-full space-y-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Create Installment Plan</h3>
@@ -307,7 +307,7 @@ export default function InstallmentsPage({ userRole }: InstallmentsPageProps) {
         </div>
       )}
 
-      {tab === 'new' && !canCreate(userRole) && (
+      {tab === 'new' && !canCreate(userRole, userPermissions) && (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-gray-400 text-sm">You don't have permission to create installment plans.</p>
         </div>

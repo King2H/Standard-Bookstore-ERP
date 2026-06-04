@@ -48,6 +48,37 @@ router.get(
   },
 );
 
+router.get(
+  '/config/effective',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const branchId = req.staff?.branchId ?? 0;
+      const rawKeys = Array.isArray(req.query.keys)
+        ? req.query.keys.join(',')
+        : String(req.query.keys ?? '');
+      const keys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+      if (keys.length === 0) {
+        res.json({ items: [] });
+        return;
+      }
+
+      const items = await Promise.all(keys.map(async (key) => {
+        try {
+          const { value, source } = await configService.getEffectiveConfigWithSource(branchId, key);
+          return { key, value, source };
+        } catch {
+          return { key, value: null, source: 'system' as const };
+        }
+      }));
+
+      res.json({ items });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // ── PUT /api/config/system/:key ───────────────────────────────────────────────
 // Super_Admin only (enforced in service layer too)
 

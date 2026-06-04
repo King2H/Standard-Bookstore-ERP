@@ -45,3 +45,9 @@ export class BusinessError extends AppError {
     super(code, message, 422, details);
   }
 }
+
+export class ServiceUnavailableError extends AppError {
+  constructor(message = 'Service temporarily unavailable') {
+    super('SERVICE_UNAVAILABLE', message, 503);
+  }
+}

@@ -142,6 +142,38 @@ describe('Config — Branch', () => {
     expect(sources.every((s: string) => s === 'system')).toBe(true);
   });
 
+  it('GET /api/config/effective returns requested settings with source metadata', async () => {
+    const app = getTestApp();
+    const res = await request(app)
+      .get(`/api/config/effective?keys=base_currency,tax_rate`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.items)).toBe(true);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'base_currency', source: expect.any(String) }),
+        expect.objectContaining({ key: 'tax_rate', source: expect.any(String) }),
+      ]),
+    );
+  });
+
+  it('GET /api/config/effective returns null for missing config keys instead of 404', async () => {
+    const app = getTestApp();
+    const res = await request(app)
+      .get(`/api/config/effective?keys=default_discount_type,missing_key`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.items)).toBe(true);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'default_discount_type', source: expect.any(String) }),
+        expect.objectContaining({ key: 'missing_key', value: null, source: 'system' }),
+      ]),
+    );
+  });
+
   it('Admin can set a branch config override', async () => {
     const app = getTestApp();
     const res = await request(app)

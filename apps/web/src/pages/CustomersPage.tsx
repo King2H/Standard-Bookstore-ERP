@@ -20,19 +20,19 @@ interface LoyaltyHistoryItem { id: number; pointsDelta: number; reason: string; 
 interface StoreCreditHistoryItem { id: number; amount: number; direction: 'credit' | 'debit'; refType: string | null; refId: string | null; createdAt: string; }
 interface HistoryResponse<T> { items: T[]; total: number; page: number; totalPages: number; }
 
-interface CustomersPageProps { userRole?: Role; }
+interface CustomersPageProps { userRole?: Role; userPermissions?: string[]; }
 
-const canWrite = (r?: string) => ['Admin', 'Manager', 'Sales'].includes(r ?? '');
-const canDeactivate = (r?: string) => ['Admin', 'Manager'].includes(r ?? '');
-const canAdjustCredit = (r?: string) => ['Admin', 'Finance_Officer'].includes(r ?? '');
-const canRedeem = (r?: string) => ['Admin', 'Manager', 'Sales'].includes(r ?? '');
+const canWrite = (r?: string, perms?: string[]) => (perms?.includes('CREATE_SALE')) || ['Admin', 'Manager', 'Sales'].includes(r ?? '');
+const canDeactivate = (r?: string, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
+const canAdjustCredit = (r?: string, perms?: string[]) => (perms?.includes('PROCESS_PAYMENT')) || ['Admin', 'Finance_Officer'].includes(r ?? '');
+const canRedeem = (r?: string, perms?: string[]) => (perms?.includes('CREATE_SALE') || perms?.includes('PROCESS_PAYMENT')) || ['Admin', 'Manager', 'Sales'].includes(r ?? '');
 
 const EMPTY_FORM = { fullName: '', phone: '', email: '', gender: '', dateOfBirth: '', address: '', city: '', branchId: '' };
 
 type View = 'list' | 'profile';
 type ProfileTab = 'profile' | 'loyalty' | 'store-credit';
 
-export default function CustomersPage({ userRole }: CustomersPageProps) {
+export default function CustomersPage({ userRole, userPermissions }: CustomersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -179,7 +179,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
           </select>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} customers</span>
-            {canWrite(userRole) && (
+            {canWrite(userRole, userPermissions) && (
               <button onClick={() => { setForm({ ...EMPTY_FORM }); setDrawerOpen(true); }}
                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
                 + New Customer
@@ -216,7 +216,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 text-xs">
                         <button onClick={() => openProfile(c)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">View</button>
-                        {canDeactivate(userRole) && c.isActive && (
+                        {canDeactivate(userRole, userPermissions) && c.isActive && (
                           <button onClick={() => { if (confirm(`Deactivate "${c.fullName}"?`)) deactivateMut.mutate(c.id); }}
                             className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Deactivate</button>
                         )}
@@ -293,7 +293,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
           {c.isActive ? 'Active' : 'Inactive'}
         </span>
-        {canDeactivate(userRole) && c.isActive && (
+        {canDeactivate(userRole, userPermissions) && c.isActive && (
           <button onClick={() => { if (confirm(`Deactivate "${c.fullName}"?`)) deactivateMut.mutate(c.id); }}
             className="ml-auto text-sm text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 px-3 py-1.5 rounded-lg border border-yellow-300 dark:border-yellow-700 transition-colors">
             Deactivate
@@ -327,26 +327,26 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
           <form onSubmit={e => { e.preventDefault(); updateMut.mutate({ id: c.id, b: editForm }); }} className="space-y-4">
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
-              <input required value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} disabled={!canWrite(userRole)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+              <input required value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
-                <input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} disabled={!canWrite(userRole)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+                <input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} disabled={!canWrite(userRole)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Gender</label>
-                <select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))} disabled={!canWrite(userRole)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+                <select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
                   <option value="">Select...</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
                 </select></div>
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Date of Birth</label>
-                <input type="date" value={editForm.dateOfBirth} onChange={e => setEditForm(f => ({ ...f, dateOfBirth: e.target.value }))} disabled={!canWrite(userRole)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+                <input type="date" value={editForm.dateOfBirth} onChange={e => setEditForm(f => ({ ...f, dateOfBirth: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             </div>
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
-              <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} disabled={!canWrite(userRole)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+              <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">City</label>
-              <input value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} disabled={!canWrite(userRole)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
-            {canWrite(userRole) && (
+              <input value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+            {canWrite(userRole, userPermissions) && (
               <button type="submit" disabled={updateMut.isPending} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-6 py-2 rounded-lg transition-colors">
                 {updateMut.isPending ? 'Saving...' : 'Save Changes'}
               </button>
@@ -369,7 +369,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
             </div>
           </div>
 
-          {canRedeem(userRole) && (
+          {canRedeem(userRole, userPermissions) && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Redeem Points</h3>
               <div className="flex gap-3 items-end">
@@ -452,7 +452,7 @@ export default function CustomersPage({ userRole }: CustomersPageProps) {
 
           </div>
 
-          {canAdjustCredit(userRole) && (
+          {canAdjustCredit(userRole, userPermissions) && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Manual Adjustment</h3>
               <div className="grid grid-cols-2 gap-3">

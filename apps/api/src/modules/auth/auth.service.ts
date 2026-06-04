@@ -27,7 +27,7 @@ function getJwtSecret(): string {
 
 // ── Security policy helpers ───────────────────────────────────────────────────
 
-async function getSecurityPolicy(): Promise<{
+export async function getSecurityPolicy(): Promise<{
   maxFailedAttempts: number;
   lockoutMinutes: number;
 }> {

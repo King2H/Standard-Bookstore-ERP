@@ -123,9 +123,8 @@ describe('POS — Transactions', () => {
 
     const qty = 2;
     const expectedSubtotal = parseFloat((bookPrice * qty).toFixed(2));
-    const taxRate = 0.10;
-    const expectedTax = parseFloat((expectedSubtotal * taxRate).toFixed(2));
-    const expectedGrand = parseFloat((expectedSubtotal + expectedTax).toFixed(2));
+    // Tax is disabled — grandTotal = subtotal (no tax applied)
+    const expectedGrand = expectedSubtotal;
 
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
@@ -162,7 +161,7 @@ describe('POS — Transactions', () => {
         branchId,
         locationId,
         items: [{ bookId, quantity: 1 }],
-        payments: [{ method: 'cash', amount: bookPrice * 1.1 }],
+        payments: [{ method: 'cash', amount: bookPrice }], // exact no-tax amount
       });
 
     expect(res.status).toBe(422);
@@ -196,11 +195,7 @@ describe('POS — Transactions', () => {
     // Sales role max discount is typically 10% from config
     const qty = 1;
     const discountPct = 99; // way over any limit
-    const discountAmount = bookPrice * qty * (discountPct / 100);
-    const lineTotal = bookPrice * qty - discountAmount;
-    const taxTotal = lineTotal * 0.10;
-    const grandTotal = parseFloat((lineTotal + taxTotal).toFixed(2));
-
+    // Payment amount doesn't matter — validation fails before reaching payment check
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
@@ -209,7 +204,7 @@ describe('POS — Transactions', () => {
         branchId,
         locationId,
         items: [{ bookId, quantity: qty, discountPct }],
-        payments: [{ method: 'cash', amount: grandTotal }],
+        payments: [{ method: 'cash', amount: 0.01 }],
       });
 
     expect(res.status).toBe(422);
@@ -224,7 +219,8 @@ describe('POS — Transactions', () => {
 
     const qty = 1;
     const expectedSubtotal = parseFloat((bookPrice * qty).toFixed(2));
-    const expectedGrand = parseFloat((expectedSubtotal * 1.10).toFixed(2));
+    // Tax disabled — grandTotal = subtotal
+    const expectedGrand = expectedSubtotal;
 
     // Use store credit for part, cash for rest
     const creditAmount = Math.min(10, expectedGrand);
@@ -261,7 +257,8 @@ describe('POS — Transactions', () => {
     const customerId = await createTestCustomer(branchId);
 
     const qty = 1;
-    const expectedGrand = parseFloat((bookPrice * qty * 1.10).toFixed(2));
+    // Tax disabled — grandTotal = subtotal
+    const expectedGrand = parseFloat((bookPrice * qty).toFixed(2));
 
     const loyaltyAmount = Math.min(5, expectedGrand);
     const cashAmount = parseFloat((expectedGrand - loyaltyAmount).toFixed(2));
@@ -299,7 +296,8 @@ describe('POS — Transactions', () => {
 
     const qty = 1;
     const expectedSubtotal = parseFloat((bookPrice * qty).toFixed(2));
-    const expectedGrand = parseFloat((expectedSubtotal * 1.10).toFixed(2));
+    // Tax disabled — grandTotal = subtotal
+    const expectedGrand = expectedSubtotal;
 
     const loyBefore = await db.query(`SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1`, [customerId]);
     const ptsBefore = Number(loyBefore.rows[0].points_balance);

@@ -16,8 +16,14 @@ interface KpiReport {
   dailyRevenue: number; monthlyRevenue: number; averageOrderValue: number;
   totalActiveCustomers: number; lowStockAlerts: number; pendingOrders: number; totalExchangesToday: number;
 }
+interface DiscountByType { Normal: number; Merchant: number; Special: number; }
+interface SalesSummary {
+  totalSales: number; totalOrders: number; averageOrderValue: number;
+  totalPosSales: number; totalPosTransactions: number;
+  totalDiscountAmount: number; discountByType: DiscountByType;
+}
 interface SalesReport {
-  summary: { totalSales: number; totalOrders: number; averageOrderValue: number; totalPosSales: number; totalPosTransactions: number };
+  summary: SalesSummary;
   byPeriod: Array<{ period: string; totalSales: number; totalOrders: number; averageOrderValue: number }>;
   byBranch: Array<{ branchId: number; branchName: string; totalSales: number; totalOrders: number }>;
 }
@@ -691,6 +697,57 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           ) : <Empty />}
         </Section>
       </div>
+
+      {/* ── Row 5: Discount Summary ── */}
+      {sales?.summary?.discountByType && (
+        <Section
+          title="Discount Summary"
+          icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>}
+          loading={salesLoading}
+          error={salesError}
+          updatedAt={salesUpdatedAt}
+          onRefresh={() => refetchSales()}
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Total Discounts</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.totalDiscountAmount)}</p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Normal</p>
+              <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{fmtShort(sales.summary.discountByType.Normal)}</p>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Merchant</p>
+              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{fmtShort(sales.summary.discountByType.Merchant)}</p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Special</p>
+              <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{fmtShort(sales.summary.discountByType.Special)}</p>
+            </div>
+          </div>
+          {sales.summary.totalDiscountAmount > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {(['Normal', 'Merchant', 'Special'] as const).map(type => {
+                const amount = sales.summary.discountByType[type];
+                const pct = sales.summary.totalDiscountAmount > 0
+                  ? (amount / sales.summary.totalDiscountAmount) * 100
+                  : 0;
+                const colors: Record<string, string> = { Normal: 'bg-blue-500', Merchant: 'bg-purple-500', Special: 'bg-amber-500' };
+                return (
+                  <div key={type} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600 dark:text-gray-400 w-16">{type}</span>
+                    <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                      <div className={`${colors[type]} h-2 rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 w-12 text-right">{pct.toFixed(1)}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+      )}
 
     </div>
     </div>

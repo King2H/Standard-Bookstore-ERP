@@ -8,13 +8,13 @@ interface Supplier { id: number; name: string; contactInfo: Record<string, strin
 interface Publisher { id: number; name: string; }
 interface SupplierListResponse { items: Supplier[]; total: number; page: number; totalPages: number; }
 interface SupplierPayload { name: string; contactInfo: { phone: string; email: string }; leadTimeDays: number; pricingTerms: string | null; supplierType: 'external' | 'publisher'; publisherId: number | null; }
-interface SuppliersPageProps { userRole?: Role; }
+interface SuppliersPageProps { userRole?: Role; userPermissions?: string[]; }
 
-const canWrite = (r?: Role) => ['Admin', 'Manager', 'Purchasor', 'Stock_Clerk'].includes(r ?? '');
-const canBlacklist = (r?: Role) => ['Super_Admin', 'Admin', 'Manager'].includes(r ?? '');
+const canWrite = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_INVENTORY')) || ['Admin', 'Manager', 'Purchasor', 'Stock_Clerk'].includes(r ?? '');
+const canBlacklist = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_BRANCH') || perms?.includes('MANAGE_STAFF')) || ['Super_Admin', 'Admin', 'Manager'].includes(r ?? '');
 const EMPTY = { name: '', contactPhone: '', contactEmail: '', leadTimeDays: 7, pricingTerms: '', supplierType: 'external' as 'external' | 'publisher', publisherId: null as number | null };
 
-export default function SuppliersPage({ userRole }: SuppliersPageProps) {
+export default function SuppliersPage({ userRole, userPermissions }: SuppliersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [page, setPage] = useState(1);
@@ -61,7 +61,7 @@ export default function SuppliersPage({ userRole }: SuppliersPageProps) {
         <select value={filterBlacklisted} onChange={e => { setFilterBlacklisted(e.target.value); setPage(1); }} className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"><option value="">All</option><option value="false">Not Blacklisted</option><option value="true">Blacklisted</option></select>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} suppliers</span>
-          {canWrite(userRole) && <button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">+ New Supplier</button>}
+          {canWrite(userRole, userPermissions) && <button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">+ New Supplier</button>}
         </div>
       </div>
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -77,10 +77,10 @@ export default function SuppliersPage({ userRole }: SuppliersPageProps) {
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{s.contactInfo.email && <div>{s.contactInfo.email}</div>}{s.contactInfo.phone && <div>{s.contactInfo.phone}</div>}</td>
                   <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>{s.isActive ? 'Active' : 'Inactive'}</span></td>
                   <td className="px-4 py-3"><div className="flex items-center gap-1 text-xs">
-                    {canWrite(userRole) && <button onClick={() => openEdit(s)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">Edit</button>}
-                    {canWrite(userRole) && s.isActive && <button onClick={() => { if (confirm(`Deactivate "${s.name}"?`)) deactivateMut.mutate(s.id); }} className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Deactivate</button>}
-                    {canBlacklist(userRole) && !s.isBlacklisted && <button onClick={() => { if (confirm(`Blacklist "${s.name}"?`)) blacklistMut.mutate(s.id); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Blacklist</button>}
-                    {canBlacklist(userRole) && <button onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteMut.mutate(s.id); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Delete</button>}
+                    {canWrite(userRole, userPermissions) && <button onClick={() => openEdit(s)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">Edit</button>}
+                    {canWrite(userRole, userPermissions) && s.isActive && <button onClick={() => { if (confirm(`Deactivate "${s.name}"?`)) deactivateMut.mutate(s.id); }} className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Deactivate</button>}
+                    {canBlacklist(userRole, userPermissions) && !s.isBlacklisted && <button onClick={() => { if (confirm(`Blacklist "${s.name}"?`)) blacklistMut.mutate(s.id); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Blacklist</button>}
+                    {canBlacklist(userRole, userPermissions) && <button onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteMut.mutate(s.id); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Delete</button>}
                   </div></td>
                 </tr>
               ))}

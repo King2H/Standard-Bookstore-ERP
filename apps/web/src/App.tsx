@@ -224,16 +224,16 @@ export default function App() {
               {currentPage === 'settings'     && <SettingsPage userRole={userRole ?? undefined} />}
               {currentPage === 'bank-accounts'&& <BankAccountsPage userRole={userRole ?? undefined} />}
               {currentPage === 'locations'    && <LocationsPage userRole={userRole ?? undefined} />}
-              {currentPage === 'catalog'      && <CatalogPage userRole={userRole ?? undefined} />}
-              {currentPage === 'inventory'    && <InventoryPage userRole={userRole ?? undefined} />}
-              {currentPage === 'suppliers'    && <SuppliersPage userRole={userRole ?? undefined} />}
-              {currentPage === 'procurement'  && <ProcurementPage userRole={userRole ?? undefined} />}
-              {currentPage === 'customers'    && <CustomersPage userRole={userRole ?? undefined} />}
-              {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} />}
-              {currentPage === 'returns'      && <ReturnsPage userRole={userRole ?? undefined} />}
+              {currentPage === 'catalog'      && <CatalogPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'inventory'    && <InventoryPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'suppliers'    && <SuppliersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'procurement'  && <ProcurementPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'customers'    && <CustomersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'returns'      && <ReturnsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} />}
-              {currentPage === 'installments' && <InstallmentsPage userRole={userRole ?? undefined} />}
+              {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'installments' && <InstallmentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'exchanges'    && <ExchangesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'profile'      && <ProfilePage />}
 
