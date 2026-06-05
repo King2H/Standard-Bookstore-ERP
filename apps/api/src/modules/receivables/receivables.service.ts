@@ -58,7 +58,7 @@ function mapRow(row: Record<string, unknown>): ReceivableRow {
     currency: row.currency as string,
     dueDate: row.due_date
       ? (row.due_date instanceof Date
-          ? row.due_date.toISOString().slice(0, 10)
+          ? new Date(row.due_date.getTime() - row.due_date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
           : String(row.due_date))
       : null,
     settlementDate: row.settlement_date
@@ -113,34 +113,44 @@ export async function updateReceivableOnPayment(
   opts: {
     sourceType: ReceivableSourceType;
     sourceEntityId: number;
+    /** Remaining amount owed AFTER this payment. Must be >= 0. */
     newOutstandingAmount: number;
     isFullySettled: boolean;
   },
   client: PoolClient,
 ): Promise<void> {
-  if (opts.isFullySettled) {
+  // Clamp to zero to guard against floating-point over-payment (within the 0.01 tolerance
+  // already enforced by the caller). Both the isFullySettled=true path and the
+  // outstanding=0 path in the else branch lead to 'Settled'.
+  const outstanding = Math.max(0, parseFloat(opts.newOutstandingAmount.toFixed(2)));
+  const fullySettled = opts.isFullySettled || outstanding === 0;
+
+  if (fullySettled) {
     await client.query(
       `UPDATE receivables
-       SET status = 'Settled',
+       SET status            = 'Settled',
            outstanding_amount = 0,
-           settlement_date = now(),
-           updated_at = now()
-       WHERE source_type = $1
+           settlement_date   = now(),
+           updated_at        = now()
+       WHERE source_type      = $1
          AND source_entity_id = $2
-         AND status != 'Settled'`,
+         AND status          != 'Settled'`,
       [opts.sourceType, opts.sourceEntityId],
     );
   } else {
-    const outstanding = Math.max(0, opts.newOutstandingAmount);
+    // outstanding > 0: determine status from the current receivable status.
+    // Pending  → PartiallyPaid (first partial payment)
+    // Overdue  → PartiallyPaid (partial payment received, still owed)
+    // PartiallyPaid → PartiallyPaid (subsequent partial payment)
     await client.query(
       `UPDATE receivables
        SET status = CASE
-             WHEN $3 > 0 THEN 'PartiallyPaid'
-             ELSE status
+             WHEN status IN ('Pending', 'Overdue') THEN 'PartiallyPaid'
+             ELSE status   -- already 'PartiallyPaid', keep it
            END,
            outstanding_amount = $3,
-           updated_at = now()
-       WHERE source_type = $1
+           updated_at        = now()
+       WHERE source_type      = $1
          AND source_entity_id = $2
          AND status NOT IN ('Settled')`,
       [opts.sourceType, opts.sourceEntityId, outstanding.toFixed(2)],

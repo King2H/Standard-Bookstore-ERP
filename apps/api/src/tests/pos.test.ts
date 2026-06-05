@@ -30,6 +30,11 @@ async function cleanTestTransactions() {
   `);
 }
 
+function toLocalDateString(d: Date | string): string {
+  const dateObj = typeof d === 'string' ? new Date(d) : d;
+  return new Date(dateObj.getTime() - dateObj.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 async function getTestBook(): Promise<{ id: number; price: number }> {
   const result = await db.query(`SELECT id, default_price FROM books WHERE is_active = true AND default_price IS NOT NULL LIMIT 1`);
   if (!result.rows.length) throw new Error('No active books with price found');
@@ -78,9 +83,15 @@ describe('POS — Transactions', () => {
   let bookPrice: number;
 
   beforeAll(async () => {
+    await cleanTestTransactions();
+    await db.query(`DELETE FROM loyalty_history WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
+    await db.query(`DELETE FROM store_credit_history WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
+    await db.query(`DELETE FROM loyalty_accounts WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
+    await db.query(`DELETE FROM store_credit_accounts WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
+    await db.query(`DELETE FROM receivables WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
+    await db.query(`DELETE FROM customers WHERE full_name = 'POS Test Customer'`);
     await cleanTestStaff(STAFF_PREFIX);
     await cleanTestBranches(BRANCH_PREFIX);
-    await cleanTestTransactions();
 
     const branch = await createTestBranch({ name: 'POS Test Branch' });
     branchId = branch.branchId;
@@ -431,7 +442,7 @@ describe('POS — Transactions', () => {
     const qty = 2;
     const expectedSubtotal = parseFloat((bookPrice * qty).toFixed(2));
     const expectedGrand = expectedSubtotal; // tax disabled
-    const dueDate = new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 10); // 7 days from now
+    const dueDate = toLocalDateString(new Date(Date.now() + 86400000 * 7)); // 7 days from now
 
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
@@ -465,12 +476,8 @@ describe('POS — Transactions', () => {
     expect(Number(rec.outstanding_amount)).toBeCloseTo(expectedGrand, 1);
     expect(rec.status).toBe('Pending');
     // Compare due_date using local-date arithmetic to avoid UTC vs local timezone off-by-one
-    const nowMs = Date.now();
-    const localOffset = new Date().getTimezoneOffset() * 60000;
-    const localNow = new Date(nowMs - localOffset);
-    const dueDateLocal = new Date(localNow.getTime() + 86400000 * 7).toISOString().slice(0, 10);
-    const recDueDate = new Date(rec.due_date).toISOString().slice(0, 10);
-    expect(recDueDate === dueDate || recDueDate === dueDateLocal).toBe(true);
+    const recDueDate = toLocalDateString(rec.due_date);
+    expect(recDueDate).toBe(dueDate);
 
     // Verify store credit debit is created
     const scRes = await db.query(
@@ -480,5 +487,151 @@ describe('POS — Transactions', () => {
     expect(scRes.rows.length).toBe(1);
     expect(Number(scRes.rows[0].amount)).toBeCloseTo(expectedGrand, 1);
     expect(scRes.rows[0].direction).toBe('debit');
+  });
+
+  // ── 12. Partial payment → receivable stays PartiallyPaid, balance reduced ────
+  it('12. Partial payment → receivable status=PartiallyPaid, outstanding reduced correctly', async () => {
+    await ensureInventory(bookId, locationId, 50);
+    const customerId = await createTestCustomer(branchId);
+    const qty = 2;
+    const grand = parseFloat((bookPrice * qty).toFixed(2));
+    const dueDate = toLocalDateString(new Date(Date.now() + 86400000 * 14));
+
+    // Create full credit sale
+    const createRes = await request(getTestApp())
+      .post('/api/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ branchId, locationId, customerId, items: [{ bookId, quantity: qty }], payments: [], allowCredit: true, dueDate });
+    expect(createRes.status).toBe(201);
+    const txId = createRes.body.id;
+
+    // Verify receivable is Pending with full balance
+    const recBefore = await db.query(
+      `SELECT * FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId],
+    );
+    expect(recBefore.rows.length).toBe(1);
+    expect(recBefore.rows[0].status).toBe('Pending');
+    expect(Number(recBefore.rows[0].outstanding_amount)).toBeCloseTo(grand, 2);
+    expect(Number(recBefore.rows[0].original_amount)).toBeCloseTo(grand, 2);
+
+    // Pay exactly half (less than outstanding)
+    const partialPayment = parseFloat((grand / 2).toFixed(2));
+    const payRes = await request(getTestApp())
+      .post(`/api/pos/transactions/${txId}/payment`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ payments: [{ method: 'cash', amount: partialPayment }] });
+    expect(payRes.status).toBe(200);
+
+    // ── Core regression: receivable must NOT be Settled ──────────────────────
+    const recAfter = await db.query(
+      `SELECT * FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId],
+    );
+    expect(recAfter.rows.length).toBe(1);
+    expect(recAfter.rows[0].status).toBe('PartiallyPaid');  // was wrongly 'Settled'
+    const expectedOutstanding = parseFloat((grand - partialPayment).toFixed(2));
+    expect(Number(recAfter.rows[0].outstanding_amount)).toBeCloseTo(expectedOutstanding, 2);  // was wrongly 0.00
+    // Due date must be unchanged
+    expect(toLocalDateString(recAfter.rows[0].due_date)).toBe(dueDate);
+    // settlement_date must NOT be set
+    expect(recAfter.rows[0].settlement_date).toBeNull();
+  });
+
+  // ── 13. Full settlement in two steps → receivable Settled ────────────────────
+  it('13. Two sequential partial payments = full settlement → receivable Settled', async () => {
+    await ensureInventory(bookId, locationId, 50);
+    const customerId = await createTestCustomer(branchId);
+    const qty = 2;
+    const grand = parseFloat((bookPrice * qty).toFixed(2));
+    const firstPayment = parseFloat((grand * 0.4).toFixed(2));
+    const secondPayment = parseFloat((grand - firstPayment).toFixed(2));
+    const dueDate = toLocalDateString(new Date(Date.now() + 86400000 * 14));
+
+    const createRes = await request(getTestApp())
+      .post('/api/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ branchId, locationId, customerId, items: [{ bookId, quantity: qty }], payments: [], allowCredit: true, dueDate });
+    expect(createRes.status).toBe(201);
+    const txId = createRes.body.id;
+
+    // First partial payment
+    const pay1 = await request(getTestApp())
+      .post(`/api/pos/transactions/${txId}/payment`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ payments: [{ method: 'cash', amount: firstPayment }] });
+    expect(pay1.status).toBe(200);
+
+    const recMid = await db.query(
+      `SELECT * FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId],
+    );
+    expect(recMid.rows[0].status).toBe('PartiallyPaid');
+    expect(Number(recMid.rows[0].outstanding_amount)).toBeCloseTo(grand - firstPayment, 2);
+
+    // Second (final) payment clears the balance
+    const pay2 = await request(getTestApp())
+      .post(`/api/pos/transactions/${txId}/payment`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ payments: [{ method: 'cash', amount: secondPayment }] });
+    expect(pay2.status).toBe(200);
+
+    const recFinal = await db.query(
+      `SELECT * FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId],
+    );
+    expect(recFinal.rows[0].status).toBe('Settled');
+    expect(Number(recFinal.rows[0].outstanding_amount)).toBeCloseTo(0, 2);
+    expect(recFinal.rows[0].settlement_date).not.toBeNull();
+    // Due date must still be the original value
+    expect(toLocalDateString(recFinal.rows[0].due_date)).toBe(dueDate);
+  });
+
+  // ── 14. Outstanding balance = originalAmount − ∑ payments ───────────────────
+  it('14. Outstanding = originalAmount − totalPaid after each payment', async () => {
+    await ensureInventory(bookId, locationId, 50);
+    const customerId = await createTestCustomer(branchId);
+    const qty = 2;
+    const grand = parseFloat((bookPrice * qty).toFixed(2));
+    const p1 = parseFloat((grand * 0.3).toFixed(2));
+    const p2 = parseFloat((grand * 0.3).toFixed(2));
+
+    const createRes = await request(getTestApp())
+      .post('/api/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ branchId, locationId, customerId, items: [{ bookId, quantity: qty }], payments: [], allowCredit: true });
+    expect(createRes.status).toBe(201);
+    const txId = createRes.body.id;
+
+    const originalRec = await db.query(
+      `SELECT original_amount, outstanding_amount FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId],
+    );
+    const origAmount = Number(originalRec.rows[0].original_amount);
+
+    await request(getTestApp())
+      .post(`/api/pos/transactions/${txId}/payment`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ payments: [{ method: 'cash', amount: p1 }] });
+
+    const rec1 = await db.query(
+      `SELECT outstanding_amount, status FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId],
+    );
+    expect(Number(rec1.rows[0].outstanding_amount)).toBeCloseTo(origAmount - p1, 2);
+    expect(rec1.rows[0].status).toBe('PartiallyPaid');
+
+    await request(getTestApp())
+      .post(`/api/pos/transactions/${txId}/payment`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ payments: [{ method: 'cash', amount: p2 }] });
+
+    const rec2 = await db.query(
+      `SELECT outstanding_amount, status FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId],
+    );
+    expect(Number(rec2.rows[0].outstanding_amount)).toBeCloseTo(origAmount - p1 - p2, 2);
+    expect(rec2.rows[0].status).toBe('PartiallyPaid');
   });
 });

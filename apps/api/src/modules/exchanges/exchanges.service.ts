@@ -91,7 +91,7 @@ function mapExchangeRow(row: Record<string, unknown>): ExchangeRow {
           : 0),
     dueDate: row.due_date
       ? (row.due_date instanceof Date
-          ? row.due_date.toISOString().slice(0, 10)
+          ? new Date(row.due_date.getTime() - row.due_date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
           : String(row.due_date))
       : null,
     settlementStatus: (row.receivable_status as string) ?? (

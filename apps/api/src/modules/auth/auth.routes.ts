@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import * as authService from './auth.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { ValidationError, BusinessError, ForbiddenError, ServiceUnavailableError, AppError } from '../../lib/errors.js';
+import { ValidationError, BusinessError, ForbiddenError, ServiceUnavailableError, AppError, AuthError } from '../../lib/errors.js';
 import { db } from '../../db/index.js';
 import { loginRateLimit } from '../../middleware/rateLimit.js';
 import { setCsrfCookie } from '../../middleware/csrf.js';
@@ -198,7 +198,7 @@ router.post('/auth/refresh', async (req: Request, res: Response, next: NextFunct
   try {
     const refreshToken = req.cookies?.refreshToken;
     if (!refreshToken) {
-      return next({ statusCode: 401, code: 'MISSING_REFRESH_TOKEN', message: 'Refresh token required' });
+      return next(new AuthError('MISSING_REFRESH_TOKEN', 'Refresh token required'));
     }
 
     const result = await authService.refresh(refreshToken);

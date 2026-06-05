@@ -96,7 +96,7 @@ function mapTransactionRow(row: Record<string, unknown>): TransactionRow {
     createdAt: (row.created_at as Date).toISOString(),
     dueDate: row.due_date
       ? (row.due_date instanceof Date
-          ? row.due_date.toISOString().slice(0, 10)
+          ? new Date(row.due_date.getTime() - row.due_date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
           : String(row.due_date))
       : null,
   };
@@ -636,17 +636,40 @@ export async function recordPayment(
     });
 
     // ── Receivable hook — sync outstanding amount ──────────────────────────────
+    // Read the receivable's actual outstanding_amount inside the same DB transaction
+    // (FOR UPDATE) so we reduce it by exactly incomingTotal. Using the transaction-
+    // level newAmountDue was an incorrect proxy: for sales with an upfront partial
+    // payment the receivable's originalAmount ≠ grandTotal, causing premature Settled.
     try {
       await client.query('SAVEPOINT before_receivable_update');
-      await updateReceivableOnPayment(
-        {
-          sourceType: 'pos_credit_sale',
-          sourceEntityId: parseInt(String(txId), 10),
-          newOutstandingAmount: Math.max(0, newAmountDue),
-          isFullySettled: newPaymentStatus === 'paid',
-        },
-        client,
+
+      const recRow = await client.query(
+        `SELECT outstanding_amount
+         FROM receivables
+         WHERE source_type      = 'pos_credit_sale'
+           AND source_entity_id = $1
+           AND status          != 'Settled'
+         FOR UPDATE`,
+        [parseInt(String(txId), 10)],
       );
+
+      if (recRow.rows.length > 0) {
+        const currentOutstanding = parseFloat(recRow.rows[0].outstanding_amount as string);
+        const newOutstanding = parseFloat(
+          Math.max(0, currentOutstanding - incomingTotal).toFixed(2),
+        );
+        await updateReceivableOnPayment(
+          {
+            sourceType: 'pos_credit_sale',
+            sourceEntityId: parseInt(String(txId), 10),
+            // updateReceivableOnPayment sets status=Settled when outstanding===0
+            newOutstandingAmount: newOutstanding,
+            isFullySettled: false,
+          },
+          client,
+        );
+      }
+
       await client.query('RELEASE SAVEPOINT before_receivable_update');
     } catch (hookErr) {
       await client.query('ROLLBACK TO SAVEPOINT before_receivable_update').catch(() => null);
