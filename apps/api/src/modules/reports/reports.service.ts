@@ -74,6 +74,8 @@ export interface CustomerReport {
 }
 
 export interface KpiReport {
+  dailySales: number;
+  monthlySales: number;
   dailyRevenue: number;
   monthlyRevenue: number;
   averageOrderValue: number;
@@ -81,6 +83,7 @@ export interface KpiReport {
   lowStockAlerts: number;
   pendingOrders: number;
   totalExchangesToday: number;
+  outstandingBalance: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -272,11 +275,22 @@ export async function getPaymentReport(filters: ReportFilters): Promise<PaymentR
       netCollected:    parseFloat(s.total_collected) - totalRefunded,
       pendingPayments: parseFloat(s.pending_payments),
     },
-    byMethod: byMethodRes.rows.map(r => ({
-      method: r.method,
-      total:  parseFloat(r.total),
-      count:  r.count,
-    })),
+    byMethod: (() => {
+      const byMethodMerged: Record<string, { method: string; total: number; count: number }> = {};
+      for (const r of byMethodRes.rows) {
+        const rawMethod = r.method as string;
+        const method = rawMethod === 'store_credit' || rawMethod === 'mobile' ? 'Telebirr' : rawMethod;
+        const total = parseFloat(r.total as string);
+        const count = parseInt(r.count as string, 10);
+        if (byMethodMerged[method]) {
+          byMethodMerged[method].total += total;
+          byMethodMerged[method].count += count;
+        } else {
+          byMethodMerged[method] = { method, total, count };
+        }
+      }
+      return Object.values(byMethodMerged).sort((a, b) => b.total - a.total);
+    })(),
     byPeriod: byPeriodRes.rows.map(r => ({
       period:    r.period,
       collected: parseFloat(r.collected),
@@ -614,43 +628,176 @@ export async function getCustomerReport(filters: ReportFilters): Promise<Custome
 // ── KPI Report ────────────────────────────────────────────────────────────────
 
 export async function getKpis(branchId?: number): Promise<KpiReport> {
-  // Build parameterized branch condition — never interpolate user input into SQL
-  const branchParams: unknown[] = [];
-  const branchCond = branchId
-    ? (() => { branchParams.push(branchId); return `AND branch_id = $${branchParams.length}`; })()
-    : '';
+  const params = branchId ? [branchId] : [];
+  const branchCond = branchId ? 'AND branch_id = $1' : '';
+  const branchCondT = branchId ? 'AND t.branch_id = $1' : '';
+  const branchCondO = branchId ? 'AND o.branch_id = $1' : '';
+  const branchCondE = branchId ? 'AND e.branch_id = $1' : '';
 
-  // Order status values: support both legacy ('Pending','Confirmed','In_Progress')
-  // and new lifecycle values ('DRAFT','CONFIRMED','PAID') introduced in migration 33.
   const ACTIVE_ORDER_STATUSES = `('Pending','Confirmed','In_Progress','DRAFT','CONFIRMED','PAID')`;
   const CANCELLED_STATUSES    = `('Cancelled','CANCELLED')`;
 
-  const [dailyRes, monthlyRes, aovRes, custRes, lowStockRes, pendingRes, excRes, posRes] = await Promise.all([
-    // Daily revenue — orders (non-cancelled) created today
+  const [
+    // 1. Sales
+    dailyOrdersSalesRes,
+    dailyPosSalesRes,
+    dailyExchangesSalesRes,
+    monthlyOrdersSalesRes,
+    monthlyPosSalesRes,
+    monthlyExchangesSalesRes,
+
+    // 2. Revenue
+    dailyPosRevenueRes,
+    dailyOrdersRevenueRes,
+    dailyExchangesRevenueRes,
+    monthlyPosRevenueRes,
+    monthlyOrdersRevenueRes,
+    monthlyExchangesRevenueRes,
+
+    // 3. Outstanding Balance
+    outstandingRes,
+
+    // 4. Other existing metrics
+    aovRes,
+    custRes,
+    lowStockRes,
+    pendingRes,
+    excRes,
+  ] = await Promise.all([
+    // Daily Orders Sales
     db.query(
       `SELECT COALESCE(SUM(total), 0)::NUMERIC AS val
        FROM orders
        WHERE DATE(created_at) = CURRENT_DATE
          AND status NOT IN ${CANCELLED_STATUSES}
          ${branchCond}`,
-      branchParams,
+      params,
     ),
-    // Monthly revenue — orders this calendar month
+    // Daily POS Sales
+    db.query(
+      `SELECT COALESCE(SUM(grand_total), 0)::NUMERIC AS val
+       FROM transactions
+       WHERE DATE(created_at) = CURRENT_DATE
+         AND status = 'completed'
+         ${branchCond}`,
+      params,
+    ),
+    // Daily Exchanges Sales
+    db.query(
+      `SELECT COALESCE(SUM(total_outgoing_value), 0)::NUMERIC AS val
+       FROM exchanges
+       WHERE DATE(created_at) = CURRENT_DATE
+         AND status IN ('Completed', 'COMPLETED')
+         ${branchCond}`,
+      params,
+    ),
+    // Monthly Orders Sales
     db.query(
       `SELECT COALESCE(SUM(total), 0)::NUMERIC AS val
        FROM orders
        WHERE date_trunc('month', created_at) = date_trunc('month', now())
          AND status NOT IN ${CANCELLED_STATUSES}
          ${branchCond}`,
-      branchParams,
+      params,
     ),
-    // Average order value — all completed/paid orders
+    // Monthly POS Sales
+    db.query(
+      `SELECT COALESCE(SUM(grand_total), 0)::NUMERIC AS val
+       FROM transactions
+       WHERE date_trunc('month', created_at) = date_trunc('month', now())
+         AND status = 'completed'
+         ${branchCond}`,
+      params,
+    ),
+    // Monthly Exchanges Sales
+    db.query(
+      `SELECT COALESCE(SUM(total_outgoing_value), 0)::NUMERIC AS val
+       FROM exchanges
+       WHERE date_trunc('month', created_at) = date_trunc('month', now())
+         AND status IN ('Completed', 'COMPLETED')
+         ${branchCond}`,
+      params,
+    ),
+
+    // Daily POS Revenue
+    db.query(
+      `SELECT COALESCE(SUM(tp.amount), 0)::NUMERIC AS val
+       FROM transaction_payments tp
+       JOIN transactions t ON t.id = tp.transaction_id
+       WHERE t.status = 'completed'
+         AND DATE(tp.created_at) = CURRENT_DATE
+         ${branchCondT}`,
+      params,
+    ),
+    // Daily Orders Revenue
+    db.query(
+      `SELECT COALESCE(SUM(op.amount), 0)::NUMERIC AS val
+       FROM order_payments op
+       JOIN orders o ON o.id = op.order_id
+       WHERE op.status IN ('success', 'partially_refunded')
+         AND o.status NOT IN ${CANCELLED_STATUSES}
+         AND DATE(op.processed_at) = CURRENT_DATE
+         ${branchCondO}`,
+      params,
+    ),
+    // Daily Exchanges Revenue
+    db.query(
+      `SELECT COALESCE(SUM(CASE WHEN ese.entry_type = 'cash_payment' THEN ese.amount WHEN ese.entry_type = 'cash_refund' THEN -ese.amount ELSE 0 END), 0)::NUMERIC AS val
+       FROM exchange_settlement_entries ese
+       JOIN exchanges e ON e.id = ese.exchange_id
+       WHERE e.status IN ('Completed', 'COMPLETED')
+         AND DATE(ese.created_at) = CURRENT_DATE
+         ${branchCondE}`,
+      params,
+    ),
+    // Monthly POS Revenue
+    db.query(
+      `SELECT COALESCE(SUM(tp.amount), 0)::NUMERIC AS val
+       FROM transaction_payments tp
+       JOIN transactions t ON t.id = tp.transaction_id
+       WHERE t.status = 'completed'
+         AND date_trunc('month', tp.created_at) = date_trunc('month', now())
+         ${branchCondT}`,
+      params,
+    ),
+    // Monthly Orders Revenue
+    db.query(
+      `SELECT COALESCE(SUM(op.amount), 0)::NUMERIC AS val
+       FROM order_payments op
+       JOIN orders o ON o.id = op.order_id
+       WHERE op.status IN ('success', 'partially_refunded')
+         AND o.status NOT IN ${CANCELLED_STATUSES}
+         AND date_trunc('month', op.processed_at) = date_trunc('month', now())
+         ${branchCondO}`,
+      params,
+    ),
+    // Monthly Exchanges Revenue
+    db.query(
+      `SELECT COALESCE(SUM(CASE WHEN ese.entry_type = 'cash_payment' THEN ese.amount WHEN ese.entry_type = 'cash_refund' THEN -ese.amount ELSE 0 END), 0)::NUMERIC AS val
+       FROM exchange_settlement_entries ese
+       JOIN exchanges e ON e.id = ese.exchange_id
+       WHERE e.status IN ('Completed', 'COMPLETED')
+         AND date_trunc('month', ese.created_at) = date_trunc('month', now())
+         ${branchCondE}`,
+      params,
+    ),
+
+    // Outstanding Balance
+    db.query(
+      `SELECT COALESCE(SUM(outstanding_amount), 0)::NUMERIC AS val
+       FROM receivables
+       WHERE status IN ('Pending', 'PartiallyPaid', 'Overdue')
+         ${branchCond}`,
+      params,
+    ),
+
+    // Average order value
     db.query(
       `SELECT COALESCE(AVG(total), 0)::NUMERIC AS val
        FROM orders
        WHERE status NOT IN ${CANCELLED_STATUSES}
          ${branchCond}`,
-      branchParams,
+      params,
     ),
     // Active customers
     db.query(
@@ -658,24 +805,24 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
        FROM customers
        WHERE is_active = true
          ${branchId ? `AND branch_id = $1` : ''}`,
-      branchId ? [branchId] : [],
+      params,
     ),
-    // Low stock alerts — items at or below reorder point
+    // Low stock alerts
     db.query(
       `SELECT COUNT(*)::INTEGER AS val
        FROM inventory i
        JOIN locations l ON l.id = i.location_id
        WHERE i.quantity <= i.reorder_point
          ${branchId ? `AND l.branch_id = $1` : ''}`,
-      branchId ? [branchId] : [],
+      params,
     ),
-    // Pending / in-progress orders (need action)
+    // Pending orders
     db.query(
       `SELECT COUNT(*)::INTEGER AS val
        FROM orders
        WHERE status IN ${ACTIVE_ORDER_STATUSES}
          ${branchCond}`,
-      branchParams,
+      params,
     ),
     // Exchanges today
     db.query(
@@ -683,29 +830,42 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
        FROM exchanges
        WHERE DATE(created_at) = CURRENT_DATE
          ${branchCond}`,
-      branchParams,
-    ),
-    // POS revenue today (completed transactions)
-    db.query(
-      `SELECT COALESCE(SUM(grand_total), 0)::NUMERIC AS val
-       FROM transactions
-       WHERE DATE(created_at) = CURRENT_DATE
-         AND status = 'completed'
-         ${branchId ? `AND branch_id = $1` : ''}`,
-      branchId ? [branchId] : [],
+      params,
     ),
   ]);
 
-  const orderDailyRevenue = parseFloat(dailyRes.rows[0].val);
-  const posDailyRevenue   = parseFloat(posRes.rows[0].val);
+  const dailySales =
+    parseFloat(dailyOrdersSalesRes.rows[0].val) +
+    parseFloat(dailyPosSalesRes.rows[0].val) +
+    parseFloat(dailyExchangesSalesRes.rows[0].val);
+
+  const monthlySales =
+    parseFloat(monthlyOrdersSalesRes.rows[0].val) +
+    parseFloat(monthlyPosSalesRes.rows[0].val) +
+    parseFloat(monthlyExchangesSalesRes.rows[0].val);
+
+  const dailyRevenue =
+    parseFloat(dailyPosRevenueRes.rows[0].val) +
+    parseFloat(dailyOrdersRevenueRes.rows[0].val) +
+    parseFloat(dailyExchangesRevenueRes.rows[0].val);
+
+  const monthlyRevenue =
+    parseFloat(monthlyPosRevenueRes.rows[0].val) +
+    parseFloat(monthlyOrdersRevenueRes.rows[0].val) +
+    parseFloat(monthlyExchangesRevenueRes.rows[0].val);
+
+  const outstandingBalance = parseFloat(outstandingRes.rows[0].val);
 
   return {
-    dailyRevenue:         orderDailyRevenue + posDailyRevenue,
-    monthlyRevenue:       parseFloat(monthlyRes.rows[0].val),
+    dailySales,
+    monthlySales,
+    dailyRevenue,
+    monthlyRevenue,
     averageOrderValue:    parseFloat(aovRes.rows[0].val),
     totalActiveCustomers: custRes.rows[0].val,
     lowStockAlerts:       lowStockRes.rows[0].val,
     pendingOrders:        pendingRes.rows[0].val,
     totalExchangesToday:  excRes.rows[0].val,
+    outstandingBalance,
   };
 }

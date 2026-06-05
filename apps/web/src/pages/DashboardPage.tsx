@@ -13,8 +13,16 @@ interface DashboardPageProps { userRole?: Role; onNavigate?: (page: string) => v
 // ── API types ─────────────────────────────────────────────────────────────────
 
 interface KpiReport {
-  dailyRevenue: number; monthlyRevenue: number; averageOrderValue: number;
-  totalActiveCustomers: number; lowStockAlerts: number; pendingOrders: number; totalExchangesToday: number;
+  dailySales: number;
+  monthlySales: number;
+  dailyRevenue: number;
+  monthlyRevenue: number;
+  averageOrderValue: number;
+  totalActiveCustomers: number;
+  lowStockAlerts: number;
+  pendingOrders: number;
+  totalExchangesToday: number;
+  outstandingBalance: number;
 }
 interface DiscountByType { Normal: number; Merchant: number; Special: number; }
 interface SalesSummary {
@@ -375,16 +383,19 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             </span>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {kpiLoading ? (
-            Array.from({ length: 7 }).map((_, i) => (
+            Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 h-20 animate-pulse" />
             ))
           ) : kpis ? (
             <>
+              <KpiCard label="Today's Sales"    value={fmtShort(kpis.dailySales)}           icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>} color="bg-blue-100 dark:bg-blue-900/30" onClick={() => onNavigate?.('pos')} />
+              <KpiCard label="Monthly Sales"    value={fmtShort(kpis.monthlySales)}         icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>} color="bg-indigo-100 dark:bg-indigo-900/30" onClick={() => onNavigate?.('pos')} />
               <KpiCard label="Today's Revenue"  value={fmtShort(kpis.dailyRevenue)}         icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} color="bg-green-100 dark:bg-green-900/30" onClick={() => onNavigate?.('payments')} />
-              <KpiCard label="Monthly Revenue"  value={fmtShort(kpis.monthlyRevenue)}        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} color="bg-blue-100 dark:bg-blue-900/30" onClick={() => onNavigate?.('payments')} />
-              <KpiCard label="Avg Order Value"  value={fmtShort(kpis.averageOrderValue)}     icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>} color="bg-indigo-100 dark:bg-indigo-900/30" onClick={() => onNavigate?.('orders')} />
+              <KpiCard label="Monthly Revenue"  value={fmtShort(kpis.monthlyRevenue)}        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} color="bg-teal-100 dark:bg-teal-900/30" onClick={() => onNavigate?.('payments')} />
+              <KpiCard label="Outstanding Bal"  value={fmtShort(kpis.outstandingBalance)}     icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>} color="bg-red-100 dark:bg-red-900/30" onClick={() => onNavigate?.('receivables')} />
+              <KpiCard label="Avg Order Value"  value={fmtShort(kpis.averageOrderValue)}     icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>} color="bg-sky-100 dark:bg-sky-900/30" onClick={() => onNavigate?.('orders')} />
               <KpiCard label="Active Customers" value={kpis.totalActiveCustomers.toString()} icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>} color="bg-purple-100 dark:bg-purple-900/30" onClick={() => onNavigate?.('customers')} />
               <KpiCard label="Low Stock"        value={kpis.lowStockAlerts.toString()}       icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>} color="bg-amber-100 dark:bg-amber-900/30" sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'} onClick={() => onNavigate?.('inventory')} />
               <KpiCard label="Pending Orders"   value={kpis.pendingOrders.toString()}        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} color="bg-orange-100 dark:bg-orange-900/30" onClick={() => onNavigate?.('orders')} />
@@ -502,7 +513,13 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     iconType="circle"
                     iconSize={8}
                     wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                    formatter={(value: string) => value.replace('_', ' ')}
+                    formatter={(value: string) => {
+                      const clean = value.replace('_', ' ');
+                      if (clean === 'store credit' || clean === 'mobile' || clean === 'store_credit') {
+                        return 'Telebirr';
+                      }
+                      return clean;
+                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>

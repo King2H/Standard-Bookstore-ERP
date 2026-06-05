@@ -198,12 +198,12 @@ export async function list(opts: {
   const conditions: string[] = [];
   const params: unknown[] = [];
 
-  if (opts.branchId)    { params.push(opts.branchId);    conditions.push(`r.branch_id = ${params.length}`); }
-  if (opts.customerId)  { params.push(opts.customerId);  conditions.push(`r.customer_id = ${params.length}`); }
-  if (opts.status)      { params.push(opts.status);      conditions.push(`r.status = ${params.length}`); }
-  if (opts.sourceType)  { params.push(opts.sourceType);  conditions.push(`r.source_type = ${params.length}`); }
-  if (opts.dueDateFrom) { params.push(opts.dueDateFrom); conditions.push(`r.due_date >= ${params.length}`); }
-  if (opts.dueDateTo)   { params.push(opts.dueDateTo);   conditions.push(`r.due_date <= ${params.length}`); }
+  if (opts.branchId)    { params.push(opts.branchId);    conditions.push(`r.branch_id = $${params.length}`); }
+  if (opts.customerId)  { params.push(opts.customerId);  conditions.push(`r.customer_id = $${params.length}`); }
+  if (opts.status)      { params.push(opts.status);      conditions.push(`r.status = $${params.length}`); }
+  if (opts.sourceType)  { params.push(opts.sourceType);  conditions.push(`r.source_type = $${params.length}`); }
+  if (opts.dueDateFrom) { params.push(opts.dueDateFrom); conditions.push(`r.due_date >= $${params.length}`); }
+  if (opts.dueDateTo)   { params.push(opts.dueDateTo);   conditions.push(`r.due_date <= $${params.length}`); }
   if (opts.overdueOnly) {
     conditions.push(`r.status = 'Overdue'`);
   }
@@ -223,7 +223,7 @@ export async function list(opts: {
        LEFT JOIN customers c ON c.id = r.customer_id
        ${where}
        ORDER BY r.created_at DESC
-       LIMIT ${li} OFFSET ${oi}`,
+       LIMIT $${li} OFFSET $${oi}`,
       [...params, pageSize, offset],
     ),
   ]);
@@ -335,7 +335,7 @@ export async function getSummary(branchId?: number): Promise<{
   partiallyPaidCount: number;
   settledThisMonth: number;
 }> {
-  const branchCond = branchId ? `WHERE branch_id = ${1}` : '';
+  const branchCond = branchId ? `WHERE branch_id = $1` : '';
   const params = branchId ? [branchId] : [];
 
   const result = await db.query(

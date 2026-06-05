@@ -156,7 +156,8 @@ export async function createCustomer(
     // Auto-generate customer_code (race-condition safe within transaction)
     const seqResult = await client.query(
       `SELECT COALESCE(MAX(CAST(SUBSTRING(customer_code FROM 5) AS INTEGER)), 0) + 1 AS next_seq
-       FROM customers`,
+       FROM customers
+       WHERE customer_code ~ '^CUS-[0-9]+$'`,
     );
     const nextSeq: number = seqResult.rows[0].next_seq as number;
     const customerCode = `CUS-${String(nextSeq).padStart(4, '0')}`;

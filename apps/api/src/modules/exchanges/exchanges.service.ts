@@ -33,6 +33,9 @@ export interface ExchangeRow {
   incomingItems?: ExchangeItemRow[];
   outgoingItems?: ExchangeItemRow[];
   allowedActions?: string[];
+  outstandingAmount?: number;
+  dueDate?: string | null;
+  settlementStatus?: string;
 }
 
 export interface ExchangeItemInput2 {
@@ -81,6 +84,21 @@ function mapExchangeRow(row: Record<string, unknown>): ExchangeRow {
     createdBy: row.created_by as number,
     createdAt: (row.created_at as Date).toISOString(),
     updatedAt: (row.updated_at as Date).toISOString(),
+    outstandingAmount: row.outstanding_amount != null
+      ? parseFloat(row.outstanding_amount as string)
+      : (row.settlement_type === 'Customer_Pays' && !['COMPLETED', 'SETTLED', 'Completed', 'Cancelled', 'CANCELLED'].includes(row.lifecycle_status as string || row.status as string)
+          ? parseFloat(row.net_balance as string)
+          : 0),
+    dueDate: row.due_date
+      ? (row.due_date instanceof Date
+          ? row.due_date.toISOString().slice(0, 10)
+          : String(row.due_date))
+      : null,
+    settlementStatus: (row.receivable_status as string) ?? (
+      ['COMPLETED', 'SETTLED', 'Completed'].includes(row.lifecycle_status as string || row.status as string)
+        ? 'Settled'
+        : 'Pending'
+    ),
   };
 }
 
@@ -108,7 +126,13 @@ async function fetchItems(exchangeId: string): Promise<{ incoming: ExchangeItemR
 }
 
 export async function getById(id: string | number): Promise<ExchangeRow> {
-  const res = await db.query('SELECT * FROM exchanges WHERE id = $1', [id]);
+  const res = await db.query(
+    `SELECT e.*, r.outstanding_amount, r.due_date, r.status AS receivable_status
+     FROM exchanges e
+     LEFT JOIN receivables r ON r.source_type = 'exchange_difference' AND r.source_entity_id = e.id
+     WHERE e.id = $1`,
+    [id],
+  );
   if (!res.rows.length) throw new NotFoundError('Exchange');
   const exchange = mapExchangeRow(res.rows[0]);
   const items = await fetchItems(exchange.id);
@@ -145,7 +169,14 @@ export async function list(opts: {
 
   const [countRes, dataRes] = await Promise.all([
     db.query('SELECT COUNT(*) FROM exchanges e ' + where, params),
-    db.query('SELECT e.* FROM exchanges e ' + where + ' ORDER BY e.created_at DESC LIMIT $' + li + ' OFFSET $' + oi, [...params, pageSize, offset]),
+    db.query(
+      `SELECT e.*, r.outstanding_amount, r.due_date, r.status AS receivable_status
+       FROM exchanges e
+       LEFT JOIN receivables r ON r.source_type = 'exchange_difference' AND r.source_entity_id = e.id
+       ${where}
+       ORDER BY e.created_at DESC LIMIT $${li} OFFSET $${oi}`,
+      [...params, pageSize, offset],
+    ),
   ]);
 
   return {

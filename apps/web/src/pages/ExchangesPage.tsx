@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
@@ -17,31 +17,12 @@ interface Exchange {
   currency: string; createdAt: string;
   incomingItems?: ExchangeItem[]; outgoingItems?: ExchangeItem[];
   allowedActions?: string[];
+  outstandingAmount?: number;
+  dueDate?: string | null;
+  settlementStatus?: string;
 }
 interface ExchangeListResponse { items: Exchange[]; total: number; page: number; totalPages: number; }
 interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; }
-
-// Lifecycle status colours — covers both legacy and new values
-const STATUS_COLORS: Record<string, string> = {
-  // Legacy
-  Initiated:  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-  Evaluated:  'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  Completed:  'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  Cancelled:  'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-  // New lifecycle
-  INITIATED:  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-  REVIEWED:   'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  APPROVED:   'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
-  SETTLED:    'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
-  COMPLETED:  'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  CANCELLED:  'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-};
-
-const SETTLEMENT_COLORS: Record<string, string> = {
-  Even:          'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  Customer_Pays: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-  Store_Refunds: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-};
 
 const ACTION_STYLES: Record<string, string> = {
   review:   'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200',
@@ -78,6 +59,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
 
   // Settle modal state
   const [settleModal, setSettleModal] = useState<{ id: string; ref: string; netBalance: number } | null>(null);
+  const [settleDueDate, setSettleDueDate] = useState<string>('');
   const [settlementEntries, setSettlementEntries] = useState<SettlementEntry[]>([
     { entryType: 'cash_payment', amount: '', method: 'cash', note: '' },
   ]);
@@ -193,7 +175,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   });
 
   const settleMut = useMutation({
-    mutationFn: ({ id, entries }: { id: string; entries: SettlementEntry[] }) =>
+    mutationFn: ({ id, entries, dueDate }: { id: string; entries: SettlementEntry[]; dueDate?: string | null }) =>
       api.post<Exchange>(`/exchanges/${id}/settle`, {
         idempotencyKey: `settle-${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         entries: entries.map(e => ({
@@ -202,12 +184,13 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
           method: e.method,
           note: e.note || undefined,
         })),
+        dueDate,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['exchanges-list'] });
-      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['exchanges'] });
       showToast('Exchange settled', 'success');
       setSettleModal(null);
+      setSettleDueDate('');
       setSettlementEntries([{ entryType: 'cash_payment', amount: '', method: 'cash', note: '' }]);
     },
     onError: (e: Error) => showToast(e.message, 'error'),
@@ -314,7 +297,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
             {isLoading ? <div className="p-8 text-center text-gray-400">Loading...</div> : (
               <table className="w-full text-sm min-w-[800px]">
                 <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                  <tr>{['Reference','Incoming','Outgoing','Balance','Settlement','Status','Date','Actions'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">{h}</th>)}</tr>
+                  <tr>{['Reference','Incoming','Outgoing','Difference','Outstanding','Settlement Status','Date','Actions'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {(listData?.items ?? []).map(exc => (
@@ -323,11 +306,30 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{exc.exchangeReference}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(exc.totalIncomingValue).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(exc.totalOutgoingValue).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-sm font-medium whitespace-nowrap" style={{ color: Number(exc.netBalance) > 0 ? '#d97706' : Number(exc.netBalance) < 0 ? '#2563eb' : '#6b7280' }}>
-                          {Number(exc.netBalance) > 0 ? '+' : ''}{Number(exc.netBalance).toFixed(2)}
+                        <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">
+                          <div style={{ color: Number(exc.netBalance) > 0 ? '#d97706' : Number(exc.netBalance) < 0 ? '#2563eb' : '#6b7280' }}>
+                            {Number(exc.netBalance) > 0 ? '+' : ''}{Number(exc.netBalance).toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-medium">
+                            {exc.settlementType === 'Even' ? 'Even Exchange' : exc.settlementType === 'Customer_Pays' ? 'Customer Pays' : 'Store Refunds'}
+                          </div>
                         </td>
-                        <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${SETTLEMENT_COLORS[exc.settlementType] ?? ''}`}>{exc.settlementType.replace('_', ' ')}</span></td>
-                        <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[exc.lifecycleStatus ?? exc.status] ?? ''}`}>{exc.lifecycleStatus ?? exc.status}</span></td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">
+                          {exc.outstandingAmount != null && exc.outstandingAmount > 0.01 ? `${currency} ${Number(exc.outstandingAmount).toFixed(2)}` : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            exc.settlementStatus === 'Settled'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : exc.settlementStatus === 'PartiallyPaid'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : exc.settlementStatus === 'Overdue'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                          }`}>
+                            {exc.settlementStatus ?? 'Pending'}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(exc.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1 flex-wrap">
@@ -343,7 +345,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                               }
                               if (action === 'settle') {
                                 return (
-                                  <button key="settle" onClick={e => { e.stopPropagation(); setSettleModal({ id: exc.id, ref: exc.exchangeReference, netBalance: Number(exc.netBalance) }); setSettlementEntries([{ entryType: Number(exc.netBalance) < 0 ? 'cash_refund' : 'cash_payment', amount: Math.abs(Number(exc.netBalance)).toFixed(2), method: 'cash', note: '' }]); }}
+                                  <button key="settle" onClick={e => { e.stopPropagation(); setSettleModal({ id: exc.id, ref: exc.exchangeReference, netBalance: Number(exc.netBalance) }); setSettleDueDate(''); setSettlementEntries([{ entryType: Number(exc.netBalance) < 0 ? 'cash_refund' : 'cash_payment', amount: Math.abs(Number(exc.netBalance)).toFixed(2), method: 'cash', note: '' }]); }}
                                     className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.settle}`}>
                                     Settle
                                   </button>
@@ -681,7 +683,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                         className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500">
                         <option value="cash">Cash</option>
                         <option value="bank">Bank</option>
-                        <option value="store_credit">Store Credit</option>
+                        <option value="store_credit">Telebirr</option>
                       </select>
                     </div>
                   </div>
@@ -705,10 +707,24 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
               </span>
             </div>
 
+            {settleModal.netBalance > 0.01 && (
+              <div className="space-y-1">
+                <label htmlFor="settle-due-date" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Receivable Due Date (if not paid immediately)</label>
+                <input
+                  id="settle-due-date"
+                  type="date"
+                  value={settleDueDate}
+                  min={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setSettleDueDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button onClick={() => setSettleModal(null)} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Cancel</button>
               <button
-                onClick={() => settleMut.mutate({ id: settleModal.id, entries: settlementEntries })}
+                onClick={() => settleMut.mutate({ id: settleModal.id, entries: settlementEntries, dueDate: settleDueDate || null })}
                 disabled={settleMut.isPending || settlementEntries.every(e => !parseFloat(e.amount))}
                 className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
                 {settleMut.isPending ? 'Settling...' : 'Confirm Settlement'}
@@ -723,20 +739,41 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
 
 function ExchangeDetailLoader({ exchangeId }: { exchangeId: string }) {
   const currency = useCurrency();
-  const { data } = useQuery<{ incomingItems?: ExchangeItem[]; outgoingItems?: ExchangeItem[] }>({
+  const { data } = useQuery<{
+    incomingItems?: ExchangeItem[];
+    outgoingItems?: ExchangeItem[];
+    outstandingAmount?: number;
+    dueDate?: string | null;
+    settlementStatus?: string;
+    netBalance?: string | number;
+    settlementType?: string;
+  }>({
     queryKey: ['exchange-detail', exchangeId],
     queryFn: () => api.get(`/exchanges/${exchangeId}`),
   });
   if (!data) return <p className="text-xs text-gray-400">Loading...</p>;
   return (
-    <div className="grid grid-cols-2 gap-4 text-xs">
+    <div className="grid grid-cols-3 gap-4 text-xs">
       <div>
-        <p className="font-semibold text-green-700 dark:text-green-400 mb-1">Incoming</p>
+        <p className="font-semibold text-green-700 dark:text-green-400 mb-1">Incoming Items</p>
         {(data.incomingItems ?? []).map((i, idx) => <p key={idx} className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ {currency} {Number(i.unitPrice).toFixed(2)}</p>)}
+        {(data.incomingItems ?? []).length === 0 && <p className="text-gray-400 italic">No incoming items</p>}
       </div>
       <div>
-        <p className="font-semibold text-blue-700 dark:text-blue-400 mb-1">Outgoing</p>
+        <p className="font-semibold text-blue-700 dark:text-blue-400 mb-1">Outgoing Items</p>
         {(data.outgoingItems ?? []).map((i, idx) => <p key={idx} className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ {currency} {Number(i.unitPrice).toFixed(2)}</p>)}
+        {(data.outgoingItems ?? []).length === 0 && <p className="text-gray-400 italic">No outgoing items</p>}
+      </div>
+      <div className="border-l border-gray-200 dark:border-gray-700 pl-4 space-y-1.5">
+        <p className="font-semibold text-purple-700 dark:text-purple-400 mb-1">Settlement Details</p>
+        <p className="text-gray-600 dark:text-gray-400">Difference: <span className="font-medium text-gray-900 dark:text-white">{currency} {Number(data.netBalance ?? 0).toFixed(2)} ({data.settlementType?.replace('_', ' ')})</span></p>
+        <p className="text-gray-600 dark:text-gray-400">Status: <span className="font-medium text-gray-900 dark:text-white">{data.settlementStatus ?? 'Settled'}</span></p>
+        {data.outstandingAmount != null && data.outstandingAmount > 0.01 && (
+          <p className="text-gray-600 dark:text-gray-400">Outstanding: <span className="font-semibold text-amber-600 dark:text-amber-400">{currency} {Number(data.outstandingAmount).toFixed(2)}</span></p>
+        )}
+        {data.dueDate && (
+          <p className="text-gray-600 dark:text-gray-400">Due Date: <span className="font-medium text-gray-900 dark:text-white">{data.dueDate}</span></p>
+        )}
       </div>
     </div>
   );

@@ -72,6 +72,7 @@ interface Transaction {
   paymentStatus: 'paid' | 'partial' | 'credit';
   currency: string; status: string; createdAt: string;
   lineItems?: TransactionLine[]; payments?: TransactionPayment[];
+  dueDate?: string | null;
 }
 
 interface TxListResponse { items: Transaction[]; total: number; page: number; totalPages: number; }
@@ -88,10 +89,10 @@ const canVoid = (r?: Role, perms?: string[]) =>
 
 type PaymentMethod = 'cash' | 'bank' | 'store_credit' | 'loyalty_points';
 const PAYMENT_TABS: { method: PaymentMethod; label: string; icon: string }[] = [
-  { method: 'cash',           label: 'Cash',    icon: '💵' },
-  { method: 'bank',           label: 'Bank',    icon: '🏦' },
-  { method: 'store_credit',   label: 'Credit',  icon: '💳' },
-  { method: 'loyalty_points', label: 'Loyalty', icon: '⭐' },
+  { method: 'cash',           label: 'Cash',     icon: '💵' },
+  { method: 'bank',           label: 'Bank',     icon: '🏦' },
+  { method: 'store_credit',   label: 'Telebirr', icon: '📱' },
+  { method: 'loyalty_points', label: 'Loyalty',  icon: '⭐' },
 ];
 
 // ── Cart maths (no tax) ───────────────────────────────────────────────────────
@@ -160,6 +161,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
   const [bookSearch, setBookSearch]               = useState('');
   const [cart, setCart]                           = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer]   = useState<Customer | null>(null);
+  const [dueDate, setDueDate]                     = useState<string>('');
   const [customerSearch, setCustomerSearch]       = useState('');
   const [showQuickAdd, setShowQuickAdd]           = useState(false);
   const [locationId, setLocationId]               = useState<number | null>(null);
@@ -173,7 +175,6 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
   // Discount state
   const [defaultDiscountType, setDefaultDiscountType]     = useState<DiscountPresetType>('Normal');
   const [discountPresets, setDiscountPresets]             = useState<Record<DiscountPresetType, DiscountPreset>>(DEFAULT_DISCOUNT_PRESETS);
-  const [defaultDiscountSource, setDefaultDiscountSource] = useState<'branch' | 'system' | 'unset'>('unset');
   const activeDiscountPreset = discountPresets[defaultDiscountType] ?? discountPresets.Normal;
 
   // Keyboard refs
@@ -215,7 +216,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
     enabled:  branchId !== null && tab === 'history',
   });
 
-  const { data: configData, isLoading: configLoading, isError: configError } = useQuery({
+  const { data: configData, isError: configError } = useQuery({
     queryKey: ['pos-discount-config', branchId],
     queryFn:  async () => {
       try {
@@ -261,13 +262,6 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
         source: presetSource('default_discount_mode_special'),
       },
     });
-
-    setDefaultDiscountSource(
-      configData.items.find(item => item.key === `default_discount_mode_${type.toLowerCase()}`)?.source ??
-      configData.items.find(item => item.key === `default_discount_value_${type.toLowerCase()}`)?.source ??
-      configData.items.find(item => item.key === 'default_discount_type')?.source ??
-      'system',
-    );
   }, [configData]);
 
   // ── Auto-select default location ───────────────────────────────────────────
@@ -480,10 +474,10 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
       });
     }
 
-    createMut.mutate({ branchId, locationId, customerId: selectedCustomer.id, items: cart.map(i => ({ bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct, discountAmount: i.discountAmount, discountType: i.discountType, discountMode: i.discountMode })), payments: buildPaymentPayload(), allowCredit: true });
+    createMut.mutate({ branchId, locationId, customerId: selectedCustomer.id, items: cart.map(i => ({ bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct, discountAmount: i.discountAmount, discountType: i.discountType, discountMode: i.discountMode })), payments: buildPaymentPayload(), allowCredit: true, dueDate: dueDate || null });
   }
 
-  function newSale() { setCart([]); setPaymentLines([]); setSelectedCustomer(null); setReceipt(null); setPayAmount(''); }
+  function newSale() { setCart([]); setPaymentLines([]); setSelectedCustomer(null); setReceipt(null); setPayAmount(''); setDueDate(''); }
 
   const bankAccounts = bankData?.items ?? [];
 
@@ -510,9 +504,14 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
               <h2 className="text-xl font-bold text-white">{receipt.transactionNumber}</h2>
               <p className="text-sm text-white/80 mt-1">{new Date(receipt.createdAt).toLocaleString()}</p>
               {receipt.paymentStatus !== 'paid' && (
-                <span className="inline-block mt-2 text-xs font-semibold px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur">
-                  {receipt.paymentStatus === 'partial' ? `Partial — ${currency} ${Number(receipt.amountDue).toFixed(2)} due` : `Credit — ${currency} ${Number(receipt.amountDue).toFixed(2)} due`}
-                </span>
+                <div className="space-y-1 mt-2">
+                  <span className="inline-block text-xs font-semibold px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur">
+                    {receipt.paymentStatus === 'partial' ? `Partial — ${currency} ${Number(receipt.amountDue).toFixed(2)} due` : `Credit — ${currency} ${Number(receipt.amountDue).toFixed(2)} due`}
+                  </span>
+                  {receipt.dueDate && (
+                    <p className="text-xs text-white/90 font-medium">Due Date: {new Date(receipt.dueDate).toLocaleDateString()}</p>
+                  )}
+                </div>
               )}
             </div>
             <div className="p-6 space-y-5">
@@ -548,7 +547,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 space-y-1.5">
                   {(receipt.payments ?? []).map((p, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500 capitalize">{p.method.replace(/_/g, ' ')}</span>
+                      <span className="text-gray-500 capitalize">{p.method === 'store_credit' ? 'Telebirr' : p.method.replace(/_/g, ' ')}</span>
                       <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {Number(p.amount).toFixed(2)}</span>
                     </div>
                   ))}
@@ -620,7 +619,14 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{tx.transactionNumber}</td>
                         <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{currency} {Number(tx.grandTotal).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 tabular-nums whitespace-nowrap">{currency} {Number(tx.amountPaid ?? tx.grandTotal).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-sm text-amber-700 dark:text-amber-400 tabular-nums whitespace-nowrap">{Number(tx.amountDue ?? 0) > 0 ? `${currency} ${Number(tx.amountDue).toFixed(2)}` : '—'}</td>
+                        <td className="px-4 py-3 text-sm text-amber-700 dark:text-amber-400 tabular-nums whitespace-nowrap">
+                          {Number(tx.amountDue ?? 0) > 0 ? (
+                            <div>
+                              <div>{currency} {Number(tx.amountDue).toFixed(2)}</div>
+                              {tx.dueDate && <div className="text-[10px] text-gray-400 font-medium">Due: {tx.dueDate}</div>}
+                            </div>
+                          ) : '—'}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${tx.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>{tx.status}</span>
                         </td>
@@ -1076,7 +1082,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                     <div key={i} className="flex items-center justify-between text-xs">
                       <span className="text-gray-600 dark:text-gray-400 capitalize flex items-center gap-1">
                         <span>{PAYMENT_TABS.find(t => t.method === p.method)?.icon}</span>
-                        {p.method.replace(/_/g, ' ')}
+                        {p.method === 'store_credit' ? 'Telebirr' : p.method.replace(/_/g, ' ')}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{currency} {parseFloat(p.amount).toFixed(2)}</span>
@@ -1129,6 +1135,21 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                     <span className="opacity-50 font-mono">Ctrl+↵</span>
                   </span>
                 </button>
+
+                {/* Due Date Picker for Credit Sale */}
+                {remaining > 0.01 && selectedCustomer && (
+                  <div className="space-y-1">
+                    <label htmlFor="pos-due-date" className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Due Date</label>
+                    <input
+                      id="pos-due-date"
+                      type="date"
+                      value={dueDate}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={e => setDueDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
 
                 {/* Credit Sale — only shown when there's an unpaid balance */}
                 {remaining > 0.01 && (

@@ -23,6 +23,8 @@ export interface PaymentRow {
   processedAt: string;
   createdAt: string;
   refunds?: RefundRow[];
+  sourceType?: string;
+  entityNumber?: string;
 }
 
 export interface RefundRow {
@@ -39,7 +41,7 @@ function mapPaymentRow(row: Record<string, unknown>): PaymentRow {
   return {
     id: String(row.id),
     paymentReference: row.payment_reference as string,
-    orderId: String(row.order_id),
+    orderId: String(row.order_id ?? row.entity_id),
     amount: parseFloat(row.amount as string),
     currency: row.currency as string,
     paymentMethod: row.payment_method as PaymentMethod,
@@ -50,6 +52,8 @@ function mapPaymentRow(row: Record<string, unknown>): PaymentRow {
     processedBy: row.processed_by as number,
     processedAt: (row.processed_at as Date).toISOString(),
     createdAt: (row.created_at as Date).toISOString(),
+    sourceType: row.source_type as string | undefined,
+    entityNumber: row.entity_number as string | undefined,
   };
 }
 
@@ -126,19 +130,88 @@ export async function list(opts: {
   const conditions: string[] = [];
   const params: unknown[] = [];
 
-  if (opts.orderId)       { params.push(opts.orderId);       conditions.push('p.order_id = $' + params.length); }
-  if (opts.status)        { params.push(opts.status);        conditions.push('p.status = $' + params.length); }
-  if (opts.paymentMethod) { params.push(opts.paymentMethod); conditions.push('p.payment_method = $' + params.length); }
-  if (opts.dateFrom)      { params.push(opts.dateFrom);      conditions.push('p.created_at >= $' + params.length); }
-  if (opts.dateTo)        { params.push(opts.dateTo);        conditions.push('p.created_at <= $' + params.length); }
+  if (opts.orderId)       { params.push(opts.orderId);       conditions.push('u.order_id = $' + params.length); }
+  if (opts.status)        { params.push(opts.status);        conditions.push('u.status = $' + params.length); }
+  if (opts.paymentMethod) { params.push(opts.paymentMethod); conditions.push('u.payment_method = $' + params.length); }
+  if (opts.dateFrom)      { params.push(opts.dateFrom);      conditions.push('u.created_at >= $' + params.length); }
+  if (opts.dateTo)        { params.push(opts.dateTo);        conditions.push('u.created_at <= $' + params.length); }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const li = params.length + 1;
   const oi = params.length + 2;
 
+  const queryText = `
+    WITH u AS (
+      SELECT
+        p.id::text AS id,
+        p.payment_reference,
+        p.order_id::text AS order_id,
+        o.order_number AS entity_number,
+        'order' AS source_type,
+        p.amount,
+        p.currency,
+        p.payment_method,
+        p.status,
+        p.transaction_reference,
+        p.notes,
+        p.processed_at,
+        p.created_at,
+        p.processed_by,
+        p.bank_account_id
+      FROM order_payments p
+      JOIN orders o ON o.id = p.order_id
+      UNION ALL
+      SELECT
+        tp.id::text AS id,
+        COALESCE(tp.reference, 'PAY-POS-' || tp.id) AS payment_reference,
+        t.id::text AS order_id,
+        t.transaction_number AS entity_number,
+        'pos' AS source_type,
+        tp.amount,
+        'ETB' AS currency,
+        tp.method AS payment_method,
+        'success' AS status,
+        tp.reference AS transaction_reference,
+        'POS Credit Sale Collection' AS notes,
+        tp.created_at AS processed_at,
+        tp.created_at,
+        t.staff_id AS processed_by,
+        NULL::integer AS bank_account_id
+      FROM transaction_payments tp
+      JOIN transactions t ON t.id = tp.transaction_id
+      JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+    )
+    SELECT * FROM u
+    ${where}
+    ORDER BY u.created_at DESC
+    LIMIT $${li} OFFSET $${oi}
+  `;
+
+  const countQueryText = `
+    WITH u AS (
+      SELECT
+        p.order_id::text AS order_id,
+        p.status,
+        p.payment_method,
+        p.created_at
+      FROM order_payments p
+      UNION ALL
+      SELECT
+        t.id::text AS order_id,
+        'success' AS status,
+        tp.method AS payment_method,
+        tp.created_at
+      FROM transaction_payments tp
+      JOIN transactions t ON t.id = tp.transaction_id
+      JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+    )
+    SELECT COUNT(*) FROM u
+    ${where}
+  `;
+
   const [countRes, dataRes] = await Promise.all([
-    db.query('SELECT COUNT(*) FROM order_payments p ' + where, params),
-    db.query('SELECT p.* FROM order_payments p ' + where + ' ORDER BY p.created_at DESC LIMIT $' + li + ' OFFSET $' + oi, [...params, pageSize, offset]),
+    db.query(countQueryText, params),
+    db.query(queryText, [...params, pageSize, offset]),
   ]);
 
   return {
@@ -405,41 +478,103 @@ export async function listUnpaidOrders(opts: {
     id: string; orderNumber: string; customerName: string | null; customerCode: string | null;
     total: number; totalPaid: number; outstanding: number; paymentStatus: string;
     status: string; channel: string; createdAt: string;
+    sourceType?: string;
   }>;
   total: number; page: number; totalPages: number;
 }> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, opts.pageSize ?? 25);
   const offset = (page - 1) * pageSize;
-  const conditions: string[] = ["o.payment_status IN ('unpaid','partial')", "o.status != 'Cancelled'"];
+  
+  const conditions: string[] = [];
   const params: unknown[] = [];
 
-  if (opts.branchId) { params.push(opts.branchId); conditions.push(`o.branch_id = $${params.length}`); }
-  if (opts.customerId) { params.push(opts.customerId); conditions.push(`o.customer_id = $${params.length}`); }
+  if (opts.branchId) { params.push(opts.branchId); conditions.push(`u.branch_id = $${params.length}`); }
+  if (opts.customerId) { params.push(opts.customerId); conditions.push(`u.customer_id = $${params.length}`); }
 
-  const where = 'WHERE ' + conditions.join(' AND ');
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const li = params.length + 1;
   const oi = params.length + 2;
 
+  const queryText = `
+    WITH u AS (
+      SELECT
+        o.id::text AS id,
+        o.order_number,
+        o.total,
+        o.payment_status,
+        o.status,
+        o.channel,
+        o.created_at,
+        c.full_name AS customer_name,
+        c.customer_code,
+        COALESCE(p.total_paid, 0) AS total_paid,
+        'order' AS source_type,
+        o.branch_id,
+        o.customer_id
+      FROM orders o
+      LEFT JOIN customers c ON c.id = o.customer_id
+      LEFT JOIN (
+        SELECT order_id, SUM(amount) AS total_paid
+        FROM order_payments
+        WHERE status IN ('success','partially_refunded','refunded')
+        GROUP BY order_id
+      ) p ON p.order_id = o.id
+      WHERE o.payment_status IN ('unpaid','partial')
+        AND o.status != 'Cancelled'
+      UNION ALL
+      SELECT
+        t.id::text AS id,
+        t.transaction_number AS order_number,
+        t.grand_total AS total,
+        t.payment_status,
+        t.status,
+        'POS' AS channel,
+        t.created_at,
+        c.full_name AS customer_name,
+        c.customer_code,
+        t.amount_paid AS total_paid,
+        'pos' AS source_type,
+        t.branch_id,
+        t.customer_id
+      FROM transactions t
+      LEFT JOIN customers c ON c.id = t.customer_id
+      JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+      WHERE r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
+        AND t.status = 'completed'
+    )
+    SELECT * FROM u
+    ${where}
+    ORDER BY u.created_at DESC
+    LIMIT $${li} OFFSET $${oi}
+  `;
+
+  const countQueryText = `
+    WITH u AS (
+      SELECT
+        o.id,
+        o.branch_id,
+        o.customer_id
+      FROM orders o
+      WHERE o.payment_status IN ('unpaid','partial')
+        AND o.status != 'Cancelled'
+      UNION ALL
+      SELECT
+        t.id,
+        t.branch_id,
+        t.customer_id
+      FROM transactions t
+      JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+      WHERE r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
+        AND t.status = 'completed'
+    )
+    SELECT COUNT(*) FROM u
+    ${where}
+  `;
+
   const [countRes, dataRes] = await Promise.all([
-    db.query(`SELECT COUNT(*) FROM orders o ${where}`, params),
-    db.query(
-      `SELECT o.id, o.order_number, o.total, o.payment_status, o.status, o.channel, o.created_at,
-              c.full_name AS customer_name, c.customer_code,
-              COALESCE(p.total_paid, 0) AS total_paid
-       FROM orders o
-       LEFT JOIN customers c ON c.id = o.customer_id
-       LEFT JOIN (
-         SELECT order_id, SUM(amount) AS total_paid
-         FROM order_payments
-         WHERE status IN ('success','partially_refunded','refunded')
-         GROUP BY order_id
-       ) p ON p.order_id = o.id
-       ${where}
-       ORDER BY o.created_at DESC
-       LIMIT $${li} OFFSET $${oi}`,
-      [...params, pageSize, offset],
-    ),
+    db.query(countQueryText, params),
+    db.query(queryText, [...params, pageSize, offset]),
   ]);
 
   return {
@@ -458,6 +593,7 @@ export async function listUnpaidOrders(opts: {
         status: r.status as string,
         channel: r.channel as string,
         createdAt: (r.created_at as Date).toISOString(),
+        sourceType: r.source_type as string,
       };
     }),
     total: parseInt(countRes.rows[0].count as string, 10),

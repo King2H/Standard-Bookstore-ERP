@@ -29,6 +29,7 @@ router.post(
           items:       req.body.items,
           payments:    req.body.payments ?? [],
           allowCredit: req.body.allowCredit === true,
+          dueDate:     req.body.dueDate ?? null,
         },
         req.staff!,
       );
@@ -80,7 +81,7 @@ router.get(
 router.post(
   '/pos/transactions/:id/payment',
   authenticate,
-  requireRole('Sales', 'Manager', 'Admin'),
+  requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tx = await posService.recordPayment(pi(req.params.id), req.body.payments, req.staff!);

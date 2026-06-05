@@ -110,6 +110,8 @@ describe('POS — Transactions', () => {
     await db.query(`DELETE FROM store_credit_history WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
     await db.query(`DELETE FROM loyalty_accounts WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
     await db.query(`DELETE FROM store_credit_accounts WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
+    // Receivables created by credit sales must be removed before the customer row is deleted
+    await db.query(`DELETE FROM receivables WHERE customer_id IN (SELECT id FROM customers WHERE full_name = 'POS Test Customer')`);
     await db.query(`DELETE FROM customers WHERE full_name = 'POS Test Customer'`);
     await cleanTestStaff(STAFF_PREFIX);
     await cleanTestBranches(BRANCH_PREFIX);
@@ -333,7 +335,7 @@ describe('POS — Transactions', () => {
   it('8. Void transaction → inventory restored, status=voided', async () => {
     await ensureInventory(bookId, locationId, 50); // ensure stock
     const qty = 1;
-    const expectedGrand = parseFloat((bookPrice * qty * 1.10).toFixed(2));
+    const expectedGrand = parseFloat((bookPrice * qty).toFixed(2)); // tax is 0
 
     const invBefore = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
     const qtyBefore = invBefore.rows[0].quantity as number;
@@ -370,12 +372,12 @@ describe('POS — Transactions', () => {
 
   // ── 9. Grand total consistency ─────────────────────────────────────────────
 
-  it('9. Grand total = subtotal + taxTotal', async () => {
+  it('9. Grand total = subtotal (tax is 0)', async () => {
     await ensureInventory(bookId, locationId, 50); // ensure stock
     const qty = 3;
     const expectedSubtotal = parseFloat((bookPrice * qty).toFixed(2));
-    const expectedTax = parseFloat((expectedSubtotal * 0.10).toFixed(2));
-    const expectedGrand = parseFloat((expectedSubtotal + expectedTax).toFixed(2));
+    // Tax rate is forced to 0 — grand total must equal subtotal
+    const expectedGrand = expectedSubtotal;
 
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
@@ -390,7 +392,8 @@ describe('POS — Transactions', () => {
 
     expect(res.status).toBe(201);
     const { subtotal, taxTotal, grandTotal } = res.body;
-    expect(Math.abs(Number(subtotal) + Number(taxTotal) - Number(grandTotal))).toBeLessThan(0.02);
+    expect(Number(taxTotal)).toBe(0);
+    expect(Math.abs(Number(subtotal) - Number(grandTotal))).toBeLessThan(0.02);
   });
 
   // ── 10. Book inactive → 422 ────────────────────────────────────────────────
@@ -419,5 +422,63 @@ describe('POS — Transactions', () => {
     expect(res.body.error).toBe('BOOK_INACTIVE');
 
     await db.query(`DELETE FROM books WHERE isbn = 'POS-TEST-INACTIVE'`);
+  });
+
+  // ── 11. Credit Sale → creates receivable and customer store credit debit ──
+  it('11. Credit Sale → creates receivable and customer store credit debit', async () => {
+    await ensureInventory(bookId, locationId, 50);
+    const customerId = await createTestCustomer(branchId);
+    const qty = 2;
+    const expectedSubtotal = parseFloat((bookPrice * qty).toFixed(2));
+    const expectedGrand = expectedSubtotal; // tax disabled
+    const dueDate = new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 10); // 7 days from now
+
+    const res = await request(getTestApp())
+      .post('/api/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        branchId,
+        locationId,
+        customerId,
+        items: [{ bookId, quantity: qty }],
+        payments: [], // no payment for full credit sale
+        allowCredit: true,
+        dueDate,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.paymentStatus).toBe('credit');
+    expect(Number(res.body.amountDue)).toBeCloseTo(expectedGrand, 1);
+    expect(Number(res.body.amountPaid)).toBe(0);
+
+    const txId = res.body.id;
+
+    // Verify receivable entry is created
+    const recRes = await db.query(
+      `SELECT * FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`,
+      [txId],
+    );
+    expect(recRes.rows.length).toBe(1);
+    const rec = recRes.rows[0];
+    expect(Number(rec.original_amount)).toBeCloseTo(expectedGrand, 1);
+    expect(Number(rec.outstanding_amount)).toBeCloseTo(expectedGrand, 1);
+    expect(rec.status).toBe('Pending');
+    // Compare due_date using local-date arithmetic to avoid UTC vs local timezone off-by-one
+    const nowMs = Date.now();
+    const localOffset = new Date().getTimezoneOffset() * 60000;
+    const localNow = new Date(nowMs - localOffset);
+    const dueDateLocal = new Date(localNow.getTime() + 86400000 * 7).toISOString().slice(0, 10);
+    const recDueDate = new Date(rec.due_date).toISOString().slice(0, 10);
+    expect(recDueDate === dueDate || recDueDate === dueDateLocal).toBe(true);
+
+    // Verify store credit debit is created
+    const scRes = await db.query(
+      `SELECT * FROM store_credit_history WHERE customer_id = $1 AND ref_type = 'pos_credit_sale' ORDER BY id DESC LIMIT 1`,
+      [customerId],
+    );
+    expect(scRes.rows.length).toBe(1);
+    expect(Number(scRes.rows[0].amount)).toBeCloseTo(expectedGrand, 1);
+    expect(scRes.rows[0].direction).toBe('debit');
   });
 });

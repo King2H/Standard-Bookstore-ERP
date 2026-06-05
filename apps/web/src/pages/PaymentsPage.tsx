@@ -12,6 +12,7 @@ interface Payment {
   id: string; paymentReference: string; orderId: string; amount: number;
   currency: string; paymentMethod: string; status: string;
   transactionReference: string | null; processedAt: string; createdAt: string;
+  sourceType?: string; entityNumber?: string;
 }
 interface Refund { id: string; paymentId: string; orderId: string; refundAmount: number; reason: string; createdAt: string; }
 interface PaymentListResponse { items: Payment[]; total: number; page: number; totalPages: number; }
@@ -20,6 +21,7 @@ interface UnpaidOrder {
   id: string; orderNumber: string; customerName: string | null; customerCode: string | null;
   total: number; totalPaid: number; outstanding: number; paymentStatus: string;
   status: string; channel: string; createdAt: string;
+  sourceType?: string;
 }
 interface UnpaidOrdersResponse { items: UnpaidOrder[]; total: number; page: number; totalPages: number; }
 interface BankAccount {
@@ -40,8 +42,8 @@ const PAY_STATUS_COLORS: Record<string, string> = {
   refunded: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
 const METHOD_LABELS: Record<string, string> = {
-  cash: '💵 Cash', bank: '🏦 Bank Transfer', mobile: '📱 Mobile', card: '💳 Card',
-  store_credit: '🏦 Store Credit', loyalty_points: '⭐ Loyalty', other: 'Other',
+  cash: '💵 Cash', bank: '🏦 Bank Transfer', mobile: '📱 Telebirr', card: '💳 Card',
+  store_credit: '📱 Telebirr', loyalty_points: '⭐ Loyalty', other: 'Other',
 };
 
 const canRefund = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
@@ -132,6 +134,21 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
+  // POS credit-sale payment collection (routes to /api/pos/transactions/:id/payment)
+  const posPayMut = useMutation({
+    mutationFn: ({ txId, payments }: { txId: string; payments: { method: string; amount: number; reference?: string }[] }) =>
+      api.post<unknown>(`/pos/transactions/${txId}/payment`, { payments }),
+    onSuccess: () => {
+      showToast('POS Credit Sale payment collected', 'success');
+      setAmount(''); setTxRef(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
+      qc.invalidateQueries({ queryKey: ['unpaid-orders'] });
+      qc.invalidateQueries({ queryKey: ['payments-list'] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      setTab('pending');
+    },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+
   const refundMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: unknown }) => api.post<Refund>(`/payments/${id}/refund`, body),
     onSuccess: () => {
@@ -151,6 +168,22 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
     setPaymentMethod('cash');
     setSelectedBankAccountId(null);
     setTxRef('');
+
+    // POS credit sales don't have a backoffice /orders/:id/balance endpoint
+    if (order.sourceType === 'pos') {
+      setOrderBalance({
+        orderTotal: order.total,
+        discountTotal: 0,
+        netPayable: order.total,
+        totalPaid: order.totalPaid,
+        totalRefunded: 0,
+        outstanding: order.outstanding,
+        paymentStatus: order.paymentStatus,
+      });
+      setTab('collect');
+      return;
+    }
+
     setLoadingBalance(true);
     try {
       const bal = await api.get<OrderBalance>(`/orders/${order.id}/balance`);
@@ -170,6 +203,16 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
       showToast('Select a bank account for bank transfer payments', 'error');
       return;
     }
+
+    // POS Credit Sales are collected via the POS payment endpoint
+    if (selectedOrder.sourceType === 'pos') {
+      posPayMut.mutate({
+        txId: selectedOrder.id,
+        payments: [{ method: paymentMethod as 'cash' | 'bank' | 'store_credit' | 'loyalty_points', amount: parseFloat(amount), reference: txRef || undefined }],
+      });
+      return;
+    }
+
     createMut.mutate({
       orderId: parseInt(selectedOrder.id),
       amount: parseFloat(amount),
@@ -206,10 +249,10 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
         <div className="flex-1 overflow-auto p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Orders Awaiting Payment</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Select an order to collect payment or record a partial payment.</p>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Orders &amp; Credit Sales Awaiting Payment</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Select an order or POS credit sale to collect payment or record a partial payment.</p>
             </div>
-            <span className="text-xs text-gray-400">{unpaidData?.total ?? 0} orders pending</span>
+            <span className="text-xs text-gray-400">{unpaidData?.total ?? 0} pending</span>
           </div>
 
           {unpaidLoading ? (
@@ -225,7 +268,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
               <table className="w-full text-sm min-w-[700px]">
                 <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                   <tr>
-                    {['Order #', 'Customer', 'Channel', 'Order Total', 'Paid', 'Outstanding', 'Status', 'Date', 'Action'].map(h => (
+                    {['Ref #', 'Customer', 'Channel', 'Total', 'Paid', 'Outstanding', 'Status', 'Date', 'Action'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -233,7 +276,12 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {unpaidData.items.map(order => (
                     <tr key={order.id} className="hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">{order.orderNumber}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                        {order.orderNumber}
+                        {order.sourceType === 'pos' && (
+                          <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded font-semibold">POS Credit</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
                         {order.customerName ? (
                           <div>
@@ -283,11 +331,13 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
       {/* ── Collect Payment Tab ── */}
       {tab === 'collect' && selectedOrder && (
         <div className="flex-1 overflow-auto p-4 pb-6 max-w-xl mx-auto w-full space-y-4">
-          {/* Order summary */}
+          {/* Order / POS Credit Sale summary */}
           <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Collecting Payment For</p>
+                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                  {selectedOrder.sourceType === 'pos' ? '🏷️ POS Credit Sale — Collecting Payment' : 'Collecting Payment For'}
+                </p>
                 <p className="text-base font-bold text-blue-900 dark:text-blue-200 mt-0.5">{selectedOrder.orderNumber}</p>
                 {selectedOrder.customerName && (
                   <p className="text-sm text-blue-700 dark:text-blue-300">{selectedOrder.customerName} ({selectedOrder.customerCode})</p>
@@ -423,7 +473,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
             </div>
 
             <button onClick={submitPayment} disabled={
-              createMut.isPending ||
+              (createMut.isPending || posPayMut.isPending) ||
               !amount ||
               parseFloat(amount) <= 0 ||
               (paymentMethod === 'bank' && !selectedBankAccountId) ||
@@ -431,7 +481,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
               (paymentMethod === 'loyalty_points' && (!selectedOrder?.customerName || (customerData != null && parseFloat(amount) > customerData.loyaltyBalance)))
             }
               className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
-              {createMut.isPending ? 'Processing...' : `✓ Record Payment — ${currency} ${parseFloat(amount || '0').toFixed(2)}`}
+              {(createMut.isPending || posPayMut.isPending) ? 'Processing...' : `✓ Record Payment — ${currency} ${parseFloat(amount || '0').toFixed(2)}`}
             </button>
           </div>
         </div>
@@ -462,14 +512,20 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                   {(historyData?.items ?? []).map(pay => (
                     <React.Fragment key={pay.id}>
                       <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === pay.id ? null : pay.id)}>
-                        <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{pay.paymentReference}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">#{pay.orderId}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                          {pay.paymentReference}
+                          {pay.sourceType === 'pos' && (
+                            <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded font-semibold">POS</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{pay.entityNumber ?? `#${pay.orderId}`}</td>
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(pay.amount).toFixed(2)}</td>
                         <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">{METHOD_LABELS[pay.paymentMethod] ?? pay.paymentMethod}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[pay.status] ?? ''}`}>{pay.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(pay.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
-                          {canRefund(userRole, userPermissions) && pay.status !== 'failed' && pay.status !== 'refunded' && (
+                          {/* POS payments cannot be refunded here — use POS Returns flow */}
+                          {canRefund(userRole, userPermissions) && pay.status !== 'failed' && pay.status !== 'refunded' && pay.sourceType !== 'pos' && (
                             refundingId === pay.id ? (
                               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                                 <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="Amount"
@@ -486,6 +542,9 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                                 Refund
                               </button>
                             )
+                          )}
+                          {pay.sourceType === 'pos' && pay.status !== 'refunded' && (
+                            <span className="text-xs text-gray-400 italic">POS Returns only</span>
                           )}
                         </td>
                       </tr>

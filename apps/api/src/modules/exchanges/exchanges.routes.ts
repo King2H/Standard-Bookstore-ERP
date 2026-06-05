@@ -151,7 +151,11 @@ router.post(
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { entries, idempotencyKey } = req.body as { entries: exchangesService.SettlementEntry[]; idempotencyKey: string };
+      const { entries, idempotencyKey, dueDate } = req.body as {
+        entries: exchangesService.SettlementEntry[];
+        idempotencyKey: string;
+        dueDate?: string | null;
+      };
       if (!entries || !Array.isArray(entries) || entries.length === 0) {
         throw new ValidationError('Settlement entries are required');
       }
@@ -163,6 +167,7 @@ router.post(
         entries,
         idempotencyKey,
         req.staff!,
+        dueDate,
       );
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({

@@ -31,7 +31,7 @@ async function ensureInventory(bookId: number, locationId: number, qty = 50) {
 }
 
 async function createSale(token: string, branchId: number, locationId: number, bookId: number, bookPrice: number, qty = 2) {
-  const grand = parseFloat((bookPrice * qty * 1.10).toFixed(2));
+  const grand = parseFloat((bookPrice * qty).toFixed(2));
   const res = await request(getTestApp())
     .post('/api/pos/transactions')
     .set('Authorization', `Bearer ${token}`)
@@ -61,6 +61,7 @@ async function cleanCustomers(branchId: number) {
     await db.query(`DELETE FROM store_credit_history WHERE customer_id = $1`, [cid]);
     await db.query(`DELETE FROM loyalty_accounts WHERE customer_id = $1`, [cid]);
     await db.query(`DELETE FROM store_credit_accounts WHERE customer_id = $1`, [cid]);
+    await db.query(`DELETE FROM receivables WHERE customer_id = $1`, [cid]);
   }
   await db.query(`DELETE FROM customer_group_membership WHERE customer_id IN (SELECT id FROM customers WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM customers WHERE branch_id = $1`, [branchId]);
@@ -190,7 +191,7 @@ describe('Returns & Refunds', () => {
     await db.query(`INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0)`, [customerId]);
     await db.query(`INSERT INTO loyalty_accounts (customer_id, points_balance, lifetime_points, updated_at) VALUES ($1, 0, 0, now())`, [customerId]);
 
-    const grand = parseFloat((bookPrice * 1.10).toFixed(2));
+    const grand = parseFloat((bookPrice * 1).toFixed(2));
     const txRes = await request(getTestApp())
       .post('/api/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
@@ -223,6 +224,7 @@ describe('Returns & Refunds', () => {
     await db.query(`DELETE FROM loyalty_history WHERE customer_id = $1`, [customerId]);
     await db.query(`DELETE FROM store_credit_accounts WHERE customer_id = $1`, [customerId]);
     await db.query(`DELETE FROM loyalty_accounts WHERE customer_id = $1`, [customerId]);
+    await db.query(`DELETE FROM receivables WHERE customer_id = $1`, [customerId]);
     await db.query(`DELETE FROM customers WHERE id = $1`, [customerId]);
   });
 
@@ -240,7 +242,7 @@ describe('Returns & Refunds', () => {
     const expBookId = expBookRes.rows[0].id as number;
     await ensureInventory(expBookId, locationId, 10);
 
-    const grand = parseFloat((9999 * 1.10).toFixed(2));
+    const grand = parseFloat((9999 * 1).toFixed(2));
     const txRes = await request(getTestApp())
       .post('/api/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)

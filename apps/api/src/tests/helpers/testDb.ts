@@ -26,19 +26,20 @@ export async function withTestTransaction<T>(
  * NEVER truncates — seed data (superadmin, admin, Main Branch) is preserved.
  */
 export async function cleanTestStaff(usernamePrefix: string): Promise<void> {
-  await db.query(
-    `DELETE FROM refresh_tokens WHERE staff_id IN (
-       SELECT id FROM staff WHERE username LIKE $1
-     )`,
+  const staffIdsResult = await db.query(
+    `SELECT id FROM staff WHERE username LIKE $1`,
     [`${usernamePrefix}%`],
   );
-  await db.query(
-    `DELETE FROM staff_branch_roles WHERE staff_id IN (
-       SELECT id FROM staff WHERE username LIKE $1
-     )`,
-    [`${usernamePrefix}%`],
-  );
-  await db.query(`DELETE FROM staff WHERE username LIKE $1`, [`${usernamePrefix}%`]);
+  const staffIds = staffIdsResult.rows.map(r => r.id);
+  if (staffIds.length > 0) {
+    await db.query(`DELETE FROM refresh_tokens WHERE staff_id = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM staff_branch_roles WHERE staff_id = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM staff_locations WHERE staff_id = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM inventory_history WHERE staff_id = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM financial_transactions WHERE staff_id = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM exchange_settlement_entries WHERE authorised_by = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM staff WHERE id = ANY($1)`, [staffIds]);
+  }
 }
 
 /**

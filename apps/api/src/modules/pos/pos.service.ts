@@ -1,4 +1,4 @@
-﻿import { db } from '../../db/index.js';
+import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import {
   getEffectiveConfig,
@@ -49,6 +49,7 @@ export interface TransactionRow {
   createdAt: string;
   lineItems?: TransactionLineItemRow[];
   payments?: TransactionPaymentRow[];
+  dueDate?: string | null;
 }
 
 export interface TransactionLineItemRow {
@@ -93,6 +94,11 @@ function mapTransactionRow(row: Record<string, unknown>): TransactionRow {
     currency: row.currency as string,
     status: row.status as 'completed' | 'voided',
     createdAt: (row.created_at as Date).toISOString(),
+    dueDate: row.due_date
+      ? (row.due_date instanceof Date
+          ? row.due_date.toISOString().slice(0, 10)
+          : String(row.due_date))
+      : null,
   };
 }
 
@@ -155,10 +161,12 @@ export async function getById(id: string | number): Promise<TransactionRow> {
     `SELECT t.*,
        s.username AS staff_username,
        c.full_name AS customer_name,
-       c.customer_code
+       c.customer_code,
+       r.due_date
      FROM transactions t
      LEFT JOIN staff s ON s.id = t.staff_id
      LEFT JOIN customers c ON c.id = t.customer_id
+     LEFT JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
      WHERE t.id = $1`,
     [id],
   );
@@ -206,8 +214,9 @@ export async function list(opts: {
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) FROM transactions t ${where}`, params),
     db.query(
-      `SELECT t.*
+      `SELECT t.*, r.due_date
        FROM transactions t
+       LEFT JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
        ${where}
        ORDER BY t.created_at DESC
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,

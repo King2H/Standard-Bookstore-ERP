@@ -20,6 +20,22 @@ interface LoyaltyHistoryItem { id: number; pointsDelta: number; reason: string; 
 interface StoreCreditHistoryItem { id: number; amount: number; direction: 'credit' | 'debit'; refType: string | null; refId: string | null; createdAt: string; }
 interface HistoryResponse<T> { items: T[]; total: number; page: number; totalPages: number; }
 
+type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
+type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference';
+
+interface ReceivableRow {
+  id: string;
+  sourceType: ReceivableSourceType;
+  sourceRefId: string;
+  originalAmount: number;
+  outstandingAmount: number;
+  currency: string;
+  dueDate: string | null;
+  settlementDate: string | null;
+  status: ReceivableStatus;
+  createdAt: string;
+}
+
 interface CustomersPageProps { userRole?: Role; userPermissions?: string[]; }
 
 const canWrite = (r?: string, perms?: string[]) => (perms?.includes('CREATE_SALE')) || ['Admin', 'Manager', 'Sales'].includes(r ?? '');
@@ -30,7 +46,7 @@ const canRedeem = (r?: string, perms?: string[]) => (perms?.includes('CREATE_SAL
 const EMPTY_FORM = { fullName: '', phone: '', email: '', gender: '', dateOfBirth: '', address: '', city: '', branchId: '' };
 
 type View = 'list' | 'profile';
-type ProfileTab = 'profile' | 'loyalty' | 'store-credit';
+type ProfileTab = 'profile' | 'loyalty' | 'store-credit' | 'receivables';
 
 export default function CustomersPage({ userRole, userPermissions }: CustomersPageProps) {
   const qc = useQueryClient();
@@ -79,6 +95,12 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
     queryKey: ['credit-history', selectedCustomer?.id],
     queryFn: () => api.get(`/customers/${selectedCustomer!.id}/store-credit/history`),
     enabled: !!selectedCustomer && profileTab === 'store-credit',
+  });
+
+  const { data: receivablesHistory, isLoading: isLoadingReceivables } = useQuery<HistoryResponse<ReceivableRow>>({
+    queryKey: ['customer-receivables', selectedCustomer?.id],
+    queryFn: () => api.get(`/receivables?customerId=${selectedCustomer!.id}`),
+    enabled: !!selectedCustomer && profileTab === 'receivables',
   });
 
   const inv = () => qc.invalidateQueries({ queryKey: ['customers'] });
@@ -314,10 +336,10 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
-        {(['profile', 'loyalty', 'store-credit'] as ProfileTab[]).map(tab => (
+        {(['profile', 'loyalty', 'store-credit', 'receivables'] as ProfileTab[]).map(tab => (
           <button key={tab} onClick={() => setProfileTab(tab)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${profileTab === tab ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-            {tab === 'store-credit' ? 'Store Credit' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === 'store-credit' ? 'Store Credit' : tab === 'receivables' ? 'Receivables' : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
       </div>
@@ -509,6 +531,72 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                           : h.refType ?? '—'}
                       </td>
                       <td className="px-4 py-2 text-gray-500 dark:text-gray-500 text-xs font-mono">{h.refId ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Receivables */}
+      {profileTab === 'receivables' && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Outstanding Receivables</h3>
+            </div>
+            {isLoadingReceivables ? (
+              <div className="p-6 text-center text-gray-400 text-sm">Loading...</div>
+            ) : !receivablesHistory || receivablesHistory.items.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-sm">No outstanding receivables yet.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                  <tr>
+                    {['Date', 'Type', 'Reference', 'Original Amount', 'Outstanding Amount', 'Due Date', 'Status'].map(h => (
+                      <th key={h} className="px-4 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {receivablesHistory.items.map((r: ReceivableRow) => (
+                    <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs">
+                        {new Date(r.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                          {r.sourceType === 'pos_credit_sale' ? 'Credit Sale' : 'Exchange Diff.'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-gray-500 dark:text-gray-500 text-xs font-mono">
+                        {r.sourceRefId}
+                      </td>
+                      <td className="px-4 py-2 text-gray-900 dark:text-white">
+                        {currency} {r.originalAmount.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 font-semibold">
+                        <span className={r.outstandingAmount > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>
+                          {currency} {r.outstandingAmount.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={r.status === 'Overdue' ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-600 dark:text-gray-400'}>
+                          {r.dueDate ? new Date(r.dueDate).toLocaleDateString() : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          r.status === 'Pending' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          : r.status === 'PartiallyPaid' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+                          : r.status === 'Settled' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                        }`}>
+                          {r.status === 'PartiallyPaid' ? 'Partial' : r.status}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
