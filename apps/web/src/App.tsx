@@ -18,6 +18,7 @@ import OrdersPage from './pages/OrdersPage.js';
 import PaymentsPage from './pages/PaymentsPage.js';
 import ExchangesPage from './pages/ExchangesPage.js';
 import InstallmentsPage from './pages/InstallmentsPage.js';
+import ReceivablesPage from './pages/ReceivablesPage.js';
 import DashboardPage from './pages/DashboardPage.js';
 import ProfilePage from './pages/ProfilePage.js';
 import { ToastProvider } from './components/Toast.js';
@@ -32,7 +33,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } },
 });
 
-type Page = 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments' | 'installments' | 'exchanges' | 'profile';
+type Page = 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments' | 'installments' | 'exchanges' | 'profile' | 'receivables';
 type Role = 'Super_Admin' | 'Admin' | 'Manager' | 'Finance_Officer' | 'Stock_Clerk' | 'Sales' | 'Purchasor';
 
 /** Parse all fields needed from the JWT in one pass. */
@@ -235,6 +236,7 @@ export default function App() {
               {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'installments' && <InstallmentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'exchanges'    && <ExchangesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'receivables'  && <ReceivablesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'profile'      && <ProfilePage />}
 
               {/* Inactivity warning overlay */}

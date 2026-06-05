@@ -6,6 +6,7 @@ import {
   isNegativeStockAllowed,
 } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
+import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -234,6 +235,7 @@ export async function createTransaction(
     items: LineItemInput[];
     payments: PaymentInput[];
     allowCredit?: boolean; // if true, payment sum < grandTotal is allowed
+    dueDate?: string | null; // optional due date for credit sales (receivable tracking)
   },
   staffCtx: StaffCtx,
 ): Promise<TransactionRow> {
@@ -482,6 +484,31 @@ export async function createTransaction(
         );
       }
 
+      // ── Receivable hook — create debt-tracking record ──────────────────────
+      // Uses a savepoint so a hook failure (e.g. table not yet migrated) never
+      // rolls back the parent POS transaction.
+      if (data.customerId && amountDue > 0.01) {
+        try {
+          await client.query('SAVEPOINT before_receivable');
+          await createReceivable(
+            {
+              sourceType: 'pos_credit_sale',
+              sourceRefId: transactionNumber,
+              sourceEntityId: parseInt(txId, 10),
+              customerId: data.customerId,
+              branchId: data.branchId,
+              originalAmount: amountDue,
+              dueDate: (data as { dueDate?: string | null }).dueDate ?? null,
+            },
+            client,
+          );
+          await client.query('RELEASE SAVEPOINT before_receivable');
+        } catch (hookErr) {
+          await client.query('ROLLBACK TO SAVEPOINT before_receivable').catch(() => null);
+          console.error('[receivable hook] createReceivable failed (non-fatal):', hookErr);
+        }
+      }
+
       await insertOutbox(client, 'pos.credit_sale', {
         txId, txNumber: transactionNumber, branchId: data.branchId, amountDue, customerId: data.customerId ?? null, customerName: custName,
       });
@@ -598,6 +625,24 @@ export async function recordPayment(
     await insertOutbox(client, 'pos.payment_collected', {
       txId: String(txId), txNumber: tx.transactionNumber, branchId: staffCtx.branchId, amount: incomingTotal,
     });
+
+    // ── Receivable hook — sync outstanding amount ──────────────────────────────
+    try {
+      await client.query('SAVEPOINT before_receivable_update');
+      await updateReceivableOnPayment(
+        {
+          sourceType: 'pos_credit_sale',
+          sourceEntityId: parseInt(String(txId), 10),
+          newOutstandingAmount: Math.max(0, newAmountDue),
+          isFullySettled: newPaymentStatus === 'paid',
+        },
+        client,
+      );
+      await client.query('RELEASE SAVEPOINT before_receivable_update');
+    } catch (hookErr) {
+      await client.query('ROLLBACK TO SAVEPOINT before_receivable_update').catch(() => null);
+      console.error('[receivable hook] updateReceivableOnPayment failed (non-fatal):', hookErr);
+    }
 
     await client.query('COMMIT');
     return getById(txId);

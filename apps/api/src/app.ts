@@ -24,6 +24,7 @@ import financialTransactionsRouter from './modules/financialTransactions/financi
 import reportsRouter from './modules/reports/reports.routes.js';
 import installmentsRouter from './modules/payments/installments.routes.js';
 import notificationsRouter from './modules/notifications/notifications.routes.js';
+import receivablesRouter from './modules/receivables/receivables.routes.js';
 import { loginRateLimit } from './middleware/rateLimit.js';
 import { csrfMiddleware } from './middleware/csrf.js';
 
@@ -87,6 +88,7 @@ export function createApp() {
   app.use('/api', reportsRouter);
   app.use('/api', installmentsRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api', receivablesRouter);
   app.use('/api', auditLogsRouter);
 
   // 404 handler

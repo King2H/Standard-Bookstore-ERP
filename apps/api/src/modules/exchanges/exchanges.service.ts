@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import type { Permission } from '../../lib/permissions.js';
+import { createReceivable } from '../receivables/receivables.service.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; permissions?: string[]; }
 
@@ -605,6 +606,7 @@ export async function settleExchange(
   entries: SettlementEntry[],
   idempotencyKey: string,
   staffCtx: StaffCtx,
+  dueDate?: string | null,
 ): Promise<ExchangeRow> {
   const exchange = await getById(exchangeId);
   if (exchange.lifecycleStatus !== 'APPROVED') {
@@ -851,6 +853,30 @@ export async function settleExchange(
       netBalance: exchange.netBalance,
       branchId: staffCtx.branchId,
     });
+
+    // ── Receivable hook — create debt record for Customer_Pays exchanges ───────
+    // Wrapped in try/catch so a hook failure never breaks the exchange settlement.
+    if (exchange.settlementType === 'Customer_Pays' && exchange.netBalance > 0.01 && exchange.customerId) {
+      try {
+        await client.query('SAVEPOINT before_exchange_receivable');
+        await createReceivable(
+          {
+            sourceType: 'exchange_difference',
+            sourceRefId: exchange.exchangeReference,
+            sourceEntityId: parseInt(String(exchangeId), 10),
+            customerId: exchange.customerId,
+            branchId: exchange.branchId,
+            originalAmount: exchange.netBalance,
+            dueDate: dueDate ?? null,
+          },
+          client,
+        );
+        await client.query('RELEASE SAVEPOINT before_exchange_receivable');
+      } catch (hookErr) {
+        await client.query('ROLLBACK TO SAVEPOINT before_exchange_receivable').catch(() => null);
+        console.error('[receivable hook] createReceivable (exchange) failed (non-fatal):', hookErr);
+      }
+    }
 
     await client.query('COMMIT');
     return getById(exchangeId);

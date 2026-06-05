@@ -23,7 +23,7 @@ type Page =
   | 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings'
   | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers'
   | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments'
-  | 'installments' | 'exchanges' | 'profile';
+  | 'installments' | 'exchanges' | 'profile' | 'receivables';
 
 type Role = string;
 
@@ -80,6 +80,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'payments',      label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND'] },
       { id: 'installments',  label: 'Installments',  icon: '📅', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT'] },
+      { id: 'receivables',   label: 'Receivables',   icon: '🧾', roles: ['Admin', 'Manager', 'Finance_Officer'],             permissions: ['PROCESS_PAYMENT'] },
       { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'],           permissions: ['PROCESS_PAYMENT', 'VIEW_REPORTS'] },
     ],
   },
