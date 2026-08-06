@@ -208,7 +208,7 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
 
   // â”€â”€ 2. CONFIRM â†’ reservation only, inventory unchanged â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  it('2. Confirming a DRAFT order creates a reservation; inventory.quantity is UNCHANGED', async () => {
+  it('2. Confirming a DRAFT order deducts inventory.quantity and creates a reservation', async () => {
     await setInventory(bookId, locationId, 10);
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
@@ -218,24 +218,30 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('CONFIRMED');
     expect(res.body.lineItems[0].qtyReserved).toBe(3);
-    // inventory.quantity must NOT change on confirm
-    expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore);
+    // confirm() deducts inventory.quantity immediately via stockOut() AND
+    // inserts the reservation, in the same transaction (order-payment-
+    // unification spec, 3.5).
+    expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore - 3);
     // reservation must exist
     expect(await getReservedQty(bookId, locationId)).toBeGreaterThanOrEqual(3);
   });
 
   // â”€â”€ 3. CONFIRM â†’ no stock_out history written â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  it('3. Confirming an order writes NO stock_out inventory_history rows', async () => {
+  it('3. Confirming an order writes exactly one stock_out inventory_history row', async () => {
     await setInventory(bookId, locationId, 20);
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 2);
     await confirmOrder(managerToken, branchId, order.id);
 
+    // confirm() deducts via stockOut() (order-payment-unification spec, 3.5),
+    // which writes movement_type='stock_out', reference_type='order_confirmed'.
     const hist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_id = $1 AND movement_type = 'stock_out'`,
       [order.id],
     );
-    expect(hist.rows.length).toBe(0);
+    expect(hist.rows.length).toBe(1);
+    expect(hist.rows[0].reference_type).toBe('order_confirmed');
+    expect(Number(hist.rows[0].delta)).toBe(-2);
   });
 
   // â”€â”€ 4. CONFIRM insufficient stock â†’ 422, no reservation, order stays DRAFT
@@ -275,22 +281,24 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
 
   // â”€â”€ 6. cash_sale full lifecycle: confirm â†’ pay â†’ fulfill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  it('6. cash_sale: confirm â†’ pay â†’ COMPLETED (auto-fulfilled), stock deducted once at payment', async () => {
+  it('6. cash_sale: confirm â†’ fulfill â†’ COMPLETED, stock deducted once at confirm', async () => {
     await setInventory(bookId, locationId, 20);
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 4);
 
-    // confirm â€” no inventory change (reservation only)
+    // confirm â€” deducts inventory immediately via stockOut() (order-payment-
+    // unification spec, 3.5), also sets payment_status='paid' for cash_sale.
     const confRes = await confirmOrder(managerToken, branchId, order.id);
     expect(confRes.status).toBe(200);
-    expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore);
+    expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore - 4);
 
-    // pay via payments module â€” auto-fulfills CASH order, deducts stock
-    const payRes = await payOrder(managerToken, branchId, order.id, order.total);
-    expect(payRes.status).toBe(201);
+    // POST /api/payments rejects cash_sale orders (paid automatically at
+    // confirm; payments.service.ts "Bug 2" guard) -- fulfill directly.
+    const fulfillRes = await fulfillOrder(managerToken, branchId, order.id);
+    expect(fulfillRes.status).toBe(200);
 
-    // After payment, inventory deducted via auto-fulfill
+    // fulfill() doesn't deduct again -- already deducted at confirm.
     expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore - 4);
 
     // Order is COMPLETED
@@ -300,14 +308,22 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
       .set('X-Branch-Id', String(branchId));
     expect(orderCheck.body.status).toBe('COMPLETED');
 
-    // inventory_history stock_out at reference_type=order_fulfilled
+    // order_fulfilled row is fulfillReservation()'s zero-delta audit trail
+    // entry; the actual -4 deduction is on the order_confirmed row.
     const hist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_fulfilled' AND reference_id = $1`,
       [order.id],
     );
     expect(hist.rows.length).toBeGreaterThan(0);
-    expect(Number(hist.rows[0].delta)).toBe(-4);
+    expect(Number(hist.rows[0].delta)).toBe(0);
     expect(hist.rows[0].movement_type).toBe('stock_out');
+
+    const confirmHist = await db.query(
+      `SELECT * FROM inventory_history WHERE reference_type = 'order_confirmed' AND reference_id = $1`,
+      [order.id],
+    );
+    expect(confirmHist.rows.length).toBeGreaterThan(0);
+    expect(Number(confirmHist.rows[0].delta)).toBe(-4);
   });
 
   // â”€â”€ 7. cash_sale: second fulfill attempt (idempotency) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -329,29 +345,30 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
 
   // â”€â”€ 8. CANCEL from CONFIRMED â†’ reservation released, qty unchanged â”€â”€â”€â”€â”€â”€â”€â”€
 
-  it('8. Cancel CONFIRMED order â†’ reservation released, inventory.quantity stays the same', async () => {
+  it('8. Cancel CONFIRMED order â†’ deducted at confirm, restored at cancel, net unchanged', async () => {
     await setInventory(bookId, locationId, 15);
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 4);
     await confirmOrder(managerToken, branchId, order.id);
 
-    // Confirm did NOT change qty
-    expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore);
+    // confirm() deducts immediately (order-payment-unification spec, 3.5)
+    expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore - 4);
 
     const cancelRes = await cancelOrder(managerToken, branchId, order.id);
     expect(cancelRes.status).toBe(200);
     expect(cancelRes.body.status).toBe('CANCELLED');
     expect(cancelRes.body.lineItems[0].qtyReserved).toBe(0);
 
-    // Qty must still be qtyBefore â€” cancel must NOT have called stockIn
+    // cancel() restores via stockIn() -- net back to qtyBefore
     expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore);
-    // No stock_in history for this order
+    // stockIn() restoration writes an order_cancelled audit row
     const hist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_cancelled' AND reference_id = $1`,
       [order.id],
     );
-    expect(hist.rows.length).toBe(0);
+    expect(hist.rows.length).toBeGreaterThan(0);
+    expect(Number(hist.rows[0].delta)).toBe(4);
     // Reservation released
     const resRows = await db.query(
       `SELECT status FROM inventory_reservations WHERE order_id = $1`,
@@ -389,32 +406,32 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     expect(await getInventoryQty(bookId, locationId)).toBe(10 - 2);
   });
 
-  // â”€â”€ 11. Available stock excludes reservations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ 11. Available stock = inventory.quantity (already reflects committed orders) â”€â”€
 
-  it('11. Available stock = inventory.quantity âˆ’ active reservations', async () => {
+  it('11. Available stock = inventory.quantity, already reduced by confirmed orders', async () => {
     await setInventory(bookId, locationId, 10);
 
-    // Confirm an order for 3 â€” creates reservation of 3
+    // Confirm an order for 3 â€” deducts quantity to 7 and creates reservation of 3
+    // (order-payment-unification spec, 3.5; getAvailableStock() no longer
+    // subtracts reservations on top of that -- see inventoryTransaction.service.ts).
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 3);
     await confirmOrder(managerToken, branchId, order.id);
 
-    // qty still 10 (unchanged)
-    expect(await getInventoryQty(bookId, locationId)).toBe(10);
-    // reserved = 3
+    expect(await getInventoryQty(bookId, locationId)).toBe(7);
     expect(await getReservedQty(bookId, locationId)).toBe(3);
 
-    // A second order for 8 must fail (available = 10 âˆ’ 3 = 7 < 8)
+    // A second order for 8 must fail (available = quantity = 7 < 8)
     const order2 = await createDraftOrder(managerToken, branchId, locationId, bookId, 8);
     const res2 = await confirmOrder(managerToken, branchId, order2.id);
     expect(res2.status).toBe(422);
     expect(res2.body.error).toBe('INSUFFICIENT_STOCK');
 
-    // A second order for 7 must succeed (available = 7 = 7)
+    // A second order for 7 must succeed (available = quantity = 7 = 7)
     const order3 = await createDraftOrder(managerToken, branchId, locationId, bookId, 7);
     const res3 = await confirmOrder(managerToken, branchId, order3.id);
     expect(res3.status).toBe(200);
     expect(await getReservedQty(bookId, locationId)).toBe(10); // 3 + 7
-    expect(await getInventoryQty(bookId, locationId)).toBe(10); // still unchanged
+    expect(await getInventoryQty(bookId, locationId)).toBe(0); // 7 - 7
   });
 
   // â”€â”€ 12. Multi-item atomicity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -465,19 +482,23 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
 
   // â”€â”€ 14. Stock deducted exactly once (not at confirm, not twice) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  it('14. Stock deducted exactly once on payment/auto-fulfill; confirm and cancel do not touch quantity', async () => {
+  it('14. Stock deducted exactly once at confirm; fulfill does not deduct again', async () => {
     await setInventory(bookId, locationId, 20);
     const qtyStart = await getInventoryQty(bookId, locationId);
 
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 3);
     await confirmOrder(managerToken, branchId, order.id);
-    expect(await getInventoryQty(bookId, locationId)).toBe(qtyStart); // unchanged after confirm
-
-    await payOrder(managerToken, branchId, order.id, order.total);
-    // Stock deducted at payment (auto-fulfill)
+    // confirm() deducts immediately (order-payment-unification spec, 3.5)
     expect(await getInventoryQty(bookId, locationId)).toBe(qtyStart - 3);
 
-    // Confirm there is exactly ONE stock_out history entry for this order
+    // POST /api/payments rejects cash_sale orders (Bug 2 guard) -- fulfill directly.
+    await fulfillOrder(managerToken, branchId, order.id);
+    // fulfill() doesn't deduct again
+    expect(await getInventoryQty(bookId, locationId)).toBe(qtyStart - 3);
+
+    // Confirm there is exactly ONE stock_out history entry with a negative
+    // delta for this order (the confirm()-time deduction; fulfill()'s own
+    // stock_out-labelled row has delta=0, so it's excluded by "delta < 0").
     const hist = await db.query(
       `SELECT COUNT(*) AS cnt FROM inventory_history WHERE reference_id = $1 AND movement_type = 'stock_out' AND delta < 0`,
       [order.id],
@@ -504,8 +525,9 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     const failed = resA.status === 422 ? resA : resB;
     expect(failed.body.error).toBe('INSUFFICIENT_STOCK');
 
-    // inventory.quantity stays at 5 (reservation only, no deduction)
-    expect(await getInventoryQty(bookId, locationId)).toBe(5);
+    // inventory.quantity deducted to 0 by the winning confirmation
+    // (order-payment-unification spec, 3.5)
+    expect(await getInventoryQty(bookId, locationId)).toBe(0);
     // reserved = 5 (only the winner created a reservation)
     expect(await getReservedQty(bookId, locationId)).toBe(5);
   });
@@ -521,8 +543,8 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 3);
     await confirmOrder(managerToken, branchId, order.id);
 
-    expect(await getInventoryQty(bookId, locationId)).toBe(qtyA); // branch A unchanged
-    expect(await getInventoryQty(bookId, locationB)).toBe(qtyB);  // branch B untouched
+    expect(await getInventoryQty(bookId, locationId)).toBe(qtyA - 3); // branch A deducted
+    expect(await getInventoryQty(bookId, locationB)).toBe(qtyB);      // branch B untouched (isolation)
   });
 
   // â”€â”€ 17. Net qty change across full lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -556,4 +578,4 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     expect(res.status).toBe(200);
     expect(await getReservedQty(bookId, locationId)).toBe(5);
   });
-});
+});
