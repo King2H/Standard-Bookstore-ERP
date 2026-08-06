@@ -21,21 +21,40 @@ async function getOrCreateLocation(branchId: number): Promise<number> {
   return c.rows[0].id as number;
 }
 
-async function createTestOrder(token: string, branchId: number, locationId: number, bookId: number): Promise<{ id: string; total: number }> {
+async function createTestCustomer(branchId: number): Promise<number> {
+  const code = `PAY-TEST-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const r = await db.query(
+    `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
+     VALUES ($1, $2, 'Payments Test Customer', true, now()) RETURNING id`,
+    [branchId, code],
+  );
+  return r.rows[0].id as number;
+}
+
+// Manual payment collection via POST /api/payments is only valid for
+// credit_sale orders — cash_sale orders are paid automatically at
+// confirmation and POST /api/payments rejects them with
+// CASH_ORDER_ALREADY_PAID (see payments.service.ts "Bug 2" guard). These
+// tests exercise the payment-collection endpoint itself, so they need a
+// credit_sale order (which requires a customer) rather than the default
+// cash_sale.
+async function createTestOrder(token: string, branchId: number, locationId: number, bookId: number, customerId: number): Promise<{ id: string; total: number }> {
   const res = await request(getTestApp())
     .post('/api/orders')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
-    .send({ locationId, channel: 'in_store', items: [{ bookId, quantity: 2 }] });
+    .send({ locationId, channel: 'in_store', saleType: 'credit_sale', customerId, items: [{ bookId, quantity: 2 }] });
   if (res.status !== 201) throw new Error(`Order creation failed: ${JSON.stringify(res.body)}`);
   return { id: res.body.id, total: Number(res.body.total) };
 }
 
 async function cleanPayments(branchId: number) {
+  await db.query(`DELETE FROM receivables WHERE branch_id = $1`, [branchId]);
   await db.query(`DELETE FROM order_refunds WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
+  await db.query(`DELETE FROM customers WHERE branch_id = $1 AND full_name = 'Payments Test Customer'`, [branchId]);
 }
 
 describe('Payments — Order Payment Management', () => {
@@ -44,6 +63,7 @@ describe('Payments — Order Payment Management', () => {
   let branchId: number;
   let locationId: number;
   let bookId: number;
+  let customerId: number;
 
   beforeAll(async () => {
     await cleanTestStaff(STAFF_PREFIX);
@@ -61,6 +81,7 @@ describe('Payments — Order Payment Management', () => {
     locationId = await getOrCreateLocation(branchId);
     const book = await getTestBook();
     bookId = book.id;
+    customerId = await createTestCustomer(branchId);
   });
 
   afterAll(async () => {
@@ -74,7 +95,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 1. Full payment → order payment_status = paid ──────────────────────────
 
   it('1. Full payment → order payment_status = paid', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const res = await request(getTestApp())
       .post('/api/payments')
@@ -96,7 +117,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 2. Partial payment → order payment_status = partial ───────────────────
 
   it('2. Partial payment → order payment_status = partial', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
     const partialAmount = parseFloat((order.total / 2).toFixed(2));
 
     const res = await request(getTestApp())
@@ -114,7 +135,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 3. Payment exceeds order total → 422 ──────────────────────────────────
 
   it('3. Payment exceeds order total → 422 EXCEEDS_ORDER_TOTAL', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const res = await request(getTestApp())
       .post('/api/payments')
@@ -129,7 +150,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 4. Refund → payment status updated ────────────────────────────────────
 
   it('4. Full refund → payment status = refunded, order = refunded', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const payRes = await request(getTestApp())
       .post('/api/payments')
@@ -160,7 +181,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 5. Refund exceeds payment → 422 ───────────────────────────────────────
 
   it('5. Refund exceeds payment amount → 422 EXCEEDS_PAYMENT_AMOUNT', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const payRes = await request(getTestApp())
       .post('/api/payments')
@@ -182,7 +203,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 6. GET /api/orders/:id/balance ────────────────────────────────────────
 
   it('6. GET /api/orders/:id/balance → correct outstanding', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
     const partialAmount = parseFloat((order.total * 0.6).toFixed(2));
 
     await request(getTestApp())
@@ -206,7 +227,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 7. GET /api/orders/:id/payments ───────────────────────────────────────
 
   it('7. GET /api/orders/:id/payments → lists payments for order', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     await request(getTestApp())
       .post('/api/payments')
@@ -228,7 +249,7 @@ describe('Payments — Order Payment Management', () => {
   // ── 8. Split payment (two methods) ────────────────────────────────────────
 
   it('8. Split payment (cash + mobile) → order fully paid', async () => {
-    const order = await createTestOrder(salesToken, branchId, locationId, bookId);
+    const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
     const half = parseFloat((order.total / 2).toFixed(2));
     const remainder = parseFloat((order.total - half).toFixed(2));
 
