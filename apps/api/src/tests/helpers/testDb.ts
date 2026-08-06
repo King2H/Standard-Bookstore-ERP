@@ -130,6 +130,17 @@ export async function cleanTestBranches(namePrefix: string): Promise<void> {
      )`,
     [`${namePrefix}%`],
   );
+  // Remove receivables (created for credit_sale orders/POS credit sales) —
+  // a direct FK to branches with no dependents of its own, so this is safe
+  // to delete right before the branches themselves. Previously caused
+  // "update or delete on table branches violates foreign key constraint
+  // receivables_branch_id_fkey" for any test creating a credit_sale order.
+  await db.query(
+    `DELETE FROM receivables WHERE branch_id IN (
+       SELECT id FROM branches WHERE name LIKE $1
+     )`,
+    [`${namePrefix}%`],
+  );
   await db.query(`DELETE FROM branches WHERE name LIKE $1`, [`${namePrefix}%`]);
 }
 
