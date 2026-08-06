@@ -341,15 +341,16 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
        WHERE reference_id = $1 AND book_id = $2 AND location_id = $3`,
       [String(orderId), bookId, locationId],
     );
-    // In reservation-only model: cancel() only calls stockIn() if stock was actually deducted.
-    // For a CONFIRMED order that was never paid/auto-fulfilled, stockWasDeducted=false,
-    // so no order_cancelled history row is written. Inventory stays unchanged.
+    // Current model (order-payment-unification spec, 3.5; cancel()'s own
+    // "Fix 9.4" comment): confirm() deducts inventory.quantity immediately,
+    // so cancel() on a CONFIRMED order calls stockIn() to restore it --
+    // hasDeductedStock is unconditionally true for CONFIRMED/PARTIALLY_PAID/
+    // PAID orders ("stockOut ran at confirm() time for all of them").
     const cancelHistRow = histRows.rows.find(
       (r: Record<string, unknown>) => r.reference_type === 'order_cancelled',
     );
-    // No stockIn called â€” nothing was deducted (correct behavior)
-    expect(cancelHistRow).toBeUndefined();
-    // Inventory stays at INITIAL_QTY
+    expect(cancelHistRow).toBeDefined();
+    // Deducted at confirm, restored at cancel — net back to INITIAL_QTY
     expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY);
   });
 

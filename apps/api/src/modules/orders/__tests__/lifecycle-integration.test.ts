@@ -289,9 +289,11 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
 
-    // confirm() creates a reservation only — inventory.quantity unchanged
+    // confirm() deducts inventory.quantity immediately via stockOut() AND
+    // inserts the reservation, in the same transaction (order-payment-
+    // unification spec, 3.5).
     const qtyAfterConfirm = await getInventoryQty(bookId, locationId);
-    expect(qtyAfterConfirm).toBe(INITIAL_QTY);
+    expect(qtyAfterConfirm).toBe(INITIAL_QTY - ORDER_QTY);
 
     // No order_credit_sale receivable for CASH orders
     const recRes = await db.query(
@@ -300,22 +302,30 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     ).catch(() => ({ rows: [] }));
     expect(recRes.rows.length).toBe(0);
 
-    // ── Step 3: Record full payment → auto-fulfill triggered ─────────────────
-    // With tax_rate=0, order total = bookPrice × qty. Full payment triggers
-    // auto-fulfill in payments.service: stockOut() deducts inventory once.
-    const orderTotal = await getOrderTotal(orderId);
-    const payRes = await request(getTestApp())
-      .post('/api/payments')
+    // ── Step 3: Fulfill directly — no payment step for cash_sale ─────────────
+    // payments.service.ts's "Bug 2" guard rejects any POST /api/payments
+    // against a cash_sale order with CASH_ORDER_ALREADY_PAID -- cash orders
+    // are marked paid at confirm() (Step 2's UPDATE ... payment_status =
+    // 'paid') and never go through payments.service.createPayment() at all.
+    // fulfill()'s own comment confirms this is intentional: "CASH orders:
+    // payment_status is already 'paid' at confirmation... allows manual
+    // fulfillment in the rare case auto-fulfill in payments.service didn't
+    // run" -- meaning fulfill() is callable directly from CONFIRMED for cash
+    // orders, which is the real, current flow this test needs to exercise.
+    const fulfillRes = await request(getTestApp())
+      .post(`/api/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ orderId, amount: orderTotal, paymentMethod: 'cash' });
+      .send({});
 
-    expect(payRes.status).toBeGreaterThanOrEqual(200);
-    expect(payRes.status).toBeLessThan(300);
+    expect(fulfillRes.status).toBeGreaterThanOrEqual(200);
+    expect(fulfillRes.status).toBeLessThan(300);
 
-    // ── Step 4: Inventory deducted exactly once (by auto-fulfill stockOut) ────
-    const qtyAfterPayment = await getInventoryQty(bookId, locationId);
-    expect(qtyAfterPayment).toBe(INITIAL_QTY - ORDER_QTY);
+    // ── Step 4: Inventory unchanged since confirm — fulfillReservation() ─────
+    // writes a delta=0 audit row, no second deduction (already deducted at
+    // confirm()).
+    const qtyAfterFulfillStep = await getInventoryQty(bookId, locationId);
+    expect(qtyAfterFulfillStep).toBe(INITIAL_QTY - ORDER_QTY);
 
     // Reservation transitioned to 'deducted' (graceful if table absent)
     const resRow = await db.query(
@@ -347,15 +357,18 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       [String(orderId), bookId, locationId],
     );
 
-    // Exactly one order_fulfilled stock_out row (the single deduction at auto-fulfill)
+    // order_fulfilled row is fulfillReservation()'s zero-delta audit trail
+    // entry -- the actual deduction (delta=-ORDER_QTY) already happened at
+    // confirm() (reference_type='order_confirmed').
     const fulfillHistRow = histRows.rows.find(
       (r: Record<string, unknown>) => r.reference_type === 'order_fulfilled',
     );
     expect(fulfillHistRow).toBeDefined();
-    expect(Number(fulfillHistRow!.delta)).toBe(-ORDER_QTY);
+    expect(Number(fulfillHistRow!.delta)).toBe(0);
     expect(fulfillHistRow!.movement_type).toBe('stock_out');
 
-    // Only one row with a negative delta for this order (no double-deduction)
+    // Only one row with a negative delta for this order (the confirm()-time
+    // deduction) — no double-deduction at fulfill.
     const stockOutRows = histRows.rows.filter(
       (r: Record<string, unknown>) => Number(r.delta) < 0,
     );
@@ -420,8 +433,9 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
 
-    // Inventory unchanged — reservation only at confirm
-    expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY);
+    // confirm() deducts inventory.quantity immediately (order-payment-
+    // unification spec, 3.5) -- applies to credit_sale orders too.
+    expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY - ORDER_QTY);
 
     // payment_status = 'unpaid' for CREDIT orders at confirm
     const payStatusAfterConfirm = String(confirmRes.body.paymentStatus ?? '').toLowerCase();
@@ -451,8 +465,10 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     expect(fulfillRes.status).toBeGreaterThanOrEqual(200);
     expect(fulfillRes.status).toBeLessThan(300);
 
-    // Inventory still unchanged — fulfillReservation() does not call stockOut
-    expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY);
+    // Inventory unchanged since confirm — fulfillReservation() writes a
+    // delta=0 audit row, no second deduction (the real deduction already
+    // happened at confirm()).
+    expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY - ORDER_QTY);
 
     // Reservation → 'deducted' (graceful if table absent)
     const resRow = await db.query(
@@ -504,8 +520,10 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .set('X-Branch-Id', String(branchId));
     expect(String(finalOrderRes.body.paymentStatus ?? '').toLowerCase()).toBe('paid');
 
-    // Inventory still at INITIAL_QTY — no deduction happened (CREDIT fulfill is reservation-only)
-    expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY);
+    // Inventory unchanged since confirm — the payment settles the receivable
+    // only, it doesn't touch inventory (the deduction already happened at
+    // confirm(), fulfill() didn't deduct again).
+    expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY - ORDER_QTY);
 
     // Cleanup customer
     await db.query(`UPDATE customers SET is_active = false WHERE id = $1`, [customerId]);
@@ -701,9 +719,10 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
 
-    // Inventory unchanged after confirm (reservation only)
+    // confirm() deducts inventory.quantity immediately (order-payment-
+    // unification spec, 3.5).
     const qtyAfterConfirm = await getInventoryQty(bookId, locationId);
-    expect(qtyAfterConfirm).toBe(INITIAL_QTY);
+    expect(qtyAfterConfirm).toBe(INITIAL_QTY - ORDER_QTY);
 
     // Receivable created at confirm
     const recAfterConfirm = await db.query(
@@ -726,19 +745,11 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     expect(String(cancelRes.body.status ?? '').toUpperCase()).toBe('CANCELLED');
 
     // ── Assertion a: inventory.quantity restored to pre-confirm value ─────────
-    // cancel() calls invTxSvc.stockIn() for CONFIRMED orders (fix C4)
-    // Since confirm() does NOT deduct inventory (reservation-only model),
-    // the stockIn in cancel() would bring qty ABOVE INITIAL_QTY.
-    // The correct assertion is: qty is still INITIAL_QTY (no net change since
-    // confirm didn't deduct and cancel restores what confirm took — which is 0).
-    // Actually: cancel() calls stockIn for items with qtyReserved > 0.
-    // In the reservation-only model, inventory.quantity was never reduced,
-    // so stockIn would ADD to it. Let's check what the actual model does:
+    // confirm() deducted ORDER_QTY via stockOut(); cancel() calls
+    // invTxSvc.stockIn() to restore it for CONFIRMED orders (fix C4) --
+    // net effect is back to INITIAL_QTY.
     const qtyAfterCancel = await getInventoryQty(bookId, locationId);
-    // The quantity should be >= INITIAL_QTY (cancel only restores, never takes)
-    expect(qtyAfterCancel).toBeGreaterThanOrEqual(INITIAL_QTY);
-    // And must not have gone negative
-    expect(qtyAfterCancel).toBeGreaterThan(0);
+    expect(qtyAfterCancel).toBe(INITIAL_QTY);
 
     // ── Assertion b: reservation released ────────────────────────────────────
     const resRow = await db.query(
@@ -757,11 +768,9 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     expect(recAfterCancel.rows[0].status).toBe('Settled');
     expect(parseFloat(recAfterCancel.rows[0].outstanding_amount as string)).toBeCloseTo(0, 1);
 
-    // ── Inventory history: no order_cancelled row expected ────────────────────
-    // In the reservation-only model, confirm() does NOT deduct inventory.
-    // cancel() only calls stockIn() if stock was actually deducted
-    // (evidenced by an order_fulfilled history row). For this CONFIRMED CREDIT
-    // order that was never paid/auto-fulfilled, no stockIn is called.
+    // ── Inventory history: order_cancelled row expected ────────────────────
+    // confirm() deducted stock via stockOut(), so cancel() calls stockIn()
+    // to restore it, writing an order_cancelled audit row.
     const histRows = await db.query(
       `SELECT reference_type, delta, movement_type
        FROM inventory_history
@@ -771,8 +780,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     const cancelHistRow = histRows.rows.find(
       (r: Record<string, unknown>) => r.reference_type === 'order_cancelled',
     );
-    // Correctly undefined — cancel() didn't call stockIn() because nothing was deducted
-    expect(cancelHistRow).toBeUndefined();
+    expect(cancelHistRow).toBeDefined();
 
     await db.query(`UPDATE customers SET is_active = false WHERE id = $1`, [customerId]);
   });

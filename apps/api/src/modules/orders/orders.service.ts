@@ -675,18 +675,21 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
       }
     }
 
-    const cancelledStatus = await dbStatus('CANCELLED');
-    await client.query('UPDATE orders SET status = $1, cancel_reason = $2, updated_at = now() WHERE id = $3', [cancelledStatus, reason, orderId]);
-    await client.query(
-      "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','order',$3,$4,$5)",
-      [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId,
-       JSON.stringify({ action: 'cancel', fromStatus: order.status, toStatus: 'CANCELLED', reason, financialLifecycleFrozen: true, note: 'Payment collection disabled. Receivable voided. No further financial transactions allowed.' })],
-    );
-    await insertOutbox(client, 'order.cancelled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId, reason });
-
     // ── Settle any open order_credit_sale receivable ───────────────────────────
     // Task 6.3: Hard failure — if receivable settlement fails the whole transaction
     // rolls back. The savepoint that swallowed errors is removed.
+    //
+    // Bug fix: this MUST run before the order's own status flips to CANCELLED
+    // below. updateReceivableOnPayment() has its own defensive guard ("Bug 4")
+    // that silently no-ops if the linked order is already CANCELLED -- that
+    // guard exists to stop some OTHER caller (e.g. createPayment) from
+    // reactivating a receivable after the fact, but it can't distinguish that
+    // from cancel() itself trying to close the receivable out as part of the
+    // cancellation. Calling it after the UPDATE below meant this guard fired
+    // on cancel()'s own settlement attempt every time, unconditionally --
+    // receivables for cancelled credit orders never actually settled, leaving
+    // the phantom-debt state order-payment-unification (3.5, 4.3) says this
+    // is supposed to prevent.
     const recRes = await client.query(
       "SELECT 1 FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1 AND status != 'Settled' LIMIT 1",
       [orderId],
@@ -702,6 +705,15 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
         client,
       );
     }
+
+    const cancelledStatus = await dbStatus('CANCELLED');
+    await client.query('UPDATE orders SET status = $1, cancel_reason = $2, updated_at = now() WHERE id = $3', [cancelledStatus, reason, orderId]);
+    await client.query(
+      "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','order',$3,$4,$5)",
+      [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId,
+       JSON.stringify({ action: 'cancel', fromStatus: order.status, toStatus: 'CANCELLED', reason, financialLifecycleFrozen: true, note: 'Payment collection disabled. Receivable voided. No further financial transactions allowed.' })],
+    );
+    await insertOutbox(client, 'order.cancelled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId, reason });
 
     await client.query('COMMIT');
     return getById(orderId);

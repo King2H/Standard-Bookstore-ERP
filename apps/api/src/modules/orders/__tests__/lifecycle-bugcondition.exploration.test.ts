@@ -302,18 +302,15 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
     
     console.log(`After Fulfill: ${qtyAfterFulfill}`);
     
-    // In the reservation-only model:
-    // - confirm() creates a soft reservation, does NOT deduct inventory.quantity
-    // - fulfill() calls fulfillReservation() which writes delta=0 history, no qty change
-    // - Stock is only physically deducted when a CASH order auto-fulfills via payment
-    // For CREDIT orders (like this test), inventory.quantity is never changed.
-    //
-    // EXPECTED AFTER FIX: qtyAfterFulfill === qtyAfterConfirm (no change at fulfill — correct)
+    // Current model (order-payment-unification spec, 3.5): confirm() deducts
+    // inventory.quantity immediately via stockOut() AND inserts a 'reserved'
+    // row, in the same transaction. fulfill() calls fulfillReservation(),
+    // which writes a delta=0 audit row and transitions the reservation to
+    // 'deducted' -- it does NOT deduct again. So:
+    //   qtyAfterFulfill === qtyAfterConfirm (no double-deduction at fulfill — correct)
+    //   qtyBefore - qtyAfterFulfill === the order quantity (5), deducted once, at confirm
     expect(qtyAfterFulfill).toBe(qtyAfterConfirm);
-    
-    // For CREDIT orders in reservation-only model, total qty change = 0
-    // (deduction only happens for CASH via auto-fulfill in payments.service)
-    expect(qtyBefore - qtyAfterFulfill).toBe(0);
+    expect(qtyBefore - qtyAfterFulfill).toBe(5);
     
     // Verify fulfillReservation() wrote an audit row with delta=0
     const fulfillHist = await db.query(
@@ -376,20 +373,22 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
     
     console.log(`Before: ${qtyBefore}, After Confirm: ${qtyAfterConfirm}, After Cancel: ${qtyAfterCancel}`);
     
-    // EXPECTED AFTER FIX: inventory unchanged (reservation-only model — confirm() never deducted,
-    // so cancel() correctly does NOT call stockIn() when no deduction occurred).
+    // Current model (order-payment-unification spec, 3.5; cancel()'s own
+    // "Fix 9.4" comment): confirm() deducts inventory.quantity immediately,
+    // so cancel() on a CONFIRMED/PARTIALLY_PAID/PAID order restores it via
+    // stockIn() -- hasDeductedStock is unconditionally true for those
+    // statuses ("stockOut ran at confirm() time for all of them"). Net
+    // effect is still qtyAfterCancel === qtyBefore, but via deduct-then-
+    // restore rather than "never touched".
     expect(qtyAfterCancel).toBe(qtyBefore);
-    
-    // In the reservation-only model, cancel() only calls stockIn() if stock was actually
-    // deducted (evidenced by an order_fulfilled history row). For a CONFIRMED order that
-    // was never paid/auto-fulfilled, no stockIn is called, so no order_cancelled history row.
-    // This is the CORRECT behavior — no spurious stock addition.
+
+    // The stockIn() restoration writes an audit row with reference_type
+    // 'order_cancelled' -- there should be exactly one.
     const hist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_cancelled' AND reference_id = $1`,
       [order.id],
     );
-    // Correctly 0 rows — cancel() only calls stockIn() when stock was actually deducted
-    expect(hist.rows.length).toBe(0);
+    expect(hist.rows.length).toBe(1);
   });
 
   // ────────────────────────────────────────────────────────────────────────────
