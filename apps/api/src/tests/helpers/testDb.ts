@@ -56,6 +56,60 @@ export async function cleanTestBranches(namePrefix: string): Promise<void> {
      )`,
     [`${namePrefix}%`],
   );
+  // Remove POS transactions (and their dependents) for these branches — a
+  // test that creates a transaction/return via the branch (e.g. POS or
+  // returns flows) and then calls this cleanup without separately deleting
+  // them first previously hit "update or delete on table locations violates
+  // foreign key constraint transactions_location_id_fkey" here.
+  // NOTE: several other tables also reference locations (orders, exchanges,
+  // inventory_history, purchase_orders, ...) — this only covers the
+  // transactions/returns chain that has actually caused teardown failures;
+  // a test creating those other entity types is still responsible for its
+  // own cleanup before calling this helper.
+  await db.query(
+    `DELETE FROM refunds WHERE return_id IN (
+       SELECT id FROM returns WHERE branch_id IN (
+         SELECT id FROM branches WHERE name LIKE $1
+       )
+     )`,
+    [`${namePrefix}%`],
+  );
+  await db.query(
+    `DELETE FROM return_line_items WHERE return_id IN (
+       SELECT id FROM returns WHERE branch_id IN (
+         SELECT id FROM branches WHERE name LIKE $1
+       )
+     )`,
+    [`${namePrefix}%`],
+  );
+  await db.query(
+    `DELETE FROM returns WHERE branch_id IN (
+       SELECT id FROM branches WHERE name LIKE $1
+     )`,
+    [`${namePrefix}%`],
+  );
+  await db.query(
+    `DELETE FROM transaction_payments WHERE transaction_id IN (
+       SELECT id FROM transactions WHERE branch_id IN (
+         SELECT id FROM branches WHERE name LIKE $1
+       )
+     )`,
+    [`${namePrefix}%`],
+  );
+  await db.query(
+    `DELETE FROM transaction_line_items WHERE transaction_id IN (
+       SELECT id FROM transactions WHERE branch_id IN (
+         SELECT id FROM branches WHERE name LIKE $1
+       )
+     )`,
+    [`${namePrefix}%`],
+  );
+  await db.query(
+    `DELETE FROM transactions WHERE branch_id IN (
+       SELECT id FROM branches WHERE name LIKE $1
+     )`,
+    [`${namePrefix}%`],
+  );
   // Remove locations in these branches
   await db.query(
     `DELETE FROM locations WHERE branch_id IN (

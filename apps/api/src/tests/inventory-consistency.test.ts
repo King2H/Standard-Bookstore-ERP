@@ -152,6 +152,15 @@ describe('Inventory Consistency Scenarios', () => {
       await clearReservations(bookId, locationBId);
       await db.query(`DELETE FROM inventory WHERE location_id IN ($1, $2)`, [locationId, locationBId]);
     }
+    // Scenarios 3/4 create orders via POST /api/orders (confirm/fulfill/cancel),
+    // which also insert inventory_reservations. Without cleaning these up first,
+    // cleanTestBranches()'s DELETE FROM locations fails with a FK violation on
+    // orders_location_id_fkey.
+    if (branchId) {
+      await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
+      await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
+      await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
+    }
     await cleanTestStaff(STAFF_PREFIX);
     await cleanTestBranches(BRANCH_PREFIX);
   });
@@ -385,7 +394,10 @@ describe('Inventory Consistency Scenarios', () => {
         transactionId: txId,
         reason: 'Customer changed mind',
         refundMethod: 'cash',
-        items: [{ transactionLineItemId: lineItemId, quantity: 1 }],
+        // POST /api/returns reads req.body.lines, not "items" -- confirmed
+        // against the real request ReturnsPage.tsx sends (`lines: selectedLines`,
+        // same { transactionLineItemId, quantity } shape). Test had the wrong key.
+        lines: [{ transactionLineItemId: lineItemId, quantity: 1 }],
       });
     expect(returnRes.status).toBe(201);
 
