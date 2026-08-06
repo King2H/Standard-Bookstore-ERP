@@ -1,3 +1,21 @@
+# Redis is intentionally not part of this stack.
+#
+# The only place the API touches Redis is an optional 5-minute cache for
+# system-config reads (apps/api/src/modules/config/config.service.ts) — when
+# REDIS_URL is unset, that falls back to a direct (cheap, indexed) Postgres
+# read with no functional loss. Nothing else in the app depends on Redis: the
+# notification/outbox pipeline (apps/api/src/workers/outboxPoller.ts) is a
+# plain in-process DB-polling loop, not a Redis/BullMQ queue, and SSE delivery
+# is in-process HTTP. This is already the exact code path the Render
+# deployment runs in production (see DEPLOY.md) — not new/untested behavior.
+#
+# For a single-branch, single-machine, offline shop deployment, an extra
+# always-on container buys nothing here and costs real memory/CPU on
+# constrained hardware. If a future deployment needs multi-branch scale,
+# horizontal API instances, or heavier config read volume, add the `redis`
+# service back and set REDIS_URL on `api` — no code changes required, the
+# caching path already exists and is tested.
+
 services:
   api:
     build:
@@ -9,12 +27,9 @@ services:
       DATABASE_URL: postgres://bms:bms@postgres:5432/bms
       JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_in_production}
       NODE_ENV: ${NODE_ENV:-development}
-      REDIS_URL: redis://redis:6379
       COLUMN_ENCRYPTION_KEY: ${COLUMN_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     volumes:
       - ./apps/api/src:/app/src
@@ -37,20 +52,5 @@ services:
       retries: 10
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
 volumes:
   pgdata:
-  redisdata:
