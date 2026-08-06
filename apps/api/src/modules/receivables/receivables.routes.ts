@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as receivablesService from './receivables.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
+import { paramStr } from '../../lib/http.js';
 
 const router = Router();
 
@@ -62,7 +63,7 @@ router.get(
   requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const rec = await receivablesService.getById(req.params.id);
+      const rec = await receivablesService.getById(paramStr(req.params.id));
       res.json(rec);
     } catch (err) { next(err); }
   },
@@ -77,7 +78,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const rec = await receivablesService.manualSettle(
-        req.params.id,
+        paramStr(req.params.id),
         typeof req.body.notes === 'string' ? req.body.notes : undefined,
         req.staff!,
       );
@@ -95,7 +96,7 @@ router.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const dueDate = req.body.dueDate === null ? null : (typeof req.body.dueDate === 'string' ? req.body.dueDate : null);
-      const rec = await receivablesService.updateDueDate(req.params.id, dueDate, req.staff!);
+      const rec = await receivablesService.updateDueDate(paramStr(req.params.id), dueDate, req.staff!);
       res.json(rec);
     } catch (err) { next(err); }
   },

@@ -10,6 +10,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db/index.js';
 import { authenticate } from '../../middleware/auth.js';
+import { paramStr } from '../../lib/http.js';
 import { sseManager } from '../../lib/sseManager.js';
 
 const router = Router();
@@ -172,7 +173,7 @@ router.get('/unread-count', authenticate, async (req: Request, res: Response, ne
 router.put('/:id/read', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const staff = req.staff!;
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(paramStr(req.params.id), 10);
     if (isNaN(id)) {
       res.status(400).json({ error: 'INVALID_ID', message: 'Notification ID must be a number' });
       return;

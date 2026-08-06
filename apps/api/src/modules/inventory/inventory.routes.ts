@@ -4,6 +4,7 @@ import * as inventoryService from './inventory.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { paramStr } from '../../lib/http.js';
 
 const router = Router();
 
@@ -263,7 +264,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const bookId = parseInt(req.params.bookId, 10);
+      const bookId = parseInt(paramStr(req.params.bookId), 10);
       if (!bookId || bookId <= 0) throw new ValidationError('Invalid bookId');
       const branchId = req.query.branchId ? qi(req.query.branchId, 0) || undefined : req.staff!.branchId;
       const items = await inventoryService.getBookStockBreakdown(bookId, branchId);

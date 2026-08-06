@@ -771,7 +771,11 @@ export async function receivePO(
           referenceType: 'purchase_order',
           referenceId: String(id),
           reasonCode: 'initial',
-          notes: notes ?? null,
+          // stockIn's `notes` is string | undefined (it does `notes ?? null`
+          // internally before the INSERT), so null and undefined already
+          // collapse to the same DB value — pass undefined to match the
+          // declared param type instead of widening it for one caller.
+          notes: notes ?? undefined,
           staffCtx,
         },
         client,
