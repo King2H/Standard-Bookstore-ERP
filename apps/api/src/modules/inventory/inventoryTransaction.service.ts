@@ -112,10 +112,24 @@ export async function getAvailableStock(
   const q = client ?? db;
 
   if (await hasReservationsTable(client)) {
+    // available = quantity, NOT quantity - reserved.
+    //
+    // orders.service.ts confirm() inserts the 'reserved' row and calls
+    // stockOut() (which decrements inventory.quantity) in the same DB
+    // transaction, every time -- there is no code path where a committed
+    // 'reserved' row exists without inventory.quantity already reflecting
+    // that deduction. Subtracting `reserved` again here double-counts it:
+    // every confirmed-but-unfulfilled order would make this function
+    // under-report available stock by its own quantity, on top of the
+    // deduction that already happened, potentially rejecting legitimate
+    // sales (INSUFFICIENT_STOCK) with real stock still on hand.
+    //
+    // `reserved` is still returned as an informational field (how much is
+    // confirmed-but-not-yet-fulfilled) but is no longer subtracted.
     const result = await q.query(
       `SELECT i.quantity,
               COALESCE(SUM(r.quantity), 0)::int AS reserved,
-              (i.quantity - COALESCE(SUM(r.quantity), 0))::int AS available
+              i.quantity::int AS available
        FROM inventory i
        LEFT JOIN inventory_reservations r
          ON r.book_id = i.book_id
@@ -146,7 +160,8 @@ export async function getAvailableStock(
 
 /**
  * Get available stock for a list of books, optionally scoped to a location or branch.
- * Returns a map of bookId -> available (quantity - reserved).
+ * Returns a map of bookId -> available (== quantity; see getAvailableStock()
+ * above for why reservations are no longer subtracted).
  */
 export async function getStockQuantities(
   bookIds: number[],
@@ -162,15 +177,7 @@ export async function getStockQuantities(
   if (useRes) {
     const result = await q.query(
       `SELECT inv.book_id,
-              COALESCE(SUM(inv.quantity), 0) - COALESCE((
-                SELECT SUM(r.quantity) FROM inventory_reservations r
-                WHERE r.book_id = inv.book_id AND r.status = 'reserved'
-                  AND (
-                    ($2::integer IS NOT NULL AND r.location_id = $2::integer) OR
-                    ($2::integer IS NULL AND $3::integer IS NOT NULL AND r.location_id IN (SELECT id FROM locations WHERE branch_id = $3::integer)) OR
-                    ($2::integer IS NULL AND $3::integer IS NULL)
-                  )
-              ), 0) AS available
+              COALESCE(SUM(inv.quantity), 0) AS available
        FROM inventory inv
        WHERE inv.book_id = ANY($1)
          AND (
@@ -280,6 +287,12 @@ export async function getBookAvailability(
   const useRes = await hasReservationsTable();
 
   if (useRes) {
+    // available = on_hand (quantity), not quantity - reserved — see
+    // getAvailableStock() above for why: reservations are inserted in the
+    // same transaction as the stockOut() that already deducted quantity, so
+    // subtracting them again here double-counts every confirmed-but-
+    // unfulfilled order, understating what POS/Orders/Exchanges show staff
+    // as in-stock.
     const result = await db.query(
       `SELECT
          i.book_id,
@@ -290,10 +303,7 @@ export async function getBookAvailability(
            SELECT SUM(r.quantity)::int FROM inventory_reservations r
            WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'
          ), 0) AS reserved,
-         GREATEST(0, i.quantity - COALESCE((
-           SELECT SUM(r2.quantity)::int FROM inventory_reservations r2
-           WHERE r2.book_id = i.book_id AND r2.location_id = i.location_id AND r2.status = 'reserved'
-         ), 0)) AS available
+         GREATEST(0, i.quantity) AS available
        FROM inventory i
        JOIN locations l ON l.id = i.location_id
        WHERE i.book_id = ANY($1) AND i.location_id = $2`,

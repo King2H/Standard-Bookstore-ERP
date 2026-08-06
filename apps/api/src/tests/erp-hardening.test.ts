@@ -226,13 +226,15 @@ describe('P2 — Inventory conservation', () => {
   it('available stock never goes negative after confirming orders', async () => {
     const app = getTestApp();
 
-    // Get current available stock
+    // Get current available stock.
+    // available = quantity, NOT quantity - reserved. confirm() inserts the
+    // 'reserved' row and calls stockOut() (which already decremented
+    // inventory.quantity) in the same DB transaction, always -- so a
+    // committed 'reserved' row's quantity is already reflected in
+    // inventory.quantity (order-payment-unification spec, 3.5). See
+    // getAvailableStock() in inventoryTransaction.service.ts.
     const stockBefore = await db.query(
-      `SELECT i.quantity - COALESCE(
-         (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
-         0
-       ) AS available
+      `SELECT i.quantity AS available
        FROM inventory i
        WHERE i.book_id = $1 AND i.location_id = $2`,
       [bookId, locationId],
@@ -255,11 +257,7 @@ describe('P2 — Inventory conservation', () => {
     if (confirmRes.status === 200) {
       // Available stock must have decreased by exactly 1
       const stockAfter = await db.query(
-        `SELECT i.quantity - COALESCE(
-           (SELECT SUM(r.quantity) FROM inventory_reservations r
-            WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
-           0
-         ) AS available
+        `SELECT i.quantity AS available
          FROM inventory i
          WHERE i.book_id = $1 AND i.location_id = $2`,
         [bookId, locationId],
@@ -274,11 +272,7 @@ describe('P2 — Inventory conservation', () => {
     const app = getTestApp();
 
     const stockBefore = await db.query(
-      `SELECT i.quantity - COALESCE(
-         (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
-         0
-       ) AS available
+      `SELECT i.quantity AS available
        FROM inventory i WHERE i.book_id = $1 AND i.location_id = $2`,
       [bookId, locationId],
     );
@@ -302,11 +296,7 @@ describe('P2 — Inventory conservation', () => {
       .send({ reason: 'PBT test cancel' });
 
     const stockAfter = await db.query(
-      `SELECT i.quantity - COALESCE(
-         (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
-         0
-       ) AS available
+      `SELECT i.quantity AS available
        FROM inventory i WHERE i.book_id = $1 AND i.location_id = $2`,
       [bookId, locationId],
     );
@@ -574,11 +564,7 @@ describe('P7 — Reservation availability', () => {
 
     // Available stock must be exactly 0 now
     const stockResult = await db.query(
-      `SELECT i.quantity - COALESCE(
-         (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
-         0
-       ) AS available
+      `SELECT i.quantity AS available
        FROM inventory i WHERE i.book_id = $1 AND i.location_id = $2`,
       [bookId, locationId],
     );
@@ -605,14 +591,16 @@ describe('P7 — Reservation availability', () => {
   });
 
   it('available_stock formula is consistent with DB state (pure DB property)', async () => {
-    // For every inventory row, verify: available = quantity - active_reservations ≥ 0
+    // For every inventory row, verify: available = quantity ≥ 0.
+    // reserved is still selected for visibility/debugging but is no longer
+    // subtracted -- see getAvailableStock() in inventoryTransaction.service.ts.
     const result = await db.query(
       `SELECT
          i.book_id,
          i.location_id,
          i.quantity,
          COALESCE(SUM(r.quantity), 0) AS reserved,
-         i.quantity - COALESCE(SUM(r.quantity), 0) AS available
+         i.quantity AS available
        FROM inventory i
        LEFT JOIN inventory_reservations r
          ON r.book_id = i.book_id
