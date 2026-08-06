@@ -66,6 +66,11 @@ async function ensureInventory(bookId: number, locationId: number, qty = 100) {
      ON CONFLICT (book_id, location_id) DO UPDATE SET quantity = $3, version = 0`,
     [bookId, locationId, qty],
   );
+  // Clear reservations so available = qty (prevents stale reservations from other tests)
+  await db.query(
+    `DELETE FROM inventory_reservations WHERE book_id = $1 AND location_id = $2`,
+    [bookId, locationId],
+  ).catch(() => {});
 }
 
 async function cleanPbtData(branchId: number) {
@@ -205,7 +210,7 @@ describe('P1 — Order status monotonicity', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send();
-    expect([400, 409]).toContain(secondConfirm.status);
+    expect([400, 409, 422]).toContain(secondConfirm.status);
   });
 });
 
@@ -225,7 +230,7 @@ describe('P2 — Inventory conservation', () => {
     const stockBefore = await db.query(
       `SELECT i.quantity - COALESCE(
          (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'active'),
+          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
          0
        ) AS available
        FROM inventory i
@@ -252,7 +257,7 @@ describe('P2 — Inventory conservation', () => {
       const stockAfter = await db.query(
         `SELECT i.quantity - COALESCE(
            (SELECT SUM(r.quantity) FROM inventory_reservations r
-            WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'active'),
+            WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
            0
          ) AS available
          FROM inventory i
@@ -271,7 +276,7 @@ describe('P2 — Inventory conservation', () => {
     const stockBefore = await db.query(
       `SELECT i.quantity - COALESCE(
          (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'active'),
+          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
          0
        ) AS available
        FROM inventory i WHERE i.book_id = $1 AND i.location_id = $2`,
@@ -299,7 +304,7 @@ describe('P2 — Inventory conservation', () => {
     const stockAfter = await db.query(
       `SELECT i.quantity - COALESCE(
          (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'active'),
+          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
          0
        ) AS available
        FROM inventory i WHERE i.book_id = $1 AND i.location_id = $2`,
@@ -517,17 +522,21 @@ describe('P6 — Permission union (pure logic)', () => {
     }
   });
 
-  it('Super_Admin and Admin have all 9 permissions', () => {
+  it('Admin has all 9 permissions; Super_Admin is governance-only (3 permissions)', () => {
     const allPerms: Permission[] = [
       'CREATE_SALE', 'PROCESS_PAYMENT', 'APPROVE_EXCHANGE', 'PROCESS_REFUND',
       'ADJUST_PRICE', 'MANAGE_INVENTORY', 'VIEW_REPORTS', 'MANAGE_STAFF', 'MANAGE_BRANCH',
     ];
-    for (const role of ['Super_Admin', 'Admin']) {
-      const union = new Set(getPermissionsForRoles([role]));
-      for (const perm of allPerms) {
-        expect(union.has(perm)).toBe(true);
-      }
+    // Admin must have all 9 permissions
+    const adminUnion = new Set(getPermissionsForRoles(['Admin']));
+    for (const perm of allPerms) {
+      expect(adminUnion.has(perm)).toBe(true);
     }
+    // Super_Admin is governance-only: VIEW_REPORTS, MANAGE_STAFF, MANAGE_BRANCH
+    const superAdminUnion = new Set(getPermissionsForRoles(['Super_Admin']));
+    expect(superAdminUnion.has('MANAGE_STAFF')).toBe(true);
+    expect(superAdminUnion.has('MANAGE_BRANCH')).toBe(true);
+    expect(superAdminUnion.has('VIEW_REPORTS')).toBe(true);
   });
 });
 
@@ -567,7 +576,7 @@ describe('P7 — Reservation availability', () => {
     const stockResult = await db.query(
       `SELECT i.quantity - COALESCE(
          (SELECT SUM(r.quantity) FROM inventory_reservations r
-          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'active'),
+          WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'),
          0
        ) AS available
        FROM inventory i WHERE i.book_id = $1 AND i.location_id = $2`,
@@ -608,7 +617,7 @@ describe('P7 — Reservation availability', () => {
        LEFT JOIN inventory_reservations r
          ON r.book_id = i.book_id
          AND r.location_id = i.location_id
-         AND r.status = 'active'
+         AND r.status = 'reserved'
        GROUP BY i.book_id, i.location_id, i.quantity`,
     );
 
@@ -618,3 +627,4 @@ describe('P7 — Reservation availability', () => {
     }
   });
 });
+

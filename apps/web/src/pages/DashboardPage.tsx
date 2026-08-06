@@ -8,7 +8,7 @@ import {
 import { api, getAccessToken, getCurrentBranchId } from '../lib/api.js';
 
 type Role = string;
-interface DashboardPageProps { userRole?: Role; onNavigate?: (page: string) => void; }
+interface DashboardPageProps { userRole?: Role; onNavigate?: (page: string, context?: Record<string, string>) => void; }
 
 // ── API types ─────────────────────────────────────────────────────────────────
 
@@ -23,6 +23,20 @@ interface KpiReport {
   pendingOrders: number;
   totalExchangesToday: number;
   outstandingBalance: number;
+  // Net profit breakdown
+  netProfit: number;
+  fulfilledRevenue: number;
+  outstandingReceivables: number;
+  cashSalesRevenue: number;
+  creditSalesRevenue: number;
+  collectedCreditRevenue: number;
+  purchaseCost: number;
+  totalDiscounts: number;
+  // Executive financial KPIs
+  procurementExpense: number;
+  grossProfit: number;
+  dailyNetProfit: number;
+  monthlyNetProfit: number;
 }
 interface DiscountByType { Normal: number; Merchant: number; Special: number; }
 interface SalesSummary {
@@ -212,7 +226,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
     queryKey: ['report-kpis', filters.branchId],
     queryFn: () => api.get(`/reports/kpis${filters.branchId ? `?branchId=${filters.branchId}` : ''}`),
     enabled: canView,
-    staleTime: 15_000,          // 15s — KPIs refresh frequently
+    staleTime: 0,               // always refetch on mount — profit data must be fresh
     refetchInterval: 30_000,    // auto-refresh every 30s
     refetchOnWindowFocus: true,
   });
@@ -361,6 +375,8 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           { type: 'inventory', label: 'Inventory' },
           { type: 'customers', label: 'Customers' },
           { type: 'exchanges', label: 'Exchanges' },
+          { type: 'procurement', label: 'Procurement' },
+          { type: 'receivables', label: 'Receivables' },
         ].map(({ type, label }) => (
           <button key={type} onClick={() => exportReport(type)}
             className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
@@ -390,16 +406,98 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             ))
           ) : kpis ? (
             <>
-              <KpiCard label="Today's Sales"    value={fmtShort(kpis.dailySales)}           icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>} color="bg-blue-100 dark:bg-blue-900/30" onClick={() => onNavigate?.('pos')} />
-              <KpiCard label="Monthly Sales"    value={fmtShort(kpis.monthlySales)}         icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>} color="bg-indigo-100 dark:bg-indigo-900/30" onClick={() => onNavigate?.('pos')} />
-              <KpiCard label="Today's Revenue"  value={fmtShort(kpis.dailyRevenue)}         icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} color="bg-green-100 dark:bg-green-900/30" onClick={() => onNavigate?.('payments')} />
-              <KpiCard label="Monthly Revenue"  value={fmtShort(kpis.monthlyRevenue)}        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} color="bg-teal-100 dark:bg-teal-900/30" onClick={() => onNavigate?.('payments')} />
-              <KpiCard label="Outstanding Bal"  value={fmtShort(kpis.outstandingBalance)}     icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>} color="bg-red-100 dark:bg-red-900/30" onClick={() => onNavigate?.('receivables')} />
-              <KpiCard label="Avg Order Value"  value={fmtShort(kpis.averageOrderValue)}     icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>} color="bg-sky-100 dark:bg-sky-900/30" onClick={() => onNavigate?.('orders')} />
-              <KpiCard label="Active Customers" value={kpis.totalActiveCustomers.toString()} icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>} color="bg-purple-100 dark:bg-purple-900/30" onClick={() => onNavigate?.('customers')} />
-              <KpiCard label="Low Stock"        value={kpis.lowStockAlerts.toString()}       icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>} color="bg-amber-100 dark:bg-amber-900/30" sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'} onClick={() => onNavigate?.('inventory')} />
-              <KpiCard label="Pending Orders"   value={kpis.pendingOrders.toString()}        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} color="bg-orange-100 dark:bg-orange-900/30" onClick={() => onNavigate?.('orders')} />
-              <KpiCard label="Exchanges Today"  value={kpis.totalExchangesToday.toString()}  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>} color="bg-teal-100 dark:bg-teal-900/30" onClick={() => onNavigate?.('exchanges')} />
+              {/* Row 1 — Revenue & Profit */}
+              <KpiCard
+                label="Monthly Sales"
+                value={fmtShort(kpis.monthlySales)}
+                sub="All channels · this month"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
+                color="bg-blue-100 dark:bg-blue-900/30"
+                onClick={() => {
+                  const now = new Date();
+                  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+                  const today = now.toISOString().slice(0, 10);
+                  onNavigate?.('orders', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
+                }}
+              />
+              <KpiCard
+                label="Today's Sales"
+                value={fmtShort(kpis.dailySales)}
+                sub="Orders + POS + Exchanges"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>}
+                color="bg-indigo-100 dark:bg-indigo-900/30"
+                onClick={() => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  onNavigate?.('pos', { dateFrom: today, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
+                }}
+              />
+              <KpiCard
+                label="Gross Profit"
+                value={fmtShort(kpis.grossProfit)}
+                sub="Fulfilled revenue − cost"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
+                color={kpis.grossProfit >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'}
+              />
+              <KpiCard
+                label="Today's Net Profit"
+                value={fmtShort(kpis.dailyNetProfit)}
+                sub="Today · after cost & returns"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                color={kpis.dailyNetProfit >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}
+              />
+              <KpiCard
+                label="Monthly Net Profit"
+                value={fmtShort(kpis.monthlyNetProfit)}
+                sub="This month · after cost & returns"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>}
+                color={kpis.monthlyNetProfit >= 0 ? 'bg-teal-100 dark:bg-teal-900/30' : 'bg-red-100 dark:bg-red-900/30'}
+              />
+
+              {/* Row 2 — Credit & Operational */}
+              <KpiCard
+                label="Outstanding Credit"
+                value={fmtShort(kpis.outstandingBalance)}
+                sub="Unpaid receivables"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
+                color={kpis.outstandingBalance > 0 ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                onClick={() => onNavigate?.('receivables', { status: 'Pending,PartiallyPaid,Overdue', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+              />
+              <KpiCard
+                label="Discount Total"
+                value={fmtShort(kpis.totalDiscounts)}
+                sub="Fulfilled orders · all types"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M17 17h.01M7 17L17 7M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z" /></svg>}
+                color="bg-orange-100 dark:bg-orange-900/30"
+              />
+              <KpiCard
+                label="Procurement Expense"
+                value={fmtShort(kpis.procurementExpense)}
+                sub="Received POs · this month"
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
+                color="bg-violet-100 dark:bg-violet-900/30"
+                onClick={() => {
+                  const now = new Date();
+                  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+                  const today = now.toISOString().slice(0, 10);
+                  onNavigate?.('procurement', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
+                }}
+              />
+              <KpiCard
+                label="Pending Orders"
+                value={kpis.pendingOrders.toString()}
+                sub={kpis.pendingOrders > 0 ? 'Awaiting action' : 'All clear'}
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
+                color={kpis.pendingOrders > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                onClick={() => onNavigate?.('orders', { status: 'pending,confirmed,CONFIRMED,Pending', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+              />
+              <KpiCard
+                label="Low Stock"
+                value={kpis.lowStockAlerts.toString()}
+                sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'}
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
+                color={kpis.lowStockAlerts > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+              />
             </>
           ) : null}
         </div>
@@ -412,7 +510,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           {(kpis?.lowStockAlerts ?? 0) > 0 && inventory.lowStockItems.length > 0 && (
             <div
               className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 cursor-pointer hover:border-amber-400 dark:hover:border-amber-600 transition-colors"
-              onClick={() => onNavigate?.('inventory')}
+              onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
             >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-amber-600 dark:text-amber-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></span>
@@ -440,7 +538,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           {(kpis?.pendingOrders ?? 0) > 0 && (
             <div
               className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 cursor-pointer hover:border-orange-400 dark:hover:border-orange-600 transition-colors"
-              onClick={() => onNavigate?.('orders')}
+              onClick={() => onNavigate?.('orders', { status: 'pending,confirmed,CONFIRMED,Pending', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
             >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-orange-600 dark:text-orange-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></span>

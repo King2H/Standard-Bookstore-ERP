@@ -5,24 +5,6 @@ import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors.
 type PoolClient = pg.PoolClient;
 
 // ── Feature flag: inventory_reservations table ────────────────────────────────
-// Migration 1700000033 adds this table. On older DBs that haven't run it yet,
-// the stock subquery must omit the reservation deduction to avoid a 500 error.
-// We check once and cache the result for the lifetime of the process.
-let _hasReservationsTable: boolean | null = null;
-async function hasReservationsTable(): Promise<boolean> {
-  if (_hasReservationsTable !== null) return _hasReservationsTable;
-  try {
-    const r = await db.query(
-      `SELECT 1 FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
-    );
-    _hasReservationsTable = r.rows.length > 0;
-  } catch {
-    _hasReservationsTable = false;
-  }
-  return _hasReservationsTable;
-}
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface StaffCtx {
@@ -191,7 +173,7 @@ function mapBook(row: Record<string, unknown>): BookRecord {
     categoryIds: (row.category_ids as number[] | null) ?? [],
     tags: (row.tags as string[] | null) ?? [],
     branchPrice: row.branch_price != null ? parseFloat(row.branch_price as string) : null,
-    stockQuantity: row.stock_quantity != null ? parseInt(row.stock_quantity as string, 10) : null,
+    stockQuantity: row.stock_quantity != null ? Math.max(0, parseInt(row.stock_quantity as string, 10)) : null,
   };
 }
 
@@ -594,20 +576,30 @@ export async function searchBooks(filters: SearchFilters): Promise<{
   const params: unknown[] = [];
   let p = 1;
 
-  // Full-text search — covers title, author name, SKU via OR
+  // Full-text search — covers title, author name, SKU, and exact ISBN via OR
   if (filters.q) {
     const q = filters.q.trim();
-    conditions.push(`(
-      lower(b.title) LIKE lower($${p}) OR
-      lower(COALESCE(b.sku, '')) LIKE lower($${p}) OR
-      EXISTS (
+    const qParam = `%${q}%`;
+    const normalizedIsbn = q.replace(/[-\s]/g, '');
+    const parts = [
+      `lower(b.title) LIKE lower($${p})`,
+      `lower(COALESCE(b.sku, '')) LIKE lower($${p})`,
+      `EXISTS (
         SELECT 1 FROM book_authors ba_q
         JOIN authors a_q ON a_q.id = ba_q.author_id
         WHERE ba_q.book_id = b.id AND lower(a_q.name) LIKE lower($${p})
-      )
-    )`);
-    params.push(`%${q}%`);
+      )`,
+    ];
+    params.push(qParam);
     p += 1;
+
+    if (/^[0-9]{10,13}$/.test(normalizedIsbn)) {
+      parts.push(`b.isbn = $${p}`);
+      params.push(normalizedIsbn);
+      p += 1;
+    }
+
+    conditions.push(`(${parts.join(' OR ')})`);
   }
 
   // Exact ISBN (strip dashes/spaces)
@@ -682,55 +674,12 @@ export async function searchBooks(filters: SearchFilters): Promise<{
   );
   const total = parseInt(countResult.rows[0].count as string, 10);
 
-  // Data query — aggregate authors, categories, tags per book
-  // p is the next available param index after all WHERE conditions.
-  // locParam=$p, branchParam=$p+1, bbpParam=$p+2, limitParam=$p+3, offsetParam=$p+4
-  const locParam    = p;
-  const branchParam = p + 1;
-  const bbpParam    = p + 2;
-  const limitParam  = p + 3;
-  const offsetParam = p + 4;
-
-  // Build the stock subquery depending on whether inventory_reservations exists.
-  // On older DBs (migration 33 not yet run) we fall back to raw inventory sum
-  // so the catalog never returns a 500 due to a missing table.
-  const useReservations = await hasReservationsTable();
-
-  const stockSubquery = useReservations
-    ? `(
-         SELECT COALESCE(SUM(inv.quantity), 0)
-              - COALESCE((
-                  SELECT SUM(r.quantity) FROM inventory_reservations r
-                  WHERE r.book_id = b.id AND r.status = 'reserved'
-                    AND CASE
-                      WHEN $${locParam}::integer IS NOT NULL THEN r.location_id = $${locParam}::integer
-                      WHEN $${branchParam}::integer IS NOT NULL THEN r.location_id IN (
-                        SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
-                      )
-                      ELSE false END
-                ), 0)
-         FROM inventory inv
-         WHERE inv.book_id = b.id
-           AND CASE
-             WHEN $${locParam}::integer IS NOT NULL THEN inv.location_id = $${locParam}::integer
-             WHEN $${branchParam}::integer IS NOT NULL THEN inv.location_id IN (
-               SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
-             )
-             ELSE false
-           END
-       ) AS stock_quantity`
-    : `(
-         SELECT COALESCE(SUM(inv.quantity), 0)
-         FROM inventory inv
-         WHERE inv.book_id = b.id
-           AND CASE
-             WHEN $${locParam}::integer IS NOT NULL THEN inv.location_id = $${locParam}::integer
-             WHEN $${branchParam}::integer IS NOT NULL THEN inv.location_id IN (
-               SELECT id FROM locations WHERE branch_id = $${branchParam}::integer
-             )
-             ELSE false
-           END
-       ) AS stock_quantity`;
+  // Data query — aggregate authors, categories, tags per book.
+  // Catalog is book-only: NO inventory joins, NO stock quantities.
+  // Stock quantities are fetched separately by POS/Orders via inventoryTransaction.service.ts.
+  const bbpParam    = p;
+  const limitParam  = p + 1;
+  const offsetParam = p + 2;
 
   const dataResult = await db.query(
     `SELECT
@@ -760,7 +709,7 @@ export async function searchBooks(filters: SearchFilters): Promise<{
          '{}'
        ) AS tags,
        bbp.price AS branch_price,
-       ${stockSubquery}
+       NULL::int AS stock_quantity
      FROM books b
      LEFT JOIN book_formats bf ON bf.id = b.format_id
      LEFT JOIN book_editions be ON be.id = b.edition_id
@@ -769,13 +718,13 @@ export async function searchBooks(filters: SearchFilters): Promise<{
      LEFT JOIN book_categories bc ON bc.book_id = b.id
      LEFT JOIN categories c ON c.id = bc.category_id
      LEFT JOIN book_tags bt ON bt.book_id = b.id
-     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $${bbpParam}::integer
+     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $${bbpParam}
        AND bbp.format_id = 0 AND bbp.edition_id = 0
      ${whereClause}
      GROUP BY b.id, bf.code, bf.label, be.code, be.label, bbp.price
      ORDER BY ${sortCol} ${sortDir}
      LIMIT $${limitParam} OFFSET $${offsetParam}`,
-    [...params, filters.locationId ?? null, filters.branchId ?? null, filters.branchId ?? null, pageSize, offset],
+    [...params, filters.branchId ?? null, pageSize, offset],
   );
 
   return {

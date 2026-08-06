@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
@@ -25,10 +25,10 @@ interface PO {
 }
 interface POListResponse { items: PO[]; total: number; page: number; totalPages: number; }
 interface Supplier { id: number; name: string; isActive: boolean; isBlacklisted: boolean; }
-interface Book { id: number; title: string; isbn: string; isActive: boolean; }
 interface Location { id: number; name: string; branchId: number; isDefaultFulfillment: boolean; }
 
-interface ProcurementPageProps { userRole?: Role; userPermissions?: string[]; }
+interface ProcurementPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
+
 
 // ── RBAC helpers ──────────────────────────────────────────────────────────────
 
@@ -64,6 +64,116 @@ interface LineItemFormRow { bookId: number | null; bookTitle: string; quantity: 
 
 const EMPTY_LINE: LineItemFormRow = { bookId: null, bookTitle: '', quantity: 1, unitCost: 0 };
 
+// ── Book search combobox ──────────────────────────────────────────────────────
+
+interface CatalogBook { id: number; title: string; isbn: string; isActive: boolean; }
+
+/** Debounce a value by `delay` ms. */
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState<T>(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+/**
+ * Per-row book search combobox.
+ * - Empty / <2 chars → no API call, empty list.
+ * - ≥2 chars (debounced 300 ms) → GET /catalog/search?q=<term>
+ * - On selection: calls onSelect(book) and closes dropdown.
+ */
+function BookSearchCombobox({
+  value,
+  onChange,
+}: {
+  value: { bookId: number | null; bookTitle: string };
+  onChange: (book: { bookId: number | null; bookTitle: string }) => void;
+}) {
+  const [inputText, setInputText] = useState(value.bookTitle);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const debouncedQuery = useDebounce(inputText, 300);
+
+  // Sync external value changes (e.g. when editing a PO)
+  useEffect(() => {
+    setInputText(value.bookTitle);
+  }, [value.bookTitle]);
+
+  const { data, isFetching } = useQuery<{ results: CatalogBook[] }>({
+    queryKey: ['catalog-search-po', debouncedQuery],
+    queryFn: () => api.get(`/catalog/search?q=${encodeURIComponent(debouncedQuery)}`),
+    enabled: debouncedQuery.trim().length >= 2,
+    staleTime: 30_000,
+  });
+
+  const results = data?.results ?? [];
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const text = e.target.value;
+    setInputText(text);
+    setOpen(true);
+    // Clear the selected bookId when the user edits the text
+    if (value.bookId !== null) {
+      onChange({ bookId: null, bookTitle: text });
+    }
+  }
+
+  function handleSelect(book: CatalogBook) {
+    setInputText(book.title);
+    setOpen(false);
+    onChange({ bookId: book.id, bookTitle: book.title });
+  }
+
+  const showDropdown = open && debouncedQuery.trim().length >= 2;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={inputText}
+        placeholder="Type to search books…"
+        autoComplete="off"
+        onChange={handleInput}
+        onFocus={() => { if (debouncedQuery.trim().length >= 2) setOpen(true); }}
+        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      {showDropdown && (
+        <ul className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg text-sm">
+          {isFetching && (
+            <li className="px-3 py-2 text-gray-400">Searching…</li>
+          )}
+          {!isFetching && results.length === 0 && (
+            <li className="px-3 py-2 text-gray-400">No books found</li>
+          )}
+          {results.filter(b => b.isActive).map(book => (
+            <li
+              key={book.id}
+              onMouseDown={() => handleSelect(book)}
+              className="px-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-900 dark:text-white"
+            >
+              <span className="font-medium">{book.title}</span>
+              {book.isbn && <span className="ml-2 text-xs text-gray-400">{book.isbn}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ── View 4: Create/Edit PO Form ───────────────────────────────────────────────
 
 function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO) => void; onCancel: () => void }) {
@@ -77,16 +187,10 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
   const [lineItems, setLineItems] = useState<LineItemFormRow[]>(
     editing?.lineItems?.map(li => ({ bookId: li.bookId, bookTitle: li.bookTitle, quantity: li.quantity, unitCost: li.unitCost })) ?? [{ ...EMPTY_LINE }],
   );
-  const [bookSearch, setBookSearch] = useState<string[]>(lineItems.map(li => li.bookTitle));
 
   const { data: suppliersData } = useQuery<{ items: Supplier[] }>({
     queryKey: ['suppliers-for-po'],
     queryFn: () => api.get('/suppliers?isActive=true&isBlacklisted=false&pageSize=200'),
-  });
-
-  const { data: booksData } = useQuery<{ items: Book[] }>({
-    queryKey: ['books-for-po', bookSearch.join(',')],
-    queryFn: () => api.get(`/books?pageSize=200`),
   });
 
   const { data: branchesData } = useQuery<{ items: Array<{id: number; name: string}> }>({
@@ -112,14 +216,13 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
   });
 
   const suppliers = suppliersData?.items ?? [];
-  const books = booksData?.items ?? [];
   const branches = branchesData?.items ?? [];
   const receivingLocations = receivingLocData?.items ?? [];
   const total = lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
   const busy = createMut.isPending || updateMut.isPending;
 
-  function addLine() { setLineItems(l => [...l, { ...EMPTY_LINE }]); setBookSearch(b => [...b, '']); }
-  function removeLine(i: number) { setLineItems(l => l.filter((_, idx) => idx !== i)); setBookSearch(b => b.filter((_, idx) => idx !== i)); }
+  function addLine() { setLineItems(l => [...l, { ...EMPTY_LINE }]); }
+  function removeLine(i: number) { setLineItems(l => l.filter((_, idx) => idx !== i)); }
   function updateLine(i: number, field: keyof LineItemFormRow, value: unknown) {
     setLineItems(l => l.map((li, idx) => idx === i ? { ...li, [field]: value } : li));
   }
@@ -204,11 +307,13 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
             <div key={i} className="grid grid-cols-12 gap-2 items-end">
               <div className="col-span-5">
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Book</label>
-                <select value={li.bookId ?? ''} onChange={e => { const b = books.find(bk => bk.id === Number(e.target.value)); updateLine(i, 'bookId', Number(e.target.value) || null); if (b) updateLine(i, 'bookTitle', b.title); }}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">Select book...</option>
-                  {books.filter(b => b.isActive).map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
-                </select>
+                <BookSearchCombobox
+                  value={{ bookId: li.bookId, bookTitle: li.bookTitle }}
+                  onChange={({ bookId, bookTitle }) => {
+                    updateLine(i, 'bookId', bookId);
+                    updateLine(i, 'bookTitle', bookTitle);
+                  }}
+                />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Qty</label>
@@ -517,7 +622,7 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
 
 type View = 'list' | 'detail' | 'receive' | 'form';
 
-export default function ProcurementPage({ userRole, userPermissions }: ProcurementPageProps) {
+export default function ProcurementPage({ userRole, userPermissions, initialContext = {} }: ProcurementPageProps) {
   const qc = useQueryClient();
   const [view, setView] = useState<View>('list');
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);

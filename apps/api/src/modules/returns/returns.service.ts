@@ -6,9 +6,21 @@ import {
   getLoyaltyAccrualRate, getLoyaltyMinTransactionAmount,
 } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
+import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
+import { updateReceivableOnPayment } from '../receivables/receivables.service.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
-export interface ReturnLineInput { transactionLineItemId: number; quantity: number; }
+export interface ReturnLineInput {
+  /** POS return: reference to transaction line item */
+  transactionLineItemId?: number;
+  /** Order return: reference to order line item */
+  orderLineItemId?: number;
+  quantity: number;
+  /** Task 10.1: Controls how returned inventory is handled.
+   *  SELLABLE (default) — restores inventory.quantity via stockIn().
+   *  DAMAGED — increments inventory.damaged_quantity, does NOT restore sellable stock. */
+  disposition?: 'SELLABLE' | 'DAMAGED';
+}
 export interface ReturnRow {
   id: string; returnNumber: string; transactionId: string; branchId: number;
   customerId: number | null; totalRefundAmount: number;
@@ -123,7 +135,7 @@ export async function createReturn(
     if (input.quantity > maxReturnable) throw new BusinessError('OVER_RETURN', `Cannot return ${input.quantity} units. Max returnable: ${maxReturnable}`, { soldQty, alreadyReturned, requested: input.quantity, maxReturnable });
     const unitPrice = parseFloat(li.unit_price as string);
     const discountPct = parseFloat(li.discount_pct as string);
-    resolvedLines.push({ txLineItemId: input.transactionLineItemId, bookId: li.book_id as number, quantity: input.quantity, unitPrice, discountPct, lineRefundAmount: parseFloat((unitPrice * input.quantity * (1 - discountPct / 100)).toFixed(2)) });
+    resolvedLines.push({ txLineItemId: input.transactionLineItemId!, bookId: li.book_id as number, quantity: input.quantity, unitPrice, discountPct, lineRefundAmount: parseFloat((unitPrice * input.quantity * (1 - discountPct / 100)).toFixed(2)) });
   }
   const totalRefundAmount = parseFloat(resolvedLines.reduce((s, l) => s + l.lineRefundAmount, 0).toFixed(2));
   const maxWithoutAuth = await getMaxReturnValueWithoutAuth();
@@ -138,10 +150,50 @@ export async function createReturn(
     await client.query('BEGIN');
     const locationId = tx.location_id as number;
     for (const line of resolvedLines) {
-      const invRes = await client.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`, [line.bookId, locationId]);
-      const qtyBefore = (invRes.rows[0]?.quantity as number) ?? 0;
-      await client.query(`UPDATE inventory SET quantity = quantity + $1, version = version + 1, updated_at = now() WHERE book_id = $2 AND location_id = $3`, [line.quantity, line.bookId, locationId]);
-      await client.query(`INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id) VALUES ($1,$2,$3,$4,$5,'return','stock_in','pos_return',$6,$7,$8)`, [line.bookId, locationId, qtyBefore, qtyBefore + line.quantity, line.quantity, data.transactionId, `Return of ${line.quantity} unit(s)`, staffCtx.staffId]);
+      const disposition = (data.lines.find(l => l.transactionLineItemId === line.txLineItemId)?.disposition) ?? 'SELLABLE';
+
+      if (disposition === 'SELLABLE') {
+        // Task 10.2: SELLABLE — restore inventory.quantity via stockIn()
+        await invTxSvc.stockIn(
+          {
+            bookId: line.bookId,
+            locationId,
+            quantity: line.quantity,
+            referenceType: 'pos_return',
+            referenceId: data.transactionId,
+            reasonCode: 'return',
+            notes: `Return of ${line.quantity} unit(s)`,
+            staffCtx,
+          },
+          client,
+        );
+      } else {
+        // Task 10.2: DAMAGED — increment damaged_quantity, do NOT restore sellable stock
+        const invRow = await client.query(
+          `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+          [line.bookId, locationId],
+        );
+        const currentQty = invRow.rows.length > 0 ? Number(invRow.rows[0].quantity) : 0;
+
+        await client.query(
+          `UPDATE inventory
+              SET damaged_quantity = COALESCE(damaged_quantity, 0) + $1, updated_at = now()
+            WHERE book_id = $2 AND location_id = $3`,
+          [line.quantity, line.bookId, locationId],
+        );
+        await client.query(
+          `INSERT INTO inventory_history
+             (book_id, location_id, qty_before, qty_after, delta,
+              reason_code, movement_type, reference_type, reference_id, notes, staff_id)
+           VALUES ($1, $2, $3, $3, 0, 'damage', 'stock_in', 'pos_return', $4, $5, $6)`,
+          [
+            line.bookId, locationId, currentQty,
+            String(data.transactionId),
+            `Damaged return – ${line.quantity} unit(s)`,
+            staffCtx.staffId,
+          ],
+        );
+      }
     }
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const cntRes = await client.query(`SELECT COUNT(*) FROM returns WHERE DATE(created_at) = CURRENT_DATE`);
@@ -151,6 +203,58 @@ export async function createReturn(
     for (const line of resolvedLines)
       await client.query(`INSERT INTO return_line_items (return_id, transaction_line_item_id, book_id, quantity, unit_price, line_refund_amount) VALUES ($1,$2,$3,$4,$5,$6)`, [returnId, line.txLineItemId, line.bookId, line.quantity, line.unitPrice.toFixed(2), line.lineRefundAmount.toFixed(2)]);
     await client.query(`INSERT INTO refunds (return_id, method, amount) VALUES ($1,$2,$3)`, [returnId, data.refundMethod, totalRefundAmount.toFixed(2)]);
+
+    // Task 10.3: For CREDIT orders, adjust the receivable balance.
+    // If the originating transaction has an order with sale_type='credit_sale'
+    // and an open order_credit_sale receivable, reduce it by the refund amount.
+    // (POS transactions don't have order_credit_sale receivables — this block
+    //  is a no-op for standard POS returns since no such receivable exists.)
+    const posOrderRes = await client.query(
+      `SELECT o.id, o.total, o.sale_type
+       FROM orders o
+       WHERE o.id = (
+         SELECT source_entity_id FROM receivables
+         WHERE source_type = 'order_credit_sale'
+           AND status != 'Settled'
+         LIMIT 1
+       )`,
+    ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
+    // Only attempt if we can find an order_credit_sale receivable linked to this return's
+    // transaction's branch/customer — check by customer and approximate match
+    try {
+      const openRecRes = await client.query(
+        `SELECT r.id, r.outstanding_amount, r.source_entity_id
+         FROM receivables r
+         WHERE r.source_type = 'order_credit_sale'
+           AND r.status != 'Settled'
+           AND r.source_entity_id IN (
+             SELECT o.id FROM orders o
+             WHERE o.branch_id = $1
+               AND o.customer_id = $2
+               AND o.status IN ('FULFILLED','COMPLETED','Fulfilled')
+           )
+         ORDER BY r.created_at DESC
+         LIMIT 1`,
+        [staffCtx.branchId, tx.customer_id ?? null],
+      );
+      void posOrderRes; // suppress unused
+      if (openRecRes.rows.length) {
+        const receivable = openRecRes.rows[0] as Record<string, unknown>;
+        const currentOutstanding = parseFloat(receivable.outstanding_amount as string);
+        const newOutstanding = Math.max(0, parseFloat((currentOutstanding - totalRefundAmount).toFixed(2)));
+        await updateReceivableOnPayment(
+          {
+            sourceType: 'order_credit_sale',
+            sourceEntityId: Number(receivable.source_entity_id),
+            newOutstandingAmount: newOutstanding,
+            isFullySettled: newOutstanding <= 0.01,
+          },
+          client,
+        );
+      }
+    } catch {
+      // Non-fatal: receivable adjustment failure should not block the return
+    }
     const customerId = tx.customer_id as number | null;
     if (data.refundMethod === 'store_credit' && customerId) {
       await client.query(`UPDATE store_credit_accounts SET balance = balance + $1 WHERE customer_id = $2`, [totalRefundAmount, customerId]);

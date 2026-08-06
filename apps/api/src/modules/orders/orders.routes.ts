@@ -27,6 +27,7 @@ router.post(
         locationId: req.body.locationId ?? null,
         channel:    req.body.channel ?? 'in_store',
         notes:      req.body.notes,
+        saleType:   req.body.saleType ?? 'cash_sale',
         items:      req.body.items,
       };
       const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
@@ -66,7 +67,7 @@ router.get(
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       const itemsWithActions = result.items.map(order => ({
         ...order,
-        allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus),
+        allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType),
       }));
       res.json({ ...result, items: itemsWithActions });
     } catch (err) { next(err); }
@@ -82,7 +83,7 @@ router.get(
     try {
       const order = await ordersService.getById(parseInt(req.params.id as string, 10));
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }
   },
 );
@@ -97,7 +98,7 @@ router.post(
     try {
       const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }
   },
 );
@@ -118,17 +119,19 @@ router.post(
 
 // â”€â”€ POST /api/orders/:id/pay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+// ── POST /api/orders/:id/pay  [DEPRECATED — use POST /api/payments instead] ──
+
 router.post(
   '/orders/:id/pay',
   authenticate,
   requirePermission('PROCESS_PAYMENT'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const id = parseInt(req.params.id as string, 10);
-      const order = await ordersService.pay(id, req.staff!);
-      const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
-    } catch (err) { next(err); }
+  (_req: Request, res: Response) => {
+    res.status(410).json({
+      error: 'DEPRECATED',
+      message:
+        'POST /orders/:id/pay is no longer supported. ' +
+        'Use POST /payments to record payments against an order.',
+    });
   },
 );
 
@@ -142,7 +145,7 @@ router.post(
     try {
       const order = await ordersService.fulfill(parseInt(req.params.id as string, 10), req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }
   },
 );
@@ -158,7 +161,33 @@ router.post(
       const reason = req.body.reason ?? 'No reason provided';
       const order = await ordersService.cancel(parseInt(req.params.id as string, 10), reason, req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
-      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus) });
+      res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/orders/:id/collect-payment ─────────────────────────────────────
+
+router.post(
+  '/orders/:id/collect-payment',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const amount = req.body.amount;
+      if (typeof amount !== 'number' || amount <= 0) {
+        throw new ValidationError('amount must be a positive number');
+      }
+      const order = await ordersService.collectPayment(
+        parseInt(req.params.id as string, 10),
+        amount,
+        req.staff!,
+      );
+      const permissions = (req.staff!.permissions ?? []) as Permission[];
+      res.json({
+        ...order,
+        allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType),
+      });
     } catch (err) { next(err); }
   },
 );

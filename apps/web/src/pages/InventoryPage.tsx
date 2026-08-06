@@ -11,7 +11,8 @@ type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'transfer' | 'history
 interface InventoryRow {
   bookId: number; bookTitle: string; bookIsbn: string;
   locationId: number; locationName: string; branchId: number;
-  quantity: number; reorderPoint: number; version: number;
+  quantity: number; reserved: number; available: number;
+  reorderPoint: number; version: number;
   isLowStock: boolean; updatedAt: string;
 }
 interface InventoryList { items: InventoryRow[]; total: number; page: number; totalPages: number; }
@@ -58,7 +59,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function InventoryPage({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
+export default function InventoryPage({ userRole, userPermissions, initialContext = {} }: { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string> }) {
   const [tab, setTab] = useState<Tab>('stock');
   const tabs = [
     { id: 'stock' as Tab, label: 'Stock Levels', icon: '📦' },
@@ -82,7 +83,7 @@ export default function InventoryPage({ userRole, userPermissions }: { userRole?
         ))}
       </div>
       <div className="flex-1 min-h-0">
-        {tab === 'stock'    && <StockLevelsTab userRole={userRole} userPermissions={userPermissions} onNavigate={setTab} />}
+        {tab === 'stock'    && <StockLevelsTab userRole={userRole} userPermissions={userPermissions} onNavigate={setTab} initialLowOnly={initialContext.lowStockOnly === 'true'} />}
         {tab === 'stock-in' && <StockInTab userRole={userRole} userPermissions={userPermissions} />}
         {tab === 'stock-out' && <StockOutTab userRole={userRole} userPermissions={userPermissions} />}
         {tab === 'adjust'   && <AdjustTab userRole={userRole} userPermissions={userPermissions} />}
@@ -111,11 +112,11 @@ function AlertBadge() {
 }
 
 // ── Stock Levels Tab ──────────────────────────────────────────────────────────
-function StockLevelsTab({ userRole, userPermissions, onNavigate }: { userRole?: Role; userPermissions?: string[]; onNavigate?: (tab: Tab) => void }) {
+function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly = false }: { userRole?: Role; userPermissions?: string[]; onNavigate?: (tab: Tab) => void; initialLowOnly?: boolean }) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [q, setQ] = useState('');
-  const [lowOnly, setLowOnly] = useState(false);
+  const [lowOnly, setLowOnly] = useState(initialLowOnly);
   const [page, setPage] = useState(1);
   const [editRow, setEditRow] = useState<InventoryRow | null>(null);
   const [newReorder, setNewReorder] = useState('');
@@ -125,10 +126,13 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate }: { userRole?: 
   if (lowOnly) params.set('lowStockOnly', 'true');
   params.set('page', String(page)); params.set('pageSize', '25');
 
-  const { data, isLoading, isFetching } = useQuery<InventoryList>({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery<InventoryList>({
     queryKey: ['inventory', q, lowOnly, page],
     queryFn: () => api.get<InventoryList>(`/inventory?${params.toString()}`),
     placeholderData: prev => prev,
+    staleTime: 0,
+    retry: 2,
+    refetchOnWindowFocus: true,
   });
 
   const reorderMut = useMutation({
@@ -155,6 +159,14 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate }: { userRole?: 
         <span className="text-xs text-gray-400">{isLoading ? '…' : `${data?.total ?? 0} records`}{isFetching && !isLoading && ' ↻'}</span>
       </div>
 
+      {/* Error state */}
+      {isError && (
+        <div className="flex items-center justify-center gap-3 px-4 py-3 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+          <span>Failed to load inventory.</span>
+          <button onClick={() => refetch()} className="px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors font-medium">Retry</button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm border-collapse">
@@ -162,7 +174,9 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate }: { userRole?: 
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Book</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Location</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Qty</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">On Hand</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Reserved</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Available</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Reorder At</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Updated</th>
@@ -170,9 +184,9 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate }: { userRole?: 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
-            {isLoading ? [...Array(6)].map((_, i) => <SkeletonRow key={i} cols={canManage(userRole, userPermissions) ? 7 : 6} />) :
+            {isLoading ? [...Array(6)].map((_, i) => <SkeletonRow key={i} cols={canManage(userRole, userPermissions) ? 9 : 8} />) :
              !data?.items.length ? (
-              <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400 text-sm">No inventory records found</td></tr>
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 text-sm">No inventory records found</td></tr>
             ) : data.items.map(row => (
               <tr key={`${row.bookId}-${row.locationId}`} className={`hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors ${row.isLowStock ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}`}>
                 <td className="px-4 py-3">
@@ -183,6 +197,12 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate }: { userRole?: 
                 <td className="px-4 py-3 text-right">
                   <span className={`text-sm font-semibold ${row.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>
                     {row.quantity}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right text-sm text-gray-400 dark:text-gray-500">{row.reserved}</td>
+                <td className="px-4 py-3 text-right">
+                  <span className={`text-sm font-semibold ${row.available === 0 ? 'text-red-500 dark:text-red-400' : row.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    {row.available}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">{row.reorderPoint}</td>

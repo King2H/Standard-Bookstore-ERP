@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
-interface ReceivablesPageProps { userRole?: Role; userPermissions?: string[]; }
+interface ReceivablesPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
 
 type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
 type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference';
@@ -55,7 +55,7 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function ReceivablesPage({ userRole, userPermissions }: ReceivablesPageProps) {
+export default function ReceivablesPage({ userRole, userPermissions, initialContext = {} }: ReceivablesPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -63,7 +63,7 @@ export default function ReceivablesPage({ userRole, userPermissions }: Receivabl
 
   // ── Filters ──────────────────────────────────────────────────────────────────
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(initialContext.status ?? '');
   const [sourceFilter, setSourceFilter] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
 

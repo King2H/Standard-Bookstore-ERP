@@ -4,29 +4,30 @@
  * If REDIS_URL is not set, all Redis operations are no-ops and return null.
  * The app works correctly without Redis — config caching just falls back to DB.
  */
-import Redis from 'ioredis';
+import IoRedis, { Redis } from 'ioredis';
+type RedisInstance = Redis;
 
-let _redis: Redis | null = null;
+let _redis: RedisInstance | null = null;
 let _attempted = false;
 
-function getRedis(): Redis | null {
+function getRedis(): RedisInstance | null {
   // If no REDIS_URL configured, skip entirely
   if (!process.env.REDIS_URL) return null;
 
   if (!_attempted) {
     _attempted = true;
     try {
-      _redis = new Redis(process.env.REDIS_URL, {
+      _redis = new IoRedis(process.env.REDIS_URL, {
         maxRetriesPerRequest: 1,
         enableReadyCheck: false,
         lazyConnect: true,
-        retryStrategy: (times) => {
+        retryStrategy: (times: number) => {
           if (times > 3) return null; // stop retrying
           return Math.min(times * 500, 2000);
         },
       });
 
-      _redis.on('error', (err) => {
+      _redis.on('error', (err: Error) => {
         console.warn(JSON.stringify({ level: 'warn', msg: 'Redis unavailable — running without cache', error: err.message }));
       });
 

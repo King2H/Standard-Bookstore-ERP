@@ -17,7 +17,7 @@ import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
-export type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference';
+export type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 
@@ -124,6 +124,24 @@ export async function updateReceivableOnPayment(
   // outstanding=0 path in the else branch lead to 'Settled'.
   const outstanding = Math.max(0, parseFloat(opts.newOutstandingAmount.toFixed(2)));
   const fullySettled = opts.isFullySettled || outstanding === 0;
+
+  // Bug 4: Guard against updating receivables linked to cancelled orders.
+  // If the linked order is CANCELLED, the financial lifecycle is frozen.
+  if (opts.sourceType === 'order_credit_sale') {
+    const orderCheck = await client.query(
+      `SELECT status FROM orders WHERE id = $1 LIMIT 1`,
+      [opts.sourceEntityId],
+    );
+    if (orderCheck.rows.length) {
+      const orderStatus = String(orderCheck.rows[0].status ?? '').toUpperCase();
+      if (orderStatus === 'CANCELLED') {
+        // Silently skip — cancelled orders have frozen financial lifecycle.
+        // The caller (createPayment) already rejects cash/cancelled orders
+        // at the entry point; this is a defensive secondary guard.
+        return;
+      }
+    }
+  }
 
   if (fullySettled) {
     await client.query(

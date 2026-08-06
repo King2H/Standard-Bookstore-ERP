@@ -13,6 +13,8 @@ interface Payment {
   currency: string; paymentMethod: string; status: string;
   transactionReference: string | null; processedAt: string; createdAt: string;
   sourceType?: string; entityNumber?: string;
+  /** Order status — used to hide Refund button for FULFILLED orders (req 4.3) */
+  orderStatus?: string;
 }
 interface Refund { id: string; paymentId: string; orderId: string; refundAmount: number; reason: string; createdAt: string; }
 interface PaymentListResponse { items: Payment[]; total: number; page: number; totalPages: number; }
@@ -47,7 +49,13 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 const canRefund = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
-const canPay = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_PAYMENT')) || ['Sales', 'Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
+
+/** Task 13.1: Hide Void/Refund for payments on FULFILLED or COMPLETED orders.
+ *  Post-fulfillment reversal must go through the Returns module, not a payment void. */
+const isFulfilledOrder = (pay: Payment): boolean => {
+  const s = (pay.orderStatus ?? '').toUpperCase();
+  return s === 'FULFILLED' || s === 'COMPLETED';
+};const canPay = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_PAYMENT')) || ['Sales', 'Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
 
 type Tab = 'pending' | 'history' | 'collect';
 
@@ -186,7 +194,19 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
 
     setLoadingBalance(true);
     try {
-      const bal = await api.get<OrderBalance>(`/orders/${order.id}/balance`);
+      const raw = await api.get<OrderBalance>(`/orders/${order.id}/balance`);
+      // The API returns { orderTotal, totalPaid, totalRefunded, outstanding, paymentStatus }.
+      // discountTotal and netPayable are not included — provide safe defaults so .toFixed()
+      // never crashes on undefined.
+      const bal: OrderBalance = {
+        orderTotal:    Number(raw.orderTotal    ?? order.total),
+        discountTotal: Number(raw.discountTotal ?? 0),
+        netPayable:    Number(raw.netPayable    ?? raw.orderTotal ?? order.total),
+        totalPaid:     Number(raw.totalPaid     ?? order.totalPaid),
+        totalRefunded: Number(raw.totalRefunded ?? 0),
+        outstanding:   Number(raw.outstanding   ?? order.outstanding),
+        paymentStatus: raw.paymentStatus ?? order.paymentStatus,
+      };
       setOrderBalance(bal);
       setAmount(bal.outstanding.toFixed(2));
     } catch {
@@ -525,7 +545,8 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(pay.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
                           {/* POS payments cannot be refunded here — use POS Returns flow */}
-                          {canRefund(userRole, userPermissions) && pay.status !== 'failed' && pay.status !== 'refunded' && pay.sourceType !== 'pos' && (
+                          {/* Task 13.1: Also hide for FULFILLED/COMPLETED orders — use Returns module */}
+                          {canRefund(userRole, userPermissions) && pay.status !== 'failed' && pay.status !== 'refunded' && pay.sourceType !== 'pos' && !isFulfilledOrder(pay) && (
                             refundingId === pay.id ? (
                               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                                 <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="Amount"

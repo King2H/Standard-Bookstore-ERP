@@ -29,6 +29,9 @@ const createBranchSchema = z.object({
 
 const updateBranchSchema = createBranchSchema.partial();
 
+// Helper to safely extract single param (Express 5 compat)
+const param = (v: string | string[]): string => Array.isArray(v) ? v[0] : v;
+
 // ── GET /api/branches/public — no auth required, for login page ───────────────
 
 router.get('/branches/public', async (_req: Request, res: Response, next: NextFunction) => {
@@ -67,7 +70,7 @@ router.get('/branches', authenticate, async (req: Request, res: Response, next: 
 
 router.get('/branches/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(param(req.params.id), 10);
     const branch = await branchService.getBranch(id);
     res.json(branch);
   } catch (err) {
@@ -104,7 +107,7 @@ router.put(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(param(req.params.id), 10);
       const parsed = updateBranchSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid branch update payload', { issues: parsed.error.issues });
@@ -126,7 +129,7 @@ router.post(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(param(req.params.id), 10);
       await branchService.deactivateBranch(id, req.staff!);
       res.json({ message: 'Branch deactivated' });
     } catch (err) {
@@ -143,7 +146,7 @@ router.post(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(param(req.params.id), 10);
       await branchService.reactivateBranch(id, req.staff!);
       res.json({ message: 'Branch reactivated' });
     } catch (err) {
@@ -160,7 +163,7 @@ router.delete(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(param(req.params.id), 10);
       await branchService.deleteBranch(id, req.staff!);
       res.json({ message: 'Branch deleted' });
     } catch (err) {

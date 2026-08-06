@@ -31,7 +31,8 @@ async function ensureInventory(bookId: number, locationId: number, qty = 50) {
 }
 
 async function cleanOrders(branchId: number) {
-  await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
+  await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
+  await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
 }
@@ -93,9 +94,9 @@ describe('Orders — Lifecycle', () => {
     expect(res.body.lineItems[0].qtyReserved).toBe(0);
   });
 
-  // ── 2. Confirm order → stock reserved ──────────────────────────────────────
+  // ── 2. Confirm order → reservation only, inventory unchanged ─────────────
 
-  it('2. Confirm order → stock reserved, status=Confirmed', async () => {
+  it('2. Confirm order → soft reservation created; inventory.quantity UNCHANGED', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
       .post('/api/orders')
@@ -106,7 +107,7 @@ describe('Orders — Lifecycle', () => {
     const orderId = createRes.body.id;
 
     const invBefore = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
-    const qtyBefore2 = invBefore.rows[0].quantity as number;
+    const qtyBefore = invBefore.rows[0].quantity as number;
 
     const confirmRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
@@ -115,44 +116,61 @@ describe('Orders — Lifecycle', () => {
 
     expect(confirmRes.status).toBe(200);
     expect(confirmRes.body.status).toBe('CONFIRMED');
-    // qty_reserved is tracked on order_line_items, not inventory
     expect(confirmRes.body.lineItems[0].qtyReserved).toBe(3);
+
+    // inventory.quantity must NOT change at confirmation — reservation only
+    const invAfter = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    expect(invAfter.rows[0].quantity).toBe(qtyBefore);
   });
 
-  // ── 3. Fulfill order → inventory decremented ───────────────────────────────
+  // ── 3. Full cash_sale lifecycle: confirm → pay → fulfill ──────────────────
 
-  it('3. Fulfill order → inventory decremented, status=Fulfilled', async () => {
+  it('3. cash_sale confirm → pay → fulfill: stock deducted exactly once at fulfill', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
       .post('/api/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 2 }] });
-    const orderId = createRes.body.id;
+    const orderId = createRes.body.id as string;
+    const orderTotal = createRes.body.total as number;
 
+    const invBefore = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    const qtyBeforeConfirm = invBefore.rows[0].quantity as number;
+
+    // Confirm — NO stock deduction
     await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
-    const invBefore = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
-    const qtyBefore = invBefore.rows[0].quantity as number;
+    const invAfterConfirm = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    expect(invAfterConfirm.rows[0].quantity).toBe(qtyBeforeConfirm); // unchanged
 
+    // Pay via payments module
+    const payRes = await request(getTestApp())
+      .post('/api/payments')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ orderId: Number(orderId), amount: orderTotal, paymentMethod: 'cash' });
+    expect(payRes.status).toBe(201);
+
+    // Fulfill — stock deducted HERE exactly once
     const fulfillRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
     expect(fulfillRes.status).toBe(200);
-    expect(fulfillRes.body.status).toBe('FULFILLED');
+    expect(fulfillRes.body.status).toBe('COMPLETED');
 
-    const invAfter = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
-    expect(invAfter.rows[0].quantity).toBe(qtyBefore - 2);
+    const invAfterFulfill = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    expect(invAfterFulfill.rows[0].quantity).toBe(qtyBeforeConfirm - 2); // deducted at fulfill
   });
 
-  // ── 4. Cancel order → reserved stock released ──────────────────────────────
+  // ── 4. Cancel confirmed order → reservation released, inventory unchanged ──
 
-  it('4. Cancel confirmed order → reserved stock released', async () => {
+  it('4. Cancel confirmed order → reservation released; inventory.quantity UNCHANGED (no stockIn)', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
       .post('/api/orders')
@@ -161,10 +179,17 @@ describe('Orders — Lifecycle', () => {
       .send({ locationId, items: [{ bookId, quantity: 2 }] });
     const orderId = createRes.body.id;
 
+    const invBefore = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    const qtyBeforeConfirm = invBefore.rows[0].quantity as number;
+
     await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
+
+    // Confirm does NOT change inventory
+    const invAfterConfirm = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    expect(invAfterConfirm.rows[0].quantity).toBe(qtyBeforeConfirm);
 
     const cancelRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/cancel`)
@@ -174,22 +199,28 @@ describe('Orders — Lifecycle', () => {
 
     expect(cancelRes.status).toBe(200);
     expect(cancelRes.body.status).toBe('CANCELLED');
-    // qty_reserved released on order_line_items
     expect(cancelRes.body.lineItems[0].qtyReserved).toBe(0);
+
+    // Inventory must still equal pre-confirm level — cancel must NOT call stockIn
+    const invAfterCancel = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    expect(invAfterCancel.rows[0].quantity).toBe(qtyBeforeConfirm);
   });
 
   // ── 5. Cannot cancel fulfilled order ───────────────────────────────────────
 
-  it('5. Cannot cancel fulfilled order → 422 ORDER_ALREADY_FULFILLED', async () => {
+  it('5. Cannot cancel COMPLETED order → 422 ORDER_ALREADY_FULFILLED', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
       .post('/api/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
-    const orderId = createRes.body.id;
+    const orderId = createRes.body.id as string;
+    const orderTotal = createRes.body.total as number;
 
+    // confirm → pay → fulfill
     await request(getTestApp()).post(`/api/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post('/api/payments').set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ orderId: Number(orderId), amount: orderTotal, paymentMethod: 'cash' });
     await request(getTestApp()).post(`/api/orders/${orderId}/fulfill`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
 
     const cancelRes = await request(getTestApp())
@@ -221,9 +252,11 @@ describe('Orders — Lifecycle', () => {
     expect(res.body.error).toBe('INVALID_STATE');
   });
 
-  // ── 7. Backordered when insufficient stock ─────────────────────────────────
+  // ── 7. Insufficient stock → hard rejection with INSUFFICIENT_STOCK ─────────
+  // The fix changes the behaviour: instead of marking the line backordered and
+  // confirming the order anyway, the entire confirmation is now rejected.
 
-  it('7. Confirm with insufficient stock → line item backordered', async () => {
+  it('7. Confirm with insufficient stock → 422 INSUFFICIENT_STOCK', async () => {
     await db.query(`UPDATE inventory SET quantity = 0, version = 0 WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
 
     const createRes = await request(getTestApp())
@@ -238,10 +271,15 @@ describe('Orders — Lifecycle', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
-    expect(confirmRes.status).toBe(200);
-    expect(confirmRes.body.status).toBe('CONFIRMED');
-    expect(confirmRes.body.lineItems[0].isBackordered).toBe(true);
-    expect(confirmRes.body.lineItems[0].qtyReserved).toBe(0);
+    expect(confirmRes.status).toBe(422);
+    expect(confirmRes.body.error).toBe('INSUFFICIENT_STOCK');
+
+    // Order status must remain DRAFT (transaction was rolled back)
+    const orderAfter = await request(getTestApp())
+      .get(`/api/orders/${orderId}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(orderAfter.body.status).toBe('DRAFT');
 
     await ensureInventory(bookId, locationId, 50);
   });

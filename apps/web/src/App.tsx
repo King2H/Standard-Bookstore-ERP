@@ -55,6 +55,8 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionRestoring, setSessionRestoring] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>('branches');
+  // pageContext carries filter state from KPI card clicks to the target page
+  const [pageContext, setPageContext] = useState<Record<string, string>>({});
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);       // all roles for active branch
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
@@ -142,8 +144,9 @@ export default function App() {
     applyRoleLanding(role);
   };
 
-  const handleNavigate = (page: Page) => {
+  const handleNavigate = (page: Page, context?: Record<string, string>) => {
     if (mustChangePassword && page !== 'profile') return;
+    setPageContext(context ?? {});
     setCurrentPage(page);
   };
 
@@ -218,7 +221,7 @@ export default function App() {
                   <span>You must change your password before continuing. Please update it in your profile.</span>
                 </div>
               )}
-              {currentPage === 'dashboard'    && <DashboardPage userRole={userRole ?? undefined} onNavigate={(page) => handleNavigate(page as Page)} />}
+              {currentPage === 'dashboard'    && <DashboardPage userRole={userRole ?? undefined} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
               {currentPage === 'branches'     && <BranchesPage userRole={userRole ?? undefined} />}
               {currentPage === 'staff'        && <StaffPage />}
               {currentPage === 'audit-log'    && <AuditLogPage />}
@@ -226,17 +229,17 @@ export default function App() {
               {currentPage === 'bank-accounts'&& <BankAccountsPage userRole={userRole ?? undefined} />}
               {currentPage === 'locations'    && <LocationsPage userRole={userRole ?? undefined} />}
               {currentPage === 'catalog'      && <CatalogPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'inventory'    && <InventoryPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'inventory'    && <InventoryPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'suppliers'    && <SuppliersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'procurement'  && <ProcurementPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'procurement'  && <ProcurementPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'customers'    && <CustomersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'returns'      && <ReturnsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'installments' && <InstallmentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'exchanges'    && <ExchangesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'receivables'  && <ReceivablesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'receivables'  && <ReceivablesPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'profile'      && <ProfilePage />}
 
               {/* Inactivity warning overlay */}

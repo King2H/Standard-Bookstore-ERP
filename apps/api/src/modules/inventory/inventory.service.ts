@@ -4,6 +4,8 @@ import { BusinessError, ConflictError, NotFoundError, ValidationError } from '..
 export type ReferenceType = 'purchase_order' | 'return' | 'adjustment' | 'manual' | 'initial_stock';
 import { isNegativeStockAllowed } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
+import * as invTxSvc from './inventoryTransaction.service.js';
+import { getAvailableStock } from './inventoryTransaction.service.js';
 
 // ── Feature flag: inventory_reservations table ────────────────────────────────
 // Checked once and cached. Falls back gracefully when migration 33 hasn't run.
@@ -37,6 +39,8 @@ export interface InventoryRow {
   locationName: string;
   branchId: number;
   quantity: number;
+  reserved: number;
+  available: number;
   reorderPoint: number;
   version: number;
   isLowStock: boolean;
@@ -106,21 +110,55 @@ export async function listInventory(opts: {
   const limitParam = p;
   const offsetParam = p + 1;
 
+  // Build reservation-aware query — falls back gracefully if table doesn't exist
+  const hasResTable = await hasReservationsTable();
+
+  let dataQuery: string;
+  let countQuery: string;
+
+  if (hasResTable) {
+    countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
+    dataQuery = `
+      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
+             i.location_id, l.name AS location_name, l.branch_id,
+             i.quantity,
+             COALESCE(SUM(r.quantity), 0)::int AS reserved,
+             GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0))::int AS available,
+             i.reorder_point, i.version, i.updated_at,
+             (i.quantity <= i.reorder_point) AS is_low_stock
+      FROM inventory i
+      JOIN locations l ON l.id = i.location_id
+      LEFT JOIN books b ON b.id = i.book_id
+      LEFT JOIN inventory_reservations r
+        ON r.book_id = i.book_id
+       AND r.location_id = i.location_id
+       AND r.status = 'reserved'
+      ${where}
+      GROUP BY i.book_id, b.title, b.isbn, i.location_id, l.name, l.branch_id,
+               i.quantity, i.reorder_point, i.version, i.updated_at
+      ORDER BY b.title ASC, l.name ASC
+      LIMIT $${limitParam} OFFSET $${offsetParam}`;
+  } else {
+    countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
+    dataQuery = `
+      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
+             i.location_id, l.name AS location_name, l.branch_id,
+             i.quantity,
+             0::int AS reserved,
+             i.quantity::int AS available,
+             i.reorder_point, i.version, i.updated_at,
+             (i.quantity <= i.reorder_point) AS is_low_stock
+      FROM inventory i
+      JOIN locations l ON l.id = i.location_id
+      LEFT JOIN books b ON b.id = i.book_id
+      ${where}
+      ORDER BY b.title ASC, l.name ASC
+      LIMIT $${limitParam} OFFSET $${offsetParam}`;
+  }
+
   const [countRes, dataRes] = await Promise.all([
-    db.query(`SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id JOIN books b ON b.id = i.book_id ${where}`, params),
-    db.query(
-      `SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
-              i.location_id, l.name AS location_name, l.branch_id,
-              i.quantity, i.reorder_point, i.version, i.updated_at,
-              (i.quantity <= i.reorder_point) AS is_low_stock
-       FROM inventory i
-       JOIN locations l ON l.id = i.location_id
-       JOIN books b ON b.id = i.book_id
-       ${where}
-       ORDER BY b.title ASC, l.name ASC
-       LIMIT $${limitParam} OFFSET $${offsetParam}`,
-      [...params, pageSize, offset],
-    ),
+    db.query(countQuery, params),
+    db.query(dataQuery, [...params, pageSize, offset]),
   ]);
 
   return {
@@ -142,9 +180,11 @@ export async function adjustStock(opts: {
   reasonCode: ReasonCode;
   notes?: string;
   version: number;
+  referenceType?: string;
+  referenceId?: number;
   staffCtx: StaffCtx;
 }): Promise<InventoryRow> {
-  const { bookId, locationId, delta, reasonCode, notes, version, staffCtx } = opts;
+  const { bookId, locationId, delta, reasonCode, notes, version, referenceType, referenceId, staffCtx } = opts;
 
   const validReasons: ReasonCode[] = ['damage', 'loss', 'return', 'correction'];
   if (!validReasons.includes(reasonCode)) {
@@ -206,9 +246,10 @@ export async function adjustStock(opts: {
 
     // Record history
     await client.query(
-      `INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, notes, staff_id)
-       VALUES ($1, $2, $3, $4, $5, $6, 'adjustment', $7, $8)`,
-      [bookId, locationId, currentQty, newQty, delta, reasonCode, notes ?? null, staffCtx.staffId],
+      `INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'adjustment', $7, $8, $9, $10)`,
+      [bookId, locationId, currentQty, newQty, delta, reasonCode,
+       referenceType ?? null, referenceId != null ? String(referenceId) : null, notes ?? null, staffCtx.staffId],
     );
 
     // Audit log
@@ -265,8 +306,8 @@ export async function adjustStock(opts: {
 }
 
 // ── Transfer stock between locations ─────────────────────────────────────────
-// Both locations must be in the same branch.
-// Uses REPEATABLE READ + FOR UPDATE to prevent concurrent transfers.
+// Delegates entirely to inventoryTransaction.service.ts — the single source of
+// truth for all inventory mutations.
 
 export async function transferStock(opts: {
   bookId: number;
@@ -276,131 +317,29 @@ export async function transferStock(opts: {
   fromVersion: number;
   staffCtx: StaffCtx;
 }): Promise<{ from: InventoryRow; to: InventoryRow }> {
-  const { bookId, fromLocationId, toLocationId, quantity, fromVersion, staffCtx } = opts;
+  // All validation, locking, quantity updates, and history writes are handled
+  // inside invTxSvc.transfer(). This service only owns the read-back of the
+  // resulting InventoryRow objects so the route can return them.
+  await invTxSvc.transfer({
+    bookId:         opts.bookId,
+    fromLocationId: opts.fromLocationId,
+    toLocationId:   opts.toLocationId,
+    quantity:       opts.quantity,
+    fromVersion:    opts.fromVersion,
+    staffCtx:       opts.staffCtx,
+  });
 
-  if (quantity <= 0) throw new ValidationError('Transfer quantity must be positive');
-  if (fromLocationId === toLocationId) throw new ValidationError('Source and destination locations must differ');
+  const [fromRow, toRow] = await Promise.all([
+    getInventoryRow(opts.bookId, opts.fromLocationId),
+    getInventoryRow(opts.bookId, opts.toLocationId),
+  ]);
 
-  // Verify both locations belong to the same branch
-  const locCheck = await db.query(
-    `SELECT id, branch_id FROM locations WHERE id = ANY($1)`,
-    [[fromLocationId, toLocationId]],
-  );
-  if (locCheck.rows.length !== 2) throw new NotFoundError('One or both locations');
-  const branchIds = locCheck.rows.map((r: { branch_id: number }) => r.branch_id);
-  if (branchIds[0] !== branchIds[1]) {
-    throw new ValidationError('Cannot transfer stock between locations in different branches');
+  if (!fromRow || !toRow) {
+    throw new NotFoundError('Inventory record after transfer');
   }
 
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-
-    // Lock source row first (lower id first to avoid deadlock)
-    const lockOrder = fromLocationId < toLocationId
-      ? [fromLocationId, toLocationId]
-      : [toLocationId, fromLocationId];
-
-    await client.query(
-      `SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = ANY($2) FOR UPDATE`,
-      [bookId, lockOrder],
-    );
-
-    // Read source
-    const src = await client.query(
-      `SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2`,
-      [bookId, fromLocationId],
-    );
-    if (!src.rows.length) throw new NotFoundError('Source inventory record');
-
-    const srcVersion = src.rows[0].version as number;
-    const srcQty = src.rows[0].quantity as number;
-
-    if (srcVersion !== fromVersion) {
-      throw new ConflictError('VERSION_CONFLICT', 'Source inventory was modified. Please refresh and retry.', { currentVersion: srcVersion, providedVersion: fromVersion });
-    }
-    if (srcQty < quantity) {
-      throw new BusinessError('INSUFFICIENT_STOCK', `Insufficient stock at source. Available: ${srcQty}, Requested: ${quantity}`);
-    }
-
-    // Read destination (initialize if missing)
-    await client.query(
-      `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version)
-       VALUES ($1, $2, 0, 5, 0) ON CONFLICT DO NOTHING`,
-      [bookId, toLocationId],
-    );
-    const dst = await client.query(
-      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
-      [bookId, toLocationId],
-    );
-    const dstQty = dst.rows[0].quantity as number;
-
-    // Apply updates
-    await client.query(
-      `UPDATE inventory SET quantity = quantity - $1, version = version + 1, updated_at = now()
-       WHERE book_id = $2 AND location_id = $3`,
-      [quantity, bookId, fromLocationId],
-    );
-    await client.query(
-      `UPDATE inventory SET quantity = quantity + $1, version = version + 1, updated_at = now()
-       WHERE book_id = $2 AND location_id = $3`,
-      [quantity, bookId, toLocationId],
-    );
-
-    // History: two rows (out + in)
-    await client.query(
-      `INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, notes, staff_id)
-       VALUES ($1, $2, $3, $4, $5, 'transfer_out', 'transfer_out', $6, $7),
-              ($1, $8, $9, $10, $11, 'transfer_in', 'transfer_in', $6, $7)`,
-      [bookId, fromLocationId, srcQty, srcQty - quantity, -quantity,
-       `Transfer to location ${toLocationId}`, staffCtx.staffId,
-       toLocationId, dstQty, dstQty + quantity, quantity],
-    );
-
-    // Audit log
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1, $2, 'UPDATE', 'inventory_transfer', $3, $4, $5)`,
-      [staffCtx.staffId, staffCtx.role, String(bookId), staffCtx.branchId,
-       JSON.stringify({ bookId, fromLocationId, toLocationId, quantity })],
-    );
-
-    await client.query('COMMIT');
-
-    // Emit notification event (non-blocking)
-    try {
-      const locRes = await db.query('SELECT id, name, branch_id FROM locations WHERE id = ANY($1)', [[fromLocationId, toLocationId]]);
-      const locMap = new Map(locRes.rows.map((r: Record<string, unknown>) => [r.id as number, r]));
-      const fromLoc = locMap.get(fromLocationId);
-      const toLoc = locMap.get(toLocationId);
-      const bookRes = await db.query('SELECT title FROM books WHERE id = $1', [bookId]);
-      const bookTitle = bookRes.rows[0]?.title ?? String(bookId);
-      const notifClient = await db.connect();
-      try {
-        await notifClient.query('BEGIN');
-        await insertOutbox(notifClient, 'inventory.transfer_completed', {
-          bookId, bookTitle,
-          fromLocationId, fromLocationName: fromLoc?.name ?? String(fromLocationId),
-          toLocationId, toLocationName: toLoc?.name ?? String(toLocationId),
-          branchId: fromLoc?.branch_id ?? staffCtx.branchId, quantity,
-        });
-        await notifClient.query('COMMIT');
-      } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
-    } catch { /* non-fatal */ }
-
-    const [fromRow, toRow] = await Promise.all([
-      getInventoryRow(bookId, fromLocationId),
-      getInventoryRow(bookId, toLocationId),
-    ]);
-    return { from: fromRow!, to: toRow! };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  return { from: fromRow, to: toRow };
 }
-
 // ── Get low-stock items for a branch ─────────────────────────────────────────
 
 export async function getLowStock(branchId: number): Promise<InventoryRow[]> {
@@ -514,6 +453,94 @@ export async function setReorderPoint(
   return (await getInventoryRow(bookId, locationId))!;
 }
 
+// ── Per-location stock breakdown for a book ───────────────────────────────────
+// Returns available, reserved, damaged, and sellable quantities per location.
+// Requirement 2.15 — search results must show full per-location breakdown.
+
+export interface LocationStockBreakdown {
+  locationId: number;
+  locationName: string;
+  branchId: number;
+  quantity: number;
+  reserved: number;
+  damaged: number;
+  available: number;
+  sellable: number;
+}
+
+export async function getBookStockBreakdown(
+  bookId: number,
+  branchId?: number,
+): Promise<LocationStockBreakdown[]> {
+  const conditions = ['i.book_id = $1'];
+  const params: unknown[] = [bookId];
+  let p = 2;
+
+  if (branchId != null) {
+    conditions.push(`l.branch_id = $${p++}`);
+    params.push(branchId);
+  }
+
+  const where = conditions.join(' AND ');
+
+  // Check whether inventory_reservations table exists (graceful degradation)
+  const hasResTable = await db.query(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
+  );
+  const hasReservations = hasResTable.rows.length > 0;
+
+  let query: string;
+  if (hasReservations) {
+    query = `
+      SELECT
+        i.location_id,
+        l.name AS location_name,
+        l.branch_id,
+        i.quantity,
+        COALESCE(SUM(r.quantity), 0)::int AS reserved,
+        COALESCE(i.damaged_quantity, 0)::int AS damaged,
+        GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0))::int AS available,
+        GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0) - COALESCE(i.damaged_quantity, 0))::int AS sellable
+      FROM inventory i
+      JOIN locations l ON l.id = i.location_id
+      LEFT JOIN inventory_reservations r
+        ON r.book_id = i.book_id
+       AND r.location_id = i.location_id
+       AND r.status = 'reserved'
+      WHERE ${where}
+      GROUP BY i.location_id, l.name, l.branch_id, i.quantity, i.damaged_quantity
+      ORDER BY l.name ASC`;
+  } else {
+    query = `
+      SELECT
+        i.location_id,
+        l.name AS location_name,
+        l.branch_id,
+        i.quantity,
+        0::int AS reserved,
+        COALESCE(i.damaged_quantity, 0)::int AS damaged,
+        i.quantity::int AS available,
+        GREATEST(0, i.quantity - COALESCE(i.damaged_quantity, 0))::int AS sellable
+      FROM inventory i
+      JOIN locations l ON l.id = i.location_id
+      WHERE ${where}
+      ORDER BY l.name ASC`;
+  }
+
+  const result = await db.query(query, params);
+  return result.rows.map((row: Record<string, unknown>) => ({
+    locationId: row.location_id as number,
+    locationName: row.location_name as string,
+    branchId: row.branch_id as number,
+    quantity: Number(row.quantity),
+    reserved: Number(row.reserved),
+    damaged: Number(row.damaged),
+    available: Number(row.available),
+    sellable: Number(row.sellable),
+  }));
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getInventoryRow(bookId: number, locationId: number): Promise<InventoryRow | null> {
@@ -541,6 +568,8 @@ function mapInventoryRow(row: Record<string, unknown>): InventoryRow {
     locationName: row.location_name as string,
     branchId: row.branch_id as number,
     quantity: row.quantity as number,
+    reserved: row.reserved != null ? Number(row.reserved) : 0,
+    available: row.available != null ? Number(row.available) : Number(row.quantity),
     reorderPoint: row.reorder_point as number,
     version: row.version as number,
     isLowStock: row.is_low_stock as boolean,
@@ -694,17 +723,12 @@ export async function stockOut(opts: {
 
   if (quantity <= 0) throw new ValidationError('Stock-out quantity must be positive');
 
-  // Pre-check negative stock policy
+  // Pre-check using reservation-aware availability (Requirement 2.19)
   const allowNeg = await isNegativeStockAllowed();
   if (!allowNeg) {
-    const check = await db.query(
-      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
-      [bookId, locationId],
-    );
-    if (!check.rows.length) throw new NotFoundError('Inventory record');
-    const available = check.rows[0].quantity as number;
-    if (available < quantity) {
-      throw new BusinessError('INSUFFICIENT_STOCK', `Insufficient stock. Available: ${available}, Requested: ${quantity}`);
+    const stock = await getAvailableStock(bookId, locationId);
+    if (stock.available < quantity) {
+      throw new BusinessError('INSUFFICIENT_STOCK', `Insufficient stock. Available: ${stock.available}, Requested: ${quantity}`);
     }
   }
 
@@ -794,35 +818,6 @@ export async function stockOut(opts: {
 
 // ── Inventory Reservation Helpers ────────────────────────────────────────────
 // Used by the order lifecycle to soft-reserve stock on confirmation.
-
-/**
- * Compute available stock = inventory.quantity - SUM(active reservations).
- * Falls back to raw inventory quantity if inventory_reservations doesn't exist yet.
- */
-export async function getAvailableStock(bookId: number, locationId: number): Promise<number> {
-  if (await hasReservationsTable()) {
-    const result = await db.query(
-      `SELECT i.quantity - COALESCE(SUM(r.quantity), 0) AS available
-       FROM inventory i
-       LEFT JOIN inventory_reservations r
-         ON r.book_id = i.book_id
-         AND r.location_id = i.location_id
-         AND r.status = 'reserved'
-       WHERE i.book_id = $1 AND i.location_id = $2
-       GROUP BY i.quantity`,
-      [bookId, locationId],
-    );
-    if (!result.rows.length) return 0;
-    return Math.max(0, parseFloat(result.rows[0].available as string));
-  }
-  // Fallback: no reservations table yet — return raw quantity
-  const result = await db.query(
-    `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
-    [bookId, locationId],
-  );
-  if (!result.rows.length) return 0;
-  return Math.max(0, parseInt(result.rows[0].quantity as string, 10));
-}
 
 /**
  * Create a reservation for an order line item.

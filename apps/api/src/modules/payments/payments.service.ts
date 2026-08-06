@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import type { PoolClient } from 'pg';
 import { insertOutbox } from '../../lib/outbox.js';
+import { updateReceivableOnPayment } from '../receivables/receivables.service.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 
@@ -14,17 +15,19 @@ export interface PaymentRow {
   orderId: string;
   amount: number;
   currency: string;
-  paymentMethod: PaymentMethod;
+  paymentMethod: string;
   status: PaymentStatus;
   transactionReference: string | null;
   notes: string | null;
-  bankAccountId: number | null;
-  processedBy: number;
   processedAt: string;
   createdAt: string;
+  processedBy: number;
+  bankAccountId: number | null;
   refunds?: RefundRow[];
   sourceType?: string;
   entityNumber?: string;
+  /** Status of the associated order — used by frontend to hide Refund on FULFILLED orders */
+  orderStatus?: string;
 }
 
 export interface RefundRow {
@@ -54,6 +57,7 @@ function mapPaymentRow(row: Record<string, unknown>): PaymentRow {
     createdAt: (row.created_at as Date).toISOString(),
     sourceType: row.source_type as string | undefined,
     entityNumber: row.entity_number as string | undefined,
+    orderStatus: row.order_status as string | undefined,
   };
 }
 
@@ -157,7 +161,8 @@ export async function list(opts: {
         p.processed_at,
         p.created_at,
         p.processed_by,
-        p.bank_account_id
+        p.bank_account_id,
+        o.status AS order_status
       FROM order_payments p
       JOIN orders o ON o.id = p.order_id
       UNION ALL
@@ -176,7 +181,8 @@ export async function list(opts: {
         tp.created_at AS processed_at,
         tp.created_at,
         t.staff_id AS processed_by,
-        NULL::integer AS bank_account_id
+        NULL::integer AS bank_account_id,
+        NULL::text AS order_status
       FROM transaction_payments tp
       JOIN transactions t ON t.id = tp.transaction_id
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
@@ -262,10 +268,25 @@ export async function createPayment(
   }
 
   // Validate order exists and is not cancelled
-  const orderRes = await db.query('SELECT id, total, status, payment_status, customer_id FROM orders WHERE id = $1', [data.orderId]);
+  const orderRes = await db.query('SELECT id, total, status, payment_status, customer_id, sale_type FROM orders WHERE id = $1', [data.orderId]);
   if (!orderRes.rows.length) throw new NotFoundError('Order');
   const order = orderRes.rows[0] as Record<string, unknown>;
-  if (order.status === 'Cancelled') throw new BusinessError('ORDER_CANCELLED', 'Cannot record payment on a cancelled order');
+
+  // Task 9.1: Block only genuinely cancelled orders. FULFILLED and COMPLETED
+  // orders must NOT be blocked — credit_sale orders need post-fulfillment payment.
+  // Handle both legacy ('Cancelled') and new ('CANCELLED') status values.
+  const orderStatusNorm = String(order.status ?? '').toUpperCase();
+  if (orderStatusNorm === 'CANCELLED') {
+    throw new BusinessError('ORDER_CANCELLED', 'Cannot record payment on a cancelled order');
+  }
+
+  // Bug 2: Cash orders are always paid at confirmation — never accept a payment
+  // collection attempt against them. This is a defensive guard; the unpaid-orders
+  // list already excludes cash orders from the UI.
+  if (String(order.sale_type ?? '') === 'cash_sale') {
+    throw new BusinessError('CASH_ORDER_ALREADY_PAID', 'Cash orders are paid automatically at confirmation. Payment collection is only available for credit orders.');
+  }
+
   if (order.total == null) throw new BusinessError('ORDER_INVALID', 'Order has no total. Ensure the order was created with valid book prices.');
   const customerId = (order.customer_id as number | null) ?? null;
 
@@ -370,6 +391,139 @@ export async function createPayment(
     // Recompute and update order payment_status
     const newPaymentStatus = await computeOrderPaymentStatus(client, data.orderId);
     await client.query('UPDATE orders SET payment_status = $1, updated_at = now() WHERE id = $2', [newPaymentStatus, data.orderId]);
+
+    // ── Auto-fulfill cash_sale orders when fully paid and still CONFIRMED ──────
+    // For cash_sale: confirm() only creates a reservation; the stock deduction
+    // happens at fulfill(). When the full payment arrives via this module,
+    // we auto-fulfill so the operator does not need a second manual step.
+    // credit_sale is excluded — it may be fulfilled before payment (on credit).
+    let autoFulfilled = false;
+    if (newPaymentStatus === 'paid') {
+      try {
+        await client.query('SAVEPOINT before_auto_fulfill');
+        const orderStatusRes = await client.query(
+          'SELECT status, sale_type, location_id, branch_id FROM orders WHERE id = $1 FOR UPDATE',
+          [data.orderId],
+        );
+        if (orderStatusRes.rows.length) {
+          const currentStatus = orderStatusRes.rows[0].status as string;
+          const saleType = orderStatusRes.rows[0].sale_type as string;
+          const ns = (currentStatus === 'Pending' || currentStatus === 'Confirmed' || currentStatus === 'In_Progress')
+            ? 'CONFIRMED' : currentStatus;
+
+          if (saleType === 'cash_sale' && (ns === 'CONFIRMED' || ns === 'PAID')) {
+            // Resolve location
+            const orderLocationId = orderStatusRes.rows[0].location_id as number | null;
+            const branchIdForLoc = orderStatusRes.rows[0].branch_id as number;
+            let locationId: number;
+            if (orderLocationId) {
+              locationId = orderLocationId;
+            } else {
+              const defLoc = await client.query(
+                'SELECT id FROM locations WHERE branch_id = $1 AND is_default_fulfillment = true LIMIT 1',
+                [branchIdForLoc],
+              );
+              if (defLoc.rows.length) {
+                locationId = defLoc.rows[0].id as number;
+              } else {
+                const anyLoc = await client.query(
+                  'SELECT id FROM locations WHERE branch_id = $1 ORDER BY id LIMIT 1',
+                  [branchIdForLoc],
+                );
+                locationId = anyLoc.rows.length ? anyLoc.rows[0].id as number : branchIdForLoc;
+              }
+            }
+
+            // Load line items with reserved quantities
+            const lineItemsRes = await client.query(
+              'SELECT id, book_id, qty_reserved FROM order_line_items WHERE order_id = $1 AND qty_reserved > 0',
+              [data.orderId],
+            );
+
+            for (const li of lineItemsRes.rows) {
+              const qtyRes = li.qty_reserved as number;
+              if (qtyRes <= 0) continue;
+
+              // Deduct stock exactly once at fulfillment
+              await (await import('../inventory/inventoryTransaction.service.js')).stockOut(
+                {
+                  bookId: li.book_id as number,
+                  locationId,
+                  quantity: qtyRes,
+                  referenceType: 'order_fulfilled',
+                  referenceId: data.orderId,
+                  reasonCode: 'loss',
+                  notes: `Auto-fulfill on full payment – order ${data.orderId}`,
+                  staffCtx,
+                },
+                client,
+              );
+
+              await client.query(
+                'UPDATE order_line_items SET qty_fulfilled = qty_fulfilled + $1, qty_reserved = 0 WHERE id = $2',
+                [qtyRes, li.id],
+              );
+            }
+
+            // Release/deduct reservations
+            await client.query(
+              "UPDATE inventory_reservations SET status = 'deducted', updated_at = now() WHERE order_id = $1 AND status = 'reserved'",
+              [data.orderId],
+            ).catch(() => { /* graceful if table absent */ });
+
+            // Transition to COMPLETED
+            const usesNew = await client.query(
+              `SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid WHERE t.relname = 'orders' AND c.conname = 'orders_status_check'`,
+            );
+            const constraintDef: string = usesNew.rows[0]?.def ?? '';
+            const completedStatus = constraintDef.includes("'DRAFT'") ? 'COMPLETED' : 'Fulfilled';
+            await client.query(
+              'UPDATE orders SET status = $1, updated_at = now() WHERE id = $2',
+              [completedStatus, data.orderId],
+            );
+
+            await insertOutbox(client, 'order.fulfilled', { orderId: String(data.orderId), branchId: staffCtx.branchId });
+            await insertOutbox(client, 'order.completed', { orderId: String(data.orderId), branchId: staffCtx.branchId });
+            autoFulfilled = true;
+          }
+        }
+        await client.query('RELEASE SAVEPOINT before_auto_fulfill');
+      } catch (fulfillErr) {
+        await client.query('ROLLBACK TO SAVEPOINT before_auto_fulfill');
+        console.error('payments.createPayment: auto-fulfill failed (non-fatal)', fulfillErr);
+      }
+    }
+    void autoFulfilled; // suppress unused warning
+
+    // ── Sync order_credit_sale receivable — MANDATORY, inside main transaction ──
+    // Bug 5 fix: receivable update is NO LONGER wrapped in a savepoint.
+    // It runs inside the main BEGIN/COMMIT block so a failure rolls back everything.
+    // This guarantees the receivable and payment_status are always consistent.
+    {
+      const recRes = await client.query(
+        "SELECT 1 FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1 AND status != 'Settled' LIMIT 1",
+        [data.orderId],
+      );
+      if (recRes.rows.length) {
+        const orderTotalRes = await client.query('SELECT total FROM orders WHERE id = $1', [data.orderId]);
+        const orderTotalVal = parseFloat(orderTotalRes.rows[0].total as string);
+        const paidRes2 = await client.query(
+          "SELECT COALESCE(SUM(amount),0) AS total_paid FROM order_payments WHERE order_id = $1 AND status IN ('success','partially_refunded','refunded')",
+          [data.orderId],
+        );
+        const totalPaidVal = parseFloat(paidRes2.rows[0].total_paid as string);
+        const newOutstanding = Math.max(0, parseFloat((orderTotalVal - totalPaidVal).toFixed(2)));
+        await updateReceivableOnPayment(
+          {
+            sourceType: 'order_credit_sale',
+            sourceEntityId: Number(data.orderId),
+            newOutstandingAmount: newOutstanding,
+            isFullySettled: newPaymentStatus === 'paid',
+          },
+          client,
+        );
+      }
+    }
 
     await client.query(
       "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'CREATE','payment',$3,$4,$5)",
@@ -520,8 +674,27 @@ export async function listUnpaidOrders(opts: {
         WHERE status IN ('success','partially_refunded','refunded')
         GROUP BY order_id
       ) p ON p.order_id = o.id
-      WHERE o.payment_status IN ('unpaid','partial')
-        AND o.status != 'Cancelled'
+      WHERE (
+        -- Only credit_sale orders can have unpaid/partial status and appear here.
+        -- Cash orders always have payment_status='paid' after confirm, so the
+        -- sale_type guard below is defensive (catches any legacy cash order data).
+        (o.sale_type = 'credit_sale'
+          AND o.payment_status IN ('unpaid','partial')
+          AND o.status NOT IN ('Cancelled', 'DRAFT', 'Pending'))
+        OR
+        -- Task 8.1: FULFILLED/COMPLETED credit_sale orders with outstanding balance.
+        -- Bug condition C2: these fell out of the list because COMPLETED status
+        -- was not included. CASH orders are excluded by the sale_type filter.
+        (o.sale_type = 'credit_sale'
+          AND o.status IN ('FULFILLED', 'COMPLETED', 'Fulfilled')
+          AND (
+            SELECT COALESCE(SUM(op.amount), 0)
+            FROM order_payments op
+            WHERE op.order_id = o.id
+              AND op.status IN ('success','partially_refunded','refunded')
+          ) < o.total - 0.01)
+      )
+      AND o.status != 'Cancelled'
       UNION ALL
       SELECT
         t.id::text AS id,
@@ -556,8 +729,21 @@ export async function listUnpaidOrders(opts: {
         o.branch_id,
         o.customer_id
       FROM orders o
-      WHERE o.payment_status IN ('unpaid','partial')
-        AND o.status != 'Cancelled'
+      WHERE (
+        (o.sale_type = 'credit_sale'
+          AND o.payment_status IN ('unpaid','partial')
+          AND o.status NOT IN ('Cancelled', 'DRAFT', 'Pending'))
+        OR
+        (o.sale_type = 'credit_sale'
+          AND o.status IN ('FULFILLED', 'COMPLETED', 'Fulfilled')
+          AND (
+            SELECT COALESCE(SUM(op.amount), 0)
+            FROM order_payments op
+            WHERE op.order_id = o.id
+              AND op.status IN ('success','partially_refunded','refunded')
+          ) < o.total - 0.01)
+      )
+      AND o.status != 'Cancelled'
       UNION ALL
       SELECT
         t.id,

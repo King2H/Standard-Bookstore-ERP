@@ -2,15 +2,23 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../../db/index.js';
 import * as catalogService from './catalog.service.js';
+import * as catalogSearchService from './catalogSearch.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { getBookAvailability } from '../inventory/inventoryTransaction.service.js';
 
 const router = Router();
 
 // Helper: safely extract a single string from req.query (handles string | string[] | ParsedQs)
 const qs = (v: unknown): string | undefined => (typeof v === 'string' ? v : Array.isArray(v) ? (v[0] as string | undefined) : undefined);
-const qi = (v: unknown, fallback: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fallback : fallback; };
+const qi = (v: unknown, fallback?: number): number | undefined => {
+  const s = qs(v);
+  if (!s) return fallback;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) && !Number.isNaN(n) ? n : fallback;
+};
+const qid = (v: unknown, fallback: number): number => qi(v, fallback) ?? fallback;
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
@@ -63,16 +71,91 @@ router.get(
           : undefined,
         // Use explicit query param if provided, otherwise fall back to the JWT branch
         // so stock quantities are always scoped to the user's active branch.
-        branchId:   req.query.branchId
-          ? qi(req.query.branchId, 0)
-          : (req.staff?.branchId ?? undefined),
-        locationId: req.query.locationId ? qi(req.query.locationId, 0) : undefined,
+        branchId:   qi(req.query.branchId) ?? req.staff?.branchId,
+        locationId: qi(req.query.locationId),
         sortBy:     qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
         sortDir:    qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
-        page:       qi(req.query.page, 1),
-        pageSize:   qi(req.query.pageSize, 25),
+        page:       qid(req.query.page, 1),
+        pageSize:   qid(req.query.pageSize, 25),
       });
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── GET /api/books/with-availability ─────────────────────────────────────────
+// Used by POS, Orders, and Exchanges to search books and display live stock.
+// Fetches book metadata from Catalog (zero inventory dependency) then enriches
+// with availability from inventoryTransaction.service.ts for the given location.
+//
+// Query params:
+//   All params from GET /api/books (q, isbn, branchId, page, pageSize, etc.)
+//   + locationId (required for availability — if omitted, availability is null)
+//
+// Response adds to each BookRecord:
+//   availability: { locationId, locationName, onHand, reserved, available } | null
+
+router.get(
+  '/books/with-availability',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const locationId = qi(req.query.locationId);
+      const branchId   = qi(req.query.branchId) ?? req.staff?.branchId;
+
+      // Step 1: Pure catalog search — no inventory dependency
+      const catalogResult = await catalogService.searchBooks({
+        q:          qs(req.query.q),
+        isbn:       qs(req.query.isbn),
+        sku:        qs(req.query.sku),
+        author:     qs(req.query.author),
+        genre:      qs(req.query.genre),
+        category:   qs(req.query.category),
+        tag:        qs(req.query.tag),
+        isActive:   req.query.is_active !== undefined ? req.query.is_active === 'true' : true,
+        branchId,
+        sortBy:     qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
+        sortDir:    qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
+        page:       qid(req.query.page, 1),
+        pageSize:   qid(req.query.pageSize, 25),
+      });
+
+      // Step 2: Enrich with availability data from inventory (only if locationId given)
+      let availabilityMap: Map<number, { locationId: number; locationName: string; onHand: number; reserved: number; available: number }> = new Map();
+
+      if (locationId && catalogResult.items.length > 0) {
+        const bookIds = catalogResult.items.map(b => b.id);
+        try {
+          const avail = await getBookAvailability(bookIds, locationId);
+          for (const a of avail) {
+            availabilityMap.set(a.bookId, {
+              locationId:   a.locationId,
+              locationName: a.locationName,
+              onHand:       a.onHand,
+              reserved:     a.reserved,
+              available:    a.available,
+            });
+          }
+        } catch {
+          // Non-fatal: if inventory lookup fails, return books with null availability
+        }
+      }
+
+      // Step 3: Merge and return enriched response
+      const items = catalogResult.items.map(book => ({
+        ...book,
+        availability: availabilityMap.get(book.id) ?? (locationId ? {
+          locationId,
+          locationName: null,
+          onHand: 0,
+          reserved: 0,
+          available: 0,
+        } : null),
+      }));
+
+      res.json({ ...catalogResult, items });
     } catch (err) {
       next(err);
     }
@@ -224,6 +307,49 @@ router.put(
       }
       await catalogService.setBranchPrice(bookId, branchId, parsed.data.price, req.staff!);
       res.json({ message: 'Branch price updated' });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── GET /api/catalog/search ───────────────────────────────────────────────────
+// Full-catalog search endpoint — no pagination offset.
+// MUST be defined before any /:id param routes to avoid param capture.
+//
+// Query params:
+//   q        (required, min 2 chars) — search term
+//   limit    (optional, max 200, default 50)
+//   branchId (optional)
+//
+// Response: { results: BookRecord[], total: number }
+// HTTP 400 if q is missing or q.length < 2
+// HTTP 200 with { results: [], total: 0 } when no matches (never an error)
+
+router.get(
+  '/catalog/search',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = qs(req.query.q);
+
+      // Validate q: required, minimum 2 characters
+      if (!q || q.trim().length < 2) {
+        throw new ValidationError(
+          'Query parameter "q" is required and must be at least 2 characters',
+          { param: 'q' },
+        );
+      }
+
+      const limit    = qi(req.query.limit) ?? 50;
+      const branchId = qi(req.query.branchId) ?? req.staff?.branchId;
+
+      const results = await catalogSearchService.search(q, {
+        limit:    Math.min(200, Math.max(1, limit)),
+        branchId: branchId,
+      });
+
+      res.json({ results, total: results.length });
     } catch (err) {
       next(err);
     }

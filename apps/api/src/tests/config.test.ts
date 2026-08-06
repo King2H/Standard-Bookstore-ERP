@@ -24,8 +24,7 @@ describe('Config — System', () => {
   });
 
   afterAll(async () => {
-    // Restore any system_config values changed by tests
-    await db.query(`UPDATE system_config SET value = '0.10' WHERE key = 'tax_rate'`);
+    // No tax_rate restoration needed — taxation is disabled for this phase
     await cleanTestStaff('cfg_sys_');
     await cleanTestBranches('Config Sys ');
   });
@@ -40,7 +39,7 @@ describe('Config — System', () => {
     expect(res.body.items.length).toBeGreaterThanOrEqual(21);
     const keys = res.body.items.map((r: { key: string }) => r.key);
     expect(keys).toContain('base_currency');
-    expect(keys).toContain('tax_rate');
+    // tax_rate removed from CONFIG_SCHEMA — not expected in system config during this phase
     expect(keys).toContain('allow_negative_stock');
   });
 
@@ -55,16 +54,15 @@ describe('Config — System', () => {
   it('Super_Admin can update system config', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/config/system/tax_rate')
+      .put('/api/config/system/allow_negative_stock')
       .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({ value: 0.15 });
+      .send({ value: false });
 
     expect(res.status).toBe(200);
-    expect(res.body.key).toBe('tax_rate');
-    expect(res.body.value).toBe(0.15);
+    expect(res.body.key).toBe('allow_negative_stock');
 
     const audit = await db.query(
-      `SELECT * FROM audit_logs WHERE entity_type = 'system_config' AND entity_id = 'tax_rate' ORDER BY id DESC LIMIT 1`,
+      `SELECT * FROM audit_logs WHERE entity_type = 'system_config' AND entity_id = 'allow_negative_stock' ORDER BY id DESC LIMIT 1`,
     );
     expect(audit.rows.length).toBeGreaterThan(0);
     expect(audit.rows[0].action).toBe('UPDATE');
@@ -73,9 +71,9 @@ describe('Config — System', () => {
   it('Admin cannot update system config (403)', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/config/system/tax_rate')
+      .put('/api/config/system/allow_negative_stock')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ value: 0.20 });
+      .send({ value: true });
     expect(res.status).toBe(403);
   });
 
@@ -91,9 +89,9 @@ describe('Config — System', () => {
   it('Wrong value type returns 400', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/config/system/tax_rate')
+      .put('/api/config/system/allow_negative_stock')
       .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({ value: 'not-a-number' });
+      .send({ value: 'not-a-boolean' });
     expect(res.status).toBe(400);
   });
 });
@@ -145,7 +143,7 @@ describe('Config — Branch', () => {
   it('GET /api/config/effective returns requested settings with source metadata', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get(`/api/config/effective?keys=base_currency,tax_rate`)
+      .get(`/api/config/effective?keys=base_currency,allow_negative_stock`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -153,7 +151,7 @@ describe('Config — Branch', () => {
     expect(res.body.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'base_currency', source: expect.any(String) }),
-        expect.objectContaining({ key: 'tax_rate', source: expect.any(String) }),
+        expect.objectContaining({ key: 'allow_negative_stock', source: expect.any(String) }),
       ]),
     );
   });

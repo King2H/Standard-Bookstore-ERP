@@ -12,7 +12,12 @@
     "migrate:create": "dotenv -e ../../.env -- node-pg-migrate create --migrations-dir src/db/migrations",
     "test": "vitest run",
     "test:watch": "vitest",
-    "reseed": "node scripts/reseed.mjs"
+    "reseed": "node scripts/reseed.mjs",
+    "reconcile": "node scripts/reconcile-inventory.mjs",
+    "reconcile:dry": "node scripts/reconcile-inventory.mjs --dry-run",
+    "reset-demo": "node scripts/reset-demo-data.mjs",
+    "reset-demo:dry": "node scripts/reset-demo-data.mjs --dry-run",
+    "reset-demo:force": "node scripts/reset-demo-data.mjs --force"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -173,7 +173,7 @@ export async function ensureSeedData(): Promise<void> {
     // ── 7. System config defaults ─────────────────────────────────────────────
     const configDefaults: Array<[string, string]> = [
       ['base_currency',                    '"ETB"'],
-      ['tax_rate',                         '0.15'],
+      // tax_rate omitted — taxation disabled for this phase
       ['fiscal_year_start_month',          '1'],
       ['max_line_discount_pct',            '{"Sales":10,"Manager":25,"Admin":50}'],
       ['max_transaction_discount_pct',     '20'],

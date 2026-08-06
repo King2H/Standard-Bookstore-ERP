@@ -22,7 +22,7 @@ export interface StaffCtx {
 
 const CONFIG_SCHEMA: Record<string, { type: 'string' | 'number' | 'boolean' | 'jsonb' }> = {
   base_currency:                    { type: 'string' },
-  tax_rate:                         { type: 'number' },
+  // tax_rate is disabled for this phase — taxation is globally off; DB key preserved for future use
   fiscal_year_start_month:          { type: 'number' },
   max_line_discount_pct:            { type: 'jsonb' },
   max_transaction_discount_pct:     { type: 'number' },

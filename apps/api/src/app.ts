@@ -8,7 +8,8 @@ import auditLogsRouter from './routes/auditLogs.js';
 import authRouter from './modules/auth/auth.routes.js';
 import branchRouter from './modules/branch/branch.routes.js';
 import configRouter from './modules/config/config.routes.js';
-import bankAccountRouter from './modules/bankAccount/bankAccount.routes.js';
+// Bank Account module disabled for this deployment phase
+// import bankAccountRouter from './modules/bankAccount/bankAccount.routes.js';
 import locationRouter from './modules/location/location.routes.js';
 import catalogRouter from './modules/catalog/catalog.routes.js';
 import inventoryRouter from './modules/inventory/inventory.routes.js';
@@ -72,7 +73,8 @@ export function createApp() {
   app.use('/api', authRouter);
   app.use('/api', branchRouter);
   app.use('/api', configRouter);
-  app.use('/api', bankAccountRouter);
+  // Bank Account routes disabled for this deployment phase
+  // app.use('/api', bankAccountRouter);
   app.use('/api', locationRouter);
   app.use('/api', catalogRouter);
   app.use('/api', inventoryRouter);

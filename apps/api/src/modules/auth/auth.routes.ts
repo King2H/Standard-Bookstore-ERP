@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
+import type { QueryResult } from 'pg';
 import * as authService from './auth.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
@@ -56,7 +57,7 @@ router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Respons
     const { username, password } = parsed.data;
 
     // Validate credentials (reuse the same checks as login, but don't issue tokens)
-    let staffResult: Awaited<ReturnType<typeof db.query>>;
+    let staffResult: QueryResult<Record<string, unknown>>;
     try {
       staffResult = await db.query(
         `SELECT id, password_hash, is_active, failed_login_attempts, locked_until
@@ -78,8 +79,8 @@ router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Respons
       throw new ValidationError('This account has been deactivated');
     }
 
-    if (staff.locked_until && new Date(staff.locked_until) > new Date()) {
-      const minutesLeft = Math.ceil((new Date(staff.locked_until).getTime() - Date.now()) / 60000);
+    if (staff.locked_until && new Date(staff.locked_until as string) > new Date()) {
+      const minutesLeft = Math.ceil((new Date(staff.locked_until as string).getTime() - Date.now()) / 60000);
       throw new ValidationError(`Account locked. Try again in ${minutesLeft} minute(s).`);
     }
 
@@ -92,10 +93,10 @@ router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Respons
       throw new ServiceUnavailableError();
     }
 
-    const passwordValid = await bcrypt.compare(password, staff.password_hash);
+    const passwordValid = await bcrypt.compare(password, staff.password_hash as string);
     if (!passwordValid) {
       // Increment failed attempts and potentially lock account (same logic as login)
-      const newAttempts = (staff.failed_login_attempts ?? 0) + 1;
+      const newAttempts = ((staff.failed_login_attempts as number) ?? 0) + 1;
       const shouldLock = newAttempts >= policy.maxFailedAttempts;
       const lockedUntil = shouldLock
         ? new Date(Date.now() + policy.lockoutMinutes * 60 * 1000)
@@ -115,7 +116,7 @@ router.post('/auth/pre-login', loginRateLimit, async (req: Request, res: Respons
     // Credentials valid — return available branches
     let branches: Awaited<ReturnType<typeof authService.getBranchesForUser>>;
     try {
-      branches = await authService.getBranchesForUser(staff.id);
+      branches = await authService.getBranchesForUser(staff.id as number);
     } catch (err) {
       if (err instanceof AppError) throw err;
       throw new ServiceUnavailableError();

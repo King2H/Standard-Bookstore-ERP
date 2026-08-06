@@ -6,19 +6,20 @@ import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
-interface OrdersPageProps { userRole?: Role; userPermissions?: string[]; }
+interface OrdersPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
 
 interface OrderLine { id: string; bookId: number; bookTitle: string; quantity: number; unitPrice: number; totalPrice: number; qtyReserved: number; qtyFulfilled: number; isBackordered: boolean; }
 interface Order {
   id: string; orderNumber: string; customerId: number | null; branchId: number;
   channel: string; status: string; paymentStatus: string; currency: string;
-  subtotal: number; taxAmount: number; total: number; cancelReason: string | null;
+  saleType?: 'cash_sale' | 'credit_sale';
+  subtotal: number; total: number; cancelReason: string | null;
   createdAt: string; lineItems?: OrderLine[];
   allowedActions?: string[];
 }
 interface OrderListResponse { items: Order[]; total: number; page: number; totalPages: number; }
 interface Customer { id: number; customerCode: string; fullName: string; }
-interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; stockQuantity?: number | null; }
+interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; stockQuantity?: number | null; availability?: { locationId: number; locationName: string | null; onHand: number; reserved: number; available: number; } | null; }
 
 // Lifecycle status colours — covers both legacy and new values
 const STATUS_COLORS: Record<string, string> = {
@@ -47,7 +48,6 @@ const PAY_COLORS: Record<string, string> = {
 // Action button styles
 const ACTION_STYLES: Record<string, string> = {
   confirm:     'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200',
-  pay:         'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 hover:bg-indigo-200',
   fulfill:     'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200',
   complete:    'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-200',
   cancel:      'text-red-600 hover:bg-red-50 dark:hover:bg-red-950',
@@ -56,7 +56,7 @@ const ACTION_STYLES: Record<string, string> = {
   progress:    'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200',
 };
 const ACTION_LABELS: Record<string, string> = {
-  confirm: 'Confirm', pay: 'Take Payment', fulfill: 'Fulfill',
+  confirm: 'Confirm', fulfill: 'Fulfill',
   complete: 'Complete', cancel: 'Cancel', print: '🖨 Print', progress: 'Progress',
 };
 
@@ -66,10 +66,7 @@ const canCreate = (r?: Role, perms?: string[]) =>
 
 type Tab = 'list' | 'new';
 
-// Payment modal state
-interface PayModalState { orderId: string; orderNumber: string; total: number; }
-
-export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPageProps) {
+export default function OrdersPage({ userRole, userPermissions = [], initialContext = {} }: OrdersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -78,20 +75,19 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
 
   // List state
   const [listPage, setListPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(initialContext.status ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelingId, setCancelingId] = useState<string | null>(null);
-  const [payModal, setPayModal] = useState<PayModalState | null>(null);
-  const [payAmount, setPayAmount] = useState('');
-  const [payMethod, setPayMethod] = useState<'cash' | 'bank'>('cash');
 
   // New order state
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [saleType, setSaleType] = useState<'cash_sale' | 'credit_sale'>('cash_sale');
   const [channel, setChannel] = useState<'in_store' | 'phone' | 'online'>('in_store');
   const [bookSearch, setBookSearch] = useState('');
-  const [orderItems, setOrderItems] = useState<Array<{ bookId: number; bookTitle: string; quantity: number; unitPrice: number }>>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
+  const [orderItems, setOrderItems] = useState<Array<{ bookId: number; bookTitle: string; quantity: number; unitPrice: number; discountPct: number; discountType: string; discountMode: string; }>>([]);
 
   // Queries
   const { data: listData, isLoading } = useQuery<OrderListResponse>({
@@ -107,10 +103,20 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
   });
 
   const { data: bookResults } = useQuery<{ items: BookResult[] }>({
-    queryKey: ['order-books', bookSearch],
-    queryFn: () => api.get(`/books?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}`),
+    queryKey: ['order-books', bookSearch, branchId, selectedLocationId],
+    queryFn: () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}${selectedLocationId ? `&locationId=${selectedLocationId}` : ''}`),
     enabled: bookSearch.length > 1,
   });
+
+  // Fetch branch locations so we can pass locationId to book search for stock availability
+  const { data: branchLocations } = useQuery<{ items: Array<{ id: number; name: string; isDefaultFulfillment: boolean }> }>({
+    queryKey: ['branch-locations-orders', branchId],
+    queryFn: () => api.get(`/branches/${branchId}/locations`),
+    enabled: branchId > 0,
+    staleTime: 60_000,
+  });
+  // Auto-select the default fulfillment location when locations load
+  const effectiveLocationId = selectedLocationId ?? branchLocations?.items?.find(l => l.isDefaultFulfillment)?.id ?? branchLocations?.items?.[0]?.id ?? null;
 
   // Mutations
   const createMut = useMutation({
@@ -121,7 +127,19 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
 
   const actionMut = useMutation({
     mutationFn: ({ id, action, body }: { id: string; action: string; body?: unknown }) => api.post<Order>(`/orders/${id}/${action}`, body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['orders-list'] }); showToast('Order updated', 'success'); setCancelingId(null); setCancelReason(''); },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['orders-list'] });
+      // Refresh expanded order detail so reservation/fulfillment state updates immediately
+      qc.invalidateQueries({ queryKey: ['order-detail', variables.id] });
+      // Inventory quantities change on confirm (deducted+reserved) and cancel (restored),
+      // so invalidate inventory cache so stock pages reflect current truth.
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      // Also invalidate book availability queries so stock underneath search updates
+      qc.invalidateQueries({ queryKey: ['order-books'] });
+      showToast('Order updated', 'success');
+      setCancelingId(null);
+      setCancelReason('');
+    },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
@@ -131,17 +149,39 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
     if (existing) {
       setOrderItems(items => items.map(i => i.bookId === book.id ? { ...i, quantity: i.quantity + 1 } : i));
     } else {
-      setOrderItems(items => [...items, { bookId: book.id, bookTitle: book.title, quantity: 1, unitPrice: price }]);
+      setOrderItems(items => [...items, { bookId: book.id, bookTitle: book.title, quantity: 1, unitPrice: price, discountPct: 0, discountType: 'Normal', discountMode: 'Percentage' }]);
     }
     setBookSearch('');
   }
 
   function submitOrder() {
     if (orderItems.length === 0) { showToast('Add at least one item', 'error'); return; }
-    createMut.mutate({ customerId: selectedCustomer?.id ?? null, channel, items: orderItems.map(i => ({ bookId: i.bookId, quantity: i.quantity })) });
+    if (saleType === 'credit_sale' && !selectedCustomer) {
+      showToast('Credit sales require a customer', 'error');
+      return;
+    }
+    createMut.mutate({
+      customerId: selectedCustomer?.id ?? null,
+      channel,
+      saleType,
+      locationId: effectiveLocationId ?? undefined,
+      items: orderItems.map(i => ({
+        bookId: i.bookId,
+        quantity: i.quantity,
+        discountPct: i.discountMode === 'Percentage' ? i.discountPct : undefined,
+        discountAmount: i.discountMode === 'Amount' ? i.discountPct : undefined,
+        discountType: i.discountType,
+        discountMode: i.discountMode,
+      })),
+    });
   }
 
-  const subtotal = orderItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+  const subtotal = orderItems.reduce((s, i) => {
+    const lineTotal = i.discountMode === 'Percentage'
+      ? i.unitPrice * i.quantity * (1 - i.discountPct / 100)
+      : Math.max(0, i.unitPrice * i.quantity - i.discountPct);
+    return s + lineTotal;
+  }, 0);
   // userPermissions available for future fine-grained checks
   void userPermissions;
 
@@ -179,7 +219,12 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{order.orderNumber}</td>
                         <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{order.channel.replace('_', ' ')}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? ''}`}>{order.status}</span></td>
-                        <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PAY_COLORS[order.paymentStatus] ?? ''}`}>{order.paymentStatus}</span></td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1 flex-wrap">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PAY_COLORS[order.paymentStatus] ?? ''}`}>{order.paymentStatus}</span>
+                            {order.saleType === 'credit_sale' && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Credit</span>}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(order.total).toFixed(2)}</td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(order.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
@@ -200,14 +245,7 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
                                   </button>
                                 );
                               }
-                              if (action === 'pay') {
-                                return (
-                                  <button key="pay" onClick={e => { e.stopPropagation(); setPayModal({ orderId: order.id, orderNumber: order.orderNumber, total: Number(order.total) }); setPayAmount(Number(order.total).toFixed(2)); }}
-                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.pay}`}>
-                                    {ACTION_LABELS.pay}
-                                  </button>
-                                );
-                              }
+                              // 'pay' action removed — payment is collected via Finance → Payments
                               if (action === 'print') {
                                 return (
                                   <button key="print" onClick={e => { e.stopPropagation(); window.print(); }}
@@ -228,7 +266,7 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
                               <>
                                 {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Pending' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'confirm' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>Confirm</button>}
                                 {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Confirmed' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'progress' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.progress}`}>Progress</button>}
-                                {['Manager','Admin'].includes(userRole ?? '') && ['Confirmed','In_Progress'].includes(order.status) && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'fulfill' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.fulfill}`}>Fulfill</button>}
+                                {['Manager','Admin'].includes(userRole ?? '') && ['Confirmed','In_Progress','PARTIALLY_PAID'].includes(order.status) && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'fulfill' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.fulfill}`}>Fulfill</button>}
                                 {['Manager','Admin'].includes(userRole ?? '') && !['Fulfilled','Cancelled'].includes(order.status) && (
                                   cancelingId === order.id ? (
                                     <div className="flex gap-1" onClick={e => e.stopPropagation()}>
@@ -300,6 +338,22 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
             )}
           </div>
 
+          {/* Sale Type */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Sale Type</h3>
+            <div className="flex gap-2">
+              {([['cash_sale', '💵 Cash Sale'], ['credit_sale', '📋 Credit Sale']] as const).map(([v, label]) => (
+                <button key={v} onClick={() => setSaleType(v)}
+                  className={`flex-1 py-1.5 text-sm rounded-lg transition-colors ${saleType === v ? (v === 'credit_sale' ? 'bg-amber-600 text-white' : 'bg-green-600 text-white') : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {saleType === 'credit_sale' && !selectedCustomer && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Credit sales require a customer — please select one above.</p>
+            )}
+          </div>
+
           {/* Channel */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Channel</h3>
@@ -312,6 +366,22 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
             </div>
           </div>
 
+          {/* Location */}
+          {branchLocations && branchLocations.items.length > 1 && (
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Fulfillment Location</h3>
+              <select
+                value={selectedLocationId ?? effectiveLocationId ?? ''}
+                onChange={e => setSelectedLocationId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {branchLocations.items.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Items */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Items</h3>
@@ -321,10 +391,23 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
               {(bookResults?.items ?? []).length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
                   {(bookResults?.items ?? []).map(b => (
-                    <button key={b.id} onClick={() => addItem(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
-                      <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
+                    <button key={b.id} onClick={() => addItem(b)}
+                      disabled={b.availability != null && b.availability.available === 0}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0 ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/30'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
+                        {b.availability != null && (
+                          <span className={`text-xs font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-full ${b.availability.available === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : b.availability.available <= 3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'}`}>
+                            {b.availability.available === 0 ? 'Out of stock' : `${b.availability.available} avail`}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.isbn} · {currency} {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
-                      {b.stockQuantity != null && (
+                      {b.availability != null ? (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          📍 {b.availability.locationName ?? 'Location'} · On hand: {b.availability.onHand} · Reserved: {b.availability.reserved} · Available: {b.availability.available}
+                        </p>
+                      ) : b.stockQuantity != null && (
                         <p className={`text-xs font-medium mt-0.5 ${b.stockQuantity === 0 ? 'text-red-600 dark:text-red-400' : b.stockQuantity <= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
                           {b.stockQuantity === 0 ? '⚠ Out of stock' : b.stockQuantity <= 3 ? `⚠ Only ${b.stockQuantity} left` : `✓ ${b.stockQuantity} in stock`}
                         </p>
@@ -347,12 +430,30 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
                       <span className="w-8 text-center text-sm">{item.quantity}</span>
                       <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: i.quantity + 1 } : i))} className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold">+</button>
                     </div>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white w-20 text-right">{currency} {(item.unitPrice * item.quantity).toFixed(2)}</span>
+                    {/* Discount controls */}
+                    <div className="flex items-center gap-1">
+                      <select value={item.discountType} onChange={e => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, discountType: e.target.value } : i))}
+                        className="text-xs px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                        {['Normal','Merchant','Special'].map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, discountMode: i.discountMode === 'Percentage' ? 'Amount' : 'Percentage', discountPct: 0 } : i))}
+                        className="text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-mono">
+                        {item.discountMode === 'Percentage' ? '%' : '$'}
+                      </button>
+                      <input type="number" min="0" step="0.01" value={item.discountPct}
+                        onChange={e => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, discountPct: Math.max(0, parseFloat(e.target.value) || 0) } : i))}
+                        className="w-14 text-xs px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white w-20 text-right">
+                      {currency} {Math.max(0, item.discountMode === 'Percentage'
+                        ? item.unitPrice * item.quantity * (1 - item.discountPct / 100)
+                        : item.unitPrice * item.quantity - item.discountPct).toFixed(2)}
+                    </span>
                     <button onClick={() => setOrderItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-gray-400 hover:text-red-500 text-sm">×</button>
                   </div>
                 ))}
                 <div className="flex justify-between text-sm font-semibold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <span>Subtotal (excl. tax)</span><span>{currency} {subtotal.toFixed(2)}</span>
+                  <span>Subtotal</span><span>{currency} {subtotal.toFixed(2)}</span>
                 </div>
               </div>
             )}
@@ -364,70 +465,84 @@ export default function OrdersPage({ userRole, userPermissions = [] }: OrdersPag
           </button>
         </div>
       )}
-
-      {/* ── Take Payment Modal ── */}
-      {payModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setPayModal(null)}>
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 w-full max-w-sm space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Take Payment</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Order <span className="font-mono font-medium text-gray-900 dark:text-white">{payModal.orderNumber}</span></p>
-            <div className="space-y-2">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Method</label>
-              <div className="flex gap-2">
-                {(['cash', 'bank'] as const).map(m => (
-                  <button key={m} onClick={() => setPayMethod(m)}
-                    className={`flex-1 py-1.5 text-sm rounded-lg transition-colors capitalize ${payMethod === m ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">{`Amount (${currency})`}</label>
-              <input type="number" min="0" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setPayModal(null)} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Cancel</button>
-              <button
-                onClick={() => {
-                  const amt = parseFloat(payAmount);
-                  if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
-                  actionMut.mutate({ id: payModal.orderId, action: 'pay', body: { amount: amt, method: payMethod } });
-                  setPayModal(null);
-                }}
-                disabled={actionMut.isPending}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
-                {actionMut.isPending ? 'Processing...' : 'Confirm Payment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 function OrderDetailLoader({ orderId }: { orderId: string }) {
   const currency = useCurrency();
-  const { data } = useQuery<{ lineItems?: OrderLine[] }>({
+  const { data } = useQuery<{ status?: string; lineItems?: OrderLine[] }>({
     queryKey: ['order-detail', orderId],
     queryFn: () => api.get(`/orders/${orderId}`),
   });
   if (!data?.lineItems) return <p className="text-xs text-gray-400">Loading...</p>;
+
+  const status = data.status ?? '';
+  const normalStatus = (['DRAFT','Pending'].includes(status)) ? 'DRAFT'
+    : (['CONFIRMED','PAID','Confirmed','In_Progress'].includes(status)) ? 'CONFIRMED'
+    : (['FULFILLED','COMPLETED','Fulfilled'].includes(status)) ? 'FULFILLED'
+    : (['CANCELLED','Cancelled'].includes(status)) ? 'CANCELLED'
+    : status;
+
   return (
-    <table className="text-xs w-full max-w-xl">
-      <thead><tr className="text-gray-500 dark:text-gray-400">{['Book','Qty','Reserved','Fulfilled','Backordered','Price'].map(h => <th key={h} className="text-left pr-4 pb-1">{h}</th>)}</tr></thead>
-      <tbody>{data.lineItems.map((li, i) => (
-        <tr key={i}>
-          <td className="pr-4 text-gray-900 dark:text-white">{li.bookTitle}</td>
-          <td className="pr-4 text-gray-600 dark:text-gray-400">{li.quantity}</td>
-          <td className="pr-4 text-blue-600 dark:text-blue-400">{li.qtyReserved}</td>
-          <td className="pr-4 text-green-600 dark:text-green-400">{li.qtyFulfilled}</td>
-          <td className="pr-4">{li.isBackordered ? <span className="text-amber-600 dark:text-amber-400">Yes</span> : '—'}</td>
-          <td className="text-gray-900 dark:text-white">{currency} {Number(li.totalPrice).toFixed(2)}</td>
+    <table className="text-xs w-full max-w-2xl">
+      <thead>
+        <tr className="text-gray-500 dark:text-gray-400">
+          {['Book', 'Ordered', 'Reserved', 'Fulfilled', 'Stock State', 'Price'].map(h => (
+            <th key={h} className="text-left pr-4 pb-1">{h}</th>
+          ))}
         </tr>
-      ))}</tbody>
+      </thead>
+      <tbody>
+        {data.lineItems.map((li, i) => {
+          // Derive the effective reservation/fulfillment state from order status
+          // rather than relying solely on line-item fields (which may lag in display)
+          let reservedDisplay: number;
+          let fulfilledDisplay: number;
+          let stockStateLabel: React.ReactNode;
+
+          if (normalStatus === 'DRAFT') {
+            // DRAFT: no stock impact — reservation not yet created
+            reservedDisplay = 0;
+            fulfilledDisplay = 0;
+            stockStateLabel = <span className="text-gray-400 italic">Pending confirmation</span>;
+          } else if (normalStatus === 'CONFIRMED') {
+            // CONFIRMED: stock deducted, reservation active
+            reservedDisplay = li.qtyReserved > 0 ? li.qtyReserved : li.quantity;
+            fulfilledDisplay = li.qtyFulfilled;
+            stockStateLabel = <span className="text-blue-600 dark:text-blue-400 font-medium">🔒 Stock reserved</span>;
+          } else if (normalStatus === 'FULFILLED') {
+            // FULFILLED: reservation released (status='deducted'), qty_fulfilled set
+            reservedDisplay = 0;
+            fulfilledDisplay = li.qtyFulfilled > 0 ? li.qtyFulfilled : li.quantity;
+            stockStateLabel = <span className="text-green-600 dark:text-green-400 font-medium">✓ Fulfilled</span>;
+          } else if (normalStatus === 'CANCELLED') {
+            // CANCELLED: reservation released, stock restored
+            reservedDisplay = 0;
+            fulfilledDisplay = 0;
+            stockStateLabel = <span className="text-red-500 dark:text-red-400 italic">Stock restored</span>;
+          } else {
+            reservedDisplay = li.qtyReserved;
+            fulfilledDisplay = li.qtyFulfilled;
+            stockStateLabel = <span className="text-gray-400">—</span>;
+          }
+
+          return (
+            <tr key={i} className="border-t border-gray-100 dark:border-gray-700">
+              <td className="pr-4 py-1.5 text-gray-900 dark:text-white">{li.bookTitle}</td>
+              <td className="pr-4 text-gray-600 dark:text-gray-400">{li.quantity}</td>
+              <td className={`pr-4 font-medium ${reservedDisplay > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-gray-400'}`}>
+                {reservedDisplay}
+              </td>
+              <td className={`pr-4 font-medium ${fulfilledDisplay > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>
+                {fulfilledDisplay}
+              </td>
+              <td className="pr-4">{stockStateLabel}</td>
+              <td className="text-gray-900 dark:text-white">{currency} {Number(li.totalPrice).toFixed(2)}</td>
+            </tr>
+          );
+        })}
+      </tbody>
     </table>
   );
 }

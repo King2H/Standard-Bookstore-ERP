@@ -7,6 +7,9 @@ import { ValidationError } from '../../lib/errors.js';
 
 const router = Router();
 
+// Helper to safely extract single param (Express 5 compat)
+const param = (v: string | string[]): string => Array.isArray(v) ? v[0] : v;
+
 // ── Validation ────────────────────────────────────────────────────────────────
 
 const setConfigSchema = z.object({
@@ -88,7 +91,7 @@ router.put(
   requireRole('Super_Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { key } = req.params;
+      const key = param(req.params.key);
       const parsed = setConfigSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid config payload', { issues: parsed.error.issues });
@@ -111,7 +114,7 @@ router.get(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = parseInt(req.params.branchId, 10);
+      const branchId = parseInt(param(req.params.branchId), 10);
       const rows = await configService.getEffectiveBranchConfig(branchId);
       res.json({ items: rows, total: rows.length });
     } catch (err) {
@@ -128,8 +131,8 @@ router.put(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = parseInt(req.params.branchId, 10);
-      const { key } = req.params;
+      const branchId = parseInt(param(req.params.branchId), 10);
+      const key = param(req.params.key);
       const parsed = setConfigSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid config payload', { issues: parsed.error.issues });
@@ -152,8 +155,8 @@ router.delete(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = parseInt(req.params.branchId, 10);
-      const { key } = req.params;
+      const branchId = parseInt(param(req.params.branchId), 10);
+      const key = param(req.params.key);
       await configService.deleteBranchConfig(branchId, key, req.staff!);
       res.json({ message: `Branch override for '${key}' removed; system default now applies` });
     } catch (err) {

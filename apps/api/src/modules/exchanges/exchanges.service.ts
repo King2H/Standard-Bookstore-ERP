@@ -2,7 +2,8 @@ import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import type { Permission } from '../../lib/permissions.js';
-import { createReceivable } from '../receivables/receivables.service.js';
+import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; permissions?: string[]; }
 
@@ -27,6 +28,7 @@ export interface ExchangeRow {
   currency: string;
   notes: string | null;
   relatedPaymentId: string | null;
+  originalOrderId: number | null;
   createdBy: number;
   createdAt: string;
   updatedAt: string;
@@ -81,6 +83,7 @@ function mapExchangeRow(row: Record<string, unknown>): ExchangeRow {
     currency: row.currency as string,
     notes: (row.notes as string | null) ?? null,
     relatedPaymentId: row.related_payment_id != null ? String(row.related_payment_id) : null,
+    originalOrderId: row.original_order_id != null ? Number(row.original_order_id) : null,
     createdBy: row.created_by as number,
     createdAt: (row.created_at as Date).toISOString(),
     updatedAt: (row.updated_at as Date).toISOString(),
@@ -272,25 +275,23 @@ export async function createExchange(
       await client.query('INSERT INTO exchange_outgoing_items (exchange_id, book_id, quantity, selling_unit_price, total_price) VALUES ($1,$2,$3,$4,$5)', [exchangeId, item.bookId, item.quantity, item.unitPrice.toFixed(2), totalPrice.toFixed(2)]);
     }
 
-    // Update inventory — incoming items increase stock, outgoing decrease
+    // Update inventory via centralized service — incoming items increase stock, outgoing decrease
     if (locationId) {
       for (const item of data.incomingItems ?? []) {
         await client.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [item.bookId, locationId]);
-        const invRes = await client.query('SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE', [item.bookId, locationId]);
-        const qtyBefore = invRes.rows[0].quantity as number;
-        const ver = invRes.rows[0].version as number;
-        await client.query('UPDATE inventory SET quantity = quantity + $1, version = version + 1, updated_at = now() WHERE book_id = $2 AND location_id = $3', [item.quantity, item.bookId, locationId]);
-        await client.query("INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id) VALUES ($1,$2,$3,$4,$5,'stock_in','stock_in','exchange_in',$6,'Exchange incoming',$7)", [item.bookId, locationId, qtyBefore, qtyBefore + item.quantity, item.quantity, exchangeId, staffCtx.staffId]);
+        // Increase stock via centralized service (Requirements 2.1, 2.12)
+        await invTxSvc.stockIn(
+          { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_in', referenceId: exchangeId, reasonCode: 'return', notes: 'Exchange incoming', staffCtx },
+          client,
+        );
       }
 
       for (const item of data.outgoingItems ?? []) {
-        const invRes = await client.query('SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE', [item.bookId, locationId]);
-        if (!invRes.rows.length) throw new BusinessError('INSUFFICIENT_STOCK', 'No inventory for book ' + item.bookId);
-        const qtyBefore = invRes.rows[0].quantity as number;
-        const qtyAfter = qtyBefore - item.quantity;
-        if (qtyAfter < 0) throw new BusinessError('INSUFFICIENT_STOCK', 'Insufficient stock for book ' + item.bookId);
-        await client.query('UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now() WHERE book_id = $2 AND location_id = $3', [qtyAfter, item.bookId, locationId]);
-        await client.query("INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id) VALUES ($1,$2,$3,$4,$5,'stock_out','stock_out','exchange_out',$6,'Exchange outgoing',$7)", [item.bookId, locationId, qtyBefore, qtyAfter, -item.quantity, exchangeId, staffCtx.staffId]);
+        // Decrease stock via centralized service — reservation-aware (Requirements 2.1, 2.13)
+        await invTxSvc.stockOut(
+          { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_out', referenceId: exchangeId, reasonCode: 'loss', notes: 'Exchange outgoing', staffCtx },
+          client,
+        );
       }
     }
 
@@ -705,22 +706,13 @@ export async function settleExchange(
           );
 
           if (condition === 'resellable') {
-            const invRes = await client.query(
-              `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
-              [bookId, locationId],
-            );
-            const qtyBefore = invRes.rows[0]?.quantity ?? 0;
-            await client.query(
-              `UPDATE inventory SET quantity = quantity + $1, updated_at = now() WHERE book_id = $2 AND location_id = $3`,
-              [qty, bookId, locationId],
-            );
-            await client.query(
-              `INSERT INTO inventory_history
-                 (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-               VALUES ($1,$2,$3,$4,$5,'stock_in','stock_in','exchange_in',$6,'Exchange returned resellable',$7)`,
-              [bookId, locationId, qtyBefore, qtyBefore + qty, qty, String(exchangeId), staffCtx.staffId],
+            // Restore resellable stock via centralized service (Requirement 2.12)
+            await invTxSvc.stockIn(
+              { bookId, locationId, quantity: qty, referenceType: 'exchange_in', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Exchange returned resellable', staffCtx },
+              client,
             );
           } else if (condition === 'damaged') {
+            // Damaged items — update damaged_quantity directly (not a sellable stock movement)
             const invRes = await client.query(
               `SELECT damaged_quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
               [bookId, locationId],
@@ -740,28 +732,10 @@ export async function settleExchange(
         }
       } else if (itemType === 'new') {
         if (locationId) {
-          const invRes = await client.query(
-            `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
-            [bookId, locationId],
-          );
-          const available = invRes.rows[0]?.quantity ?? 0;
-          if (available < qty) {
-            await client.query('ROLLBACK');
-            throw new BusinessError(
-              'INSUFFICIENT_STOCK',
-              `Insufficient stock for book ${bookId}. Available: ${available}, requested: ${qty}`,
-              { available, requested: qty },
-            );
-          }
-          await client.query(
-            `UPDATE inventory SET quantity = quantity - $1, updated_at = now() WHERE book_id = $2 AND location_id = $3`,
-            [qty, bookId, locationId],
-          );
-          await client.query(
-            `INSERT INTO inventory_history
-               (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-             VALUES ($1,$2,$3,$4,$5,'stock_out','stock_out','exchange_out',$6,'Exchange new item issued',$7)`,
-            [bookId, locationId, available, available - qty, -qty, String(exchangeId), staffCtx.staffId],
+          // Deduct outgoing item via centralized service — reservation-aware (Requirement 2.13)
+          await invTxSvc.stockOut(
+            { bookId, locationId, quantity: qty, referenceType: 'exchange_out', referenceId: String(exchangeId), reasonCode: 'loss', notes: 'Exchange new item issued', staffCtx },
+            client,
           );
         }
       }
@@ -868,6 +842,46 @@ export async function settleExchange(
             [exchange.customerId, exchange.exchangeReference, absBalance.toFixed(2)],
           );
         }
+      }
+    }
+
+    // ── Task 11.3: For CREDIT order exchanges with Store_Refunds, adjust receivable ─
+    // If the exchange has an original_order_id with sale_type='credit_sale' and there
+    // is an open order_credit_sale receivable, reduce it by the exchange refund amount.
+    // This runs inside the same transaction as all inventory mutations (task 11.1).
+    if (exchange.originalOrderId && exchange.settlementType === 'Store_Refunds' && exchange.netBalance > 0.01) {
+      try {
+        const origOrderRes = await client.query(
+          `SELECT o.id, o.sale_type FROM orders o WHERE o.id = $1`,
+          [exchange.originalOrderId],
+        );
+        if (origOrderRes.rows.length && origOrderRes.rows[0].sale_type === 'credit_sale') {
+          const openRecRes = await client.query(
+            `SELECT r.id, r.outstanding_amount
+             FROM receivables r
+             WHERE r.source_type = 'order_credit_sale'
+               AND r.source_entity_id = $1
+               AND r.status != 'Settled'
+             LIMIT 1`,
+            [exchange.originalOrderId],
+          );
+          if (openRecRes.rows.length) {
+            const currentOutstanding = parseFloat(openRecRes.rows[0].outstanding_amount as string);
+            const newOutstanding = Math.max(0, parseFloat((currentOutstanding - exchange.netBalance).toFixed(2)));
+            await updateReceivableOnPayment(
+              {
+                sourceType: 'order_credit_sale',
+                sourceEntityId: exchange.originalOrderId,
+                newOutstandingAmount: newOutstanding,
+                isFullySettled: newOutstanding <= 0.01,
+              },
+              client,
+            );
+          }
+        }
+      } catch (recErr) {
+        // Non-fatal: log but don't roll back the exchange settlement
+        console.error('[exchange.settle] CREDIT receivable adjustment failed (non-fatal):', recErr);
       }
     }
 

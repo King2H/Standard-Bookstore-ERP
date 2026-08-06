@@ -22,7 +22,7 @@ interface Exchange {
   settlementStatus?: string;
 }
 interface ExchangeListResponse { items: Exchange[]; total: number; page: number; totalPages: number; }
-interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; }
+interface BookResult { id: number; title: string; isbn: string; defaultPrice: number | null; branchPrice: number | null; availability?: { locationId: number; locationName: string | null; onHand: number; reserved: number; available: number; } | null; }
 
 const ACTION_STYLES: Record<string, string> = {
   review:   'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200',
@@ -102,14 +102,14 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   });
 
   const { data: bookResults } = useQuery<{ items: BookResult[] }>({
-    queryKey: ['exc-books', bookSearch],
-    queryFn: () => api.get(`/books?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}`),
+    queryKey: ['exc-books', bookSearch, locationId, branchId],
+    queryFn: () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}${locationId ? `&locationId=${locationId}` : ''}`),
     enabled: bookSearch.length > 1,
   });
 
   const { data: initBookResults } = useQuery<{ items: BookResult[] }>({
-    queryKey: ['exc-init-books', initBookSearch],
-    queryFn: () => api.get(`/books?q=${encodeURIComponent(initBookSearch)}&pageSize=8&branchId=${branchId}`),
+    queryKey: ['exc-init-books', initBookSearch, branchId],
+    queryFn: () => api.get(`/books/with-availability?q=${encodeURIComponent(initBookSearch)}&pageSize=8&branchId=${branchId}`),
     enabled: initBookSearch.length > 1,
   });
 
@@ -457,6 +457,16 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                     <button key={b.id} onClick={() => addBook(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · {currency} {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      {b.availability != null && (
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {b.availability.locationName && <span className="text-xs text-gray-400">📍 {b.availability.locationName}</span>}
+                          <span className={`text-xs font-medium ${b.availability.available === 0 ? 'text-red-600 dark:text-red-400' : b.availability.available <= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                            {b.availability.available === 0 ? '⚠ Out of stock' : `✓ ${b.availability.available} available`}
+                          </span>
+                          {b.availability.reserved > 0 && <span className="text-xs text-orange-500 dark:text-orange-400">🔒 {b.availability.reserved} reserved</span>}
+                          <span className="text-xs text-gray-400">On hand: {b.availability.onHand}</span>
+                        </div>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -563,6 +573,16 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                     <button key={b.id} onClick={() => addInitBook(b)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{b.isbn} · {currency} {(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      {b.availability != null && (
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {b.availability.locationName && <span className="text-xs text-gray-400">📍 {b.availability.locationName}</span>}
+                          <span className={`text-xs font-medium ${b.availability.available === 0 ? 'text-red-600 dark:text-red-400' : b.availability.available <= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                            {b.availability.available === 0 ? '⚠ Out of stock' : `✓ ${b.availability.available} available`}
+                          </span>
+                          {b.availability.reserved > 0 && <span className="text-xs text-orange-500 dark:text-orange-400">🔒 {b.availability.reserved} reserved</span>}
+                          <span className="text-xs text-gray-400">On hand: {b.availability.onHand}</span>
+                        </div>
+                      )}
                     </button>
                   ))}
                 </div>

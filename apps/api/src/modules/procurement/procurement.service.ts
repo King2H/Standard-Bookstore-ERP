@@ -3,6 +3,7 @@ import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.
 import { validateSupplierForProcurement } from '../supplier/supplier.service.js';
 import { getPOApprovalThreshold } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
+import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -761,27 +762,19 @@ export async function receivePO(
         [bookId, effectiveLocationId],
       );
 
-      // Get current inventory state with lock
-      const invRes = await client.query(
-        `SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
-        [bookId, effectiveLocationId],
-      );
-      const qtyBefore = invRes.rows[0].quantity as number;
-      const qtyAfter = qtyBefore + item.quantityReceived;
-
-      // Update inventory
-      await client.query(
-        `UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now()
-         WHERE book_id = $2 AND location_id = $3`,
-        [qtyAfter, bookId, effectiveLocationId],
-      );
-
-      // Insert inventory_history
-      await client.query(
-        `INSERT INTO inventory_history
-           (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-         VALUES ($1, $2, $3, $4, $5, 'stock_in', 'stock_in', 'purchase_order', $6, $7, $8)`,
-        [bookId, effectiveLocationId, qtyBefore, qtyAfter, item.quantityReceived, String(id), notes ?? null, staffCtx.staffId],
+      // Increase inventory via centralized service (Requirements 2.1, 2.11)
+      await invTxSvc.stockIn(
+        {
+          bookId,
+          locationId: effectiveLocationId,
+          quantity: item.quantityReceived,
+          referenceType: 'purchase_order',
+          referenceId: String(id),
+          reasonCode: 'initial',
+          notes: notes ?? null,
+          staffCtx,
+        },
+        client,
       );
     }
 

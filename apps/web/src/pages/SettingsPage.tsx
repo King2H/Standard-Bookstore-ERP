@@ -19,7 +19,7 @@ interface Branch { id: number; name: string; isActive: boolean }
 
 const CONFIG_META: Record<string, { label: string; tab: string; type: 'string' | 'number' | 'boolean' | 'json'; description: string }> = {
   base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. USD)' },
-  tax_rate:                         { label: 'Tax Rate',                     tab: 'General',      type: 'number',  description: 'Default tax rate (0–1, e.g. 0.10 = 10%)' },
+  // tax_rate removed — taxation disabled for this phase
   fiscal_year_start_month:          { label: 'Fiscal Year Start Month',      tab: 'General',      type: 'number',  description: 'Month number 1–12 (1 = January)' },
   max_line_discount_pct:            { label: 'Max Line Discount % (per role)',tab: 'Discounts',    type: 'json',    description: 'JSON object: {"Sales":10,"Manager":25,"Admin":50}' },
   max_transaction_discount_pct:     { label: 'Max Transaction Discount %',   tab: 'Discounts',    type: 'number',  description: 'Maximum total transaction discount allowed' },

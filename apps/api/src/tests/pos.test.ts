@@ -111,6 +111,8 @@ describe('POS — Transactions', () => {
     bookPrice = book.price;
 
     await ensureInventory(bookId, locationId, 50);
+    // Ensure zero tax — config.test.ts may run before this and reset tax_rate
+    await db.query(`UPDATE system_config SET value = '0' WHERE key = 'tax_rate'`).catch(() => {});
   });
 
   afterAll(async () => {

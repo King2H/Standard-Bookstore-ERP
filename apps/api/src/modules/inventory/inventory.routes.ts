@@ -14,12 +14,14 @@ const qb = (v: unknown): boolean | undefined => { const s = qs(v); return s === 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
 const adjustSchema = z.object({
-  bookId:     z.number().int().positive(),
-  locationId: z.number().int().positive(),
-  delta:      z.number().int().refine(n => n !== 0, 'Delta cannot be zero'),
-  reasonCode: z.enum(['damage', 'loss', 'return', 'correction']),
-  notes:      z.string().max(500).optional(),
-  version:    z.number().int().min(0),
+  bookId:        z.number().int().positive(),
+  locationId:    z.number().int().positive(),
+  delta:         z.number().int().refine(n => n !== 0, 'Delta cannot be zero'),
+  reasonCode:    z.enum(['damage', 'loss', 'return', 'correction']),
+  notes:         z.string().max(500).optional(),
+  version:       z.number().int().min(0),
+  referenceType: z.string().max(100).optional(),
+  referenceId:   z.number().int().positive().optional(),
 });
 
 const transferSchema = z.object({
@@ -34,6 +36,36 @@ const reorderSchema = z.object({
   reorderPoint: z.number().int().min(0),
 });
 
+// ── Retry wrapper for transient DB errors ─────────────────────────────────────
+// Catches serialization failures, deadlocks, and connection errors and retries
+// up to 2 times with 200ms back-off. Non-transient errors re-throw immediately.
+
+const TRANSIENT_PG_CODES = new Set([
+  '40001', // serialization failure
+  '40P01', // deadlock detected
+  '57P03', // cannot connect now
+  '08006', // connection failure
+  '08001', // unable to establish connection
+]);
+
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2, delayMs = 200): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const pgCode = (err as { code?: string }).code;
+      if (pgCode && TRANSIENT_PG_CODES.has(pgCode) && attempt < maxRetries) {
+        lastErr = err;
+        await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 // ── GET /api/inventory — list stock for a branch ──────────────────────────────
 
 router.get(
@@ -41,8 +73,16 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = req.staff!.branchId;
-      const result = await inventoryService.listInventory({
+      // Support explicit branchId override (Admin/Super_Admin cross-branch view).
+      // Fall back to the staff's own branch from the JWT.
+      const qBranchId = req.query.branchId ? qi(req.query.branchId, 0) : undefined;
+      const branchId = (qBranchId && qBranchId > 0) ? qBranchId : req.staff!.branchId;
+
+      if (!branchId || branchId <= 0) {
+        return res.json({ items: [], total: 0, page: 1, totalPages: 0 });
+      }
+
+      const result = await withRetry(() => inventoryService.listInventory({
         branchId,
         locationId: req.query.locationId ? qi(req.query.locationId, 0) : undefined,
         bookId:     req.query.bookId     ? qi(req.query.bookId, 0)     : undefined,
@@ -50,7 +90,7 @@ router.get(
         q:          qs(req.query.q),
         page:       qi(req.query.page, 1),
         pageSize:   qi(req.query.pageSize, 25),
-      });
+      }));
       res.json(result);
     } catch (err) { next(err); }
   },
@@ -63,7 +103,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const items = await inventoryService.getLowStock(req.staff!.branchId);
+      const items = await withRetry(() => inventoryService.getLowStock(req.staff!.branchId));
       res.json({ items, total: items.length });
     } catch (err) { next(err); }
   },
@@ -210,6 +250,24 @@ router.post(
       if (!parsed.success) throw new ValidationError('Invalid payload', { issues: parsed.error.issues });
       const row = await inventoryService.stockOut({ ...parsed.data, staffCtx: req.staff! });
       res.json(row);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── GET /api/inventory/book/:bookId/breakdown ─────────────────────────────────
+// Returns per-location Available / Reserved / Damaged / Sellable breakdown.
+// Requirement 2.15
+
+router.get(
+  '/inventory/book/:bookId/breakdown',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const bookId = parseInt(req.params.bookId, 10);
+      if (!bookId || bookId <= 0) throw new ValidationError('Invalid bookId');
+      const branchId = req.query.branchId ? qi(req.query.branchId, 0) || undefined : req.staff!.branchId;
+      const items = await inventoryService.getBookStockBreakdown(bookId, branchId);
+      res.json({ items });
     } catch (err) { next(err); }
   },
 );

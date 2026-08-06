@@ -7,6 +7,7 @@ import {
 } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -377,18 +378,8 @@ export async function createTransaction(
       }
     }
 
-    // Inventory check
-    interface InvSnapshot { bookId: number; qtyBefore: number; }
-    const invSnapshots: InvSnapshot[] = [];
-    for (const item of resolvedItems) {
-      const invRes = await client.query(`SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`, [item.bookId, data.locationId]);
-      if (!invRes.rows.length) throw new BusinessError('INSUFFICIENT_STOCK', `No inventory record for book ${item.bookId} at location ${data.locationId}`);
-      const qtyBefore = invRes.rows[0].quantity as number;
-      if (qtyBefore < item.quantity && !(await isNegativeStockAllowed())) {
-        throw new BusinessError('INSUFFICIENT_STOCK', `Insufficient stock for book ${item.bookId}. Available: ${qtyBefore}, requested: ${item.quantity}`, { available: qtyBefore, requested: item.quantity });
-      }
-      invSnapshots.push({ bookId: item.bookId, qtyBefore });
-    }
+    // Inventory availability is checked inside invTxSvc.stockOut (reservation-aware).
+    // No pre-check needed here — removing the old raw-quantity check prevents stale reads.
 
     // Generate transaction number
     const now = new Date();
@@ -424,16 +415,19 @@ export async function createTransaction(
       );
     }
 
-    // Decrement inventory
-    for (let i = 0; i < resolvedItems.length; i++) {
-      const item = resolvedItems[i];
-      const { qtyBefore } = invSnapshots[i];
-      const qtyAfter = qtyBefore - item.quantity;
-      await client.query(`UPDATE inventory SET quantity = quantity - $1, version = version + 1, updated_at = now() WHERE book_id = $2 AND location_id = $3`, [item.quantity, item.bookId, data.locationId]);
-      await client.query(
-        `INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-         VALUES ($1, $2, $3, $4, $5, 'stock_out', 'stock_out', 'sale', $6, NULL, $7)`,
-        [item.bookId, data.locationId, qtyBefore, qtyAfter, -item.quantity, txId, staffCtx.staffId],
+    // Decrement inventory via centralized InventoryTransactionService (Requirement 2.1, 2.3, 2.4)
+    // Uses reservation-aware availability: available = quantity - SUM(active_reservations)
+    for (const item of resolvedItems) {
+      await invTxSvc.stockOut(
+        {
+          bookId: item.bookId,
+          locationId: data.locationId,
+          quantity: item.quantity,
+          referenceType: 'sale',
+          referenceId: txId,
+          staffCtx,
+        },
+        client,
       );
     }
 
@@ -697,14 +691,18 @@ export async function voidTransaction(id: string | number, staffCtx: StaffCtx): 
     await client.query('BEGIN');
 
     for (const item of tx.lineItems ?? []) {
-      const invRes = await client.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`, [item.bookId, tx.locationId]);
-      const qtyBefore = (invRes.rows[0]?.quantity as number) ?? 0;
-      const qtyAfter = qtyBefore + item.quantity;
-      await client.query(`UPDATE inventory SET quantity = quantity + $1, version = version + 1, updated_at = now() WHERE book_id = $2 AND location_id = $3`, [item.quantity, item.bookId, tx.locationId]);
-      await client.query(
-        `INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-         VALUES ($1, $2, $3, $4, $5, 'return', 'stock_in', 'void', $6, NULL, $7)`,
-        [item.bookId, tx.locationId, qtyBefore, qtyAfter, item.quantity, String(tx.id), staffCtx.staffId],
+      // Restore inventory via centralized service (Requirement 2.9)
+      await invTxSvc.stockIn(
+        {
+          bookId: item.bookId,
+          locationId: tx.locationId,
+          quantity: item.quantity,
+          referenceType: 'void',
+          referenceId: String(tx.id),
+          reasonCode: 'return',
+          staffCtx,
+        },
+        client,
       );
     }
 

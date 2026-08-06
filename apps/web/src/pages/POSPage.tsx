@@ -16,6 +16,13 @@ interface BookResult {
   defaultPrice: number | null;
   branchPrice: number | null;
   stockQuantity?: number | null;
+  availability?: {
+    locationId: number;
+    locationName: string | null;
+    onHand: number;
+    reserved: number;
+    available: number;
+  } | null;
 }
 
 type DiscountPresetType = 'Normal' | 'Merchant' | 'Special';
@@ -67,7 +74,7 @@ interface TransactionPayment { method: string; amount: number; }
 
 interface Transaction {
   id: string; transactionNumber: string;
-  subtotal: number; discountTotal: number; taxTotal: number; grandTotal: number;
+  subtotal: number; discountTotal: number; grandTotal: number;
   amountPaid: number; amountDue: number;
   paymentStatus: 'paid' | 'partial' | 'credit';
   currency: string; status: string; createdAt: string;
@@ -200,7 +207,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
 
   const { data: bookResults } = useQuery<{ items: BookResult[] }>({
     queryKey: ['pos-books', bookSearch, locationId, branchId],
-    queryFn:  () => api.get(`/books?q=${encodeURIComponent(bookSearch)}&pageSize=10&branchId=${branchId}${locationId ? `&locationId=${locationId}` : ''}`),
+    queryFn:  () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=10&branchId=${branchId}${locationId ? `&locationId=${locationId}` : ''}`),
     enabled:  branchId !== null && bookSearch.length > 1,
   });
 
@@ -777,8 +784,8 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                     key={b.id}
                     id={`pos-book-${b.id}`}
                     onClick={() => addToCart(b)}
-                    disabled={b.stockQuantity === 0}
-                    className={`w-full text-left px-3 py-2 border-b border-gray-50 dark:border-gray-800/60 transition-colors ${b.stockQuantity === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100'}`}
+                    disabled={b.availability != null && b.availability.available === 0}
+                    className={`w-full text-left px-3 py-2 border-b border-gray-50 dark:border-gray-800/60 transition-colors ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100'}`}
                   >
                     <div className="flex items-start justify-between gap-1.5">
                       <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight flex-1">{b.title}</p>
@@ -786,8 +793,13 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
                       <p className="text-xs text-gray-400 truncate">{b.isbn}</p>
-                      {b.stockQuantity != null && stockBadge(b.stockQuantity)}
+                      {b.availability != null && stockBadge(b.availability.available)}
                     </div>
+                    {b.availability != null && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        📍 {b.availability.locationName ?? 'Location'} · On hand: {b.availability.onHand} · Reserved: {b.availability.reserved}
+                      </p>
+                    )}
                   </button>
                 ))
               ) : bookSearch.length > 1 ? (

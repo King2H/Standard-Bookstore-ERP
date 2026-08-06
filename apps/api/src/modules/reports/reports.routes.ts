@@ -2,6 +2,10 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as reportsService from './reports.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
+import {
+  buildCsv, sendCsv,
+  SALES_COLUMNS, INVENTORY_COLUMNS, PROCUREMENT_COLUMNS, RECEIVABLES_COLUMNS,
+} from '../../lib/csvBuilder.js';
 
 const router = Router();
 
@@ -30,30 +34,6 @@ function parseFilters(req: Request) {
 
 // All report endpoints require VIEW_REPORTS permission
 const reportAccess = [authenticate, requirePermission('VIEW_REPORTS')];
-
-// ── CSV helper ────────────────────────────────────────────────────────────────
-
-function toCSV(rows: Record<string, unknown>[]): string {
-  if (!rows.length) return '';
-  const headers = Object.keys(rows[0]);
-  const escape = (v: unknown): string => {
-    const s = v == null ? '' : String(v);
-    return s.includes(',') || s.includes('"') || s.includes('\n')
-      ? `"${s.replace(/"/g, '""')}"`
-      : s;
-  };
-  const lines = [
-    headers.join(','),
-    ...rows.map(r => headers.map(h => escape(r[h])).join(',')),
-  ];
-  return lines.join('\r\n');
-}
-
-function sendCSV(res: Response, filename: string, data: string): void {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send('\uFEFF' + data); // BOM for Excel compatibility
-}
 
 // ── GET /api/reports/sales ────────────────────────────────────────────────────
 
@@ -134,21 +114,15 @@ router.get(
 );
 
 // ── CSV Export endpoints ──────────────────────────────────────────────────────
-// GET /api/reports/:type/export?format=csv
 
 router.get(
   '/reports/sales/export',
   ...reportAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const report = await reportsService.getSalesReport(parseFilters(req));
-      const rows = report.byPeriod.map(r => ({
-        period: r.period,
-        total_sales_etb: r.totalSales.toFixed(2),
-        total_orders: r.totalOrders,
-        average_order_value_etb: r.averageOrderValue.toFixed(2),
-      }));
-      sendCSV(res, `sales-report-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
+      const rows = await reportsService.getSalesExportRows(parseFilters(req));
+      const today = new Date().toISOString().slice(0, 10);
+      sendCsv(res, `sales-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], SALES_COLUMNS));
     } catch (err) { next(err); }
   },
 );
@@ -159,14 +133,19 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const report = await reportsService.getPaymentReport(parseFilters(req));
-      const rows = [
-        { metric: 'Total Collected (ETB)', value: report.summary.totalCollected.toFixed(2) },
-        { metric: 'Total Refunded (ETB)', value: report.summary.totalRefunded.toFixed(2) },
-        { metric: 'Net Collected (ETB)', value: report.summary.netCollected.toFixed(2) },
-        { metric: 'Pending Payments (ETB)', value: report.summary.pendingPayments.toFixed(2) },
-        ...report.byMethod.map(m => ({ metric: `Method: ${m.method}`, value: m.total.toFixed(2) })),
+      const today = new Date().toISOString().slice(0, 10);
+      const rows: Record<string, unknown>[] = [
+        { metric: 'Total Collected',  amount: report.summary.totalCollected  },
+        { metric: 'Total Refunded',   amount: report.summary.totalRefunded   },
+        { metric: 'Net Collected',    amount: report.summary.netCollected    },
+        { metric: 'Pending Payments', amount: report.summary.pendingPayments },
+        ...report.byMethod.map(m => ({ metric: `Method: ${m.method}`, amount: m.total })),
       ];
-      sendCSV(res, `payments-report-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
+      const cols = [
+        { key: 'metric', header: 'metric', type: 'string' as const },
+        { key: 'amount', header: 'amount', type: 'number' as const },
+      ];
+      sendCsv(res, `payments-report-${today}.csv`, buildCsv(rows, cols));
     } catch (err) { next(err); }
   },
 );
@@ -176,14 +155,33 @@ router.get(
   ...reportAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const report = await reportsService.getInventoryReport(parseFilters(req));
-      const rows = report.topSellingBooks.map(b => ({
-        book_id: b.bookId,
-        title: b.title,
-        units_sold: b.unitsSold,
-        revenue_etb: b.revenue.toFixed(2),
-      }));
-      sendCSV(res, `inventory-report-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
+      const rows = await reportsService.getInventoryExportRowsV2(parseFilters(req));
+      const today = new Date().toISOString().slice(0, 10);
+      sendCsv(res, `inventory-export-${today}.csv`, buildCsv(rows as Record<string, unknown>[], INVENTORY_COLUMNS));
+    } catch (err) { next(err); }
+  },
+);
+
+router.get(
+  '/reports/procurement/export',
+  ...reportAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rows = await reportsService.getProcurementExportRows(parseFilters(req));
+      const today = new Date().toISOString().slice(0, 10);
+      sendCsv(res, `procurement-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], PROCUREMENT_COLUMNS));
+    } catch (err) { next(err); }
+  },
+);
+
+router.get(
+  '/reports/receivables/export',
+  ...reportAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rows = await reportsService.getReceivablesExportRows(parseFilters(req));
+      const today = new Date().toISOString().slice(0, 10);
+      sendCsv(res, `receivables-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], RECEIVABLES_COLUMNS));
     } catch (err) { next(err); }
   },
 );
@@ -194,13 +192,20 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const report = await reportsService.getCustomerReport(parseFilters(req));
+      const today = new Date().toISOString().slice(0, 10);
       const rows = report.topCustomers.map(c => ({
-        customer_id: c.customerId,
-        full_name: c.fullName,
-        total_spend_etb: c.totalSpend.toFixed(2),
-        order_count: c.orderCount,
+        customer_id:  c.customerId,
+        full_name:    c.fullName,
+        total_spend:  c.totalSpend,
+        order_count:  c.orderCount,
       }));
-      sendCSV(res, `customers-report-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
+      const cols = [
+        { key: 'customer_id',  header: 'customer_id',  type: 'integer' as const },
+        { key: 'full_name',    header: 'full_name',     type: 'string'  as const },
+        { key: 'total_spend',  header: 'total_spend',   type: 'number'  as const },
+        { key: 'order_count',  header: 'order_count',   type: 'integer' as const },
+      ];
+      sendCsv(res, `customers-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], cols));
     } catch (err) { next(err); }
   },
 );
@@ -211,13 +216,20 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const report = await reportsService.getExchangeReport(parseFilters(req));
+      const today = new Date().toISOString().slice(0, 10);
       const rows = report.byPeriod.map(r => ({
-        period: r.period,
-        count: r.count,
-        incoming_value_etb: r.incomingValue.toFixed(2),
-        outgoing_value_etb: r.outgoingValue.toFixed(2),
+        period:          r.period,
+        count:           r.count,
+        incoming_value:  r.incomingValue,
+        outgoing_value:  r.outgoingValue,
       }));
-      sendCSV(res, `exchanges-report-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
+      const cols = [
+        { key: 'period',         header: 'period',         type: 'string'  as const },
+        { key: 'count',          header: 'count',           type: 'integer' as const },
+        { key: 'incoming_value', header: 'incoming_value',  type: 'number'  as const },
+        { key: 'outgoing_value', header: 'outgoing_value',  type: 'number'  as const },
+      ];
+      sendCsv(res, `exchanges-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], cols));
     } catch (err) { next(err); }
   },
 );
