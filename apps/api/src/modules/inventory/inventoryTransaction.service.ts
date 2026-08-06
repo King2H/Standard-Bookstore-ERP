@@ -677,21 +677,33 @@ export async function transfer(
       [quantity, bookId, toLocationId],
     );
 
-    // Shared transfer batch ID for traceability (Requirement 2.22)
-    const transferBatchId = `TRF-${Date.now()}-${bookId}-${fromLocationId}-${toLocationId}`;
+    // Shared transfer batch ID for traceability (Requirement 2.22).
+    // Bug fix: this used to be a human-readable string (`TRF-${Date.now()}-...`)
+    // that was computed but never actually placed in the reference_type/
+    // reference_id columns below (both were hardcoded NULL) -- it only ended
+    // up embedded in the free-text `notes` string, making it unqueryable.
+    // reference_id is bigint (a string batch id wouldn't fit) and 'transfer'
+    // wasn't even an allowed reference_type value (see migration
+    // 1700000044_transfer_reference_type). Fixed both: extended the CHECK
+    // constraint, and generate a real bigint batch id (independent of either
+    // row's own id, so it can be shared identically by both rows) from the
+    // table's own id sequence.
+    const batchIdRes = await client.query(`SELECT nextval('inventory_history_id_seq') AS id`);
+    const transferBatchId = String(batchIdRes.rows[0].id);
 
     await client.query(
       `INSERT INTO inventory_history
          (book_id, location_id, qty_before, qty_after, delta,
           reason_code, movement_type, reference_type, reference_id, notes, staff_id)
        VALUES
-         ($1, $2, $3, $4, $5, 'transfer_out', 'transfer_out', NULL, NULL, $6, $7),
-         ($1, $8, $9, $10, $11, 'transfer_in', 'transfer_in', NULL, NULL, $6, $7)`,
+         ($1, $2, $3, $4, $5, 'transfer_out', 'transfer_out', 'transfer', $8, $6, $7),
+         ($1, $9, $10, $11, $12, 'transfer_in', 'transfer_in', 'transfer', $8, $6, $7)`,
       [
         bookId,
         fromLocationId, srcQty, srcQty - quantity, -quantity,
-        notes ?? `Transfer to location ${toLocationId} [${transferBatchId}]`,
+        notes ?? `Transfer to location ${toLocationId} [batch ${transferBatchId}]`,
         staffCtx.staffId,
+        transferBatchId,
         toLocationId, dstQty, dstQty + quantity, quantity,
       ],
     );

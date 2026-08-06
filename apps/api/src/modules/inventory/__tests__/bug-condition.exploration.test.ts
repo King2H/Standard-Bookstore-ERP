@@ -73,24 +73,6 @@ async function getInventoryVersion(bId: number, locId: number): Promise<number> 
   return res.rows[0]?.version as number ?? 0;
 }
 
-async function insertReservation(bId: number, locId: number, qty: number): Promise<void> {
-  // Insert a synthetic order to satisfy FK constraint on inventory_reservations
-  const orderRes = await db.query(
-    `INSERT INTO orders (order_number, customer_id, branch_id, location_id, channel, status,
-      payment_status, currency, subtotal, discount_amount, discount_total, tax_rate, tax_amount, total, created_by)
-     VALUES ($1, NULL, $2, $3, 'in_store', 'CONFIRMED', 'unpaid', 'ETB', 100, 0, 0, 0, 0, 100, $4)
-     RETURNING id`,
-    [`BUG-ORD-${Date.now()}`, branchId, locId, staffId],
-  );
-  const orderId = orderRes.rows[0].id as number;
-
-  await db.query(
-    `INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status)
-     VALUES ($1, $2, $3, $4, 'reserved')`,
-    [orderId, bId, locId, qty],
-  );
-}
-
 async function clearReservations(bId: number, locId: number): Promise<void> {
   // Delete reservations and their synthetic orders
   const reservationOrderIds = await db.query(
@@ -250,21 +232,28 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
   });
 
   /**
-   * Bug 1: POS ignores active reservations
+   * Bug 1: POS oversell protection once stock is fully committed
    * Validates: Requirements 1.2, 2.3, 2.4
    *
-   * Scenario:
-   *   - inventory.quantity = 5
-   *   - active reservation = 5 (entire stock soft-reserved for a confirmed order)
-   *   - available = 5 - 5 = 0
-   *   - POS attempts to sell qty=1
+   * Original scenario (superseded): inventory.quantity=5, a *synthetic*
+   * inventory_reservations row of 5 inserted directly via SQL (bypassing
+   * confirm()), available = quantity - reserved = 0, POS should be blocked.
    *
-   * EXPECTED BEHAVIOR (after fix): POS is BLOCKED with INSUFFICIENT_STOCK (available=0)
-   * CURRENT BUG: POS SUCCEEDS because it reads raw quantity=5 and ignores the reservation
+   * That scenario doesn't correspond to any reachable state in the live
+   * app: orders.service.ts confirm() inserts the 'reserved' row and calls
+   * stockOut() (which decrements inventory.quantity) in the same DB
+   * transaction, always -- there is no code path where a committed
+   * 'reserved' row exists without inventory.quantity already reflecting
+   * that deduction (order-payment-unification spec, 3.5). A standalone
+   * reservation-without-deduction can only be produced by writing directly
+   * to the table, which no application code path does.
    *
-   * This test FAILS on unfixed code (sale succeeds when it should be blocked).
+   * Rewritten to exercise the real mechanism: confirm a real order for all
+   * 5 units (which deducts quantity to 0), then verify POS correctly
+   * refuses a sale against the now-empty stock. This is what "reservation
+   * blocks oversell" actually means under the current, ratified design.
    */
-  it('[BUG-1] POS should be BLOCKED when all stock is soft-reserved (POS ignores reservations)', async () => {
+  it('[BUG-1] POS is blocked once a confirmed order has committed all available stock', async () => {
     const hasReservations = await reservationsTableExists();
     if (!hasReservations) {
       // Skip — reservation table doesn't exist; graceful degradation in effect
@@ -272,12 +261,24 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
       return;
     }
 
-    // Arrange: qty=5, reservation=5 (no available stock)
+    // Arrange: qty=5, confirm a real order for all 5 units
     await ensureInventory(bookId, locationId, 5);
     await clearReservations(bookId, locationId);
-    await insertReservation(bookId, locationId, 5);
 
-    // Act: attempt a POS sale for qty=1
+    const orderRes = await request(getTestApp())
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 5 }] });
+    expect(orderRes.status).toBe(201);
+    const orderId = orderRes.body.id as string;
+
+    const confirmRes = await request(getTestApp())
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send();
+    expect(confirmRes.status).toBe(200);
+
+    // Act: attempt a POS sale for qty=1 — nothing physically left
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -288,58 +289,63 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
         payments: [{ method: 'cash', amount: 100.00 }],
       });
 
-    // EXPECTED BEHAVIOR (after fix): sale is BLOCKED
-    // available = quantity(5) - reserved(5) = 0 < requested(1) → INSUFFICIENT_STOCK
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('INSUFFICIENT_STOCK');
 
     // Cleanup
     await clearReservations(bookId, locationId);
+    await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [orderId]);
+    await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
   });
 
   /**
-   * Bug 2: stockOut API ignores active reservations
+   * Bug 2: stockOut API oversell protection once stock is fully committed
    * Validates: Requirements 1.16, 2.19
    *
-   * Scenario:
-   *   - inventory.quantity = 5
-   *   - active reservation = 5 (all stock reserved)
-   *   - available = 5 - 5 = 0
-   *   - stockOut call for qty=1
-   *
-   * EXPECTED BEHAVIOR (after fix): stockOut is BLOCKED (available=0)
-   * CURRENT BUG: stockOut SUCCEEDS because its pre-check reads raw quantity=5
-   *
-   * This test FAILS on unfixed code.
+   * Same rewrite rationale as BUG-1 above -- exercises the real confirm()
+   * mechanism instead of a synthetic, unreachable reservation-without-
+   * deduction state.
    */
-  it('[BUG-2] stockOut API should be BLOCKED when all stock is soft-reserved (ignores reservations)', async () => {
+  it('[BUG-2] stockOut API is blocked once a confirmed order has committed all available stock', async () => {
     const hasReservations = await reservationsTableExists();
     if (!hasReservations) {
       console.log('[BUG-2] SKIPPED — inventory_reservations table does not exist (graceful degradation)');
       return;
     }
 
-    // Arrange: qty=5, reservation=5 (no available stock)
+    // Arrange: qty=5, confirm a real order for all 5 units
     await ensureInventory(bookId, locationId, 5);
     await clearReservations(bookId, locationId);
-    await insertReservation(bookId, locationId, 5);
+
+    const orderRes = await request(getTestApp())
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 5 }] });
+    expect(orderRes.status).toBe(201);
+    const orderId = orderRes.body.id as string;
+
+    const confirmRes = await request(getTestApp())
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send();
+    expect(confirmRes.status).toBe(200);
 
     // Get current version for the stockOut call
     const version = await getInventoryVersion(bookId, locationId);
 
-    // Act: attempt a stockOut for qty=1 via API
+    // Act: attempt a stockOut for qty=1 via API — nothing physically left
     const res = await request(getTestApp())
       .post('/api/inventory/stock-out')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, quantity: 1, version });
 
-    // EXPECTED BEHAVIOR (after fix): BLOCKED — available = 5 - 5 = 0 < 1
-    // CURRENT BUG: SUCCEEDS because pre-check reads raw quantity=5
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('INSUFFICIENT_STOCK');
 
     // Cleanup
     await clearReservations(bookId, locationId);
+    await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [orderId]);
+    await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
   });
 
   /**

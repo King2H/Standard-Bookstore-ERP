@@ -60,23 +60,6 @@ async function getLastHistoryRow(bookId: number, locationId: number): Promise<Re
   return res.rows[0] ?? null;
 }
 
-async function insertActiveReservation(
-  orderId: number, bookId: number, locationId: number, qty: number,
-): Promise<void> {
-  // Check table exists (graceful degradation)
-  const check = await db.query(
-    `SELECT 1 FROM information_schema.tables
-     WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
-  );
-  if (!check.rows.length) return;
-  await db.query(
-    `INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status)
-     VALUES ($1, $2, $3, $4, 'reserved')
-     ON CONFLICT DO NOTHING`,
-    [orderId, bookId, locationId, qty],
-  );
-}
-
 async function clearReservations(bookId: number, locationId: number): Promise<void> {
   const check = await db.query(
     `SELECT 1 FROM information_schema.tables
@@ -210,7 +193,7 @@ describe('Inventory Consistency Scenarios', () => {
 
   // ── Scenario 2: Reservation blocks POS oversell ───────────────────────────
 
-  it('Scenario 2: POS is blocked when stock is fully reserved', async () => {
+  it('Scenario 2: POS is blocked when stock is fully committed to a confirmed order', async () => {
     const check = await db.query(
       `SELECT 1 FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
@@ -220,24 +203,38 @@ describe('Inventory Consistency Scenarios', () => {
       return;
     }
 
-    // Arrange: qty=3, entire stock reserved for a confirmed order
+    // Arrange: qty=3
     await setInventory(bookId, locationId, 3);
 
-    // Create a synthetic order to satisfy FK
-    const orderRes = await db.query(
-      `INSERT INTO orders (order_number, customer_id, branch_id, location_id, channel, status,
-         payment_status, currency, subtotal, discount_amount, discount_total, tax_rate, tax_amount, total, created_by)
-       VALUES ($1, NULL, $2, $3, 'in_store', 'CONFIRMED', 'unpaid', 'ETB', 300, 0, 0, 0, 0, 300, $4)
-       RETURNING id`,
-      [`INVC-ORD-${Date.now()}`, branchId, locationId, staffId],
-    );
-    const orderId = orderRes.rows[0].id as number;
-    await insertActiveReservation(orderId, bookId, locationId, 3);
+    // Confirm a real order for all 3 units through the actual API (not a
+    // synthetic direct-SQL reservation insert). orders.service.ts confirm()
+    // deducts inventory.quantity AND inserts the 'reserved' row in the same
+    // transaction (order-payment-unification spec, 3.5) -- there is no live
+    // code path where a reservation exists without the matching deduction,
+    // so that's the scenario this test needs to exercise to mean anything.
+    const orderRes = await request(getTestApp())
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 3 }] });
+    expect(orderRes.status).toBe(201);
+    const orderId = orderRes.body.id as string;
 
-    // Act: POS tries to sell qty=1 — available = 3 - 3 = 0
+    const confirmRes = await request(getTestApp())
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send();
+    expect(confirmRes.status).toBe(200);
+
+    // Confirming deducted quantity to 0
+    expect(await getInventoryQty(bookId, locationId)).toBe(0);
+
+    // Act: POS tries to sell qty=1 — nothing physically left on hand
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
       .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
       .send({
         branchId,
         locationId,
@@ -249,11 +246,12 @@ describe('Inventory Consistency Scenarios', () => {
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('INSUFFICIENT_STOCK');
 
-    // Assert: inventory untouched
+    // Assert: inventory untouched by the rejected attempt
     const qty = await getInventoryQty(bookId, locationId);
-    expect(qty).toBe(3);
+    expect(qty).toBe(0);
 
     // Cleanup
+    await db.query(`DELETE FROM inventory_reservations WHERE order_id = $1`, [orderId]).catch(() => {});
     await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [orderId]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
   });
