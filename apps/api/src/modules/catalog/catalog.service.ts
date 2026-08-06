@@ -568,7 +568,17 @@ export async function searchBooks(filters: SearchFilters): Promise<{
   pageSize: number;
   totalPages: number;
 }> {
-  const page = Math.max(1, filters.page ?? 1);
+  // Bug 1 fix (C1): when a text query (q) is present, ignore the caller's
+  // page/offset. A search term reflects a fresh, targeted lookup, not a
+  // continuation of whatever catalog-browsing page the caller happened to be
+  // on — a stale page value (e.g. leftover from browsing page 3) previously
+  // applied OFFSET against the WHERE-*filtered* result set, which could skip
+  // past the only match entirely. catalogSearch.service.ts's search() (used
+  // elsewhere for the same kind of lookup) already has no OFFSET for this
+  // reason; this brings searchBooks() in line with it for q-searches while
+  // leaving normal catalog browsing (no q) paginated as before.
+  const isTextSearch = !!filters.q;
+  const page = isTextSearch ? 1 : Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 25));
   const offset = (page - 1) * pageSize;
 
@@ -576,7 +586,13 @@ export async function searchBooks(filters: SearchFilters): Promise<{
   const params: unknown[] = [];
   let p = 1;
 
-  // Full-text search — covers title, author name, SKU, and exact ISBN via OR
+  // Full-text search — covers title, author name, SKU, publisher, description,
+  // and exact ISBN via OR.
+  //
+  // Bug 1 fix (C2, C3): publisher and description were previously absent from
+  // this predicate, so searching by either always returned 0 results even
+  // though catalogSearch.service.ts's search() (used elsewhere) already
+  // covered publisher correctly — this function had drifted out of sync with it.
   if (filters.q) {
     const q = filters.q.trim();
     const qParam = `%${q}%`;
@@ -584,6 +600,8 @@ export async function searchBooks(filters: SearchFilters): Promise<{
     const parts = [
       `lower(b.title) LIKE lower($${p})`,
       `lower(COALESCE(b.sku, '')) LIKE lower($${p})`,
+      `lower(COALESCE(b.publisher, '')) LIKE lower($${p})`,
+      `lower(COALESCE(b.description, '')) LIKE lower($${p})`,
       `EXISTS (
         SELECT 1 FROM book_authors ba_q
         JOIN authors a_q ON a_q.id = ba_q.author_id

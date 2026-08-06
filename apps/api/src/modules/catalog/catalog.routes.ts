@@ -66,9 +66,13 @@ router.get(
         genre:      qs(req.query.genre),
         category:   qs(req.query.category),
         tag:        qs(req.query.tag),
+        // Defaults to active-only, matching /books/with-availability below.
+        // Without this default, a deactivated book stayed visible in the
+        // default listing/search — callers must explicitly pass
+        // ?is_active=false to see inactive books.
         isActive:   req.query.is_active !== undefined
           ? req.query.is_active === 'true'
-          : undefined,
+          : true,
         // Use explicit query param if provided, otherwise fall back to the JWT branch
         // so stock quantities are always scoped to the user's active branch.
         branchId:   qi(req.query.branchId) ?? req.staff?.branchId,
