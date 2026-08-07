@@ -422,8 +422,11 @@ export async function getInventoryReport(filters: ReportFilters): Promise<Invent
     `SELECT
        COUNT(DISTINCT i.book_id)::INTEGER                                                          AS total_books,
        COALESCE(SUM(i.quantity), 0)::INTEGER                                                       AS total_units,
-       -- Available stock = quantity - active reservations (Requirement 2.16)
-       COALESCE(SUM(i.quantity - COALESCE(r.reserved, 0)), 0)::INTEGER                            AS available_stock,
+       -- Available stock = quantity, NOT quantity - reservations: confirm()
+       -- already physically deducts stock via stockOut() (order-payment-
+       -- unification spec, 3.5); the reservation row is bookkeeping, not a
+       -- second hold on top of the physical deduction.
+       COALESCE(SUM(i.quantity), 0)::INTEGER                                                       AS available_stock,
        -- Reserved stock = SUM of all active reservations (Requirement 2.16)
        COALESCE(SUM(COALESCE(r.reserved, 0)), 0)::INTEGER                                         AS reserved_stock,
        COUNT(CASE WHEN i.quantity <= i.reorder_point AND i.quantity > 0 THEN 1 END)::INTEGER       AS low_stock,
@@ -1390,9 +1393,12 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
        ) res ON res.book_id = i.book_id AND res.location_id = i.location_id`
     : '';
 
-  // When the table is absent, use 0 for reserved and i.quantity for available
-  const reservedExpr  = hasReservationsTable ? `COALESCE(res.reserved, 0)::int`                           : `0::int`;
-  const availableExpr = hasReservationsTable ? `GREATEST(0, i.quantity - COALESCE(res.reserved, 0))::int` : `i.quantity::int`;
+  // When the table is absent, use 0 for reserved. available is always
+  // i.quantity: confirm() already physically deducts stock via stockOut()
+  // (order-payment-unification spec, 3.5), so quantity_reserved is
+  // informational bookkeeping, not a second hold to subtract.
+  const reservedExpr  = hasReservationsTable ? `COALESCE(res.reserved, 0)::int` : `0::int`;
+  const availableExpr = `i.quantity::int`;
   // GROUP BY clause differs — res.reserved is only selectable when the join exists
   const groupByReserved = hasReservationsTable ? `, res.reserved` : '';
 

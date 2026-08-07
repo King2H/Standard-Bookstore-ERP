@@ -123,7 +123,10 @@ export async function listInventory(opts: {
              i.location_id, l.name AS location_name, l.branch_id,
              i.quantity,
              COALESCE(SUM(r.quantity), 0)::int AS reserved,
-             GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0))::int AS available,
+             -- available = quantity, NOT quantity - reserved: confirm() already
+             -- physically deducts stock via stockOut() (order-payment-unification
+             -- spec, 3.5); the reservation row is bookkeeping, not a second hold.
+             i.quantity::int AS available,
              i.reorder_point, i.version, i.updated_at,
              (i.quantity <= i.reorder_point) AS is_low_stock
       FROM inventory i
@@ -500,8 +503,10 @@ export async function getBookStockBreakdown(
         i.quantity,
         COALESCE(SUM(r.quantity), 0)::int AS reserved,
         COALESCE(i.damaged_quantity, 0)::int AS damaged,
-        GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0))::int AS available,
-        GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0) - COALESCE(i.damaged_quantity, 0))::int AS sellable
+        -- available = quantity, NOT quantity - reserved (see inventoryTransaction.
+        -- service.ts getAvailableStock()); sellable further excludes damaged units.
+        i.quantity::int AS available,
+        GREATEST(0, i.quantity - COALESCE(i.damaged_quantity, 0))::int AS sellable
       FROM inventory i
       JOIN locations l ON l.id = i.location_id
       LEFT JOIN inventory_reservations r
