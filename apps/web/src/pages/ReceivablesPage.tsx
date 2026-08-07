@@ -75,6 +75,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   const [writeOffId, setWriteOffId] = useState<string | null>(null);
   const [writeOffNotes, setWriteOffNotes] = useState('');
   const [collectingId, setCollectingId] = useState<string | null>(null);
+  const [collectCustomerId, setCollectCustomerId] = useState<number | null>(null);
   const [collectAmount, setCollectAmount] = useState('');
   const [collectMethod, setCollectMethod] = useState<PaymentMethod>('cash');
   const [collectBankAccountId, setCollectBankAccountId] = useState<number | ''>('');
@@ -84,6 +85,16 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
     queryKey: ['bank-accounts-for-receivables', branchId],
     queryFn: () => api.get(`/branches/${branchId}/bank-accounts`),
     enabled: collectMethod === 'bank',
+  });
+
+  // Store credit was already accepted as a collect method server-side, but
+  // the modal never showed the customer's available balance — staff only
+  // found out it was insufficient after submitting and getting a 422. Fetch
+  // it whenever the modal is open so it's visible before that happens.
+  const { data: collectingCustomer } = useQuery<{ storeCreditBalance: number }>({
+    queryKey: ['customer-for-collect', collectCustomerId],
+    queryFn: () => api.get(`/customers/${collectCustomerId}`),
+    enabled: !!collectCustomerId,
   });
 
   // ── Queries ───────────────────────────────────────────────────────────────────
@@ -118,7 +129,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
       api.post(`/receivables/${id}/collect`, { amount, paymentMethod, bankAccountId, notes: notes || undefined }),
     onSuccess: () => {
       inv();
-      setCollectingId(null); setCollectAmount(''); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes('');
+      setCollectingId(null); setCollectCustomerId(null); setCollectAmount(''); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes('');
       showToast('Payment collected', 'success');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
@@ -267,7 +278,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                           </button>
                           {/* Collect payment — the normal "customer paid" action */}
                           <button
-                            onClick={() => { setCollectingId(rec.id); setCollectAmount(rec.outstandingAmount.toFixed(2)); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes(''); }}
+                            onClick={() => { setCollectingId(rec.id); setCollectCustomerId(rec.customerId); setCollectAmount(rec.outstandingAmount.toFixed(2)); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes(''); }}
                             title="Collect payment"
                             className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
                             💰 Collect
@@ -313,9 +324,11 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         const rec = receivables.find(r => r.id === collectingId);
         if (!rec) return null;
         const amt = parseFloat(collectAmount) || 0;
-        const invalid = amt <= 0 || amt > rec.outstandingAmount + 0.01 || (collectMethod === 'bank' && !collectBankAccountId);
+        const storeCreditBalance = collectingCustomer?.storeCreditBalance ?? null;
+        const storeCreditInsufficient = collectMethod === 'store_credit' && storeCreditBalance != null && amt > storeCreditBalance + 0.01;
+        const invalid = amt <= 0 || amt > rec.outstandingAmount + 0.01 || (collectMethod === 'bank' && !collectBankAccountId) || storeCreditInsufficient;
         return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setCollectingId(null)}>
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => { setCollectingId(null); setCollectCustomerId(null); }}>
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Collect Payment</h3>
@@ -334,7 +347,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500">
                   <option value="cash">Cash</option>
                   <option value="bank">Bank Transfer</option>
-                  <option value="store_credit">Store Credit</option>
+                  <option value="store_credit">Store Credit{storeCreditBalance != null ? ` (${fmt(storeCreditBalance)} available)` : ''}</option>
                 </select>
               </div>
               {collectMethod === 'bank' && (
@@ -347,13 +360,22 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                   </select>
                 </div>
               )}
+              {collectMethod === 'store_credit' && (
+                <p className={`text-xs rounded-lg px-3 py-2 ${storeCreditInsufficient ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
+                  {storeCreditBalance == null
+                    ? 'Loading available store credit…'
+                    : storeCreditInsufficient
+                      ? `⚠️ Only ${fmt(storeCreditBalance)} available — reduce the amount or choose another method.`
+                      : `✓ ${fmt(storeCreditBalance)} available on this customer's account.`}
+                </p>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input value={collectNotes} onChange={e => setCollectNotes(e.target.value)} placeholder="Reference, description…"
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => setCollectingId(null)}
+                <button onClick={() => { setCollectingId(null); setCollectCustomerId(null); }}
                   className="flex-1 px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
                 <button
                   onClick={() => collectMut.mutate({ id: rec.id, amount: amt, paymentMethod: collectMethod, bankAccountId: collectBankAccountId || undefined, notes: collectNotes })}
