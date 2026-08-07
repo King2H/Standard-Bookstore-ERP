@@ -313,25 +313,19 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                 </button>
                               );
                             })}
-                            {/* Fallback for legacy orders that don't return allowedActions */}
-                            {!order.allowedActions && (
-                              <>
-                                {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Pending' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'confirm' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>Confirm</button>}
-                                {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Confirmed' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'progress' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.progress}`}>Progress</button>}
-                                {['Manager','Admin'].includes(userRole ?? '') && ['Confirmed','In_Progress','PARTIALLY_PAID'].includes(order.status) && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'fulfill' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.fulfill}`}>Fulfill</button>}
-                                {['Manager','Admin'].includes(userRole ?? '') && !['Fulfilled','Cancelled'].includes(order.status) && (
-                                  cancelingId === order.id ? (
-                                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                                      <input value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason..." className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-28" />
-                                      <button onClick={() => actionMut.mutate({ id: order.id, action: 'cancel', body: { reason: cancelReason || 'No reason' } })} className="text-xs bg-red-600 text-white px-2 py-0.5 rounded">OK</button>
-                                      <button onClick={() => setCancelingId(null)} className="text-xs text-gray-500 px-1">✕</button>
-                                    </div>
-                                  ) : (
-                                    <button onClick={e => { e.stopPropagation(); setCancelingId(order.id); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.cancel}`}>Cancel</button>
-                                  )
-                                )}
-                              </>
-                            )}
+                            {/* Module 11 cleanup: removed a "legacy orders without
+                                allowedActions" fallback block that lived here. It was
+                                dead code — every response that can populate this list
+                                (GET /orders, GET /orders/:id) has always attached
+                                allowedActions server-side via computeOrderAllowedActions()
+                                (orders.routes.ts) since that field was introduced, so
+                                order.allowedActions is never undefined in practice. The
+                                fallback had also drifted out of date with real fixes made
+                                since: it used only the legacy status vocabulary
+                                ('Pending'/'Confirmed'), and its 'confirm' button called
+                                actionMut with no body, which would violate Module 4's
+                                mandatory-due-date-for-credit-orders confirm requirement had
+                                it ever actually rendered. */}
                             {/* Module 9: admin-only delete for Draft/Cancelled orders. */}
                             {userRole === 'Admin' && ['DRAFT', 'Pending', 'CANCELLED', 'Cancelled'].includes(order.status) && (
                               <button
