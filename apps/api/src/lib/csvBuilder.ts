@@ -92,11 +92,27 @@ function formatValue(v: unknown, type: CsvColumnDef['type']): string {
   return String(v);
 }
 
-function escapeCell(v: string): string {
-  if (v.includes(',') || v.includes('"') || v.includes('\n') || v.includes('\r')) {
-    return `"${v.replace(/"/g, '""')}"`;
+// Module 7: guard against CSV/formula injection on free-text cells. A string
+// value beginning with =, +, -, or @ is interpreted by Excel/Sheets as a
+// formula when the file is opened — e.g. a customer or supplier name of
+// "=1+1" or "=HYPERLINK(...)" entered via a form field would silently
+// become a live formula for whoever opens the export. Prefixing with a
+// single quote neutralizes it (OWASP's standard CSV-injection mitigation)
+// while leaving the visible value unchanged in every spreadsheet app.
+// Deliberately scoped to 'string' columns only — number/integer columns can
+// legitimately start with '-' (a negative amount) and must never be
+// quote-prefixed, or the exported figure itself would be corrupted.
+const FORMULA_TRIGGER_CHARS = ['=', '+', '-', '@'];
+
+function escapeCell(v: string, isFreeText: boolean): string {
+  let cell = v;
+  if (isFreeText && cell.length > 0 && FORMULA_TRIGGER_CHARS.includes(cell[0])) {
+    cell = `'${cell}`;
   }
-  return v;
+  if (cell.includes(',') || cell.includes('"') || cell.includes('\n') || cell.includes('\r')) {
+    return `"${cell.replace(/"/g, '""')}"`;
+  }
+  return cell;
 }
 
 /**
@@ -107,9 +123,11 @@ export function buildCsv(
   rows: Record<string, unknown>[],
   columns: CsvColumnDef[],
 ): string {
-  const headerLine = columns.map(c => escapeCell(c.header)).join(',');
+  // Headers are static column names from CsvColumnDef, not user input — no
+  // formula-trigger check needed there, only the RFC4180 quoting.
+  const headerLine = columns.map(c => escapeCell(c.header, false)).join(',');
   const dataLines = rows.map(row =>
-    columns.map(c => escapeCell(formatValue(row[c.key], c.type))).join(','),
+    columns.map(c => escapeCell(formatValue(row[c.key], c.type), c.type === 'string')).join(','),
   );
   return [headerLine, ...dataLines].join('\r\n');
 }

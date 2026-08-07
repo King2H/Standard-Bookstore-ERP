@@ -1293,7 +1293,14 @@ export async function getSalesExportRows(filters: ReportFilters): Promise<SalesE
       discount_special:   disc.special,
       total_discount:     totalDiscount,
       purchase_cost:      purchaseCost,
-      net_profit:         total - purchaseCost - totalDiscount,
+      // Module 7 fix: `total` (o.total) is already post-discount — every
+      // line's total_price was computed as unitPrice*qty - discountAmount
+      // at order-creation time (orders.service.ts). Subtracting
+      // totalDiscount again here double-counted it, understating net
+      // profit on every discounted order by exactly the discount amount.
+      // lib/profit.service.ts computeNetProfit() already gets this right
+      // (see its comment); this export row builder had the same bug.
+      net_profit:         total - purchaseCost,
       payment_status:     row.payment_status as string,
       collected_amount:   collectedAmount,
       outstanding_amount: outstandingAmount,
@@ -1377,12 +1384,21 @@ export interface ReceivablesExportRow {
 }
 
 export async function getReceivablesExportRows(filters: ReportFilters): Promise<ReceivablesExportRow[]> {
-  const params: unknown[] = ['order_credit_sale'];
-  const conditions: string[] = [`r.source_type = $1`];
+  // Module 7 fix: this export was hardcoded to source_type = 'order_credit_sale',
+  // silently dropping all pos_credit_sale and exchange_difference receivables
+  // from the CSV — an incomplete AR export compared to the on-screen
+  // Receivables page, which lists all three source types. Export every
+  // source type; use receivables.source_ref_id (the human-readable
+  // reference stamped at creation time for every source type — order
+  // number, POS transaction number, or exchange reference) instead of
+  // joining orders specifically, which only resolved for order_credit_sale
+  // rows and left the reference blank/'N/A' for the other two types.
+  const params: unknown[] = [];
+  const conditions: string[] = [];
   if (filters.branchId) { params.push(filters.branchId); conditions.push(`r.branch_id = $${params.length}`); }
   if (filters.dateFrom) { params.push(filters.dateFrom); conditions.push(`r.created_at::date >= $${params.length}::date`); }
   if (filters.dateTo)   { params.push(filters.dateTo);   conditions.push(`r.created_at::date <= $${params.length}::date`); }
-  const where = 'WHERE ' + conditions.join(' AND ');
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
   const res = await db.query(
     `SELECT
@@ -1392,11 +1408,10 @@ export async function getReceivablesExportRows(filters: ReportFilters): Promise<
        r.due_date,
        r.status,
        GREATEST(0, EXTRACT(DAY FROM now() - r.due_date)::int) AS days_overdue,
-       COALESCE(o.order_number, 'N/A') AS order_reference,
+       r.source_ref_id AS order_reference,
        COALESCE(c.full_name, 'Unknown') AS customer_name,
-       COALESCE(o.payment_status, r.status) AS payment_status
+       r.status AS payment_status
      FROM receivables r
-     LEFT JOIN orders o ON o.id = r.source_entity_id
      LEFT JOIN customers c ON c.id = r.customer_id
      ${where}
      ORDER BY r.due_date ASC NULLS LAST, r.created_at DESC`,
