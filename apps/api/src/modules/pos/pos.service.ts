@@ -381,10 +381,13 @@ export async function createTransaction(
     // Inventory availability is checked inside invTxSvc.stockOut (reservation-aware).
     // No pre-check needed here — removing the old raw-quantity check prevents stale reads.
 
-    // Generate transaction number
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query(`SELECT COUNT(*) FROM transactions WHERE DATE(created_at) = CURRENT_DATE`);
+    // Generate transaction number. Module 9: date-stamp derived from the
+    // DB's CURRENT_DATE (see orders.service.ts confirm() for the full
+    // rationale) instead of Node's new Date() (always UTC).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM transactions WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const transactionNumber = `POS-${dateStr}-${String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0')}`;
 
     // INSERT transaction

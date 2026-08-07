@@ -151,6 +151,18 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
+  // Module 9: admin-only cleanup for Draft/Cancelled orders (service layer
+  // enforces the status gate + dependency checks — see orders.service.ts
+  // deleteOrder()).
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/orders/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders-list'] });
+      showToast('Order deleted', 'success');
+    },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+
   function addItem(book: BookResult) {
     const price = book.branchPrice ?? book.defaultPrice ?? 0;
     const existing = orderItems.find(i => i.bookId === book.id);
@@ -319,6 +331,16 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                   )
                                 )}
                               </>
+                            )}
+                            {/* Module 9: admin-only delete for Draft/Cancelled orders. */}
+                            {userRole === 'Admin' && ['DRAFT', 'Pending', 'CANCELLED', 'Cancelled'].includes(order.status) && (
+                              <button
+                                onClick={e => { e.stopPropagation(); if (confirm(`Permanently delete order ${order.orderNumber}? This cannot be undone.`)) deleteMut.mutate(order.id); }}
+                                disabled={deleteMut.isPending}
+                                className="text-xs px-2 py-0.5 rounded transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
+                              >
+                                🗑 Delete
+                              </button>
                             )}
                           </div>
                         </td>

@@ -104,6 +104,23 @@ router.post(
   },
 );
 
+// ── DELETE /api/orders/:id ────────────────────────────────────────────────────
+// Module 9: admin-only cleanup for Draft/Cancelled orders. Service layer
+// enforces the status gate and dependency checks — see orders.service.ts
+// deleteOrder().
+
+router.delete(
+  '/orders/:id',
+  authenticate,
+  requireRole('Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await ordersService.deleteOrder(parseInt(req.params.id as string, 10), req.staff!);
+      res.json({ message: 'Order deleted' });
+    } catch (err) { next(err); }
+  },
+);
+
 // â”€â”€ POST /api/orders/:id/progress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post(

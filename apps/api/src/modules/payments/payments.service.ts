@@ -352,8 +352,12 @@ export async function createPayment(
     await client.query('BEGIN');
 
     // Generate payment reference
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM order_payments WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
+    // orders.service.ts confirm() for the full rationale).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM order_payments WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const paymentReference = 'PAY-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
 
     const payRes = await client.query(
@@ -425,108 +429,12 @@ export async function createPayment(
     const newPaymentStatus = await computeOrderPaymentStatus(client, data.orderId);
     await client.query('UPDATE orders SET payment_status = $1, updated_at = now() WHERE id = $2', [newPaymentStatus, data.orderId]);
 
-    // ── Auto-fulfill cash_sale orders when fully paid and still CONFIRMED ──────
-    // For cash_sale: confirm() only creates a reservation; the stock deduction
-    // happens at fulfill(). When the full payment arrives via this module,
-    // we auto-fulfill so the operator does not need a second manual step.
-    // credit_sale is excluded — it may be fulfilled before payment (on credit).
-    let autoFulfilled = false;
-    if (newPaymentStatus === 'paid') {
-      try {
-        await client.query('SAVEPOINT before_auto_fulfill');
-        const orderStatusRes = await client.query(
-          'SELECT status, sale_type, location_id, branch_id FROM orders WHERE id = $1 FOR UPDATE',
-          [data.orderId],
-        );
-        if (orderStatusRes.rows.length) {
-          const currentStatus = orderStatusRes.rows[0].status as string;
-          const saleType = orderStatusRes.rows[0].sale_type as string;
-          const ns = (currentStatus === 'Pending' || currentStatus === 'Confirmed' || currentStatus === 'In_Progress')
-            ? 'CONFIRMED' : currentStatus;
-
-          if (saleType === 'cash_sale' && (ns === 'CONFIRMED' || ns === 'PAID')) {
-            // Resolve location
-            const orderLocationId = orderStatusRes.rows[0].location_id as number | null;
-            const branchIdForLoc = orderStatusRes.rows[0].branch_id as number;
-            let locationId: number;
-            if (orderLocationId) {
-              locationId = orderLocationId;
-            } else {
-              const defLoc = await client.query(
-                'SELECT id FROM locations WHERE branch_id = $1 AND is_default_fulfillment = true LIMIT 1',
-                [branchIdForLoc],
-              );
-              if (defLoc.rows.length) {
-                locationId = defLoc.rows[0].id as number;
-              } else {
-                const anyLoc = await client.query(
-                  'SELECT id FROM locations WHERE branch_id = $1 ORDER BY id LIMIT 1',
-                  [branchIdForLoc],
-                );
-                locationId = anyLoc.rows.length ? anyLoc.rows[0].id as number : branchIdForLoc;
-              }
-            }
-
-            // Load line items with reserved quantities
-            const lineItemsRes = await client.query(
-              'SELECT id, book_id, qty_reserved FROM order_line_items WHERE order_id = $1 AND qty_reserved > 0',
-              [data.orderId],
-            );
-
-            for (const li of lineItemsRes.rows) {
-              const qtyRes = li.qty_reserved as number;
-              if (qtyRes <= 0) continue;
-
-              // Deduct stock exactly once at fulfillment
-              await (await import('../inventory/inventoryTransaction.service.js')).stockOut(
-                {
-                  bookId: li.book_id as number,
-                  locationId,
-                  quantity: qtyRes,
-                  referenceType: 'order_fulfilled',
-                  referenceId: data.orderId,
-                  reasonCode: 'loss',
-                  notes: `Auto-fulfill on full payment – order ${data.orderId}`,
-                  staffCtx,
-                },
-                client,
-              );
-
-              await client.query(
-                'UPDATE order_line_items SET qty_fulfilled = qty_fulfilled + $1, qty_reserved = 0 WHERE id = $2',
-                [qtyRes, li.id],
-              );
-            }
-
-            // Release/deduct reservations
-            await client.query(
-              "UPDATE inventory_reservations SET status = 'deducted', updated_at = now() WHERE order_id = $1 AND status = 'reserved'",
-              [data.orderId],
-            ).catch(() => { /* graceful if table absent */ });
-
-            // Transition to COMPLETED
-            const usesNew = await client.query(
-              `SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid WHERE t.relname = 'orders' AND c.conname = 'orders_status_check'`,
-            );
-            const constraintDef: string = usesNew.rows[0]?.def ?? '';
-            const completedStatus = constraintDef.includes("'DRAFT'") ? 'COMPLETED' : 'Fulfilled';
-            await client.query(
-              'UPDATE orders SET status = $1, updated_at = now() WHERE id = $2',
-              [completedStatus, data.orderId],
-            );
-
-            await insertOutbox(client, 'order.fulfilled', { orderId: String(data.orderId), branchId: staffCtx.branchId });
-            await insertOutbox(client, 'order.completed', { orderId: String(data.orderId), branchId: staffCtx.branchId });
-            autoFulfilled = true;
-          }
-        }
-        await client.query('RELEASE SAVEPOINT before_auto_fulfill');
-      } catch (fulfillErr) {
-        await client.query('ROLLBACK TO SAVEPOINT before_auto_fulfill');
-        console.error('payments.createPayment: auto-fulfill failed (non-fatal)', fulfillErr);
-      }
-    }
-    void autoFulfilled; // suppress unused warning
+    // Module 9 cleanup: removed a dead "auto-fulfill cash_sale orders on full
+    // payment" block that used to live here (identified in Module 4). It was
+    // unreachable: this function unconditionally rejects cash_sale orders
+    // with CASH_ORDER_ALREADY_PAID near the top (cash orders are paid and
+    // marked so at confirm() time, never routed through createPayment()), so
+    // `saleType === 'cash_sale'` could never be true by the time this ran.
 
     // ── Sync order_credit_sale receivable — MANDATORY, inside main transaction ──
     // Bug 5 fix: receivable update is NO LONGER wrapped in a savepoint.

@@ -195,8 +195,13 @@ export async function createReturn(
         );
       }
     }
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query(`SELECT COUNT(*) FROM returns WHERE DATE(created_at) = CURRENT_DATE`);
+    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
+    // orders.service.ts confirm() for the full rationale — keeps the
+    // date-stamp and the same-day sequence count from the same source).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM returns WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const returnNumber = `RET-${dateStr}-${String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0')}`;
     const retRes = await client.query(`INSERT INTO returns (return_number, transaction_id, branch_id, customer_id, total_refund_amount, refund_method, status, reason, processed_by, approved_by) VALUES ($1,$2,$3,$4,$5,$6,'completed',$7,$8,$9) RETURNING id`, [returnNumber, data.transactionId, staffCtx.branchId, tx.customer_id ?? null, totalRefundAmount.toFixed(2), data.refundMethod, data.reason ?? null, staffCtx.staffId, effectiveApprovedBy ?? null]);
     const returnId = String(retRes.rows[0].id);

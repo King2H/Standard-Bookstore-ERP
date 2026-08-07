@@ -298,8 +298,17 @@ export async function create(
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: derive the date-stamp from the DB's own CURRENT_DATE instead
+    // of Node's new Date() (always UTC via toISOString()). The sequence
+    // count below is already scoped to CURRENT_DATE — computing the visible
+    // date-stamp from a separate, JS-side UTC clock let the two drift apart
+    // whenever the DB session timezone differs from UTC (e.g. EAT, UTC+3):
+    // during the first few hours of each local day the reference number
+    // would show yesterday's date while the counter had already rolled over.
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM orders WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const orderNumber = 'ORD-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count, 10) + 1).padStart(4, '0');
     const orderRes = await client.query(
       `INSERT INTO orders
@@ -746,6 +755,70 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
 
 export async function updatePaymentStatus(orderId: string | number, paymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded'): Promise<void> {
   await db.query('UPDATE orders SET payment_status = $1, updated_at = now() WHERE id = $2', [paymentStatus, orderId]);
+}
+
+// ── deleteOrder (Module 9 — admin-only cleanup for Draft/Cancelled orders) ────
+//
+// Only DRAFT (never confirmed) or CANCELLED orders are eligible — anything
+// further along the lifecycle must be cancelled first, not deleted, so its
+// history survives. Even within those two statuses, deletion is blocked if
+// any financial or inventory record still references the order: a DRAFT
+// order cancelled without ever being confirmed has none of these (confirm()
+// is the only place stock gets deducted or a receivable created), but a
+// CONFIRMED-then-CANCELLED order can have real history (payments collected
+// before cancellation, a settled receivable, linked exchanges, inventory
+// movement) that must be retained, not silently destroyed. order_line_items
+// and inventory_reservations are ON DELETE CASCADE and clean up
+// automatically; everything else is checked explicitly since
+// receivables.source_entity_id is a polymorphic reference with no FK.
+export async function deleteOrder(orderId: string | number, staffCtx: StaffCtx): Promise<void> {
+  const order = await getById(orderId);
+  const status = normaliseStatus(order.status);
+  if (status !== 'DRAFT' && status !== 'CANCELLED') {
+    throw new BusinessError(
+      'INVALID_STATE',
+      `Cannot delete order in status '${order.status}'. Only Draft or Cancelled orders can be deleted — cancel it first.`,
+    );
+  }
+
+  const [payRes, recRes, instRes, exchRes, histRes] = await Promise.all([
+    db.query('SELECT 1 FROM order_payments WHERE order_id = $1 LIMIT 1', [orderId]),
+    db.query(
+      "SELECT 1 FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1 LIMIT 1",
+      [orderId],
+    ),
+    db.query('SELECT 1 FROM installment_plans WHERE order_id = $1 LIMIT 1', [orderId]),
+    db.query('SELECT 1 FROM exchanges WHERE original_order_id = $1 LIMIT 1', [orderId]),
+    db.query(
+      "SELECT 1 FROM inventory_history WHERE reference_type IN ('order_confirmed','order_cancelled') AND reference_id = $1 LIMIT 1",
+      [String(orderId)],
+    ),
+  ]);
+  const blockers: string[] = [];
+  if (payRes.rows.length) blockers.push('payments');
+  if (recRes.rows.length) blockers.push('a receivable');
+  if (instRes.rows.length) blockers.push('an installment plan');
+  if (exchRes.rows.length) blockers.push('a linked exchange');
+  if (histRes.rows.length) blockers.push('inventory movement history');
+  if (blockers.length) {
+    throw new BusinessError(
+      'ORDER_HAS_DEPENDENCIES',
+      `Cannot delete order ${order.orderNumber}: it has ${blockers.join(', ')} on record. Orders with financial or inventory history must be retained.`,
+      { blockers },
+    );
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM orders WHERE id = $1', [orderId]);
+    await client.query(
+      "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'DELETE','order',$3,$4,$5)",
+      [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId,
+       JSON.stringify({ orderNumber: order.orderNumber, status: order.status })],
+    );
+    await client.query('COMMIT');
+  } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
 }
 
 /**

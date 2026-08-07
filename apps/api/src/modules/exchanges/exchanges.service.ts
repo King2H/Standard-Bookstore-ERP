@@ -388,8 +388,12 @@ export async function createExchange(
     await client.query('BEGIN');
 
     // Generate exchange reference
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM exchanges WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
+    // orders.service.ts confirm() for the full rationale).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM exchanges WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const exchangeReference = 'EXC-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
 
     // INSERT exchange
@@ -609,8 +613,12 @@ export async function initiateExchange(
     await client.query('BEGIN');
 
     // Generate exchange reference
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM exchanges WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
+    // orders.service.ts confirm() for the full rationale).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM exchanges WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const exchangeReference = 'EXC-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
 
     // INSERT exchange with lifecycle_status = 'INITIATED'
