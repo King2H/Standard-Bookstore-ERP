@@ -198,6 +198,34 @@ describe('Export Integrity (Module 7)', () => {
     expect(refs).toContain(`${ORDER_PREFIX}POS`);
     expect(refs).toContain(`${ORDER_PREFIX}EXC`);
   });
+
+  // ── 3. Inventory export succeeds (regression: GROUP BY ungrouped column) ──
+
+  it('3. Inventory export returns 200 (getInventoryExportRowsV2 GROUP BY bug)', async () => {
+    // Bug: the category column's correlated subquery referenced b.id, but
+    // the GROUP BY only listed b.sku/b.isbn/b.title/b.publisher — not b.id
+    // itself — so Postgres rejected every call to this endpoint with
+    // "subquery uses ungrouped column b.id from outer query" (a 500 on
+    // every /reports/inventory/export request, reported live in prod).
+    const locRes = await db.query(
+      `INSERT INTO locations (branch_id, name, is_default_fulfillment) VALUES ($1, 'Export Test Loc', true) RETURNING id`,
+      [branchId],
+    );
+    await db.query(
+      `INSERT INTO inventory (book_id, location_id, quantity) VALUES ($1, $2, 5)
+       ON CONFLICT (book_id, location_id) DO UPDATE SET quantity = 5`,
+      [bookId, locRes.rows[0].id],
+    );
+
+    const res = await request(getTestApp())
+      .get(`/api/reports/inventory/export?branchId=${branchId}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+
+    expect(res.status).toBe(200);
+    const rows = parseCsv(res.text);
+    expect(rows.length).toBeGreaterThan(0);
+  });
 });
 
 // ── 3. csvBuilder — formula-injection guard (unit tests, no DB) ──────────────

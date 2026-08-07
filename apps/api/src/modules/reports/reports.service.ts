@@ -1373,7 +1373,7 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
        WHERE pli.book_id = b.id ORDER BY pli.id DESC LIMIT 1
      ) lc ON true
      ${where}
-     GROUP BY i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id,
+     GROUP BY b.id, i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id,
               i.quantity${groupByReserved}, lc.unit_cost
      ORDER BY b.title ASC`,
     params,
