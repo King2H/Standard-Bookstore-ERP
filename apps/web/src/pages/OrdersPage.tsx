@@ -76,6 +76,10 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   // List state
   const [listPage, setListPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState(initialContext.status ?? '');
+  // Module 6: dashboard drill-downs (Monthly Sales KPI) pass a date range —
+  // wire it through instead of silently discarding it.
+  const [dateFromFilter, setDateFromFilter] = useState(initialContext.dateFrom ?? '');
+  const [dateToFilter, setDateToFilter] = useState(initialContext.dateTo ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelingId, setCancelingId] = useState<string | null>(null);
@@ -93,8 +97,8 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
 
   // Queries
   const { data: listData, isLoading } = useQuery<OrderListResponse>({
-    queryKey: ['orders-list', listPage, branchId, statusFilter],
-    queryFn: () => api.get(`/orders?branchId=${branchId}&page=${listPage}&pageSize=20${statusFilter ? `&status=${statusFilter}` : ''}`),
+    queryKey: ['orders-list', listPage, branchId, statusFilter, dateFromFilter, dateToFilter],
+    queryFn: () => api.get(`/orders?branchId=${branchId}&page=${listPage}&pageSize=20${statusFilter ? `&status=${statusFilter}` : ''}${dateFromFilter ? `&dateFrom=${dateFromFilter}` : ''}${dateToFilter ? `&dateTo=${dateToFilter}` : ''}`),
     enabled: tab === 'list',
   });
 
@@ -202,13 +206,24 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       {/* ── Orders List ── */}
       {tab === 'list' && (
         <div className="flex-1 overflow-auto p-4 space-y-3">
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setListPage(1); }}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">All statuses</option>
               {['DRAFT','CONFIRMED','PAID','FULFILLED','COMPLETED','CANCELLED',
                 'Pending','Confirmed','In_Progress','Fulfilled','Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            <input type="date" value={dateFromFilter} onChange={e => { setDateFromFilter(e.target.value); setListPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <span className="text-xs text-gray-400">to</span>
+            <input type="date" value={dateToFilter} onChange={e => { setDateToFilter(e.target.value); setListPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {(statusFilter || dateFromFilter || dateToFilter) && (
+              <button onClick={() => { setStatusFilter(''); setDateFromFilter(''); setDateToFilter(''); setListPage(1); }}
+                className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Clear
+              </button>
+            )}
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
             {isLoading ? <div className="p-8 text-center text-gray-400">Loading...</div> : (

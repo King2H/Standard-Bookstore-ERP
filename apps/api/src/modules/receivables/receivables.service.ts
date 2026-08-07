@@ -228,7 +228,17 @@ export async function list(opts: {
 
   if (opts.branchId)    { params.push(opts.branchId);    conditions.push(`r.branch_id = $${params.length}`); }
   if (opts.customerId)  { params.push(opts.customerId);  conditions.push(`r.customer_id = $${params.length}`); }
-  if (opts.status)      { params.push(opts.status);      conditions.push(`r.status = $${params.length}`); }
+  // Module 6: accept a comma-separated status list (dashboard drill-downs pass
+  // multiple statuses, e.g. "Pending,PartiallyPaid,Overdue") alongside the
+  // single-value case.
+  if (opts.status) {
+    const statuses = opts.status.split(',').map(s => s.trim()).filter(Boolean);
+    if (statuses.length > 1) {
+      params.push(statuses); conditions.push(`r.status = ANY($${params.length}::text[])`);
+    } else if (statuses.length === 1) {
+      params.push(statuses[0]); conditions.push(`r.status = $${params.length}`);
+    }
+  }
   if (opts.sourceType)  { params.push(opts.sourceType);  conditions.push(`r.source_type = $${params.length}`); }
   if (opts.dueDateFrom) { params.push(opts.dueDateFrom); conditions.push(`r.due_date >= $${params.length}`); }
   if (opts.dueDateTo)   { params.push(opts.dueDateTo);   conditions.push(`r.due_date <= $${params.length}`); }

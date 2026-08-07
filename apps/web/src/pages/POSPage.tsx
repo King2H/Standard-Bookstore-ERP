@@ -83,7 +83,7 @@ interface Transaction {
 }
 
 interface TxListResponse { items: Transaction[]; total: number; page: number; totalPages: number; }
-interface POSPageProps { userRole?: Role; userPermissions?: string[]; }
+interface POSPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 
@@ -158,11 +158,16 @@ type Tab = 'pos' | 'history';
 //  Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function POSPage({ userRole, userPermissions }: POSPageProps) {
+export default function POSPage({ userRole, userPermissions, initialContext = {} }: POSPageProps) {
   const qc          = useQueryClient();
   const { showToast } = useToast();
   const currency    = useCurrency();
-  const [tab, setTab] = useState<Tab>('pos');
+  // Module 6: the dashboard's Today's Sales KPI drill-down passes a date
+  // range and expects the Sales History tab, pre-filtered — this page used
+  // to ignore initialContext entirely and always land on the POS terminal.
+  const [tab, setTab] = useState<Tab>(initialContext.dateFrom || initialContext.dateTo ? 'history' : 'pos');
+  const [histDateFrom, setHistDateFrom] = useState(initialContext.dateFrom ?? '');
+  const [histDateTo, setHistDateTo] = useState(initialContext.dateTo ?? '');
 
   // ── POS state ──────────────────────────────────────────────────────────────
   const [bookSearch, setBookSearch]               = useState('');
@@ -218,8 +223,8 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
   });
 
   const { data: histData, isLoading: histLoading } = useQuery<TxListResponse>({
-    queryKey: ['pos-history', histPage, branchId],
-    queryFn:  () => api.get(`/pos/transactions?branchId=${branchId}&page=${histPage}&pageSize=20`),
+    queryKey: ['pos-history', histPage, branchId, histDateFrom, histDateTo],
+    queryFn:  () => api.get(`/pos/transactions?branchId=${branchId}&page=${histPage}&pageSize=20${histDateFrom ? `&dateFrom=${histDateFrom}` : ''}${histDateTo ? `&dateTo=${histDateTo}` : ''}`),
     enabled:  branchId !== null && tab === 'history',
   });
 
@@ -604,6 +609,19 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
       {/* ── History tab ──────────────────────────────────────────────────────── */}
       {tab === 'history' && (
         <div className="flex-1 overflow-auto p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <input type="date" value={histDateFrom} onChange={e => { setHistDateFrom(e.target.value); setHistPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <span className="text-xs text-gray-400">to</span>
+            <input type="date" value={histDateTo} onChange={e => { setHistDateTo(e.target.value); setHistPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {(histDateFrom || histDateTo) && (
+              <button onClick={() => { setHistDateFrom(''); setHistDateTo(''); setHistPage(1); }}
+                className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Clear
+              </button>
+            )}
+          </div>
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
             {histLoading ? (
               <div className="p-12 text-center">

@@ -703,12 +703,20 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
+  // Module 6: the dashboard's Procurement Expense KPI drill-down passes a
+  // date range (and branch) — this page used to silently ignore both.
+  const [dateFromFilter, setDateFromFilter] = useState(initialContext.dateFrom ?? '');
+  const [dateToFilter, setDateToFilter] = useState(initialContext.dateTo ?? '');
+  const [branchFilter] = useState(initialContext.branchId ?? '');
 
   const params = new URLSearchParams({ page: String(page), pageSize: '25' });
   if (filterStatus) params.set('status', filterStatus);
+  if (dateFromFilter) params.set('dateFrom', dateFromFilter);
+  if (dateToFilter) params.set('dateTo', dateToFilter);
+  if (branchFilter) params.set('branchId', branchFilter);
 
   const { data, isLoading } = useQuery<POListResponse>({
-    queryKey: ['purchase-orders', page, filterStatus],
+    queryKey: ['purchase-orders', page, filterStatus, dateFromFilter, dateToFilter, branchFilter],
     queryFn: () => api.get(`/purchase-orders?${params}`),
   });
 
@@ -770,6 +778,17 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
             <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
           ))}
         </select>
+        <input type="date" value={dateFromFilter} onChange={e => { setDateFromFilter(e.target.value); setPage(1); }}
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <span className="text-xs text-gray-400">to</span>
+        <input type="date" value={dateToFilter} onChange={e => { setDateToFilter(e.target.value); setPage(1); }}
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        {(filterStatus || dateFromFilter || dateToFilter) && (
+          <button onClick={() => { setFilterStatus(''); setDateFromFilter(''); setDateToFilter(''); setPage(1); }}
+            className="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            Clear
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} orders</span>
           {canWrite(userRole, userPermissions) && (

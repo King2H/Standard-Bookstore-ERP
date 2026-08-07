@@ -488,7 +488,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 sub={kpis.pendingOrders > 0 ? 'Awaiting action' : 'All clear'}
                 icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
                 color={kpis.pendingOrders > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
-                onClick={() => onNavigate?.('orders', { status: 'pending,confirmed,CONFIRMED,Pending', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+                onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
               />
               <KpiCard
                 label="Low Stock"
@@ -538,7 +538,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           {(kpis?.pendingOrders ?? 0) > 0 && (
             <div
               className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 cursor-pointer hover:border-orange-400 dark:hover:border-orange-600 transition-colors"
-              onClick={() => onNavigate?.('orders', { status: 'pending,confirmed,CONFIRMED,Pending', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+              onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
             >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-orange-600 dark:text-orange-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></span>

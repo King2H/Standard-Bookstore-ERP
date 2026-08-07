@@ -233,7 +233,7 @@ export default function App() {
               {currentPage === 'suppliers'    && <SuppliersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'procurement'  && <ProcurementPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'customers'    && <CustomersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'returns'      && <ReturnsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}

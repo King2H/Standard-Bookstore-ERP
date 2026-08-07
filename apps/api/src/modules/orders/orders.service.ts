@@ -155,7 +155,16 @@ export async function list(opts: {
   const params: unknown[] = [];
   if (opts.branchId)      { params.push(opts.branchId);      conditions.push('o.branch_id = $' + params.length); }
   if (opts.customerId)    { params.push(opts.customerId);    conditions.push('o.customer_id = $' + params.length); }
-  if (opts.status)        { params.push(opts.status);        conditions.push('o.status = $' + params.length); }
+  // Module 6: accept a comma-separated status list (dashboard drill-downs pass
+  // multiple statuses, e.g. "CONFIRMED,PAID") alongside the single-value case.
+  if (opts.status) {
+    const statuses = opts.status.split(',').map(s => s.trim()).filter(Boolean);
+    if (statuses.length > 1) {
+      params.push(statuses); conditions.push('o.status = ANY($' + params.length + '::text[])');
+    } else if (statuses.length === 1) {
+      params.push(statuses[0]); conditions.push('o.status = $' + params.length);
+    }
+  }
   if (opts.paymentStatus) { params.push(opts.paymentStatus); conditions.push('o.payment_status = $' + params.length); }
   if (opts.channel)       { params.push(opts.channel);       conditions.push('o.channel = $' + params.length); }
   if (opts.dateFrom)      { params.push(opts.dateFrom);      conditions.push('o.created_at >= $' + params.length); }
