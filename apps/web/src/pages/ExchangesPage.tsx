@@ -216,8 +216,13 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
 
   function submitExchange() {
     if (incomingItems.length === 0 && outgoingItems.length === 0) { showToast('Add at least one item', 'error'); return; }
+    if (!locationId) { showToast('Select a location — every exchange moves physical stock', 'error'); return; }
+    if (Math.abs(netBalance) >= 0.01 && !selectedCustomer) {
+      showToast(`Select a customer — this exchange has a ${netBalance > 0 ? 'balance the customer owes' : 'refund owed to the customer'} that has to be tracked against someone`, 'error');
+      return;
+    }
     createMut.mutate({
-      locationId: locationId || undefined,
+      locationId,
       customerId: selectedCustomer?.id ?? undefined,
       incomingItems: incomingItems.map(i => ({ bookId: i.bookId, quantity: i.quantity, unitPrice: i.unitPrice })),
       outgoingItems: outgoingItems.map(i => ({ bookId: i.bookId, quantity: i.quantity, unitPrice: i.unitPrice })),
@@ -279,9 +284,15 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   return (
     <div className="flex flex-col h-full">
       <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
+        {/* Module 2 (stabilization sprint): Initiate Exchange is disabled per
+            operator decision -- Quick Exchange (createExchange()) is now the
+            sole exchange path and handles the full stock + settlement logic
+            (location required, availability enforced, receivable/store
+            credit posted) that the multi-step lifecycle previously handled
+            separately. The backend initiate/review/approve/settle endpoints
+            still exist (API completeness) but are unreachable from this UI. */}
         {([
           { key: 'list', label: '🔁 Exchanges' },
-          { key: 'initiate', label: '+ Initiate Exchange' },
           { key: 'new', label: '⚡ Quick Exchange' },
         ] as { key: Tab; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)} className={`px-4 py-2 text-sm font-medium transition-colors ${tab === key ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
@@ -405,19 +416,27 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
       {/* ── New Exchange ── */}
       {tab === 'new' && canCreate(userRole, userPermissions) && (
         <div className="flex-1 overflow-auto p-4 pb-6 max-w-3xl mx-auto w-full space-y-4">
-          {/* Location */}
+          {/* Location — required: every exchange moves physical stock, and
+              without a location neither the availability check nor the
+              inventory update can run. */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Location</h3>
-            <select value={locationId} onChange={e => setLocationId(Number(e.target.value) || '')}
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Location <span className="text-red-500">*</span></h3>
+            <select required value={locationId} onChange={e => setLocationId(Number(e.target.value) || '')}
               className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Select location (optional)...</option>
+              <option value="">Select location...</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>)}
             </select>
           </div>
 
-          {/* Customer (optional) */}
+          {/* Customer — required once incoming/outgoing values differ, since
+              the resulting receivable or store credit has to be posted
+              against someone (enforced below at submit and by the API). */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Customer <span className="text-gray-400 font-normal">(optional)</span></h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+              Customer {Math.abs(netBalance) < 0.01
+                ? <span className="text-gray-400 font-normal">(optional)</span>
+                : <span className="text-red-500">*</span>}
+            </h3>
             {selectedCustomer ? (
               <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 rounded-lg px-3 py-2">
                 <span className="text-sm text-blue-700 dark:text-blue-300">{selectedCustomer.fullName} <span className="text-xs text-blue-500">({selectedCustomer.customerCode})</span></span>
@@ -509,6 +528,13 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
               <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">Net Balance</span><span className={`font-semibold ${Math.abs(netBalance) < 0.01 ? 'text-gray-600 dark:text-gray-400' : netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>{currency} {netBalance.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-gray-400">Settlement</span><span className="font-medium text-gray-900 dark:text-white">{settlementType}</span></div>
+              {Math.abs(netBalance) >= 0.01 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  {netBalance > 0
+                    ? <>Completing this exchange opens a <strong>receivable of {currency} {netBalance.toFixed(2)}</strong> for the selected customer — collect it later through Payments/Receivables.</>
+                    : <>Completing this exchange <strong>credits {currency} {Math.abs(netBalance).toFixed(2)} of store credit</strong> to the selected customer.</>}
+                </p>
+              )}
               <button onClick={submitExchange} disabled={createMut.isPending}
                 className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm mt-2">
                 {createMut.isPending ? 'Processing...' : 'Complete Exchange'}
