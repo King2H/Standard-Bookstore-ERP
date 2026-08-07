@@ -12,6 +12,10 @@ interface Customer {
   dateOfBirth: string | null; address: string | null; city: string | null;
   isActive: boolean; createdAt: string;
   loyaltyBalance: number; lifetimePoints: number; storeCreditBalance: number;
+  /** SUM of outstanding_amount across all non-Settled receivables, regardless
+   *  of source (order/POS/exchange) -- the authoritative "owes the store"
+   *  figure (Module 3). */
+  outstandingReceivables: number;
   groups: Array<{ id: number; name: string; discountPct: number }>;
 }
 
@@ -21,7 +25,7 @@ interface StoreCreditHistoryItem { id: number; amount: number; direction: 'credi
 interface HistoryResponse<T> { items: T[]; total: number; page: number; totalPages: number; }
 
 type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
-type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference';
+type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
 
 interface ReceivableRow {
   id: string;
@@ -450,28 +454,22 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
               <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{currency} {c.storeCreditBalance.toFixed(2)}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Available to spend</p>
             </div>
-            {/* Outstanding POS credit debt */}
-            {creditHistory && (() => {
-              const posDebits = creditHistory.items
-                .filter((h: StoreCreditHistoryItem) => h.refType === 'pos_credit_sale')
-                .reduce((s: number, h: StoreCreditHistoryItem) => s + h.amount, 0);
-              const posCredits = creditHistory.items
-                .filter((h: StoreCreditHistoryItem) => h.refType === 'pos_credit_settlement')
-                .reduce((s: number, h: StoreCreditHistoryItem) => s + h.amount, 0);
-              const outstanding = Math.max(0, posDebits - posCredits);
-              return (
-                <div className={`bg-white dark:bg-gray-900 rounded-xl border p-6 text-center ${outstanding > 0 ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-800'}`}>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Outstanding Credit Sales</p>
-                  <p className={`text-3xl font-bold ${outstanding > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                    {currency} {outstanding.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    {outstanding > 0 ? '⚠️ Amount owed to store' : '✓ No outstanding debt'}
-                  </p>
-                </div>
-              );
-            })()}
-
+            {/* Outstanding balance — sum of all non-Settled receivables
+                (order, POS, and exchange credit sales alike). Module 3: this
+                used to be derived from a POS-only slice of store credit
+                history (pos_credit_sale debits minus pos_credit_settlement
+                credits), which silently excluded order- and exchange-sourced
+                debt. c.outstandingReceivables is the authoritative figure,
+                synchronized the same way the Receivables page is. */}
+            <div className={`bg-white dark:bg-gray-900 rounded-xl border p-6 text-center ${c.outstandingReceivables > 0 ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-800'}`}>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Outstanding Balance</p>
+              <p className={`text-3xl font-bold ${c.outstandingReceivables > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {currency} {c.outstandingReceivables.toFixed(2)}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                {c.outstandingReceivables > 0 ? '⚠️ Amount owed to store' : '✓ No outstanding debt'}
+              </p>
+            </div>
           </div>
 
           {canAdjustCredit(userRole, userPermissions) && (

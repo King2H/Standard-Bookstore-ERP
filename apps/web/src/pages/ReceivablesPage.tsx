@@ -8,7 +8,8 @@ type Role = string;
 interface ReceivablesPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
 
 type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
-type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference';
+type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
+type PaymentMethod = 'cash' | 'bank' | 'store_credit';
 
 interface ReceivableRow {
   id: string;
@@ -46,7 +47,8 @@ const STATUS_COLORS: Record<ReceivableStatus, string> = {
 };
 
 const SOURCE_LABELS: Record<ReceivableSourceType, string> = {
-  pos_credit_sale:    'Credit Sale',
+  pos_credit_sale:     'POS Credit Sale',
+  order_credit_sale:   'Order Credit Sale',
   exchange_difference: 'Exchange Diff.',
 };
 
@@ -70,8 +72,19 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   // ── Inline state ─────────────────────────────────────────────────────────────
   const [editingDueDateId, setEditingDueDateId] = useState<string | null>(null);
   const [dueDateDraft, setDueDateDraft] = useState('');
-  const [settlingId, setSettlingId] = useState<string | null>(null);
-  const [settleNotes, setSettleNotes] = useState('');
+  const [writeOffId, setWriteOffId] = useState<string | null>(null);
+  const [writeOffNotes, setWriteOffNotes] = useState('');
+  const [collectingId, setCollectingId] = useState<string | null>(null);
+  const [collectAmount, setCollectAmount] = useState('');
+  const [collectMethod, setCollectMethod] = useState<PaymentMethod>('cash');
+  const [collectBankAccountId, setCollectBankAccountId] = useState<number | ''>('');
+  const [collectNotes, setCollectNotes] = useState('');
+
+  const { data: bankAccountsData } = useQuery<{ items: Array<{ id: number; accountName: string; bankName: string }> }>({
+    queryKey: ['bank-accounts-for-receivables', branchId],
+    queryFn: () => api.get(`/branches/${branchId}/bank-accounts`),
+    enabled: collectMethod === 'bank',
+  });
 
   // ── Queries ───────────────────────────────────────────────────────────────────
   const params = new URLSearchParams({ branchId: String(branchId), page: String(page), pageSize: '25' });
@@ -96,10 +109,27 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   };
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
-  const settleMut = useMutation({
+  // Collect: the normal "customer paid" action — routes server-side to the
+  // receivable's own source-type payment pipeline (order/POS/exchange), so
+  // the amount and method are always recorded, store credit is deducted when
+  // used, and the collection shows up in Payments/Dashboard reporting.
+  const collectMut = useMutation({
+    mutationFn: ({ id, amount, paymentMethod, bankAccountId, notes }: { id: string; amount: number; paymentMethod: PaymentMethod; bankAccountId?: number; notes?: string }) =>
+      api.post(`/receivables/${id}/collect`, { amount, paymentMethod, bankAccountId, notes: notes || undefined }),
+    onSuccess: () => {
+      inv();
+      setCollectingId(null); setCollectAmount(''); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes('');
+      showToast('Payment collected', 'success');
+    },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+
+  // Write off: bad-debt only — records no payment. Restricted server-side to
+  // Admin/Manager/Finance_Officer.
+  const writeOffMut = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes: string }) =>
       api.post(`/receivables/${id}/settle`, { notes: notes || undefined }),
-    onSuccess: () => { inv(); setSettlingId(null); setSettleNotes(''); showToast('Receivable settled', 'success'); },
+    onSuccess: () => { inv(); setWriteOffId(null); setWriteOffNotes(''); showToast('Receivable written off', 'success'); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
@@ -113,6 +143,9 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   const canWrite = (perms?: string[]) =>
     perms?.includes('PROCESS_PAYMENT') ||
     ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
+  // Write-off is stricter than routine collection — matches the backend's
+  // requireRole('Admin', 'Manager', 'Finance_Officer') on POST /:id/settle.
+  const canWriteOff = () => ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
 
   const receivables = data?.items ?? [];
   const fmt = (n: number) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -145,7 +178,8 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
           className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Types</option>
-          <option value="pos_credit_sale">Credit Sale</option>
+          <option value="pos_credit_sale">POS Credit Sale</option>
+          <option value="order_credit_sale">Order Credit Sale</option>
           <option value="exchange_difference">Exchange Diff.</option>
         </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
@@ -231,22 +265,20 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                             className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">
                             📅
                           </button>
-                          {/* Manual settle */}
-                          {settlingId === rec.id ? (
-                            <div className="flex gap-1 items-center">
-                              <input value={settleNotes} onChange={e => setSettleNotes(e.target.value)} placeholder="Notes…"
-                                className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-28 focus:outline-none focus:ring-1 focus:ring-green-500" />
-                              <button onClick={() => settleMut.mutate({ id: rec.id, notes: settleNotes })}
-                                disabled={settleMut.isPending}
-                                className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50">✓</button>
-                              <button onClick={() => setSettlingId(null)}
-                                className="px-2 py-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => { setSettlingId(rec.id); setSettleNotes(''); }}
-                              title="Mark as settled"
-                              className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
-                              ✓ Settle
+                          {/* Collect payment — the normal "customer paid" action */}
+                          <button
+                            onClick={() => { setCollectingId(rec.id); setCollectAmount(rec.outstandingAmount.toFixed(2)); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes(''); }}
+                            title="Collect payment"
+                            className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
+                            💰 Collect
+                          </button>
+                          {/* Write off — bad debt only, restricted */}
+                          {canWriteOff() && (
+                            <button
+                              onClick={() => { setWriteOffId(rec.id); setWriteOffNotes(''); }}
+                              title="Write off (no payment collected)"
+                              className="px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                              ✕ Write Off
                             </button>
                           )}
                         </div>
@@ -275,6 +307,98 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
           </div>
         </div>
       )}
+
+      {/* ── Collect Payment modal ────────────────────────────────────────────── */}
+      {collectingId && (() => {
+        const rec = receivables.find(r => r.id === collectingId);
+        if (!rec) return null;
+        const amt = parseFloat(collectAmount) || 0;
+        const invalid = amt <= 0 || amt > rec.outstandingAmount + 0.01 || (collectMethod === 'bank' && !collectBankAccountId);
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setCollectingId(null)}>
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Collect Payment</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {rec.customerName ?? 'Customer'} · Outstanding: <strong>{fmt(rec.outstandingAmount)}</strong> ({SOURCE_LABELS[rec.sourceType]})
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({currency})</label>
+                <input type="number" min={0.01} max={rec.outstandingAmount} step="0.01" value={collectAmount} onChange={e => setCollectAmount(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Method</label>
+                <select value={collectMethod} onChange={e => setCollectMethod(e.target.value as PaymentMethod)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500">
+                  <option value="cash">Cash</option>
+                  <option value="bank">Bank Transfer</option>
+                  <option value="store_credit">Store Credit</option>
+                </select>
+              </div>
+              {collectMethod === 'bank' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bank Account</label>
+                  <select value={collectBankAccountId} onChange={e => setCollectBankAccountId(Number(e.target.value) || '')}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500">
+                    <option value="">Select bank account…</option>
+                    {(bankAccountsData?.items ?? []).map(ba => <option key={ba.id} value={ba.id}>{ba.accountName} — {ba.bankName}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input value={collectNotes} onChange={e => setCollectNotes(e.target.value)} placeholder="Reference, description…"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setCollectingId(null)}
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+                <button
+                  onClick={() => collectMut.mutate({ id: rec.id, amount: amt, paymentMethod: collectMethod, bankAccountId: collectBankAccountId || undefined, notes: collectNotes })}
+                  disabled={invalid || collectMut.isPending}
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+                  {collectMut.isPending ? 'Collecting…' : 'Collect'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Write Off modal ──────────────────────────────────────────────────── */}
+      {writeOffId && (() => {
+        const rec = receivables.find(r => r.id === writeOffId);
+        if (!rec) return null;
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setWriteOffId(null)}>
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Write Off Receivable</h3>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
+                  ⚠️ This marks {fmt(rec.outstandingAmount)} as uncollectible — no payment is recorded, and it will not appear in Payments reporting. Use Collect instead if the customer actually paid.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+                <input value={writeOffNotes} onChange={e => setWriteOffNotes(e.target.value)} placeholder="Why is this being written off?"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setWriteOffId(null)}
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+                <button
+                  onClick={() => writeOffMut.mutate({ id: rec.id, notes: writeOffNotes })}
+                  disabled={writeOffMut.isPending}
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+                  {writeOffMut.isPending ? 'Writing off…' : 'Write Off'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

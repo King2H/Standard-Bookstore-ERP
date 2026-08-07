@@ -27,6 +27,14 @@ export interface CustomerRow {
   loyaltyBalance: number;
   lifetimePoints: number;
   storeCreditBalance: number;
+  /** SUM(receivables.outstanding_amount) across all non-Settled receivables,
+   *  regardless of source (order/POS/exchange) -- the authoritative "money
+   *  this customer owes the store" figure. Module 3: the customer profile
+   *  page previously derived an "outstanding" stat from a POS-only slice of
+   *  store_credit_history (debits minus credits tagged 'pos_credit_sale'/
+   *  'pos_credit_settlement'), which silently ignored order- and exchange-
+   *  sourced debt entirely. */
+  outstandingReceivables: number;
   groups: Array<{ id: number; name: string; discountPct: number }>;
 }
 
@@ -71,6 +79,7 @@ function mapCustomerRow(
     loyaltyBalance: Number(row.points_balance ?? 0),
     lifetimePoints: Number(row.lifetime_points ?? 0),
     storeCreditBalance: Number(row.store_credit_balance ?? 0),
+    outstandingReceivables: Number(row.outstanding_receivables ?? 0),
     groups,
   };
 }
@@ -100,7 +109,11 @@ export async function getCustomerById(id: number): Promise<CustomerRow> {
     `SELECT c.*,
        COALESCE(la.points_balance, 0) AS points_balance,
        COALESCE(la.lifetime_points, 0) AS lifetime_points,
-       COALESCE(sca.balance, 0) AS store_credit_balance
+       COALESCE(sca.balance, 0) AS store_credit_balance,
+       COALESCE((
+         SELECT SUM(r.outstanding_amount) FROM receivables r
+         WHERE r.customer_id = c.id AND r.status != 'Settled'
+       ), 0) AS outstanding_receivables
      FROM customers c
      LEFT JOIN loyalty_accounts la ON la.customer_id = c.id
      LEFT JOIN store_credit_accounts sca ON sca.customer_id = c.id
@@ -372,7 +385,11 @@ export async function searchCustomers(opts: {
       `SELECT c.*,
          COALESCE(la.points_balance, 0) AS points_balance,
          COALESCE(la.lifetime_points, 0) AS lifetime_points,
-         COALESCE(sca.balance, 0) AS store_credit_balance
+         COALESCE(sca.balance, 0) AS store_credit_balance,
+         COALESCE((
+           SELECT SUM(r.outstanding_amount) FROM receivables r
+           WHERE r.customer_id = c.id AND r.status != 'Settled'
+         ), 0) AS outstanding_receivables
        ${baseQuery}
        ORDER BY c.full_name ASC
        LIMIT $${limitParam} OFFSET $${offsetParam}`,

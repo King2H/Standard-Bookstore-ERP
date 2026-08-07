@@ -264,7 +264,138 @@ export async function list(opts: {
   };
 }
 
-// ── manualSettle (admin override) ─────────────────────────────────────────────
+// ── collectPayment (exchange_difference receivables) ──────────────────────────
+// Module 3 fix: order_credit_sale receivables are paid down through
+// payments.service.ts createPayment() and pos_credit_sale receivables through
+// pos.service.ts recordPayment() -- both fully-featured (cash/bank/store_credit,
+// bank reconciliation, financial audit trail). exchange_difference receivables
+// (opened by Customer_Pays exchanges, see exchanges.service.ts
+// applyExchangeSettlementEffects()) had no equivalent -- the only way to close
+// one was manualSettle() below, which records no payment at all. This mirrors
+// the same cash/bank/store_credit handling for the one source type that was
+// missing it, writing to financial_transactions (the same exchange-linked
+// ledger the Payments report already reads, per the Module 2 fix) so the
+// money is visible everywhere a real payment is, not just marked away.
+//
+// Routing which of these three functions handles a given receivable is the
+// caller's job (receivables.routes.ts POST /:id/collect) -- keeping it there
+// avoids a receivables.service.ts <-> payments.service.ts import cycle.
+
+export async function collectPayment(
+  id: string | number,
+  data: {
+    amount: number;
+    paymentMethod: 'cash' | 'bank' | 'store_credit';
+    bankAccountId?: number | null;
+    notes?: string;
+  },
+  staffCtx: StaffCtx,
+): Promise<ReceivableRow> {
+  const receivable = await getById(id);
+  if (receivable.status === 'Settled') {
+    throw new BusinessError('RECEIVABLE_ALREADY_SETTLED', 'Receivable is already settled');
+  }
+  if (!(data.amount > 0)) throw new ValidationError('Payment amount must be positive');
+  if (data.amount > receivable.outstandingAmount + 0.01) {
+    throw new BusinessError(
+      'EXCEEDS_OUTSTANDING',
+      `Payment of ETB ${data.amount.toFixed(2)} exceeds outstanding balance of ETB ${receivable.outstandingAmount.toFixed(2)}`,
+      { outstanding: receivable.outstandingAmount, requested: data.amount },
+    );
+  }
+  if (data.paymentMethod === 'bank' && !data.bankAccountId) {
+    throw new ValidationError('bankAccountId is required for bank transfer payments');
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    if (data.paymentMethod === 'store_credit') {
+      const scRes = await client.query(
+        'SELECT balance FROM store_credit_accounts WHERE customer_id = $1 FOR UPDATE',
+        [receivable.customerId],
+      );
+      const available = scRes.rows.length ? parseFloat(scRes.rows[0].balance as string) : 0;
+      if (available < data.amount - 0.01) {
+        throw new BusinessError(
+          'INSUFFICIENT_STORE_CREDIT',
+          `Insufficient store credit. Available: ETB ${available.toFixed(2)}, requested: ETB ${data.amount.toFixed(2)}`,
+          { available, requested: data.amount },
+        );
+      }
+      await client.query(
+        'UPDATE store_credit_accounts SET balance = balance - $1 WHERE customer_id = $2',
+        [data.amount.toFixed(2), receivable.customerId],
+      );
+      await client.query(
+        `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+         VALUES ($1, 'receivable_payment', $2, $3, 'debit')`,
+        [receivable.customerId, String(id), data.amount.toFixed(2)],
+      );
+    }
+
+    // Real, reportable payment record -- financial_transactions is the same
+    // ledger getPaymentReport() aggregates exchange-linked entries from.
+    const exchangeId = receivable.sourceType === 'exchange_difference'
+      ? parseInt(receivable.sourceEntityId, 10)
+      : null;
+    const idempotencyKey = `receivable-${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const ftRes = await client.query(
+      `INSERT INTO financial_transactions (type, exchange_id, idempotency_key, amount, currency, method, staff_id, branch_id, meta)
+       VALUES ('payment', $1, $2, $3, 'ETB', $4, $5, $6, $7)
+       RETURNING id`,
+      [
+        exchangeId, idempotencyKey, data.amount.toFixed(2), data.paymentMethod,
+        staffCtx.staffId, staffCtx.branchId,
+        JSON.stringify({ receivableId: String(id), sourceType: receivable.sourceType, notes: data.notes ?? null }),
+      ],
+    );
+
+    if (data.paymentMethod === 'bank' && data.bankAccountId) {
+      await client.query(
+        `INSERT INTO bank_reconciliation (bank_account_id, payment_ref_id, amount, direction, status, notes)
+         VALUES ($1, $2, $3, 'in', 'uncleared', $4)`,
+        [data.bankAccountId, ftRes.rows[0].id, data.amount.toFixed(2), `Receivable #${id} payment`],
+      );
+    }
+
+    const newOutstanding = Math.max(0, parseFloat((receivable.outstandingAmount - data.amount).toFixed(2)));
+    await updateReceivableOnPayment(
+      {
+        sourceType: receivable.sourceType,
+        sourceEntityId: parseInt(receivable.sourceEntityId, 10),
+        newOutstandingAmount: newOutstanding,
+        isFullySettled: newOutstanding <= 0.01,
+      },
+      client,
+    );
+
+    await client.query(
+      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
+       VALUES ($1, $2, 'CREATE', 'receivable_payment', $3, $4, $5)`,
+      [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId,
+       JSON.stringify({ amount: data.amount, paymentMethod: data.paymentMethod, notes: data.notes ?? null })],
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  return getById(id);
+}
+
+// ── manualSettle (write-off — no payment is collected) ────────────────────────
+// Distinct from collectPayment()/createPayment()/recordPayment() above: this
+// records NO money movement anywhere. Restricted to Admin/Manager/
+// Finance_Officer (receivables.routes.ts) -- it exists for bad-debt write-offs,
+// not routine "the customer paid" collection, which must always go through
+// one of the three functions above so the amount is auditable and shows up
+// in Payments/Dashboard reporting.
 
 export async function manualSettle(
   id: string | number,
