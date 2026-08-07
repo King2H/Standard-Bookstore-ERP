@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api.js';
+import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
 
@@ -69,7 +70,10 @@ const EMPTY_LINE: LineItemFormRow = { bookId: null, bookTitle: '', quantity: 1, 
 
 // ── Book search combobox ──────────────────────────────────────────────────────
 
-interface CatalogBook { id: number; title: string; isbn: string; isActive: boolean; }
+interface CatalogBook {
+  id: number; title: string; isbn: string; isActive: boolean;
+  availability?: { onHand: number; reserved: number; available: number } | null;
+}
 
 /** Debounce a value by `delay` ms. */
 function useDebounce<T>(value: T, delay: number): T {
@@ -90,9 +94,16 @@ function useDebounce<T>(value: T, delay: number): T {
 function BookSearchCombobox({
   value,
   onChange,
+  branchId,
+  locationId,
 }: {
   value: { bookId: number | null; bookTitle: string };
   onChange: (book: { bookId: number | null; bookTitle: string }) => void;
+  /** Module 8: when a receiving branch/location is known, show current
+   *  available stock next to each result so the buyer can see what's
+   *  already on hand before deciding how much to reorder. */
+  branchId?: number | null;
+  locationId?: number | null;
 }) {
   const [inputText, setInputText] = useState(value.bookTitle);
   const [open, setOpen] = useState(false);
@@ -104,14 +115,17 @@ function BookSearchCombobox({
     setInputText(value.bookTitle);
   }, [value.bookTitle]);
 
-  const { data, isFetching } = useQuery<{ results: CatalogBook[] }>({
-    queryKey: ['catalog-search-po', debouncedQuery],
-    queryFn: () => api.get(`/catalog/search?q=${encodeURIComponent(debouncedQuery)}`),
+  const withAvailability = !!locationId;
+  const { data, isFetching } = useQuery<{ results?: CatalogBook[]; items?: CatalogBook[] }>({
+    queryKey: ['catalog-search-po', debouncedQuery, branchId, locationId],
+    queryFn: () => withAvailability
+      ? api.get(`/books/with-availability?q=${encodeURIComponent(debouncedQuery)}&pageSize=10&branchId=${branchId}&locationId=${locationId}`)
+      : api.get(`/catalog/search?q=${encodeURIComponent(debouncedQuery)}`),
     enabled: debouncedQuery.trim().length >= 2,
     staleTime: 30_000,
   });
 
-  const results = data?.results ?? [];
+  const results = data?.results ?? data?.items ?? [];
 
   // Close on outside click
   useEffect(() => {
@@ -167,8 +181,15 @@ function BookSearchCombobox({
               onMouseDown={() => handleSelect(book)}
               className="px-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-900 dark:text-white"
             >
-              <span className="font-medium">{book.title}</span>
-              {book.isbn && <span className="ml-2 text-xs text-gray-400">{book.isbn}</span>}
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">{book.title}</span>
+                {book.availability != null && (
+                  <span className={`text-xs font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-full ${book.availability.available === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'}`}>
+                    {book.availability.available} avail
+                  </span>
+                )}
+              </div>
+              {book.isbn && <span className="text-xs text-gray-400">{book.isbn}</span>}
             </li>
           ))}
         </ul>
@@ -181,8 +202,12 @@ function BookSearchCombobox({
 
 function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO) => void; onCancel: () => void }) {
   const { showToast } = useToast();
+  const systemCurrency = useCurrency();
   const [supplierId, setSupplierId] = useState<number | null>(editing?.supplierId ?? null);
-  const [currency, setCurrency] = useState(editing?.currency ?? 'USD');
+  // Module 8: default new POs to the system's configured currency (ETB)
+  // instead of a hardcoded 'USD' — every other money figure in the app
+  // (POS, Orders, Dashboard, Receivables) is denominated in ETB.
+  const [currency, setCurrency] = useState(editing?.currency ?? systemCurrency);
   const [paymentTerms, setPaymentTerms] = useState<'cash' | 'credit'>(editing?.paymentTerms ?? 'credit');
   const [expectedDate, setExpectedDate] = useState(editing?.expectedDeliveryDate ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
@@ -326,6 +351,8 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
                     updateLine(i, 'bookId', bookId);
                     updateLine(i, 'bookTitle', bookTitle);
                   }}
+                  branchId={receivingBranchId ?? getCurrentBranchId()}
+                  locationId={receivingLocationId}
                 />
               </div>
               <div className="col-span-2">

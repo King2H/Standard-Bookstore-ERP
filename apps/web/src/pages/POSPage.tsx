@@ -513,7 +513,21 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl overflow-hidden">
             <div className={`px-6 py-5 text-center ${receipt.paymentStatus === 'paid' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
               <div className="text-4xl mb-2">{receipt.paymentStatus === 'paid' ? '✅' : '🟡'}</div>
-              <h2 className="text-xl font-bold text-white">{receipt.transactionNumber}</h2>
+              <div className="flex items-center justify-center gap-1.5">
+                <h2 className="text-xl font-bold text-white">{receipt.transactionNumber}</h2>
+                <button
+                  type="button"
+                  title="Copy Transaction ID"
+                  onClick={() => {
+                    navigator.clipboard.writeText(receipt.transactionNumber)
+                      .then(() => showToast('Transaction ID copied', 'success'))
+                      .catch(() => showToast('Could not copy — copy manually', 'error'));
+                  }}
+                  className="text-white/70 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+              </div>
               <p className="text-sm text-white/80 mt-1">{new Date(receipt.createdAt).toLocaleString()}</p>
               {receipt.paymentStatus !== 'paid' && (
                 <div className="space-y-1 mt-2">
@@ -641,7 +655,20 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                   <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                     {(histData?.items ?? []).map(tx => (
                       <tr key={tx.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
-                        <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{tx.transactionNumber}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                          <button
+                            type="button"
+                            title="Copy Transaction ID"
+                            onClick={() => {
+                              navigator.clipboard.writeText(tx.transactionNumber)
+                                .then(() => showToast('Transaction ID copied', 'success'))
+                                .catch(() => showToast('Could not copy — copy manually', 'error'));
+                            }}
+                            className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
+                          >
+                            {tx.transactionNumber}
+                          </button>
+                        </td>
                         <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{currency} {Number(tx.grandTotal).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 tabular-nums whitespace-nowrap">{currency} {Number(tx.amountPaid ?? tx.grandTotal).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-amber-700 dark:text-amber-400 tabular-nums whitespace-nowrap">

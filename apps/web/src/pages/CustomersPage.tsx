@@ -27,6 +27,15 @@ interface HistoryResponse<T> { items: T[]; total: number; page: number; totalPag
 type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
 type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
 
+// Module 8: matches ReceivablesPage.tsx's SOURCE_LABELS. The inline table
+// here previously used a two-way ternary (pos_credit_sale vs. "everything
+// else") that mislabeled order_credit_sale receivables as "Exchange Diff."
+const RECEIVABLE_SOURCE_LABELS: Record<ReceivableSourceType, string> = {
+  pos_credit_sale:     'POS Credit Sale',
+  order_credit_sale:   'Order Credit Sale',
+  exchange_difference: 'Exchange Diff.',
+};
+
 interface ReceivableRow {
   id: string;
   sourceType: ReceivableSourceType;
@@ -566,7 +575,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                       </td>
                       <td className="px-4 py-2">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                          {r.sourceType === 'pos_credit_sale' ? 'Credit Sale' : 'Exchange Diff.'}
+                          {RECEIVABLE_SOURCE_LABELS[r.sourceType] ?? r.sourceType}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-gray-500 dark:text-gray-500 text-xs font-mono">
