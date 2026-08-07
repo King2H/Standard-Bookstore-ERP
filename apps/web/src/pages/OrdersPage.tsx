@@ -79,6 +79,8 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmDueDate, setConfirmDueDate] = useState('');
 
   // New order state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -139,6 +141,8 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       showToast('Order updated', 'success');
       setCancelingId(null);
       setCancelReason('');
+      setConfirmingId(null);
+      setConfirmDueDate('');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
@@ -242,6 +246,27 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                   <button key="cancel" onClick={e => { e.stopPropagation(); setCancelingId(order.id); }}
                                     className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.cancel}`}>
                                     Cancel
+                                  </button>
+                                );
+                              }
+                              // Module 4: credit_sale orders must carry a due date on the
+                              // receivable created at confirm — prompt for it inline instead
+                              // of firing the plain confirm action.
+                              if (action === 'confirm' && order.saleType === 'credit_sale') {
+                                return confirmingId === order.id ? (
+                                  <div key="confirm-credit" className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                    <input type="date" value={confirmDueDate} onChange={e => setConfirmDueDate(e.target.value)}
+                                      className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                                    <button
+                                      disabled={!confirmDueDate}
+                                      onClick={() => actionMut.mutate({ id: order.id, action: 'confirm', body: { dueDate: confirmDueDate } })}
+                                      className="text-xs bg-blue-600 disabled:opacity-40 text-white px-2 py-0.5 rounded">OK</button>
+                                    <button onClick={() => { setConfirmingId(null); setConfirmDueDate(''); }} className="text-xs text-gray-500 px-1">✕</button>
+                                  </div>
+                                ) : (
+                                  <button key="confirm-credit-open" onClick={e => { e.stopPropagation(); setConfirmingId(order.id); setConfirmDueDate(''); }}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>
+                                    Confirm (set due date)
                                   </button>
                                 );
                               }

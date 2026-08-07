@@ -696,11 +696,15 @@ describe('Order Lifecycle — credit_sale paths', () => {
     return { id: res.body.id as string, total: Number(res.body.total) };
   }
 
-  async function confirm(orderId: string) {
+  async function confirm(orderId: string, dueDate = '2099-12-31') {
+    // Module 4: credit_sale orders now require a due date to confirm (it
+    // seeds the receivable's due_date). All orders in this suite are
+    // credit_sale, so default every call to a valid far-future date.
     return request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId));
+      .set('X-Branch-Id', String(branchId))
+      .send({ dueDate });
   }
 
   async function pay(orderId: string, amount: number) {

@@ -674,7 +674,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
 
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);

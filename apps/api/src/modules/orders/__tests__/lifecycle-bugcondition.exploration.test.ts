@@ -106,11 +106,13 @@ async function createDraftOrder(
 }
 
 async function confirmOrder(token: string, branchId: number, orderId: string) {
+  // Module 4: credit_sale orders require a due date to confirm. Every call
+  // site in this file confirms a credit_sale order, so default it here.
   return request(getTestApp())
     .post(`/api/orders/${orderId}/confirm`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
-    .send({});
+    .send({ dueDate: '2099-12-31' });
 }
 
 async function fulfillOrder(token: string, branchId: number, orderId: string) {

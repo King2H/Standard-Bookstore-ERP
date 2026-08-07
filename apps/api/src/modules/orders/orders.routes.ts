@@ -96,7 +96,8 @@ router.post(
   requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!);
+      const dueDate = typeof req.body?.dueDate === 'string' ? req.body.dueDate : null;
+      const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!, dueDate);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }

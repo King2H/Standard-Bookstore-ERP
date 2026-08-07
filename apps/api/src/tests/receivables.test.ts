@@ -113,7 +113,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     const orderId = createRes.body.id;
     const orderTotal = Number(createRes.body.total);
 
-    await request(getTestApp()).post(`/api/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ dueDate: '2099-12-31' });
 
     const recRes = await db.query(`SELECT id FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1`, [orderId]);
     expect(recRes.rows.length).toBe(1);

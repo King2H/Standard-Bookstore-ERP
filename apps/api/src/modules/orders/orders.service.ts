@@ -371,9 +371,23 @@ async function resolveLocationId(client: pg.PoolClient, order: OrderRow, staffCt
   return staffCtx.branchId;
 }
 
-export async function confirm(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
+export async function confirm(orderId: string | number, staffCtx: StaffCtx, dueDate?: string | null): Promise<OrderRow> {
   const order = await getById(orderId);
   if (normaliseStatus(order.status) !== 'DRAFT') throw new BusinessError('INVALID_STATE', "Cannot confirm order in status '" + order.status + "'");
+
+  // Module 4: a credit order must carry a due date on the receivable it is
+  // about to create — otherwise the receivable is un-chaseable (never goes
+  // Overdue, never surfaces on aging reports). Required up front, before the
+  // transaction opens, so a missing date fails fast without touching stock.
+  if (order.saleType === 'credit_sale' && order.customerId) {
+    if (!dueDate) {
+      throw new ValidationError('due_date is required to confirm a credit sale order');
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      throw new ValidationError('due_date must be in YYYY-MM-DD format');
+    }
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -488,6 +502,7 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx): Pro
               customerId: order.customerId,
               branchId: order.branchId,
               originalAmount: outstandingAmount,
+              dueDate: dueDate ?? null,
             },
             client,
           );

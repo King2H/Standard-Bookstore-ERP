@@ -290,12 +290,21 @@ export async function createPayment(
   if (order.total == null) throw new BusinessError('ORDER_INVALID', 'Order has no total. Ensure the order was created with valid book prices.');
   const customerId = (order.customer_id as number | null) ?? null;
 
-  // Store credit requires a customer on the order
+  // Store credit / loyalty points requires a customer on the order. The
+  // balance sufficiency itself is only fail-fast-checked here, on the plain
+  // (unlocked) connection, for a quick error before doing the rest of this
+  // function's work -- it is NOT the authoritative check. That check happens
+  // again below, inside the transaction, with FOR UPDATE (Module 4 fix: this
+  // pre-check used to be the ONLY check, and the deduction UPDATE below never
+  // re-verified sufficiency or locked the row, so two concurrent payments
+  // against the same balance could both pass, both deduct, and drive the
+  // balance negative -- pos.service.ts recordPayment() and receivables.
+  // service.ts collectPayment() already lock correctly; this was the one
+  // gap in an otherwise-consistent pattern).
   if (data.paymentMethod === 'store_credit') {
     if (!customerId) {
       throw new BusinessError('STORE_CREDIT_REQUIRES_CUSTOMER', 'Store credit payments require the order to be linked to a customer.');
     }
-    // Validate customer has sufficient store credit balance
     const scRes = await db.query('SELECT balance FROM store_credit_accounts WHERE customer_id = $1', [customerId]);
     if (!scRes.rows.length) {
       throw new BusinessError('INSUFFICIENT_STORE_CREDIT', 'Customer has no store credit account.');
@@ -362,8 +371,21 @@ export async function createPayment(
       );
     }
 
-    // Deduct store credit from customer account
+    // Deduct store credit from customer account. Re-validate sufficiency here,
+    // under FOR UPDATE, since the check above ran on an unlocked connection
+    // before this transaction opened and cannot prevent two concurrent
+    // payments from both passing and driving the balance negative.
     if (data.paymentMethod === 'store_credit' && customerId) {
+      const scLockRes = await client.query(
+        'SELECT balance FROM store_credit_accounts WHERE customer_id = $1 FOR UPDATE',
+        [customerId],
+      );
+      const lockedAvailable = scLockRes.rows.length ? parseFloat(scLockRes.rows[0].balance as string) : 0;
+      if (lockedAvailable < data.amount - 0.01) {
+        throw new BusinessError('INSUFFICIENT_STORE_CREDIT',
+          `Insufficient store credit. Available: ETB ${lockedAvailable.toFixed(2)}, requested: ETB ${data.amount.toFixed(2)}`,
+          { available: lockedAvailable, requested: data.amount });
+      }
       await client.query(
         'UPDATE store_credit_accounts SET balance = balance - $1 WHERE customer_id = $2',
         [data.amount.toFixed(2), customerId],
@@ -375,8 +397,19 @@ export async function createPayment(
       );
     }
 
-    // Deduct loyalty points from customer account
+    // Deduct loyalty points from customer account. Same re-validation under
+    // FOR UPDATE as store credit above, for the same reason.
     if (data.paymentMethod === 'loyalty_points' && customerId) {
+      const lpLockRes = await client.query(
+        'SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1 FOR UPDATE',
+        [customerId],
+      );
+      const lockedAvailable = lpLockRes.rows.length ? parseFloat(lpLockRes.rows[0].points_balance as string) : 0;
+      if (lockedAvailable < data.amount - 0.01) {
+        throw new BusinessError('INSUFFICIENT_LOYALTY_POINTS',
+          `Insufficient loyalty points. Available: ${lockedAvailable.toFixed(0)} pts, requested: ${data.amount.toFixed(0)} pts`,
+          { available: lockedAvailable, requested: data.amount });
+      }
       await client.query(
         'UPDATE loyalty_accounts SET points_balance = points_balance - $1, updated_at = now() WHERE customer_id = $2',
         [data.amount.toFixed(2), customerId],

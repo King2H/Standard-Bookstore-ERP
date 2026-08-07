@@ -284,7 +284,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
 
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
@@ -428,7 +428,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
 
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
@@ -571,7 +571,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
 
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
@@ -714,7 +714,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
 
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
@@ -822,7 +822,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
 
@@ -1071,7 +1071,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
 
     await request(getTestApp())
       .post(`/api/orders/${orderId}/fulfill`)
