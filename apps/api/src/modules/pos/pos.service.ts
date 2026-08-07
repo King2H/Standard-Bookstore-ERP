@@ -416,7 +416,8 @@ export async function createTransaction(
     }
 
     // Decrement inventory via centralized InventoryTransactionService (Requirement 2.1, 2.3, 2.4)
-    // Uses reservation-aware availability: available = quantity - SUM(active_reservations)
+    // Availability check is available = quantity (reservations are bookkeeping,
+    // not a second hold -- see inventoryTransaction.service.ts getAvailableStock()).
     for (const item of resolvedItems) {
       await invTxSvc.stockOut(
         {
