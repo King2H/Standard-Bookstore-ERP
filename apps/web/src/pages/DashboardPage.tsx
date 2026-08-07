@@ -564,8 +564,20 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           <Section title="Sales Trend" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
             {sales?.byPeriod && sales.byPeriod.length > 0 ? (
               <>
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Total Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.totalSales)}</p></div>
+                {/* Module 10: this card and the trend line below are sourced from
+                    getSalesReport(), which is Orders-channel only (o.total) —
+                    POS sales are tracked separately in summary.totalPosSales.
+                    Previously labeled bare "Total Sales", which read as the
+                    all-channel figure the Monthly/Today's Sales KPI cards up
+                    top actually show, silently excluding POS revenue. Relabeled
+                    for accuracy and the (already-computed but unused) POS
+                    figure is now surfaced alongside it instead of combining
+                    the two into one number — combining would desync this
+                    summary from the still-Orders-only trend line/branch chart
+                    below it. */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Order Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.totalSales)}</p></div>
+                  <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">POS Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.totalPosSales)}</p></div>
                   <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Orders</p><p className="text-base font-bold text-gray-900 dark:text-white">{sales.summary.totalOrders}</p></div>
                   <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Avg Order</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.averageOrderValue)}</p></div>
                 </div>
@@ -576,7 +588,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
                     <Tooltip formatter={(v: number) => fmt(v)} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Line type="monotone" dataKey="totalSales" name="Sales (ETB)" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="totalSales" name="Order Sales (ETB)" stroke="#3b82f6" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="totalOrders" name="Orders" stroke="#10b981" strokeWidth={2} dot={false} yAxisId={0} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -630,7 +642,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Sales by branch */}
-        <Section title="Sales by Branch" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
+        <Section title="Order Sales by Branch" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
           {sales?.byBranch && sales.byBranch.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={sales.byBranch} layout="vertical">
@@ -638,7 +650,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
                 <YAxis type="category" dataKey="branchName" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip formatter={(v: number) => fmt(v)} />
-                <Bar dataKey="totalSales" name="Sales (ETB)" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="totalSales" name="Order Sales (ETB)" fill="#3b82f6" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <Empty />}
