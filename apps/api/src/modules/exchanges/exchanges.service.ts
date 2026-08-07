@@ -118,6 +118,27 @@ function mapItemRow(row: Record<string, unknown>, priceField: string): ExchangeI
 }
 
 async function fetchItems(exchangeId: string): Promise<{ incoming: ExchangeItemRow[]; outgoing: ExchangeItemRow[] }> {
+  // Module 2 fix: initiateExchange() (the draft -> confirmed -> settled/cancelled
+  // lifecycle) writes items to the unified exchange_items table, not to the
+  // legacy exchange_incoming_items/exchange_outgoing_items pair that
+  // createExchange() (the older single-step path) uses. This function only
+  // ever queried the legacy tables, so every exchange created via initiate
+  // came back from getById()/list() with empty incomingItems/outgoingItems --
+  // the items were correctly stored and correctly drove inventory at
+  // settlement, but never surfaced to any caller (API response, frontend
+  // detail view, review/approve screens). An exchange only ever has rows in
+  // one of the two storage shapes, so check the unified table first.
+  const unifiedRes = await db.query(
+    'SELECT ei.*, b.title AS book_title FROM exchange_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = $1 ORDER BY ei.id',
+    [exchangeId],
+  );
+  if (unifiedRes.rows.length) {
+    return {
+      incoming: unifiedRes.rows.filter((r: Record<string, unknown>) => r.type === 'returned').map(r => mapItemRow(r, 'unit_price')),
+      outgoing: unifiedRes.rows.filter((r: Record<string, unknown>) => r.type === 'new').map(r => mapItemRow(r, 'unit_price')),
+    };
+  }
+
   const [inRes, outRes] = await Promise.all([
     db.query('SELECT ei.*, b.title AS book_title FROM exchange_incoming_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = $1 ORDER BY ei.id', [exchangeId]),
     db.query('SELECT eo.*, b.title AS book_title FROM exchange_outgoing_items eo JOIN books b ON b.id = eo.book_id WHERE eo.exchange_id = $1 ORDER BY eo.id', [exchangeId]),
@@ -219,14 +240,18 @@ export async function createExchange(
     if (!bookRes.rows[0].is_active) throw new BusinessError('BOOK_INACTIVE', 'Book ' + bookId + ' is not active');
   }
 
-  // Validate outgoing items have sufficient stock
+  // Validate outgoing items have sufficient stock — via the centralized
+  // inventoryTransaction.service.ts, not a raw query (Module 2: this call
+  // site was reading inventory.quantity directly, bypassing the single
+  // source of truth for "available" that invTxSvc.stockOut() itself uses a
+  // few lines below; a raw duplicate of that formula is exactly the class of
+  // bug that caused the reservation double-counting fix earlier this sprint).
   const locationId = data.locationId ?? null;
   if (locationId && data.outgoingItems && data.outgoingItems.length > 0) {
     for (const item of data.outgoingItems) {
-      const invRes = await db.query('SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2', [item.bookId, locationId]);
-      const available = invRes.rows[0]?.quantity ?? 0;
-      if (available < item.quantity) {
-        throw new BusinessError('INSUFFICIENT_STOCK', 'Insufficient stock for book ' + item.bookId + '. Available: ' + available + ', requested: ' + item.quantity, { available, requested: item.quantity });
+      const stock = await invTxSvc.getAvailableStock(item.bookId, locationId);
+      if (stock.available < item.quantity) {
+        throw new BusinessError('INSUFFICIENT_STOCK', 'Insufficient stock for book ' + item.bookId + '. Available: ' + stock.available + ', requested: ' + item.quantity, { available: stock.available, requested: item.quantity });
       }
     }
   }
@@ -592,6 +617,26 @@ export async function approveExchange(exchangeId: string | number, staffCtx: Sta
   const exchange = await getById(exchangeId);
   if (exchange.lifecycleStatus !== 'REVIEWED') {
     throw new BusinessError('INVALID_LIFECYCLE_TRANSITION', `Exchange must be in REVIEWED status to approve. Current: ${exchange.lifecycleStatus}`);
+  }
+
+  // Module 2: validate available stock before confirmation. Previously the
+  // only check was deep inside settleExchange()'s call to invTxSvc.stockOut(),
+  // which runs after review AND approval -- a stock shortfall (e.g. sold via
+  // POS between initiation and settlement) only surfaced as a failure at the
+  // very last step, discarding the review/approval work. Outgoing ('new')
+  // items are what get deducted at settlement, so they're what must be
+  // checked here.
+  if (exchange.locationId) {
+    for (const item of exchange.outgoingItems ?? []) {
+      const stock = await invTxSvc.getAvailableStock(item.bookId, exchange.locationId);
+      if (stock.available < item.quantity) {
+        throw new BusinessError(
+          'INSUFFICIENT_STOCK',
+          `Insufficient stock for "${item.bookTitle}". Available: ${stock.available}, Requested: ${item.quantity}`,
+          { bookId: item.bookId, available: stock.available, requested: item.quantity },
+        );
+      }
+    }
   }
 
   const client = await db.connect();

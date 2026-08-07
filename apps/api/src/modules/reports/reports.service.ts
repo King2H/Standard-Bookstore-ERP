@@ -305,37 +305,101 @@ export async function getPaymentReport(filters: ReportFilters): Promise<PaymentR
     params,
   );
 
+  // ── Exchange settlement cash entries ──────────────────────────────────────
+  // Module 2: exchange settlement (settleExchange()) records cash_payment/
+  // cash_refund entries into financial_transactions, but this report only
+  // ever queried order_payments -- exchange money movement was invisible in
+  // the Payments report (and had no other surface anywhere in the app).
+  // financial_transactions has branch_id directly (no join needed) and its
+  // own created_at column, so it needs its own filter param set.
+  const exParams: unknown[] = [];
+  const exConditions: string[] = ['ft.exchange_id IS NOT NULL', `ft.type IN ('payment','refund')`];
+  if (filters.branchId) { exParams.push(filters.branchId); exConditions.push(`ft.branch_id = $${exParams.length}`); }
+  if (filters.dateFrom) { exParams.push(filters.dateFrom); exConditions.push(`ft.created_at >= $${exParams.length}`); }
+  if (filters.dateTo)   { exParams.push(filters.dateTo);   exConditions.push(`ft.created_at <= $${exParams.length}`); }
+  const exWhere = 'WHERE ' + exConditions.join(' AND ');
+  const exTruncExpr = `date_trunc('${groupBy}', ft.created_at)`;
+
+  const [exSummaryRes, exByMethodRes, exByPeriodRes] = await Promise.all([
+    db.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN ft.type = 'payment' THEN ft.amount ELSE 0 END), 0)::NUMERIC AS collected,
+         COALESCE(SUM(CASE WHEN ft.type = 'refund'  THEN ft.amount ELSE 0 END), 0)::NUMERIC AS refunded
+       FROM financial_transactions ft ${exWhere}`,
+      exParams,
+    ),
+    db.query(
+      `SELECT COALESCE(ft.method, 'cash') AS method,
+              COALESCE(SUM(CASE WHEN ft.type = 'payment' THEN ft.amount ELSE 0 END), 0)::NUMERIC AS total,
+              COUNT(*) FILTER (WHERE ft.type = 'payment')::INTEGER AS count
+       FROM financial_transactions ft ${exWhere}
+       GROUP BY COALESCE(ft.method, 'cash')`,
+      exParams,
+    ),
+    db.query(
+      `SELECT ${exTruncExpr}::TEXT AS period,
+              COALESCE(SUM(CASE WHEN ft.type = 'payment' THEN ft.amount ELSE 0 END), 0)::NUMERIC AS collected,
+              COALESCE(SUM(CASE WHEN ft.type = 'refund'  THEN ft.amount ELSE 0 END), 0)::NUMERIC AS refunded
+       FROM financial_transactions ft ${exWhere}
+       GROUP BY ${exTruncExpr}`,
+      exParams,
+    ),
+  ]);
+
   const s = summaryRes.rows[0];
   const totalRefunded = parseFloat(refundRes.rows[0].total_refunded);
+  const exCollected = parseFloat(exSummaryRes.rows[0].collected);
+  const exRefunded = parseFloat(exSummaryRes.rows[0].refunded);
+
+  const byMethodMerged: Record<string, { method: string; total: number; count: number }> = {};
+  for (const r of byMethodRes.rows) {
+    const rawMethod = r.method as string;
+    const method = rawMethod === 'store_credit' || rawMethod === 'mobile' ? 'Telebirr' : rawMethod;
+    const total = parseFloat(r.total as string);
+    const count = parseInt(r.count as string, 10);
+    if (byMethodMerged[method]) {
+      byMethodMerged[method].total += total;
+      byMethodMerged[method].count += count;
+    } else {
+      byMethodMerged[method] = { method, total, count };
+    }
+  }
+  for (const r of exByMethodRes.rows) {
+    const total = parseFloat(r.total as string);
+    if (total <= 0) continue; // method rows with only refunds contribute nothing to "collected"
+    const method = r.method as string;
+    if (byMethodMerged[method]) {
+      byMethodMerged[method].total += total;
+      byMethodMerged[method].count += parseInt(r.count as string, 10);
+    } else {
+      byMethodMerged[method] = { method, total, count: parseInt(r.count as string, 10) };
+    }
+  }
+
+  const byPeriodMerged = new Map<string, { period: string; collected: number; refunded: number }>();
+  for (const r of byPeriodRes.rows) {
+    byPeriodMerged.set(r.period as string, { period: r.period as string, collected: parseFloat(r.collected as string), refunded: parseFloat(r.refunded as string) });
+  }
+  for (const r of exByPeriodRes.rows) {
+    const period = r.period as string;
+    const existing = byPeriodMerged.get(period);
+    if (existing) {
+      existing.collected += parseFloat(r.collected as string);
+      existing.refunded += parseFloat(r.refunded as string);
+    } else {
+      byPeriodMerged.set(period, { period, collected: parseFloat(r.collected as string), refunded: parseFloat(r.refunded as string) });
+    }
+  }
 
   return {
     summary: {
-      totalCollected:  parseFloat(s.total_collected),
-      totalRefunded,
-      netCollected:    parseFloat(s.total_collected) - totalRefunded,
+      totalCollected:  parseFloat(s.total_collected) + exCollected,
+      totalRefunded:   totalRefunded + exRefunded,
+      netCollected:    parseFloat(s.total_collected) + exCollected - (totalRefunded + exRefunded),
       pendingPayments: parseFloat(s.pending_payments),
     },
-    byMethod: (() => {
-      const byMethodMerged: Record<string, { method: string; total: number; count: number }> = {};
-      for (const r of byMethodRes.rows) {
-        const rawMethod = r.method as string;
-        const method = rawMethod === 'store_credit' || rawMethod === 'mobile' ? 'Telebirr' : rawMethod;
-        const total = parseFloat(r.total as string);
-        const count = parseInt(r.count as string, 10);
-        if (byMethodMerged[method]) {
-          byMethodMerged[method].total += total;
-          byMethodMerged[method].count += count;
-        } else {
-          byMethodMerged[method] = { method, total, count };
-        }
-      }
-      return Object.values(byMethodMerged).sort((a, b) => b.total - a.total);
-    })(),
-    byPeriod: byPeriodRes.rows.map(r => ({
-      period:    r.period,
-      collected: parseFloat(r.collected),
-      refunded:  parseFloat(r.refunded),
-    })),
+    byMethod: Object.values(byMethodMerged).sort((a, b) => b.total - a.total),
+    byPeriod: Array.from(byPeriodMerged.values()).sort((a, b) => a.period.localeCompare(b.period)),
   };
 }
 
