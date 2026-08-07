@@ -118,14 +118,15 @@ describe('Orders — Lifecycle', () => {
     expect(confirmRes.body.status).toBe('CONFIRMED');
     expect(confirmRes.body.lineItems[0].qtyReserved).toBe(3);
 
-    // inventory.quantity must NOT change at confirmation — reservation only
+    // confirm() deducts inventory immediately via stockOut() (order-payment-
+    // unification spec, 3.5) in addition to writing the soft reservation.
     const invAfter = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
-    expect(invAfter.rows[0].quantity).toBe(qtyBefore);
+    expect(invAfter.rows[0].quantity).toBe(qtyBefore - 3);
   });
 
   // ── 3. Full cash_sale lifecycle: confirm → pay → fulfill ──────────────────
 
-  it('3. cash_sale confirm → pay → fulfill: stock deducted exactly once at fulfill', async () => {
+  it('3. cash_sale: confirm deducts stock immediately; fulfill does not deduct again', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
       .post('/api/orders')
@@ -133,29 +134,22 @@ describe('Orders — Lifecycle', () => {
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 2 }] });
     const orderId = createRes.body.id as string;
-    const orderTotal = createRes.body.total as number;
 
     const invBefore = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
     const qtyBeforeConfirm = invBefore.rows[0].quantity as number;
 
-    // Confirm — NO stock deduction
+    // Confirm — deducts inventory immediately via stockOut() (order-payment-
+    // unification spec, 3.5); also sets payment_status='paid' for cash_sale.
     await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
     const invAfterConfirm = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
-    expect(invAfterConfirm.rows[0].quantity).toBe(qtyBeforeConfirm); // unchanged
+    expect(invAfterConfirm.rows[0].quantity).toBe(qtyBeforeConfirm - 2);
 
-    // Pay via payments module
-    const payRes = await request(getTestApp())
-      .post('/api/payments')
-      .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId))
-      .send({ orderId: Number(orderId), amount: orderTotal, paymentMethod: 'cash' });
-    expect(payRes.status).toBe(201);
-
-    // Fulfill — stock deducted HERE exactly once
+    // POST /api/payments rejects cash_sale orders (paid automatically at
+    // confirm; payments.service.ts "Bug 2" guard) — fulfill directly.
     const fulfillRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
@@ -164,8 +158,9 @@ describe('Orders — Lifecycle', () => {
     expect(fulfillRes.status).toBe(200);
     expect(fulfillRes.body.status).toBe('COMPLETED');
 
+    // fulfill() doesn't deduct again — already deducted at confirm.
     const invAfterFulfill = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
-    expect(invAfterFulfill.rows[0].quantity).toBe(qtyBeforeConfirm - 2); // deducted at fulfill
+    expect(invAfterFulfill.rows[0].quantity).toBe(qtyBeforeConfirm - 2);
   });
 
   // ── 4. Cancel confirmed order → reservation released, inventory unchanged ──
@@ -187,9 +182,9 @@ describe('Orders — Lifecycle', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
-    // Confirm does NOT change inventory
+    // confirm() deducts immediately (order-payment-unification spec, 3.5)
     const invAfterConfirm = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
-    expect(invAfterConfirm.rows[0].quantity).toBe(qtyBeforeConfirm);
+    expect(invAfterConfirm.rows[0].quantity).toBe(qtyBeforeConfirm - 2);
 
     const cancelRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/cancel`)
@@ -201,7 +196,7 @@ describe('Orders — Lifecycle', () => {
     expect(cancelRes.body.status).toBe('CANCELLED');
     expect(cancelRes.body.lineItems[0].qtyReserved).toBe(0);
 
-    // Inventory must still equal pre-confirm level — cancel must NOT call stockIn
+    // cancel() restores via stockIn() — net back to the pre-confirm level
     const invAfterCancel = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
     expect(invAfterCancel.rows[0].quantity).toBe(qtyBeforeConfirm);
   });
