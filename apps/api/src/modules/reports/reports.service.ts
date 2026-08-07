@@ -909,7 +909,11 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
   const branchCondO = branchId ? 'AND o.branch_id = $1' : '';
   const branchCondE = branchId ? 'AND e.branch_id = $1' : '';
 
-  const ACTIVE_ORDER_STATUSES = `('Pending','Confirmed','In_Progress','DRAFT','CONFIRMED','PAID')`;
+  // Module 5: "Pending Orders" is the confirmed-but-unfulfilled backlog —
+  // orders staff have committed stock to and still owe fulfillment on.
+  // DRAFT/Pending orders are excluded: they haven't been confirmed yet (no
+  // stock committed), so they're a quote/cart, not operational backlog.
+  const ACTIVE_ORDER_STATUSES = `('Confirmed','In_Progress','CONFIRMED','PAID')`;
   const CANCELLED_STATUSES    = `('Cancelled','CANCELLED')`;
 
   const [

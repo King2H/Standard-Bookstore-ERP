@@ -548,7 +548,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 </span>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400">
-                {kpis?.pendingOrders} order{(kpis?.pendingOrders ?? 0) !== 1 ? 's' : ''} awaiting confirmation or fulfillment.
+                {kpis?.pendingOrders} confirmed order{(kpis?.pendingOrders ?? 0) !== 1 ? 's' : ''} awaiting fulfillment.
               </p>
               <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-medium">View Orders</p>
             </div>
