@@ -24,6 +24,11 @@ async function cleanTestPOs() {
     )
   `);
   await db.query(`
+    DELETE FROM supplier_payments WHERE po_id IN (
+      SELECT id FROM purchase_orders WHERE notes LIKE '%proc_test%'
+    )
+  `);
+  await db.query(`
     DELETE FROM po_line_items WHERE po_id IN (
       SELECT id FROM purchase_orders WHERE notes LIKE '%proc_test%'
     )
@@ -688,5 +693,201 @@ describe('Procurement — Purchase Orders', () => {
     // Null out receiving_location_id on POs referencing this location before deleting
     await db.query(`UPDATE purchase_orders SET receiving_location_id = NULL WHERE receiving_location_id = $1`, [location3Id]);
     await db.query(`DELETE FROM locations WHERE id = $1`, [location3Id]);
+  });
+
+  // ── Module 1 — Procurement payment lifecycle ──────────────────────────────
+  // PO completion (status) must never imply payment completion (financial_status).
+  // financial_status is derived solely from supplier_payments rows.
+
+  it('17. Default (credit) PO stays financialStatus=unpaid through full receipt', async () => {
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ supplierId, branchId, notes: 'proc_test credit unpaid', lineItems: [{ bookId, quantity: 4, unitCost: 10 }] });
+    expect(createRes.body.paymentTerms).toBe('credit');
+    expect(createRes.body.financialStatus).toBe('unpaid');
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+
+    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    const receiveRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 4 }], notes: 'proc_test full receive' });
+
+    expect(receiveRes.status).toBe(200);
+    expect(receiveRes.body.status).toBe('received');
+    // PO completion (received) must NOT imply payment completion
+    expect(receiveRes.body.financialStatus).toBe('unpaid');
+  });
+
+  it('18. Cash-terms PO auto-settles to paid on full receipt', async () => {
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ supplierId, branchId, paymentTerms: 'cash', notes: 'proc_test cash full', lineItems: [{ bookId, quantity: 5, unitCost: 20 }] });
+    expect(createRes.body.paymentTerms).toBe('cash');
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+
+    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    const receiveRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 5 }], notes: 'proc_test cash full receive' });
+
+    expect(receiveRes.status).toBe(200);
+    expect(receiveRes.body.financialStatus).toBe('paid');
+    expect(receiveRes.body.payments.length).toBe(1);
+    expect(receiveRes.body.payments[0].source).toBe('auto_on_receipt');
+    expect(Number(receiveRes.body.payments[0].amount)).toBeCloseTo(100, 2); // 5 * 20
+  });
+
+  it('19. Cash-terms PO partial receipt → financialStatus=partial, auto-pay only for value received so far', async () => {
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ supplierId, branchId, paymentTerms: 'cash', notes: 'proc_test cash partial', lineItems: [{ bookId, quantity: 10, unitCost: 15 }] });
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+
+    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    const receiveRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 4 }], notes: 'proc_test cash partial receive' });
+
+    expect(receiveRes.status).toBe(200);
+    expect(receiveRes.body.status).toBe('partially_received');
+    expect(receiveRes.body.financialStatus).toBe('partial');
+    expect(Number(receiveRes.body.payments[0].amount)).toBeCloseTo(60, 2); // 4 * 15, not the full 150
+  });
+
+  it('20. Manual supplier payment on a credit PO moves financialStatus unpaid → partial → paid', async () => {
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ supplierId, branchId, notes: 'proc_test manual payment', lineItems: [{ bookId, quantity: 2, unitCost: 50 }] });
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+
+    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 2 }], notes: 'proc_test manual receive' });
+
+    const partialRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/payments`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ amount: 40, paymentMethod: 'bank_transfer', notes: 'proc_test partial settlement' });
+    expect(partialRes.status).toBe(201);
+    expect(partialRes.body.financialStatus).toBe('partial');
+
+    const fullRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/payments`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ amount: 60, paymentMethod: 'bank_transfer', notes: 'proc_test final settlement' });
+    expect(fullRes.status).toBe(201);
+    expect(fullRes.body.financialStatus).toBe('paid');
+    expect(fullRes.body.payments.length).toBe(2);
+    expect(fullRes.body.payments.every((p: { source: string }) => p.source === 'manual')).toBe(true);
+  });
+
+  it('21. Cannot record a payment against a draft or cancelled PO', async () => {
+    const draftRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ supplierId, branchId, notes: 'proc_test draft payment reject', lineItems: [{ bookId, quantity: 1, unitCost: 10 }] });
+    const draftPoId = draftRes.body.id;
+
+    const draftPayRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${draftPoId}/payments`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ amount: 10 });
+    expect(draftPayRes.status).toBe(422);
+    expect(draftPayRes.body.error).toBe('PO_NOT_PAYABLE');
+
+    const cancelRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${draftPoId}/cancel`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(cancelRes.status).toBe(200);
+
+    const cancelledPayRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${draftPoId}/payments`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ amount: 10 });
+    expect(cancelledPayRes.status).toBe(422);
+    expect(cancelledPayRes.body.error).toBe('PO_NOT_PAYABLE');
+  });
+
+  it('22. PO close never implies payment completion; financialStatus stays unpaid after close', async () => {
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ supplierId, branchId, notes: 'proc_test close unpaid', lineItems: [{ bookId, quantity: 1, unitCost: 25 }] });
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+
+    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 1 }], notes: 'proc_test close receive' });
+
+    const closeRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/close`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(closeRes.status).toBe(200);
+    expect(closeRes.body.status).toBe('closed');
+    expect(closeRes.body.financialStatus).toBe('unpaid');
+  });
+
+  it('23. Stock_Clerk cannot record a supplier payment (403); Finance_Officer can', async () => {
+    const createRes = await request(getTestApp())
+      .post('/api/purchase-orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ supplierId, branchId, notes: 'proc_test rbac payment', lineItems: [{ bookId, quantity: 1, unitCost: 10 }] });
+    const poId = createRes.body.id;
+    const lineItemId = Number(createRes.body.lineItems[0].id);
+    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/receive`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 1 }] });
+
+    const clerkRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/payments`)
+      .set('Authorization', `Bearer ${stockClerkToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ amount: 10 });
+    expect(clerkRes.status).toBe(403);
+
+    const financeRes = await request(getTestApp())
+      .post(`/api/purchase-orders/${poId}/payments`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ amount: 10 });
+    expect(financeRes.status).toBe(201);
+    expect(financeRes.body.financialStatus).toBe('paid');
   });
 });

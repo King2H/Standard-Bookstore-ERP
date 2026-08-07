@@ -14,14 +14,16 @@ interface POLineItem {
 }
 interface POReceiptItem { id: string; receiptId: string; poLineItemId: string; bookTitle: string; quantityReceived: number; }
 interface POReceipt { id: string; poId: string; locationId: number; locationName: string; receivedBy: number; receivedAt: string; notes: string | null; items: POReceiptItem[]; }
+interface SupplierPayment { id: string; poId: string; amount: number; paymentMethod: string; source: 'manual' | 'auto_on_receipt'; notes: string | null; createdBy: number; createdAt: string; }
 interface PO {
   id: string; branchId: number; supplierId: number; supplierName: string;
   status: string; totalAmount: number; currency: string;
   expectedDeliveryDate: string | null; notes: string | null;
   receivingBranchId: number | null; receivingLocationId: number | null;
   receivingLocationName: string | null; financialStatus: 'unpaid' | 'partial' | 'paid';
+  paymentTerms: 'cash' | 'credit';
   createdBy: number; approvedBy: number | null; createdAt: string; updatedAt: string;
-  lineItems?: POLineItem[]; receipts?: POReceipt[];
+  lineItems?: POLineItem[]; receipts?: POReceipt[]; payments?: SupplierPayment[];
 }
 interface POListResponse { items: PO[]; total: number; page: number; totalPages: number; }
 interface Supplier { id: number; name: string; isActive: boolean; isBlacklisted: boolean; }
@@ -36,6 +38,7 @@ const canWrite = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_INVENT
 const canApprove = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
 const canReceive = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_INVENTORY')) || ['Admin', 'Manager', 'Stock_Clerk'].includes(r ?? '');
 const canClose = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
+const canRecordPayment = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager', 'Finance_Officer'].includes(r ?? '');
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -180,6 +183,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
   const { showToast } = useToast();
   const [supplierId, setSupplierId] = useState<number | null>(editing?.supplierId ?? null);
   const [currency, setCurrency] = useState(editing?.currency ?? 'USD');
+  const [paymentTerms, setPaymentTerms] = useState<'cash' | 'credit'>(editing?.paymentTerms ?? 'credit');
   const [expectedDate, setExpectedDate] = useState(editing?.expectedDeliveryDate ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
   const [receivingBranchId, setReceivingBranchId] = useState<number | null>(editing?.receivingBranchId ?? null);
@@ -235,6 +239,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
     const body = {
       supplierId,
       currency,
+      paymentTerms,
       expectedDeliveryDate: expectedDate || null,
       notes: notes || null,
       receivingBranchId: receivingBranchId || null,
@@ -266,6 +271,14 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Currency</label>
               <input value={currency} onChange={e => setCurrency(e.target.value)}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Terms</label>
+              <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value as 'cash' | 'credit')}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="credit">Credit (pay later)</option>
+                <option value="cash">Cash (settles on receipt)</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Delivery</label>
@@ -484,6 +497,8 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
 }) {
   const { showToast } = useToast();
   const qc = useQueryClient();
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
 
   const { data: po, isLoading } = useQuery<PO>({
     queryKey: ['po', poId],
@@ -497,6 +512,11 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
   const orderMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/order`), onSuccess: () => { inv(); showToast('Marked as ordered', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const closeMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/close`), onSuccess: () => { inv(); showToast('PO closed', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const cancelMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/cancel`), onSuccess: () => { inv(); showToast('PO cancelled', 'success'); onBack(); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const paymentMut = useMutation({
+    mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/payments`, { amount: parseFloat(paymentAmount), paymentMethod }),
+    onSuccess: () => { inv(); showToast('Payment recorded', 'success'); setPaymentAmount(''); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
   if (!po) return <div className="p-8 text-center text-gray-400">PO not found.</div>;
@@ -528,9 +548,40 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
           <span className={`ml-1 text-xs font-medium px-2 py-0.5 rounded-full ${po.financialStatus === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : po.financialStatus === 'partial' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
             {po.financialStatus}
           </span>
+          <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">({po.paymentTerms === 'cash' ? 'Cash — settles on receipt' : 'Credit'})</span>
         </div>
         {po.notes && <div className="col-span-2"><span className="text-gray-500 dark:text-gray-400">Notes:</span> <span className="text-gray-900 dark:text-white ml-1">{po.notes}</span></div>}
       </div>
+
+      {/* Record payment (credit POs, or cash POs not yet fully auto-settled) */}
+      {po.financialStatus !== 'paid' && !['draft', 'pending_approval', 'cancelled'].includes(status) && canRecordPayment(userRole, userPermissions) && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Record Supplier Payment</h3>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount ({po.currency})</label>
+              <input type="number" min={0.01} step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Method</label>
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="cash">Cash</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="cheque">Cheque</option>
+              </select>
+            </div>
+            <button
+              onClick={() => { const amt = parseFloat(paymentAmount); if (!amt || amt <= 0) { showToast('Enter a positive amount', 'error'); return; } paymentMut.mutate(); }}
+              disabled={paymentMut.isPending}
+              className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+              Record Payment
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2">
@@ -609,6 +660,28 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
                     </div>
                   ))}
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Supplier payments */}
+      {(po.payments ?? []).length > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Supplier Payments</h3>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {(po.payments ?? []).map(p => (
+              <div key={p.id} className="p-4 flex items-center gap-4 text-sm">
+                <span className="font-medium text-gray-900 dark:text-white">{po.currency} {Number(p.amount).toFixed(2)}</span>
+                <span className="text-gray-500 dark:text-gray-400">{p.paymentMethod}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${p.source === 'auto_on_receipt' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
+                  {p.source === 'auto_on_receipt' ? 'auto (on receipt)' : 'manual'}
+                </span>
+                <span className="text-gray-500 dark:text-gray-400">{new Date(p.createdAt).toLocaleString()}</span>
+                {p.notes && <span className="text-gray-500 dark:text-gray-400 italic">{p.notes}</span>}
               </div>
             ))}
           </div>

@@ -33,12 +33,25 @@ export interface PORow {
   receivingLocationId: number | null;
   receivingLocationName: string | null;
   financialStatus: 'unpaid' | 'partial' | 'paid';
+  paymentTerms: 'cash' | 'credit';
   createdBy: number;
   approvedBy: number | null;
   createdAt: string;
   updatedAt: string;
   lineItems?: POLineItemRow[];
   receipts?: POReceiptRow[];
+  payments?: SupplierPaymentRow[];
+}
+
+export interface SupplierPaymentRow {
+  id: string;
+  poId: string;
+  amount: number;
+  paymentMethod: string;
+  source: 'manual' | 'auto_on_receipt';
+  notes: string | null;
+  createdBy: number;
+  createdAt: string;
 }
 
 export interface POLineItemRow {
@@ -100,6 +113,7 @@ function mapPORow(row: Record<string, unknown>): PORow {
     receivingLocationId: (row.receiving_location_id as number | null) ?? null,
     receivingLocationName: (row.receiving_location_name as string | null) ?? null,
     financialStatus: (row.financial_status as 'unpaid' | 'partial' | 'paid') ?? 'unpaid',
+    paymentTerms: (row.payment_terms as 'cash' | 'credit') ?? 'credit',
     createdBy: row.created_by as number,
     approvedBy: (row.approved_by as number | null) ?? null,
     createdAt: (row.created_at as Date).toISOString(),
@@ -148,6 +162,19 @@ function mapReceiptItemRow(row: Record<string, unknown>): POReceiptItemRow {
   };
 }
 
+function mapSupplierPaymentRow(row: Record<string, unknown>): SupplierPaymentRow {
+  return {
+    id: String(row.id),
+    poId: String(row.po_id),
+    amount: parseFloat(row.amount as string),
+    paymentMethod: row.payment_method as string,
+    source: row.source as 'manual' | 'auto_on_receipt',
+    notes: (row.notes as string | null) ?? null,
+    createdBy: row.created_by as number,
+    createdAt: (row.created_at as Date).toISOString(),
+  };
+}
+
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 async function fetchLineItems(poId: string | number): Promise<POLineItemRow[]> {
@@ -189,6 +216,17 @@ async function fetchReceipts(poId: string | number): Promise<POReceiptRow[]> {
   return receipts;
 }
 
+async function fetchSupplierPayments(poId: string | number): Promise<SupplierPaymentRow[]> {
+  const result = await db.query(
+    `SELECT id, po_id, amount, payment_method, source, notes, created_by, created_at
+     FROM supplier_payments
+     WHERE po_id = $1
+     ORDER BY created_at ASC`,
+    [poId],
+  );
+  return result.rows.map(mapSupplierPaymentRow);
+}
+
 // ── getById ───────────────────────────────────────────────────────────────────
 
 export async function getById(id: number | string): Promise<PORow> {
@@ -197,7 +235,7 @@ export async function getById(id: number | string): Promise<PORow> {
             po.status, po.total_amount, po.currency, po.expected_delivery_date,
             po.notes, po.receiving_branch_id, po.receiving_location_id,
             rl.name AS receiving_location_name,
-            po.financial_status, po.created_by, po.approved_by, po.created_at, po.updated_at
+            po.financial_status, po.payment_terms, po.created_by, po.approved_by, po.created_at, po.updated_at
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
      LEFT JOIN locations rl ON rl.id = po.receiving_location_id
@@ -208,6 +246,7 @@ export async function getById(id: number | string): Promise<PORow> {
   const po = mapPORow(result.rows[0]);
   po.lineItems = await fetchLineItems(po.id);
   po.receipts = await fetchReceipts(po.id);
+  po.payments = await fetchSupplierPayments(po.id);
   return po;
 }
 
@@ -250,7 +289,7 @@ export async function list(opts: {
               po.status, po.total_amount, po.currency, po.expected_delivery_date,
               po.notes, po.receiving_branch_id, po.receiving_location_id,
               rl.name AS receiving_location_name,
-              po.financial_status, po.created_by, po.approved_by, po.created_at, po.updated_at
+              po.financial_status, po.payment_terms, po.created_by, po.approved_by, po.created_at, po.updated_at
        FROM purchase_orders po
        JOIN suppliers s ON s.id = po.supplier_id
        LEFT JOIN locations rl ON rl.id = po.receiving_location_id
@@ -280,6 +319,8 @@ export async function createPO(
     currency?: string;
     expectedDeliveryDate?: string | null;
     notes?: string | null;
+    /** 'cash' auto-settles on receipt; 'credit' (default) stays unpaid until a supplier payment is recorded. */
+    paymentTerms?: 'cash' | 'credit';
     lineItems: POLineItemInput[];
   },
   staffCtx: StaffCtx,
@@ -331,8 +372,8 @@ export async function createPO(
     await client.query('BEGIN');
 
     const poRes = await client.query(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, currency, expected_delivery_date, notes, created_by, receiving_branch_id, receiving_location_id)
-       VALUES ($1, $2, 'draft', $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, currency, expected_delivery_date, notes, created_by, receiving_branch_id, receiving_location_id, payment_terms)
+       VALUES ($1, $2, 'draft', $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         data.branchId,
@@ -344,6 +385,7 @@ export async function createPO(
         staffCtx.staffId,
         data.receivingBranchId ?? null,
         resolvedLocationId,
+        data.paymentTerms ?? 'credit',
       ],
     );
     const poId: string = String(poRes.rows[0].id);
@@ -390,6 +432,7 @@ export async function updatePO(
     notes?: string | null;
     receivingBranchId?: number | null;
     receivingLocationId?: number | null;
+    paymentTerms?: 'cash' | 'credit';
     lineItems?: POLineItemInput[];
   },
   staffCtx: StaffCtx,
@@ -459,6 +502,7 @@ export async function updatePO(
     if (data.notes !== undefined) { sets.push(`notes = $${p++}`); params.push(data.notes); }
     if (data.receivingBranchId !== undefined) { sets.push(`receiving_branch_id = $${p++}`); params.push(data.receivingBranchId); }
     if (data.receivingLocationId !== undefined) { sets.push(`receiving_location_id = $${p++}`); params.push(data.receivingLocationId); }
+    if (data.paymentTerms !== undefined) { sets.push(`payment_terms = $${p++}`); params.push(data.paymentTerms); }
     if (totalAmount !== undefined) { sets.push(`total_amount = $${p++}`); params.push(totalAmount.toFixed(2)); }
 
     params.push(id);
@@ -679,6 +723,103 @@ export async function cancelPO(id: number | string, staffCtx: StaffCtx): Promise
   return getById(id);
 }
 
+// ── Payment lifecycle (Module 1 — stabilization sprint) ────────────────────────
+//
+// purchase_orders.financial_status is the source of truth for "has this PO
+// been paid" and is derived -- never set directly by callers -- from the sum
+// of supplier_payments against the PO vs. its total_amount. PO operational
+// status (draft -> ... -> closed) never implies payment: closePO() does not
+// touch financial_status, and only recomputeFinancialStatus() (called from
+// createSupplierPayment() and, for cash terms, from receivePO()) may write it.
+
+async function recomputeFinancialStatus(
+  poId: number | string,
+  client: import('pg').PoolClient,
+): Promise<void> {
+  const poRes = await client.query(
+    `SELECT total_amount FROM purchase_orders WHERE id = $1 FOR UPDATE`,
+    [poId],
+  );
+  if (!poRes.rows.length) return;
+  const totalAmount = parseFloat(poRes.rows[0].total_amount as string);
+
+  const paidRes = await client.query(
+    `SELECT COALESCE(SUM(amount), 0) AS paid FROM supplier_payments WHERE po_id = $1`,
+    [poId],
+  );
+  const totalPaid = parseFloat(paidRes.rows[0].paid as string);
+
+  let financialStatus: 'unpaid' | 'partial' | 'paid';
+  if (totalPaid <= 0.01) financialStatus = 'unpaid';
+  else if (totalPaid >= totalAmount - 0.01) financialStatus = 'paid';
+  else financialStatus = 'partial';
+
+  await client.query(
+    `UPDATE purchase_orders SET financial_status = $1, updated_at = now() WHERE id = $2`,
+    [financialStatus, poId],
+  );
+}
+
+// ── createSupplierPayment ────────────────────────────────────────────────────
+// Records a manual supplier payment against a PO and recomputes financial_status.
+// Reuses the same PO-existence / status checks as the rest of this module
+// rather than introducing a parallel payment pipeline.
+
+export async function createSupplierPayment(
+  poId: number | string,
+  data: { amount: number; paymentMethod?: string; notes?: string | null },
+  staffCtx: StaffCtx,
+): Promise<PORow> {
+  if (!(data.amount > 0)) throw new ValidationError('Payment amount must be positive');
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    const poRes = await client.query(
+      `SELECT status, branch_id, supplier_id FROM purchase_orders WHERE id = $1 FOR UPDATE`,
+      [poId],
+    );
+    if (!poRes.rows.length) throw new NotFoundError('Purchase Order');
+    const po = poRes.rows[0] as { status: string; branch_id: number; supplier_id: number };
+
+    const unpayableStatuses = ['draft', 'pending_approval', 'cancelled'];
+    if (unpayableStatuses.includes(po.status)) {
+      throw new BusinessError(
+        'PO_NOT_PAYABLE',
+        `Cannot record a payment against a Purchase Order in status '${po.status}'`,
+      );
+    }
+
+    await client.query(
+      `INSERT INTO supplier_payments (po_id, branch_id, supplier_id, amount, payment_method, source, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7)`,
+      [
+        poId, po.branch_id, po.supplier_id,
+        data.amount.toFixed(2), data.paymentMethod ?? 'cash',
+        data.notes ?? null, staffCtx.staffId,
+      ],
+    );
+
+    await recomputeFinancialStatus(poId, client);
+
+    await client.query(
+      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
+       VALUES ($1, $2, 'CREATE', 'supplier_payment', $3, $4, $5)`,
+      [staffCtx.staffId, staffCtx.role, String(poId), staffCtx.branchId,
+       JSON.stringify({ amount: data.amount, paymentMethod: data.paymentMethod ?? 'cash' })],
+    );
+
+    await client.query('COMMIT');
+    return getById(poId);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ── receivePO ─────────────────────────────────────────────────────────────────
 
 export async function receivePO(
@@ -698,7 +839,7 @@ export async function receivePO(
 
     // 1. Fetch PO — must be in receivable status
     const poRes = await client.query(
-      `SELECT id, status, receiving_location_id FROM purchase_orders WHERE id = $1 FOR UPDATE`,
+      `SELECT id, status, receiving_location_id, branch_id, supplier_id, payment_terms FROM purchase_orders WHERE id = $1 FOR UPDATE`,
       [id],
     );
     if (!poRes.rows.length) throw new NotFoundError('Purchase Order');
@@ -707,6 +848,7 @@ export async function receivePO(
     if (!receivableStatuses.includes(poRes.rows[0].status as string)) {
       throw new BusinessError('PO_INVALID_STATUS', 'Purchase Order must be approved, ordered, or partially_received to receive goods');
     }
+    const paymentTerms = poRes.rows[0].payment_terms as 'cash' | 'credit';
 
     // Resolve effective location: use provided locationId or fall back to PO's receiving_location_id
     const effectiveLocationId = locationId ?? (poRes.rows[0].receiving_location_id as number | null);
@@ -719,20 +861,22 @@ export async function receivePO(
     if (!locRes.rows.length) throw new NotFoundError('Location');
 
     // 3. Process each item
+    let cashValueReceived = 0; // SUM(quantityReceived * unit_cost) this event — for cash-terms auto-pay
     for (const item of items) {
       if (item.quantityReceived <= 0) {
         throw new ValidationError('Quantity received must be positive');
       }
 
       const lineRes = await client.query(
-        `SELECT id, po_id, book_id, quantity, received_quantity FROM po_line_items WHERE id = $1 FOR UPDATE`,
+        `SELECT id, po_id, book_id, quantity, received_quantity, unit_cost FROM po_line_items WHERE id = $1 FOR UPDATE`,
         [item.poLineItemId],
       );
       if (!lineRes.rows.length) throw new NotFoundError(`PO Line Item ${item.poLineItemId}`);
 
       const line = lineRes.rows[0] as {
-        id: number; po_id: string; book_id: number; quantity: number; received_quantity: number;
+        id: number; po_id: string; book_id: number; quantity: number; received_quantity: number; unit_cost: string;
       };
+      cashValueReceived += item.quantityReceived * parseFloat(line.unit_cost);
 
       if (String(line.po_id) !== String(id)) {
         throw new BusinessError('LINE_ITEM_MISMATCH', `Line item ${item.poLineItemId} does not belong to this PO`);
@@ -815,6 +959,27 @@ export async function receivePO(
       `UPDATE purchase_orders SET status = $1, updated_at = now() WHERE id = $2`,
       [newStatus, id],
     );
+
+    // 7b. Cash procurement auto-settles on receipt (COD-style): the value of
+    // goods actually received in THIS event is recorded as a supplier
+    // payment, so a partial receipt only pays for what arrived, not the
+    // full PO total. Credit procurement (the default) is untouched here —
+    // it stays 'unpaid'/'partial' until createSupplierPayment() is called
+    // explicitly at settlement. financial_status is only ever written by
+    // recomputeFinancialStatus(); this receipt path never sets it directly.
+    if (paymentTerms === 'cash' && cashValueReceived > 0) {
+      await client.query(
+        `INSERT INTO supplier_payments (po_id, branch_id, supplier_id, amount, payment_method, source, notes, created_by)
+         VALUES ($1, $2, $3, $4, 'cash', 'auto_on_receipt', $5, $6)`,
+        [
+          id, poRes.rows[0].branch_id, poRes.rows[0].supplier_id,
+          cashValueReceived.toFixed(2),
+          `Auto-settled on receipt #${receiptId}`,
+          staffCtx.staffId,
+        ],
+      );
+      await recomputeFinancialStatus(id, client);
+    }
 
     // 8. Audit log
     await client.query(

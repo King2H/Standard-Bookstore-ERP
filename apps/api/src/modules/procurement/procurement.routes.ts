@@ -143,6 +143,34 @@ router.post(
   },
 );
 
+// ── POST /api/purchase-orders/:id/payments ────────────────────────────────────
+// Module 1 (stabilization sprint) — record a manual supplier payment against
+// a PO. financial_status is derived from the sum of these rows (plus any
+// auto-settled cash-terms receipt payments) — PO completion (close) never
+// implies payment completion, and this is the only way to move a credit-terms
+// PO out of 'unpaid'.
+
+router.post(
+  '/purchase-orders/:id/payments',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { amount, paymentMethod, notes } = req.body as {
+        amount: number;
+        paymentMethod?: string;
+        notes?: string | null;
+      };
+      const po = await procurementService.createSupplierPayment(
+        pi(req.params.id),
+        { amount, paymentMethod, notes },
+        req.staff!,
+      );
+      res.status(201).json(po);
+    } catch (err) { next(err); }
+  },
+);
+
 // ── POST /api/purchase-orders/:id/close ───────────────────────────────────────
 
 router.post(
