@@ -17,6 +17,8 @@ interface Order {
   subtotal: number; total: number; cancelReason: string | null;
   createdAt: string; lineItems?: OrderLine[];
   allowedActions?: string[];
+  paymentMethod?: string | null;
+  dueDate?: string | null;
 }
 interface OrderListResponse { items: Order[]; total: number; page: number; totalPages: number; }
 interface Customer { id: number; customerCode: string; fullName: string; }
@@ -65,6 +67,13 @@ const canCreate = (r?: Role, perms?: string[]) =>
   (perms && perms.includes('CREATE_SALE')) ||
   ['Sales', 'Manager', 'Admin', 'Super_Admin'].includes(r ?? '');
 
+// Payment Mode Capture: the 4 methods this ticket asks for, captured at cash-sale
+// confirmation. Vocabulary matches order_payments.payment_method's existing CHECK
+// constraint ('mobile' = Telebirr, 'store_credit' = Store Credit) — no new values.
+const CASH_PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: '💵 Cash', bank: '🏦 Bank Transfer', mobile: '📱 Telebirr', store_credit: '🎁 Store Credit',
+};
+
 type Tab = 'list' | 'new';
 
 export default function OrdersPage({ userRole, userPermissions = [], initialContext = {} }: OrdersPageProps) {
@@ -87,6 +96,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [confirmDueDate, setConfirmDueDate] = useState('');
+  const [confirmPaymentMethod, setConfirmPaymentMethod] = useState('');
 
   // New order state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -95,7 +105,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   const [channel, setChannel] = useState<'in_store' | 'phone' | 'online'>('in_store');
   const [bookSearch, setBookSearch] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
-  const [orderItems, setOrderItems] = useState<Array<{ bookId: number; bookTitle: string; quantity: number; unitPrice: number; discountPct: number; discountType: string; discountMode: string; }>>([]);
+  const [orderItems, setOrderItems] = useState<Array<{ bookId: number; bookTitle: string; quantity: number; unitPrice: number; discountPct: number; discountType: string; discountMode: string; availableStock: number | null; }>>([]);
 
   // Queries
   const { data: listData, isLoading } = useQuery<OrderListResponse>({
@@ -149,6 +159,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       setCancelReason('');
       setConfirmingId(null);
       setConfirmDueDate('');
+      setConfirmPaymentMethod('');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
@@ -167,11 +178,20 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
 
   function addItem(book: BookResult) {
     const price = book.branchPrice ?? book.defaultPrice ?? 0;
+    const availableStock = book.availability?.available ?? null;
     const existing = orderItems.find(i => i.bookId === book.id);
     if (existing) {
+      if (availableStock != null && existing.quantity >= availableStock) {
+        showToast(`Only ${availableStock} in stock for "${book.title}"`, 'error');
+        return;
+      }
       setOrderItems(items => items.map(i => i.bookId === book.id ? { ...i, quantity: i.quantity + 1 } : i));
     } else {
-      setOrderItems(items => [...items, { bookId: book.id, bookTitle: book.title, quantity: 1, unitPrice: price, discountPct: 0, discountType: 'Normal', discountMode: 'Percentage' }]);
+      if (availableStock != null && availableStock <= 0) {
+        showToast(`"${book.title}" is out of stock`, 'error');
+        return;
+      }
+      setOrderItems(items => [...items, { bookId: book.id, bookTitle: book.title, quantity: 1, unitPrice: price, discountPct: 0, discountType: 'Normal', discountMode: 'Percentage', availableStock }]);
     }
     setBookSearch('');
   }
@@ -294,7 +314,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                               if (action === 'confirm' && order.saleType === 'credit_sale') {
                                 return confirmingId === order.id ? (
                                   <div key="confirm-credit" className="flex gap-1" onClick={e => e.stopPropagation()}>
-                                    <input type="date" value={confirmDueDate} onChange={e => setConfirmDueDate(e.target.value)}
+                                    <input type="date" value={confirmDueDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setConfirmDueDate(e.target.value)}
                                       className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                                     <button
                                       disabled={!confirmDueDate}
@@ -306,6 +326,30 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                   <button key="confirm-credit-open" onClick={e => { e.stopPropagation(); setConfirmingId(order.id); setConfirmDueDate(''); }}
                                     className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>
                                     Confirm (set due date)
+                                  </button>
+                                );
+                              }
+                              // Payment Mode Capture: a cash order's payment method is
+                              // recorded automatically at confirm — prompt for it inline,
+                              // mirroring the credit_sale due-date prompt above.
+                              if (action === 'confirm' && order.saleType === 'cash_sale') {
+                                return confirmingId === order.id ? (
+                                  <div key="confirm-cash" className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                    <select value={confirmPaymentMethod} onChange={e => setConfirmPaymentMethod(e.target.value)}
+                                      className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                                      <option value="">Payment method…</option>
+                                      {Object.entries(CASH_PAYMENT_METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                    </select>
+                                    <button
+                                      disabled={!confirmPaymentMethod}
+                                      onClick={() => actionMut.mutate({ id: order.id, action: 'confirm', body: { paymentMethod: confirmPaymentMethod } })}
+                                      className="text-xs bg-blue-600 disabled:opacity-40 text-white px-2 py-0.5 rounded">OK</button>
+                                    <button onClick={() => { setConfirmingId(null); setConfirmPaymentMethod(''); }} className="text-xs text-gray-500 px-1">✕</button>
+                                  </div>
+                                ) : (
+                                  <button key="confirm-cash-open" onClick={e => { e.stopPropagation(); setConfirmingId(order.id); setConfirmPaymentMethod(''); }}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>
+                                    Confirm (set payment method)
                                   </button>
                                 );
                               }
@@ -494,7 +538,20 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                     <div className="flex items-center gap-1">
                       <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i))} className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold">-</button>
                       <span className="w-8 text-center text-sm">{item.quantity}</span>
-                      <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: i.quantity + 1 } : i))} className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold">+</button>
+                      <button
+                        onClick={() => {
+                          if (item.availableStock != null && item.quantity >= item.availableStock) {
+                            showToast(`Only ${item.availableStock} in stock for "${item.bookTitle}"`, 'error');
+                            return;
+                          }
+                          setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: i.quantity + 1 } : i));
+                        }}
+                        disabled={item.availableStock != null && item.quantity >= item.availableStock}
+                        className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                      >+</button>
+                      {item.availableStock != null && (
+                        <span className="text-[10px] text-gray-400 ml-1">/{item.availableStock} avail</span>
+                      )}
                     </div>
                     {/* Discount controls */}
                     <div className="flex items-center gap-1">
@@ -537,7 +594,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
 
 function OrderDetailLoader({ orderId }: { orderId: string }) {
   const currency = useCurrency();
-  const { data } = useQuery<{ status?: string; lineItems?: OrderLine[] }>({
+  const { data } = useQuery<{ status?: string; lineItems?: OrderLine[]; paymentMethod?: string | null; dueDate?: string | null; saleType?: 'cash_sale' | 'credit_sale' }>({
     queryKey: ['order-detail', orderId],
     queryFn: () => api.get(`/orders/${orderId}`),
   });
@@ -551,7 +608,18 @@ function OrderDetailLoader({ orderId }: { orderId: string }) {
     : status;
 
   return (
-    <table className="text-xs w-full max-w-2xl">
+    <>
+      {(data.paymentMethod || data.dueDate) && (
+        <div className="flex gap-4 mb-2 text-xs text-gray-600 dark:text-gray-400">
+          {data.paymentMethod && (
+            <span>💳 Payment method: <span className="font-medium text-gray-900 dark:text-white">{CASH_PAYMENT_METHOD_LABELS[data.paymentMethod] ?? data.paymentMethod}</span></span>
+          )}
+          {data.dueDate && (
+            <span>📅 Due date: <span className="font-medium text-gray-900 dark:text-white">{data.dueDate}</span></span>
+          )}
+        </div>
+      )}
+      <table className="text-xs w-full max-w-2xl">
       <thead>
         <tr className="text-gray-500 dark:text-gray-400">
           {['Book', 'Ordered', 'Reserved', 'Fulfilled', 'Stock State', 'Price'].map(h => (
@@ -609,6 +677,7 @@ function OrderDetailLoader({ orderId }: { orderId: string }) {
           );
         })}
       </tbody>
-    </table>
+      </table>
+    </>
   );
 }

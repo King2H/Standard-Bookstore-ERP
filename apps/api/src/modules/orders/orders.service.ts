@@ -90,6 +90,10 @@ export interface OrderRow {
   cancelReason: string | null; notes: string | null;
   createdBy: number; createdAt: string; updatedAt: string; lineItems?: OrderLineItemRow[];
   allowedActions?: string[];
+  /** Payment method recorded for this order (cash orders: at confirm; populated via getById()'s subquery). */
+  paymentMethod?: string | null;
+  /** Credit sale due date (YYYY-MM-DD), sourced from the linked receivable; populated via getById()'s subquery. */
+  dueDate?: string | null;
 }
 
 export interface OrderLineItemRow {
@@ -113,6 +117,8 @@ function mapOrderRow(row: Record<string, unknown>): OrderRow {
     cancelReason: (row.cancel_reason as string | null) ?? null, notes: (row.notes as string | null) ?? null,
     createdBy: row.created_by as number,
     createdAt: (row.created_at as Date).toISOString(), updatedAt: (row.updated_at as Date).toISOString(),
+    paymentMethod: (row.payment_method as string | null | undefined) ?? null,
+    dueDate: (row.due_date as string | null | undefined) ?? null,
   };
 }
 
@@ -136,7 +142,13 @@ async function fetchLineItems(orderId: string): Promise<OrderLineItemRow[]> {
 }
 
 export async function getById(id: string | number): Promise<OrderRow> {
-  const res = await db.query('SELECT o.* FROM orders o WHERE o.id = $1', [id]);
+  const res = await db.query(
+    `SELECT o.*,
+       (SELECT op.payment_method FROM order_payments op WHERE op.order_id = o.id ORDER BY op.created_at ASC LIMIT 1) AS payment_method,
+       (SELECT TO_CHAR(r.due_date, 'YYYY-MM-DD') FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = o.id LIMIT 1) AS due_date
+     FROM orders o WHERE o.id = $1`,
+    [id],
+  );
   if (!res.rows.length) throw new NotFoundError('Order');
   const order = mapOrderRow(res.rows[0]);
   order.lineItems = await fetchLineItems(order.id);
@@ -295,6 +307,28 @@ export async function create(
   const total = subtotal;
   const initialStatus = await dbStatus('DRAFT');
 
+  // ── Stock visibility: cannot order more than available branch inventory ──
+  // A DRAFT order doesn't reserve or deduct stock yet (confirm() does that,
+  // with its own row-locked, authoritative INSUFFICIENT_STOCK check below,
+  // unchanged) — so a plain read-only availability check here is enough: it
+  // just stops the order from ever being created oversold in the first
+  // place, closer to where the user is adding items, instead of only
+  // surfacing as a confusing error much later at confirm.
+  if (!(await isNegativeStockAllowed())) {
+    const effectiveLocationId = await resolveEffectiveLocationId(data.locationId ?? null, staffCtx.branchId);
+    for (const item of resolvedItems) {
+      const stock = await invTxSvc.getAvailableStock(item.bookId, effectiveLocationId);
+      if (stock.available < item.quantity) {
+        const bookRes = await db.query('SELECT title FROM books WHERE id = $1', [item.bookId]);
+        const bookTitle = (bookRes.rows[0]?.title as string | undefined) ?? `Book ${item.bookId}`;
+        throw new BusinessError(
+          'INSUFFICIENT_STOCK',
+          `Insufficient stock for "${bookTitle}". Available: ${stock.available}, Requested: ${item.quantity}`,
+        );
+      }
+    }
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -371,6 +405,26 @@ export async function create(
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
 }
 
+// Standalone counterpart to resolveLocationId() below, usable before an
+// OrderRow/transaction exists (e.g. from create(), pre-INSERT). Same
+// fallback chain: explicit locationId → branch default-fulfillment location
+// → any location in the branch → branchId itself. Uses the plain `db` pool
+// since it only ever runs outside a transaction.
+async function resolveEffectiveLocationId(locationId: number | null, branchId: number): Promise<number> {
+  if (locationId) return locationId;
+  const defRes = await db.query(
+    'SELECT id FROM locations WHERE branch_id = $1 AND is_default_fulfillment = true LIMIT 1',
+    [branchId],
+  );
+  if (defRes.rows.length) return defRes.rows[0].id as number;
+  const anyRes = await db.query(
+    'SELECT id FROM locations WHERE branch_id = $1 ORDER BY id LIMIT 1',
+    [branchId],
+  );
+  if (anyRes.rows.length) return anyRes.rows[0].id as number;
+  return branchId;
+}
+
 async function resolveLocationId(client: pg.PoolClient, order: OrderRow, staffCtx: StaffCtx): Promise<number> {
   if (order.locationId) return order.locationId;
   // Try branch default fulfillment location
@@ -389,7 +443,14 @@ async function resolveLocationId(client: pg.PoolClient, order: OrderRow, staffCt
   return staffCtx.branchId;
 }
 
-export async function confirm(orderId: string | number, staffCtx: StaffCtx, dueDate?: string | null): Promise<OrderRow> {
+const CASH_PAYMENT_METHODS = ['cash', 'bank', 'mobile', 'store_credit'] as const;
+
+export async function confirm(
+  orderId: string | number,
+  staffCtx: StaffCtx,
+  dueDate?: string | null,
+  paymentMethod?: string | null,
+): Promise<OrderRow> {
   const order = await getById(orderId);
   if (normaliseStatus(order.status) !== 'DRAFT') throw new BusinessError('INVALID_STATE', "Cannot confirm order in status '" + order.status + "'");
 
@@ -403,6 +464,35 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx, dueD
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       throw new ValidationError('due_date must be in YYYY-MM-DD format');
+    }
+    // Due date must be today or later. Compared as ISO YYYY-MM-DD strings
+    // (both zero-padded) so this never round-trips through a JS Date object
+    // — TO_CHAR(CURRENT_DATE, ...) reads the DB session's own local date,
+    // avoiding the UTC-shift bugs a Date().toISOString() comparison would
+    // introduce for non-UTC server timezones (e.g. Africa/Addis_Ababa).
+    const todayRes = await db.query(`SELECT TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS today`);
+    const today = todayRes.rows[0].today as string;
+    if (dueDate < today) {
+      throw new ValidationError(`due_date must be today (${today}) or later`);
+    }
+  }
+
+  // Payment Mode Capture: every cash order must have a payment method
+  // persisted against it — the Create Order confirm form (OrdersPage.tsx)
+  // requires the staff member to pick one before it will submit. Callers
+  // that don't supply one (older/other integration points, e.g. programmatic
+  // confirms elsewhere in the app) fall back to 'cash', matching the
+  // "cash order" naming itself — the method is still always recorded,
+  // it's just assumed to be cash absent a more specific selection, so this
+  // never becomes a caller-breaking hard requirement at the API layer.
+  let effectivePaymentMethod: string | null = null;
+  if (order.saleType === 'cash_sale') {
+    effectivePaymentMethod = paymentMethod || 'cash';
+    if (!(CASH_PAYMENT_METHODS as readonly string[]).includes(effectivePaymentMethod)) {
+      throw new ValidationError(`payment_method must be one of: ${CASH_PAYMENT_METHODS.join(', ')}`);
+    }
+    if (effectivePaymentMethod === 'store_credit' && !order.customerId) {
+      throw new BusinessError('STORE_CREDIT_REQUIRES_CUSTOMER', 'Store credit payment requires a customer to be selected');
     }
   }
 
@@ -483,6 +573,47 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx, dueD
     // ── Fix 9.1 (CASH): set payment_status = 'paid' atomically at confirmation ──
     if (order.saleType === 'cash_sale') {
       await client.query("UPDATE orders SET payment_status = 'paid', updated_at = now() WHERE id = $1", [orderId]);
+
+      // ── Payment Mode Capture: persist the payment method as an order_payments
+      // record. This is a system-recorded side effect of confirmation (the
+      // order is paid in full immediately) — distinct from the Payments
+      // module's manual collection flow, which paymentsService.createPayment()
+      // already refuses for cash_sale orders (CASH_ORDER_ALREADY_PAID).
+      if (effectivePaymentMethod === 'store_credit') {
+        const scRes = await client.query(
+          'SELECT balance FROM store_credit_accounts WHERE customer_id = $1 FOR UPDATE',
+          [order.customerId],
+        );
+        const available = scRes.rows.length ? parseFloat(scRes.rows[0].balance as string) : 0;
+        if (available < order.total - 0.01) {
+          throw new BusinessError(
+            'INSUFFICIENT_STORE_CREDIT',
+            `Insufficient store credit. Available: ETB ${available.toFixed(2)}, requested: ETB ${order.total.toFixed(2)}`,
+            { available, requested: order.total },
+          );
+        }
+        await client.query(
+          'UPDATE store_credit_accounts SET balance = balance - $1 WHERE customer_id = $2',
+          [order.total.toFixed(2), order.customerId],
+        );
+        await client.query(
+          `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+           VALUES ($1, 'order_cash_sale', $2, $3, 'debit')`,
+          [order.customerId, String(orderId), order.total.toFixed(2)],
+        );
+      }
+
+      const payCntRes = await client.query(
+        `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM order_payments WHERE DATE(created_at) = CURRENT_DATE`,
+      );
+      const payDateStr = payCntRes.rows[0].date_str as string;
+      const paymentReference = 'PAY-' + payDateStr + '-' + String(parseInt(payCntRes.rows[0].count, 10) + 1).padStart(4, '0');
+      await client.query(
+        `INSERT INTO order_payments
+           (payment_reference, order_id, amount, currency, payment_method, status, notes, processed_by)
+         VALUES ($1, $2, $3, 'ETB', $4, 'success', $5, $6)`,
+        [paymentReference, orderId, order.total.toFixed(2), effectivePaymentMethod, 'Recorded at order confirmation', staffCtx.staffId],
+      );
     }
 
     const confirmedStatus = await dbStatus('CONFIRMED');

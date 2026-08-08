@@ -411,7 +411,26 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     const orderId = createRes.body.id as number;
     expect(createRes.body.status).toBe('DRAFT');
 
-    // ── Step 2: Confirm the order — should succeed ───────────────────────────
+    // ── Step 1b: Draft a second CASH order for the full INITIAL_QTY, while
+    // all of it is still available (Unified Order Creation Workflow: create()
+    // now also validates available stock, so this can't be over the *original*
+    // total the way a truly oversized request could — it has to be drafted
+    // before order 1 consumes any of it, then become insufficient once order 1
+    // is confirmed below). ────────────────────────────────────────────────────
+    const OVER_QTY = INITIAL_QTY;
+    const overCreateRes = await request(getTestApp())
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        locationId,
+        saleType: 'cash_sale',
+        items: [{ bookId, quantity: OVER_QTY }],
+      });
+    expect(overCreateRes.status).toBe(201);
+    const overOrderId = overCreateRes.body.id as number;
+
+    // ── Step 2: Confirm the first order — should succeed ─────────────────────
     const confirmRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
@@ -431,23 +450,10 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     const confirmedStatus = (orderRes.body.status as string).toLowerCase();
     expect(['confirmed', 'in_progress']).toContain(confirmedStatus);
 
-    // ── Step 3: Create a second DRAFT order that requests MORE than available ─
-    // After confirm above, the soft reservation means available = qty - reserved.
-    // Create an order requesting MORE than the total remaining qty.
-    const OVER_QTY = INITIAL_QTY + 1; // definitely exceeds available
-    const overCreateRes = await request(getTestApp())
-      .post('/api/orders')
-      .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId))
-      .send({
-        locationId,
-        saleType: 'cash_sale',
-        items: [{ bookId, quantity: OVER_QTY }],
-      });
-    expect(overCreateRes.status).toBe(201);
-    const overOrderId = overCreateRes.body.id as number;
-
-    // ── Assertion 2: confirming the over-quantity order must be rejected ──────
+    // ── Assertion 2: confirming the now-over-quantity order must be rejected ──
+    // Order 1's confirm above consumed ORDER_QTY, leaving less than OVER_QTY
+    // available — order 2 (drafted before that, still requesting all of
+    // INITIAL_QTY) must now fail at its own confirm.
     // requirement 3.13: confirm() SHALL CONTINUE TO enforce hard stock rejection
     const overConfirmRes = await request(getTestApp())
       .post(`/api/orders/${overOrderId}/confirm`)

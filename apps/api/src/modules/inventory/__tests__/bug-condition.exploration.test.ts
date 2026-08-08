@@ -293,6 +293,7 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
     expect(res.body.error).toBe('INSUFFICIENT_STOCK');
 
     // Cleanup
+    await db.query(`DELETE FROM order_payments WHERE order_id = $1`, [orderId]).catch(() => {});
     await clearReservations(bookId, locationId);
     await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [orderId]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
@@ -343,6 +344,7 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
     expect(res.body.error).toBe('INSUFFICIENT_STOCK');
 
     // Cleanup
+    await db.query(`DELETE FROM order_payments WHERE order_id = $1`, [orderId]).catch(() => {});
     await clearReservations(bookId, locationId);
     await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [orderId]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);

@@ -97,7 +97,8 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const dueDate = typeof req.body?.dueDate === 'string' ? req.body.dueDate : null;
-      const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!, dueDate);
+      const paymentMethod = typeof req.body?.paymentMethod === 'string' ? req.body.paymentMethod : null;
+      const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!, dueDate, paymentMethod);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }

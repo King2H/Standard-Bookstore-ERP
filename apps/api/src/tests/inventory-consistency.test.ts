@@ -140,6 +140,9 @@ describe('Inventory Consistency Scenarios', () => {
     // cleanTestBranches()'s DELETE FROM locations fails with a FK violation on
     // orders_location_id_fkey.
     if (branchId) {
+      // Payment Mode Capture: cash_sale confirms now write an order_payments
+      // row, which must be cleaned up before orders (FK).
+      await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
       await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
       await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
       await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
@@ -251,6 +254,7 @@ describe('Inventory Consistency Scenarios', () => {
     expect(qty).toBe(0);
 
     // Cleanup
+    await db.query(`DELETE FROM order_payments WHERE order_id = $1`, [orderId]).catch(() => {});
     await db.query(`DELETE FROM inventory_reservations WHERE order_id = $1`, [orderId]).catch(() => {});
     await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [orderId]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);

@@ -78,6 +78,11 @@ async function cleanPbtData(branchId: number) {
     `DELETE FROM financial_transactions WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`,
     [branchId],
   );
+  // Payment Mode Capture: cash_sale confirms now write an order_payments row.
+  await db.query(
+    `DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`,
+    [branchId],
+  ).catch(() => {});
   await db.query(
     `DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`,
     [branchId],

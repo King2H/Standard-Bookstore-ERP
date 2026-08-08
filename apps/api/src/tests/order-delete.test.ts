@@ -59,6 +59,10 @@ describe('Order delete (Module 9)', () => {
   });
 
   afterAll(async () => {
+    // Payment Mode Capture: cash_sale confirms now write an order_payments
+    // row, so it must be cleaned up before orders (FK) same as the other
+    // order test suites' cleanOrders() helpers already do.
+    await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
     await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
     await db.query(`DELETE FROM receivables WHERE branch_id = $1`, [branchId]);
     await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);

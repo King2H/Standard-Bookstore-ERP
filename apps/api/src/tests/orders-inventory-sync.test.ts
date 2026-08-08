@@ -228,15 +228,20 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
   // ── 6.5 Insufficient stock → hard rejection, inventory unchanged ──────────
 
   it('6.5 Confirm with insufficient stock → 422 INSUFFICIENT_STOCK, order stays DRAFT, inventory unchanged', async () => {
-    await setInventory(bookId, locationId, 2);
-    const qtyBefore = await getInventoryQty(bookId, locationId);
-
+    // Unified Order Creation Workflow: create() now also validates available
+    // stock, so draft while stock is sufficient, then simulate stock
+    // disappearing before confirm — exercising confirm()'s own separate,
+    // row-locked, authoritative check.
+    await setInventory(bookId, locationId, 10);
     const createRes = await request(getTestApp())
       .post('/api/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 10 }] });
     const orderId = createRes.body.id;
+
+    await setInventory(bookId, locationId, 2);
+    const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const confirmRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
@@ -417,9 +422,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     // Clear all reservations for both books at this location before starting
     await db.query(`DELETE FROM inventory_reservations WHERE book_id = ANY($1) AND location_id = $2`, [[bookId, bookId2], locationId]).catch(() => {});
     await setInventory(bookId, locationId, 10);
-    await setInventory(bookId2, locationId, 2); // too low for 5 requested
-    const qtyBefore1 = await getInventoryQty(bookId, locationId);
-    const qtyBefore2 = await getInventoryQty(bookId2, locationId);
+    await setInventory(bookId2, locationId, 10); // enough for create() to accept the draft
 
     const createRes = await request(getTestApp())
       .post('/api/orders')
@@ -428,6 +431,11 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
       .send({ locationId, items: [{ bookId, quantity: 3 }, { bookId: bookId2, quantity: 5 }] });
     expect(createRes.status).toBe(201);
     const orderId = createRes.body.id as string;
+
+    // Simulate stock disappearing on bookId2 between create() and confirm().
+    await setInventory(bookId2, locationId, 2); // too low for 5 requested
+    const qtyBefore1 = await getInventoryQty(bookId, locationId);
+    const qtyBefore2 = await getInventoryQty(bookId2, locationId);
 
     // First confirm: bookId2 has only 2, needs 5 → fail, full rollback
     const confirmRes = await request(getTestApp())
@@ -525,19 +533,22 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
   // ── 6.12 Negative stock prevention ───────────────────────────────────────
 
   it('6.12 Cannot confirm when stock is 0 → 422 INSUFFICIENT_STOCK, qty stays 0', async () => {
-    await setInventory(bookId, locationId, 0);
-    // Also clear any existing reservations so available = 0
-    await db.query(
-      `DELETE FROM inventory_reservations WHERE book_id = $1 AND location_id = $2`,
-      [bookId, locationId],
-    ).catch(() => { /* table may not exist */ });
-
+    // Draft while stock is sufficient (create()'s check), then simulate the
+    // stock disappearing before confirm (confirm()'s own check).
+    await setInventory(bookId, locationId, 5);
     const createRes = await request(getTestApp())
       .post('/api/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
     const orderId = createRes.body.id;
+
+    await setInventory(bookId, locationId, 0);
+    // Also clear any existing reservations so available = 0
+    await db.query(
+      `DELETE FROM inventory_reservations WHERE book_id = $1 AND location_id = $2`,
+      [bookId, locationId],
+    ).catch(() => { /* table may not exist */ });
 
     const confirmRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)

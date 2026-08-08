@@ -257,11 +257,16 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
   // â”€â”€ 4. CONFIRM insufficient stock â†’ 422, no reservation, order stays DRAFT
 
   it('4. Insufficient stock on confirm â†’ 422 INSUFFICIENT_STOCK, no reservation created, order stays DRAFT', async () => {
+    // Unified Order Creation Workflow: create() now also validates available
+    // stock, so draft while stock is sufficient, then simulate stock
+    // disappearing before confirm — exercising confirm()'s own separate,
+    // row-locked, authoritative check.
+    await setInventory(bookId, locationId, 5);
+    const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 5);
     await setInventory(bookId, locationId, 1);
     const qtyBefore = await getInventoryQty(bookId, locationId);
     const reservedBefore = await getReservedQty(bookId, locationId);
 
-    const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 5);
     const res = await confirmOrder(managerToken, branchId, order.id);
 
     expect(res.status).toBe(422);
@@ -416,8 +421,12 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
   it('11. Available stock = inventory.quantity, already reduced by confirmed orders', async () => {
     await setInventory(bookId, locationId, 10);
 
-    // Confirm an order for 3 â€” deducts inventory AND creates a reservation of 3
+    // Draft both orders up front, while all 10 units are still available for
+    // create()'s own stock-visibility check (Unified Order Creation Workflow).
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 3);
+    const order2 = await createDraftOrder(managerToken, branchId, locationId, bookId, 8);
+
+    // Confirm the first order for 3 â€” deducts inventory AND creates a reservation of 3
     await confirmOrder(managerToken, branchId, order.id);
 
     // qty deducted by 3 (order-payment-unification spec, 3.5)
@@ -425,8 +434,9 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     // reserved bookkeeping still shows 3 (separate from physical quantity)
     expect(await getReservedQty(bookId, locationId)).toBe(3);
 
-    // A second order for 8 must fail (available = quantity = 7 < 8)
-    const order2 = await createDraftOrder(managerToken, branchId, locationId, bookId, 8);
+    // order2 (8 units, drafted back when 10 were available) must now fail at
+    // confirm â€” available = quantity = 7 < 8, exercising confirm()'s own
+    // authoritative, row-locked recheck.
     const res2 = await confirmOrder(managerToken, branchId, order2.id);
     expect(res2.status).toBe(422);
     expect(res2.body.error).toBe('INSUFFICIENT_STOCK');
@@ -450,7 +460,7 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     const bookA = books.rows[0].id as number;
     const bookB = books.rows[1].id as number;
     await setInventory(bookA, locationId, 10);
-    await setInventory(bookB, locationId, 1); // not enough for 5
+    await setInventory(bookB, locationId, 10); // enough for create() to accept the draft
 
     const orderRes = await request(getTestApp())
       .post('/api/orders')
@@ -458,6 +468,9 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId: bookA, quantity: 3 }, { bookId: bookB, quantity: 5 }] });
     expect(orderRes.status).toBe(201);
+
+    // Simulate stock disappearing on bookB between create() and confirm().
+    await setInventory(bookB, locationId, 1); // not enough for 5
 
     const res = await confirmOrder(managerToken, branchId, String(orderRes.body.id));
     expect(res.status).toBe(422);
@@ -477,8 +490,11 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
   // â”€â”€ 13. Negative stock prevention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it('13. Cannot confirm when stock is 0 â†’ 422 INSUFFICIENT_STOCK, qty stays 0', async () => {
-    await setInventory(bookId, locationId, 0);
+    // Draft while stock is sufficient (create()'s check), then simulate the
+    // stock disappearing before confirm (confirm()'s own check).
+    await setInventory(bookId, locationId, 5);
     const order = await createDraftOrder(managerToken, branchId, locationId, bookId, 1);
+    await setInventory(bookId, locationId, 0);
     const res = await confirmOrder(managerToken, branchId, order.id);
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('INSUFFICIENT_STOCK');
@@ -648,6 +664,12 @@ describe('Order Lifecycle — credit_sale paths', () => {
 
   afterAll(async () => {
     await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
+    // This describe's tests confirm credit_sale orders, which create
+    // receivables (source_type='order_credit_sale') against customerId —
+    // without deleting them first, the customer delete below silently no-ops
+    // (FK violation swallowed by .catch()), leaking the customer row and
+    // breaking the next run's INSERT on customer_code's unique constraint.
+    await db.query(`DELETE FROM receivables WHERE customer_id = $1`, [customerId]).catch(() => {});
     await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
     await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
     await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
@@ -926,8 +948,11 @@ describe('Order Lifecycle — credit_sale paths', () => {
   // ── CS-8: no negative stock ───────────────────────────────────────────────
 
   it('CS-8: credit_sale cannot reserve when available stock is 0', async () => {
-    await setInv(0);
+    // Draft while stock is sufficient (create()'s own check), then simulate
+    // the stock disappearing before confirm (confirm()'s own separate check).
+    await setInv(5);
     const order = await createCreditOrder(1);
+    await setInv(0);
     const confRes = await confirm(order.id);
     expect(confRes.status).toBe(422);
     expect(confRes.body.error).toBe('INSUFFICIENT_STOCK');

@@ -21,6 +21,19 @@ async function getOrCreateLocation(branchId: number): Promise<number> {
   return c.rows[0].id as number;
 }
 
+// Unified Order Creation Workflow: order creation now validates available
+// stock up front, so tests that create orders need inventory seeded — this
+// suite never confirms orders (it exercises payment collection on DRAFT
+// orders directly), so it never needed inventory before.
+async function ensureInventory(bookId: number, locationId: number, qty = 50) {
+  await db.query(
+    `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version)
+     VALUES ($1, $2, $3, 5, 0)
+     ON CONFLICT (book_id, location_id) DO UPDATE SET quantity = $3, version = 0`,
+    [bookId, locationId, qty],
+  );
+}
+
 async function createTestCustomer(branchId: number): Promise<number> {
   const code = `PAY-TEST-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const r = await db.query(
@@ -81,6 +94,7 @@ describe('Payments — Order Payment Management', () => {
     locationId = await getOrCreateLocation(branchId);
     const book = await getTestBook();
     bookId = book.id;
+    await ensureInventory(bookId, locationId, 50);
     customerId = await createTestCustomer(branchId);
   });
 
