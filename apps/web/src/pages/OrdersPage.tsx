@@ -222,6 +222,12 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setListPage(1); }}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">All statuses</option>
+              {/* Matches the Dashboard's Pending Orders drill-down exactly (Module 6/
+                  hotfix) — without this explicit option, arriving here with that
+                  filter pre-applied left the <select> showing "All statuses" (no
+                  option matched the comma-joined value), which looked like the
+                  drill-down hadn't applied any filter even though it had. */}
+              <option value="Confirmed,In_Progress,CONFIRMED,PAID">Pending Fulfillment (Confirmed/Paid)</option>
               {['DRAFT','CONFIRMED','PAID','FULFILLED','COMPLETED','CANCELLED',
                 'Pending','Confirmed','In_Progress','Fulfilled','Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>

@@ -184,6 +184,13 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
           className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Statuses</option>
+          {/* Matches the Dashboard's Outstanding Credit drill-down exactly
+              (Module 6/hotfix) — without this explicit option, arriving here
+              with that filter pre-applied left the <select> showing "All
+              Statuses" (no option matched the comma-joined value), which
+              looked like the drill-down hadn't applied any filter even
+              though it had. */}
+          <option value="Pending,PartiallyPaid,Overdue">Outstanding (Pending/Partial/Overdue)</option>
           {['Pending', 'PartiallyPaid', 'Settled', 'Overdue'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
