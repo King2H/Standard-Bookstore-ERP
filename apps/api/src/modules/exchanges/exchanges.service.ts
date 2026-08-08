@@ -342,6 +342,19 @@ export async function createExchange(
     if (!bookRes.rows[0].is_active) throw new BusinessError('BOOK_INACTIVE', 'Book ' + bookId + ' is not active');
   }
 
+  // Acquisition Allowance Capture / Valuation Integrity: every incoming item's
+  // unitPrice IS the Customer Allowance Value — the trade-in credit granted
+  // to the customer, which becomes that unit's cost basis in inventory below
+  // (Virtual Exchange Receiving). A zero/blank allowance would receive stock
+  // with no real cost basis, corrupting COGS for every future sale of that
+  // book (see costBasis.ts) — reject it up front instead of silently letting
+  // it through.
+  for (const item of data.incomingItems ?? []) {
+    if (!(item.unitPrice > 0)) {
+      throw new ValidationError(`Customer allowance value is required for incoming book ${item.bookId} and must be greater than zero`);
+    }
+  }
+
   // Validate outgoing items have sufficient stock — via the centralized
   // inventoryTransaction.service.ts, not a raw query (Module 2: this call
   // site was reading inventory.quantity directly, bypassing the single
@@ -420,9 +433,14 @@ export async function createExchange(
     // Update inventory via centralized service — incoming items increase stock, outgoing decrease
     for (const item of data.incomingItems ?? []) {
       await client.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [item.bookId, locationId]);
-      // Increase stock via centralized service (Requirements 2.1, 2.12)
+      // Virtual Exchange Receiving: increase stock via centralized service
+      // (Requirements 2.1, 2.12), tagged with the 'customer_exchange' SOURCE
+      // and the Customer Allowance Value as this stock-in event's unit cost
+      // basis — the whole point of this feature is that a book that was
+      // never procured through Procurement still gets a real, non-zero cost
+      // (see costBasis.ts) instead of silently costing $0 in COGS/profit.
       await invTxSvc.stockIn(
-        { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_in', referenceId: exchangeId, reasonCode: 'return', notes: 'Exchange incoming', staffCtx },
+        { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'customer_exchange', referenceId: exchangeId, reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: item.unitPrice },
         client,
       );
     }
@@ -563,6 +581,15 @@ export async function initiateExchange(
     const bookRes = await db.query('SELECT id, is_active FROM books WHERE id = $1', [bookId]);
     if (!bookRes.rows.length) throw new NotFoundError('Book ' + bookId);
     if (!bookRes.rows[0].is_active) throw new BusinessError('BOOK_INACTIVE', 'Book ' + bookId + ' is not active');
+  }
+
+  // Acquisition Allowance Capture / Valuation Integrity — same requirement as
+  // createExchange() (see there for the full rationale): a returned item's
+  // unitPrice becomes its cost basis in inventory once settled.
+  for (const item of data.items.filter(i => i.type === 'returned')) {
+    if (!(item.unitPrice > 0)) {
+      throw new ValidationError(`Customer allowance value is required for incoming book ${item.bookId} and must be greater than zero`);
+    }
   }
 
   let resolvedCustomerId = data.customerId ?? null;
@@ -899,9 +926,11 @@ export async function settleExchange(
           );
 
           if (condition === 'resellable') {
-            // Restore resellable stock via centralized service (Requirement 2.12)
+            // Virtual Exchange Receiving: restore resellable stock via
+            // centralized service (Requirement 2.12), tagged and cost-based
+            // the same way createExchange() does (see there for rationale).
             await invTxSvc.stockIn(
-              { bookId, locationId, quantity: qty, referenceType: 'exchange_in', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Exchange returned resellable', staffCtx },
+              { bookId, locationId, quantity: qty, referenceType: 'customer_exchange', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: parseFloat(item.unit_price as string) },
               client,
             );
           } else if (condition === 'damaged') {

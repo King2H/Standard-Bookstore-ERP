@@ -4,7 +4,7 @@ import { db } from '../../db/index.js';
 import * as catalogService from './catalog.service.js';
 import * as catalogSearchService from './catalogSearch.service.js';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { getBookAvailability } from '../inventory/inventoryTransaction.service.js';
 
@@ -61,6 +61,20 @@ const bookWriteSchema = z.object({
 });
 
 const bookUpdateSchema = bookWriteSchema.partial().omit({ isbn: true });
+
+// Non-Destructive Catalog Search & Virtual Receiving: a lightweight subset of
+// bookWriteSchema for the Exchange screen's "Quick Catalog Register" modal —
+// just enough to create a searchable catalog entry (ISBN/Barcode, Title,
+// Author, Base List Price) without leaving the Exchange flow. Reuses
+// catalogService.createBook() itself (same INSERT, same is_active=true
+// default, same duplicate-ISBN handling) — this is metadata registration
+// only, it never touches inventory.
+const quickRegisterSchema = z.object({
+  isbn:         z.string().min(10).max(17).optional().or(z.literal('')),
+  title:        z.string().min(1).max(500),
+  author:       z.string().max(200).optional().or(z.literal('')),
+  defaultPrice: z.number().nonnegative().optional(),
+});
 
 const priceSchema = z.object({
   price: z.number().nonnegative(),
@@ -191,6 +205,38 @@ router.post(
         throw new ValidationError('Invalid book payload', { issues: parsed.error.issues });
       }
       const book = await catalogService.createBook({ ...parsed.data, isbn: parsed.data.isbn ?? '' }, req.staff!);
+      res.status(201).json(book);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ── POST /api/books/quick-register ────────────────────────────────────────────
+// Non-Destructive Catalog Search & Virtual Receiving: lets Sales register a
+// catalog-only entry for a book that's never been in the Catalog, without
+// leaving the Exchange screen — gated by CREATE_SALE (the same permission
+// Exchange creation itself requires), deliberately looser than POST /books'
+// Admin/Manager/Stock_Clerk role gate, and deliberately narrow (no genre,
+// publisher, categories, etc. — those can be filled in later via full Catalog
+// management by staff who have that access). Creates catalog metadata only;
+// does NOT touch inventory (mirrors catalogService.createBook() exactly).
+
+router.post(
+  '/books/quick-register',
+  authenticate,
+  requirePermission('CREATE_SALE'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = quickRegisterSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid quick-register payload', { issues: parsed.error.issues });
+      }
+      const { isbn, title, author, defaultPrice } = parsed.data;
+      const book = await catalogService.createBook(
+        { isbn: isbn ?? '', title, authors: author ? [author] : [], defaultPrice },
+        req.staff!,
+      );
       res.status(201).json(book);
     } catch (err) {
       next(err);

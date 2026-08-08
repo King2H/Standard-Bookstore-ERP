@@ -73,6 +73,16 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   const [outgoingItems, setOutgoingItems] = useState<Array<{ bookId: number; bookTitle: string; quantity: number; unitPrice: number }>>([]);
   const [addingTo, setAddingTo] = useState<'incoming' | 'outgoing'>('incoming');
 
+  // Quick Catalog Register modal (Non-Destructive Catalog Search & Virtual
+  // Receiving) — lets Sales register a catalog-only entry for a book that's
+  // never been in the Catalog, without leaving the Exchange screen. Creates
+  // metadata only; never touches inventory (see POST /books/quick-register).
+  const [quickRegisterOpen, setQuickRegisterOpen] = useState(false);
+  const [qrIsbn, setQrIsbn] = useState('');
+  const [qrTitle, setQrTitle] = useState('');
+  const [qrAuthor, setQrAuthor] = useState('');
+  const [qrPrice, setQrPrice] = useState('');
+
   // Initiate exchange (new lifecycle) state
   const [initBookSearch, setInitBookSearch] = useState('');
   const [initAddingTo, setInitAddingTo] = useState<'returned' | 'new'>('returned');
@@ -138,6 +148,20 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
     queryKey: ['exc-init-customers', initCustomerSearch],
     queryFn: () => api.get(`/customers?q=${encodeURIComponent(initCustomerSearch)}&pageSize=5`),
     enabled: initCustomerSearch.length > 1,
+  });
+
+  const quickRegisterMut = useMutation({
+    mutationFn: (body: unknown) => api.post<{ id: number; title: string; isbn: string; defaultPrice: number | null }>('/books/quick-register', body),
+    onSuccess: (book) => {
+      showToast(`"${book.title}" registered in the catalog`, 'success');
+      addBook({ id: book.id, title: book.title, isbn: book.isbn, defaultPrice: book.defaultPrice, branchPrice: null, availability: null });
+      setQuickRegisterOpen(false);
+      setQrIsbn(''); setQrTitle(''); setQrAuthor(''); setQrPrice('');
+      // The new book is now searchable everywhere else too.
+      qc.invalidateQueries({ queryKey: ['exc-books'] });
+      qc.invalidateQueries({ queryKey: ['exc-init-books'] });
+    },
+    onError: (e: Error) => showToast(e.message, 'error'),
   });
 
   const createMut = useMutation({
@@ -232,6 +256,17 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   function submitExchange() {
     if (incomingItems.length === 0 && outgoingItems.length === 0) { showToast('Add at least one item', 'error'); return; }
     if (!locationId) { showToast('Select a location — every exchange moves physical stock', 'error'); return; }
+    // Acquisition Allowance Capture / Valuation Integrity: an incoming item's
+    // unit price IS the Customer Allowance Value — it becomes that unit's
+    // cost basis in inventory once the exchange completes. A zero/blank
+    // allowance would receive stock with no real cost, corrupting COGS for
+    // every future sale of that book — block it client-side too (the backend
+    // enforces this regardless).
+    const unvalued = incomingItems.find(i => !(i.unitPrice > 0));
+    if (unvalued) {
+      showToast(`Enter a trade-in allowance for "${unvalued.bookTitle}" — it can't be zero`, 'error');
+      return;
+    }
     if (Math.abs(netBalance) >= 0.01 && !selectedCustomer) {
       showToast(`Select a customer — this exchange has a ${netBalance > 0 ? 'balance the customer owes' : 'refund owed to the customer'} that has to be tracked against someone`, 'error');
       return;
@@ -507,6 +542,19 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   ))}
                 </div>
               )}
+              {/* Non-Destructive Catalog Search & Virtual Receiving: the
+                  Exchange screen must be able to accept a book that's never
+                  been in the Catalog at all — offer Quick Catalog Register
+                  the moment a search for an incoming trade-in comes up
+                  empty, instead of forcing staff to leave this screen. */}
+              {addingTo === 'incoming' && bookSearch.length > 1 && (bookResults?.items ?? []).length === 0 && (
+                <button
+                  onClick={() => { setQrTitle(bookSearch); setQuickRegisterOpen(true); }}
+                  className="mt-2 w-full text-left px-3 py-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                >
+                  + Can't find it? Quick-register "{bookSearch}" as a new catalog entry
+                </button>
+              )}
             </div>
           </div>
 
@@ -515,14 +563,29 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
             {/* Incoming */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-green-200 dark:border-green-800 p-4 space-y-2">
               <h3 className="text-sm font-semibold text-green-700 dark:text-green-400">📥 Incoming (Customer Gives)</h3>
-              {incomingItems.length === 0 ? <p className="text-xs text-gray-400">No items yet</p> : incomingItems.map(item => (
-                <div key={item.bookId} className="flex items-center gap-2 text-xs">
-                  <span className="flex-1 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
-                  <input type="number" min="1" value={item.quantity} onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
-                  <input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, unitPrice: parseFloat(e.target.value) || 0 } : i))} className="w-20 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
-                  <button onClick={() => setIncomingItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
-                </div>
-              ))}
+              {incomingItems.length === 0 ? <p className="text-xs text-gray-400">No items yet</p> : (
+                <>
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400 uppercase tracking-wide">
+                    <span className="flex-1">Book</span>
+                    <span className="w-12 text-center">Qty</span>
+                    <span className="w-20 text-center">Allowance</span>
+                    <span className="w-4" />
+                  </div>
+                  {incomingItems.map(item => (
+                    <div key={item.bookId} className="flex items-center gap-2 text-xs">
+                      <span className="flex-1 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
+                      <input type="number" min="1" value={item.quantity} onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                      <input
+                        type="number" min="0.01" step="0.01" value={item.unitPrice}
+                        title="Customer Allowance Value — the trade-in credit granted for this book; becomes its cost basis in inventory"
+                        onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, unitPrice: parseFloat(e.target.value) || 0 } : i))}
+                        className={`w-20 px-1 py-0.5 border rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${item.unitPrice > 0 ? 'border-gray-300 dark:border-gray-600' : 'border-red-400 dark:border-red-600'}`}
+                      />
+                      <button onClick={() => setIncomingItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
+                    </div>
+                  ))}
+                </>
+              )}
               <div className="text-xs font-semibold text-green-700 dark:text-green-400 pt-1 border-t border-green-100 dark:border-green-900">Total: {currency} {incomingTotal.toFixed(2)}</div>
             </div>
             {/* Outgoing */}
@@ -558,6 +621,62 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Quick Catalog Register modal ──
+          Non-Destructive Catalog Search & Virtual Receiving: registers a
+          catalog-only entry (ISBN/Barcode, Title, Author, Base List Price)
+          without leaving the Exchange screen. This creates catalog metadata
+          only — it never increments stock; the incoming exchange item still
+          has to be given a Customer Allowance Value and completed like any
+          other trade-in for inventory to actually move. */}
+      {quickRegisterOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setQuickRegisterOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-sm p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Quick Catalog Register</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Registers this book in the Catalog so it can be searched and exchanged — it does not add any stock by itself.</p>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400">ISBN / Barcode</label>
+                <input value={qrIsbn} onChange={e => setQrIsbn(e.target.value)} placeholder="Optional"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Title <span className="text-red-500">*</span></label>
+                <input value={qrTitle} onChange={e => setQrTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Author</label>
+                <input value={qrAuthor} onChange={e => setQrAuthor(e.target.value)} placeholder="Optional"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Base List Price</label>
+                <input type="number" min="0" step="0.01" value={qrPrice} onChange={e => setQrPrice(e.target.value)} placeholder="Optional"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setQuickRegisterOpen(false)} className="flex-1 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+              <button
+                onClick={() => {
+                  if (!qrTitle.trim()) { showToast('Title is required', 'error'); return; }
+                  quickRegisterMut.mutate({
+                    isbn: qrIsbn.trim() || undefined,
+                    title: qrTitle.trim(),
+                    author: qrAuthor.trim() || undefined,
+                    defaultPrice: qrPrice ? parseFloat(qrPrice) : undefined,
+                  });
+                }}
+                disabled={quickRegisterMut.isPending || !qrTitle.trim()}
+                className="flex-1 py-2 text-sm rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold transition-colors"
+              >
+                {quickRegisterMut.isPending ? 'Registering...' : 'Register & Add'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

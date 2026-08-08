@@ -1,4 +1,5 @@
 import { db } from '../db/index.js';
+import { costBasisLateralJoin } from './costBasis.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -145,15 +146,14 @@ export async function computeNetProfit(opts: {
        WHERE ${revWhere}`,
       revParams,
     ),
-    // Q2a: Order-based purchase cost (most-recent PO unit cost × qty for fulfilled orders)
+    // Q2a: Order-based purchase cost (most-recent cost basis × qty for fulfilled orders —
+    // procurement unit cost, falling back to Customer Exchange receiving cost for
+    // never-procured books; see costBasis.ts)
     db.query(
       `SELECT COALESCE(SUM(COALESCE(lc.unit_cost, 0) * oli.quantity), 0)::NUMERIC AS purchase_cost
        FROM order_line_items oli
        JOIN orders o ON o.id = oli.order_id
-       LEFT JOIN LATERAL (
-         SELECT pli.unit_cost FROM po_line_items pli
-         WHERE pli.book_id = oli.book_id ORDER BY pli.id DESC LIMIT 1
-       ) lc ON true
+       ${costBasisLateralJoin('oli.book_id')}
        WHERE ${costWhere}`,
       costParams,
     ),
@@ -162,10 +162,7 @@ export async function computeNetProfit(opts: {
       `SELECT COALESCE(SUM(COALESCE(lc.unit_cost, 0) * tli.quantity), 0)::NUMERIC AS purchase_cost
        FROM transaction_line_items tli
        JOIN transactions t ON t.id = tli.transaction_id
-       LEFT JOIN LATERAL (
-         SELECT pli.unit_cost FROM po_line_items pli
-         WHERE pli.book_id = tli.book_id ORDER BY pli.id DESC LIMIT 1
-       ) lc ON true
+       ${costBasisLateralJoin('tli.book_id')}
        WHERE ${posCostWhere} AND t.payment_status != 'credit'`,
       posCostParams,
     ),

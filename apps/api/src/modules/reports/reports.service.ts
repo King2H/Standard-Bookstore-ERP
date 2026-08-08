@@ -1,5 +1,6 @@
 import { db } from '../../db/index.js';
 import { computeNetProfit } from '../../lib/profit.service.js';
+import { costBasisLateralJoin } from '../../lib/costBasis.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1097,10 +1098,7 @@ export async function getSalesExportRows(filters: ReportFilters): Promise<SalesE
        oli.order_id,
        COALESCE(SUM(COALESCE(lc.unit_cost,0) * oli.quantity),0)::NUMERIC AS purchase_cost
      FROM order_line_items oli
-     LEFT JOIN LATERAL (
-       SELECT pli.unit_cost FROM po_line_items pli
-       WHERE pli.book_id = oli.book_id ORDER BY pli.id DESC LIMIT 1
-     ) lc ON true
+     ${costBasisLateralJoin('oli.book_id')}
      GROUP BY oli.order_id`,
   );
   const costMap = new Map<string, number>();
@@ -1368,10 +1366,7 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
      LEFT JOIN book_authors ba ON ba.book_id = b.id
      LEFT JOIN authors a ON a.id = ba.author_id
      ${reservationJoin}
-     LEFT JOIN LATERAL (
-       SELECT pli.unit_cost FROM po_line_items pli
-       WHERE pli.book_id = b.id ORDER BY pli.id DESC LIMIT 1
-     ) lc ON true
+     ${costBasisLateralJoin('b.id')}
      ${where}
      GROUP BY b.id, i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id,
               i.quantity${groupByReserved}, lc.unit_cost

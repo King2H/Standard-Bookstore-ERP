@@ -72,6 +72,17 @@ export interface StockInParams extends BaseParams {
   quantity: number;
   /** Caller must supply movement_type context */
   reasonCode?: ReasonCode;
+  /**
+   * Per-unit cost basis for this specific receiving event (e.g. the
+   * Customer Allowance Value for a Virtual Exchange Receiving — see
+   * exchanges.service.ts createExchange()). Optional and unrelated to most
+   * callers (procurement receiving establishes cost via po_line_items, not
+   * here); when supplied it must be > 0 — "Valuation Integrity: do not allow
+   * zero-cost or unvalued inventory entries into stock." Persisted on the
+   * inventory_history row and consumed by costBasis.ts's cost-basis
+   * fallback for books that have never been procured.
+   */
+  unitCost?: number;
 }
 
 export interface StockOutParams extends BaseParams {
@@ -349,10 +360,13 @@ export async function stockIn(
   params: StockInParams,
   externalClient?: PoolClient,
 ): Promise<void> {
-  const { bookId, locationId, quantity, referenceType, referenceId, notes, staffCtx } = params;
+  const { bookId, locationId, quantity, referenceType, referenceId, notes, staffCtx, unitCost } = params;
   const reasonCode = params.reasonCode ?? 'return';
 
   if (quantity <= 0) throw new ValidationError('stockIn quantity must be positive');
+  if (unitCost !== undefined && !(unitCost > 0)) {
+    throw new ValidationError('stockIn unitCost must be positive when provided — zero/unvalued stock entries are not allowed');
+  }
 
   const useExternal = !!externalClient;
   const client = externalClient ?? await db.connect();
@@ -379,8 +393,8 @@ export async function stockIn(
     await client.query(
       `INSERT INTO inventory_history
          (book_id, location_id, qty_before, qty_after, delta,
-          reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-       VALUES ($1, $2, $3, $4, $5, $6, 'stock_in', $7, $8, $9, $10)`,
+          reason_code, movement_type, reference_type, reference_id, notes, staff_id, unit_cost)
+       VALUES ($1, $2, $3, $4, $5, $6, 'stock_in', $7, $8, $9, $10, $11)`,
       [
         bookId, locationId, qtyBefore, qtyAfter, quantity,
         reasonCode,
@@ -388,6 +402,7 @@ export async function stockIn(
         referenceId != null ? String(referenceId) : null,
         notes ?? null,
         staffCtx.staffId,
+        unitCost != null ? unitCost.toFixed(2) : null,
       ],
     );
 

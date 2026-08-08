@@ -168,13 +168,16 @@ describe('Exchanges — draft -> confirmed -> settled/cancelled lifecycle', () =
     expect(await getInventoryQty(book2.id, locationId)).toBe(qty2Before - 1);
 
     // Both movements went through invTxSvc (inventoryTransaction.service.ts),
-    // not a raw UPDATE — verify the audit trail it writes.
+    // not a raw UPDATE — verify the audit trail it writes. Incoming items are
+    // tagged 'customer_exchange' (Virtual Exchange Receiving — Non-Destructive
+    // Catalog Search & Virtual Receiving), distinct from the outgoing side.
     const histIn = await db.query(
-      `SELECT * FROM inventory_history WHERE reference_type = 'exchange_in' AND reference_id = $1`,
+      `SELECT * FROM inventory_history WHERE reference_type = 'customer_exchange' AND reference_id = $1`,
       [id],
     );
     expect(histIn.rows.length).toBeGreaterThan(0);
     expect(Number(histIn.rows[0].delta)).toBe(1);
+    expect(parseFloat(histIn.rows[0].unit_cost as string)).toBeGreaterThan(0);
     const histOut = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'exchange_out' AND reference_id = $1`,
       [id],
