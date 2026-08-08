@@ -20,6 +20,21 @@ const qi = (v: unknown, fallback?: number): number | undefined => {
 };
 const qid = (v: unknown, fallback: number): number => qi(v, fallback) ?? fallback;
 
+// Tri-state is_active resolver shared by /books and /books/with-availability:
+// omitted -> true (active-only default — a deactivated book must stay out of
+// the default listing/search); 'true'/'false' -> exact filter; 'all' -> no
+// filter (both). Bug fix: the Catalog UI's "All" status option used to send
+// no is_active param at all, which fell through to the same default as an
+// omitted param and silently filtered to active-only — "All" never actually
+// showed inactive books. searchBooks() already treats `isActive: undefined`
+// as "no filter"; the bug was that this endpoint had no way to reach that
+// state on purpose. 'all' is that explicit signal.
+function resolveIsActiveFilter(raw: string | undefined): boolean | undefined {
+  if (raw === undefined) return true;
+  if (raw === 'all') return undefined;
+  return raw === 'true';
+}
+
 // ── Validation schemas ────────────────────────────────────────────────────────
 
 const bookWriteSchema = z.object({
@@ -66,13 +81,10 @@ router.get(
         genre:      qs(req.query.genre),
         category:   qs(req.query.category),
         tag:        qs(req.query.tag),
-        // Defaults to active-only, matching /books/with-availability below.
-        // Without this default, a deactivated book stayed visible in the
-        // default listing/search — callers must explicitly pass
-        // ?is_active=false to see inactive books.
-        isActive:   req.query.is_active !== undefined
-          ? req.query.is_active === 'true'
-          : true,
+        // See resolveIsActiveFilter() above: defaults to active-only,
+        // matching /books/with-availability below; ?is_active=false shows
+        // only inactive books; ?is_active=all shows both.
+        isActive:   resolveIsActiveFilter(qs(req.query.is_active)),
         // Use explicit query param if provided, otherwise fall back to the JWT branch
         // so stock quantities are always scoped to the user's active branch.
         branchId:   qi(req.query.branchId) ?? req.staff?.branchId,
@@ -118,7 +130,7 @@ router.get(
         genre:      qs(req.query.genre),
         category:   qs(req.query.category),
         tag:        qs(req.query.tag),
-        isActive:   req.query.is_active !== undefined ? req.query.is_active === 'true' : true,
+        isActive:   resolveIsActiveFilter(qs(req.query.is_active)),
         branchId,
         sortBy:     qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
         sortDir:    qs(req.query.sortDir) as 'asc' | 'desc' | undefined,

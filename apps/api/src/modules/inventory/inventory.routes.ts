@@ -91,9 +91,19 @@ router.get(
         q:          qs(req.query.q),
         page:       qi(req.query.page, 1),
         pageSize:   qi(req.query.pageSize, 25),
-        // Deactivated books are hidden unless explicitly requested — see
-        // listInventory()'s includeInactive doc comment.
-        includeInactive: qb(req.query.includeInactive) ?? false,
+        // Tri-state, same is_active=true|false|all convention as GET /books
+        // (catalog.routes.ts) — omitted defaults to active-only so existing
+        // callers (Adjust/Transfer/Stock In/Stock Out's book search) that
+        // never pass this param keep getting active-only results; 'all'
+        // must map to `undefined` (no filter), not to a default, or "All"
+        // becomes unreachable exactly like the Catalog bug this mirrors.
+        isActive: qs(req.query.is_active) === undefined
+          ? true
+          : qs(req.query.is_active) === 'all'
+            ? undefined
+            : qs(req.query.is_active) === 'true',
+        sortBy:  qs(req.query.sortBy) as 'title' | 'updatedAt' | undefined,
+        sortDir: qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
       }));
       res.json(result);
     } catch (err) { next(err); }

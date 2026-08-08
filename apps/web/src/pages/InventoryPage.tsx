@@ -120,9 +120,14 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
   const [lowOnly, setLowOnly] = useState(initialLowOnly);
   // Deactivated books are hidden by default — they can't be sold, reordered,
   // or restocked any more, so Stock Levels/Adjust/Transfer/Stock In/Stock Out
-  // shouldn't surface them for selection. This checkbox is an explicit
-  // audit-only escape hatch to see them without reactivating first.
-  const [includeInactive, setIncludeInactive] = useState(false);
+  // shouldn't surface them for selection. Mirrors Catalog's own status
+  // filter (Active/Inactive/All) rather than an additive checkbox, so
+  // switching modes replaces the list instead of layering onto it — an
+  // additive "show inactive too" checkbox made an active book look like it
+  // was appearing in both an "active" and an "inactive" view at once.
+  const [status, setStatus] = useState<'active' | 'inactive' | 'all'>('active');
+  const [sortBy, setSortBy] = useState<'title' | 'updatedAt'>('title');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [editRow, setEditRow] = useState<InventoryRow | null>(null);
@@ -131,17 +136,28 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (lowOnly) params.set('lowStockOnly', 'true');
-  if (includeInactive) params.set('includeInactive', 'true');
+  // Same is_active=true|false|all convention as GET /books — 'active' is the
+  // default and is sent explicitly rather than omitted, purely so the query
+  // string stays self-describing; the backend treats an omitted param the
+  // same way.
+  params.set('is_active', status === 'active' ? 'true' : status === 'inactive' ? 'false' : 'all');
+  params.set('sortBy', sortBy); params.set('sortDir', sortDir);
   params.set('page', String(page)); params.set('pageSize', String(pageSize));
 
   const { data, isLoading, isFetching, isError, refetch } = useQuery<InventoryList>({
-    queryKey: ['inventory', q, lowOnly, includeInactive, page, pageSize],
+    queryKey: ['inventory', q, lowOnly, status, sortBy, sortDir, page, pageSize],
     queryFn: () => api.get<InventoryList>(`/inventory?${params.toString()}`),
     placeholderData: prev => prev,
     staleTime: 0,
     retry: 2,
     refetchOnWindowFocus: true,
   });
+
+  function toggleSort(col: 'title' | 'updatedAt') {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir('asc'); }
+    setPage(1);
+  }
 
   const reorderMut = useMutation({
     mutationFn: ({ bookId, locId, rp }: { bookId: number; locId: number; rp: number }) =>
@@ -163,10 +179,13 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
           <input type="checkbox" checked={lowOnly} onChange={e => { setLowOnly(e.target.checked); setPage(1); }} className="rounded border-gray-300 dark:border-gray-600 text-amber-500" />
           Low stock only
         </label>
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" title="Deactivated books are hidden from search and stock actions by default">
-          <input type="checkbox" checked={includeInactive} onChange={e => { setIncludeInactive(e.target.checked); setPage(1); }} className="rounded border-gray-300 dark:border-gray-600 text-gray-500" />
-          Show inactive books
-        </label>
+        <select value={status} onChange={e => { setStatus(e.target.value as typeof status); setPage(1); }}
+          title="Deactivated books are hidden from search and stock actions unless Inactive or All is selected"
+          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="all">All</option>
+        </select>
         <div className="flex-1" />
         <span className="text-xs text-gray-400">{isLoading ? '…' : `${data?.total ?? 0} records`}{isFetching && !isLoading && ' ↻'}</span>
       </div>
@@ -191,7 +210,12 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Available</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Reorder At</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Updated</th>
+              <th className="px-4 py-3 text-left">
+                <button onClick={() => toggleSort('updatedAt')}
+                  className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors ${sortBy === 'updatedAt' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                  Updated <span className="text-xs">{sortBy === 'updatedAt' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                </button>
+              </th>
               {canManage(userRole, userPermissions) && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>}
             </tr>
           </thead>

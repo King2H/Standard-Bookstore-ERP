@@ -89,12 +89,18 @@ export async function listInventory(opts: {
   q?: string;
   page?: number;
   pageSize?: number;
-  /** Deactivated books are hidden by default (bug fix: a deactivated book
-   *  stayed visible/searchable/actionable in Stock Levels, Adjust, Transfer,
-   *  Stock In and Stock Out, even though it can't be sold or reordered any
-   *  more) — pass true to include them, e.g. for an explicit "show inactive"
-   *  audit view. */
-  includeInactive?: boolean;
+  /** Tri-state, matching catalogService.searchBooks()'s `isActive` contract
+   *  for consistency: true = active books only (DEFAULT — a deactivated
+   *  book can't be sold or reordered, so it's hidden from Stock Levels,
+   *  Adjust, Transfer, Stock In and Stock Out unless asked for), false =
+   *  inactive books only, undefined = no filter (both). Pass this straight
+   *  through from the same `is_active=true|false|all` query convention used
+   *  by GET /books — do not default a missing param to `true` yourself
+   *  inside a caller and then also default it here, or "all" becomes
+   *  unreachable (that was the Catalog "All" bug this mirrors the fix for). */
+  isActive?: boolean;
+  sortBy?: 'title' | 'updatedAt';
+  sortDir?: 'asc' | 'desc';
 }): Promise<{ items: InventoryRow[]; total: number; page: number; totalPages: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, opts.pageSize ?? 25);
@@ -107,7 +113,7 @@ export async function listInventory(opts: {
   if (opts.locationId) { conditions.push(`i.location_id = $${p++}`); params.push(opts.locationId); }
   if (opts.bookId) { conditions.push(`i.book_id = $${p++}`); params.push(opts.bookId); }
   if (opts.lowStockOnly) { conditions.push(`i.quantity <= i.reorder_point`); }
-  if (!opts.includeInactive) { conditions.push(`b.is_active = true`); }
+  if (opts.isActive !== undefined) { conditions.push(`b.is_active = $${p++}`); params.push(opts.isActive); }
   if (opts.q) {
     conditions.push(`(lower(b.title) LIKE lower($${p}) OR b.isbn LIKE $${p})`);
     params.push(`%${opts.q.trim()}%`); p++;
@@ -117,6 +123,11 @@ export async function listInventory(opts: {
 
   const limitParam = p;
   const offsetParam = p + 1;
+
+  const sortDir = opts.sortDir === 'desc' ? 'DESC' : 'ASC';
+  const orderBy = opts.sortBy === 'updatedAt'
+    ? `i.updated_at ${sortDir}, b.title ASC`
+    : `b.title ${sortDir}, l.name ASC`;
 
   // Build reservation-aware query — falls back gracefully if table doesn't exist
   const hasResTable = await hasReservationsTable();
@@ -147,7 +158,7 @@ export async function listInventory(opts: {
       ${where}
       GROUP BY i.book_id, b.title, b.isbn, b.is_active, i.location_id, l.name, l.branch_id,
                i.quantity, i.reorder_point, i.version, i.updated_at
-      ORDER BY b.title ASC, l.name ASC
+      ORDER BY ${orderBy}
       LIMIT $${limitParam} OFFSET $${offsetParam}`;
   } else {
     countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
@@ -163,7 +174,7 @@ export async function listInventory(opts: {
       JOIN locations l ON l.id = i.location_id
       LEFT JOIN books b ON b.id = i.book_id
       ${where}
-      ORDER BY b.title ASC, l.name ASC
+      ORDER BY ${orderBy}
       LIMIT $${limitParam} OFFSET $${offsetParam}`;
   }
 

@@ -110,7 +110,7 @@ describe('Inventory', () => {
     });
   });
 
-  it('Deactivated books are hidden from the inventory list by default, and reappear with includeInactive=true', async () => {
+  it('Deactivated books are hidden from the inventory list by default, excluded by is_active=true, included by is_active=all, and returned alone by is_active=false', async () => {
     const bookRes = await db.query(
       `INSERT INTO books (isbn, title, is_active) VALUES ($1, 'Inv Test Deactivated Book', true) RETURNING id`,
       [`978inv${Date.now()}`],
@@ -123,22 +123,60 @@ describe('Inventory', () => {
     await db.query(`UPDATE books SET is_active = false WHERE id = $1`, [inactiveBookId]);
 
     try {
-      const hidden = await request(getTestApp())
+      // Default (no is_active param) — same as is_active=true — excludes it.
+      const byDefault = await request(getTestApp())
         .get(`/api/inventory?locationId=${locationId}&pageSize=100`)
         .set('Authorization', `Bearer ${adminToken}`);
-      expect(hidden.status).toBe(200);
-      expect(hidden.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
+      expect(byDefault.status).toBe(200);
+      expect(byDefault.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
 
-      const shown = await request(getTestApp())
-        .get(`/api/inventory?locationId=${locationId}&pageSize=100&includeInactive=true`)
+      // Explicit is_active=true — same exclusion.
+      const explicitActive = await request(getTestApp())
+        .get(`/api/inventory?locationId=${locationId}&pageSize=100&is_active=true`)
         .set('Authorization', `Bearer ${adminToken}`);
-      expect(shown.status).toBe(200);
-      const row = shown.body.items.find((i: { bookId: number }) => i.bookId === inactiveBookId);
+      expect(explicitActive.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
+
+      // is_active=all — bug regression: must actually include it, not silently
+      // fall back to active-only the way an omitted param does.
+      const all = await request(getTestApp())
+        .get(`/api/inventory?locationId=${locationId}&pageSize=100&is_active=all`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(all.status).toBe(200);
+      const row = all.body.items.find((i: { bookId: number }) => i.bookId === inactiveBookId);
       expect(row).toBeDefined();
       expect(row.bookIsActive).toBe(false);
+
+      // is_active=false — inactive-only; our still-active seeded book must
+      // not leak into this view.
+      const inactiveOnly = await request(getTestApp())
+        .get(`/api/inventory?locationId=${locationId}&pageSize=100&is_active=false`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(inactiveOnly.status).toBe(200);
+      expect(inactiveOnly.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(true);
+      expect(inactiveOnly.body.items.some((i: { bookId: number }) => i.bookId === bookId)).toBe(false);
     } finally {
       await db.query(`DELETE FROM inventory WHERE book_id = $1`, [inactiveBookId]);
       await db.query(`DELETE FROM books WHERE id = $1`, [inactiveBookId]);
+    }
+  });
+
+  it('sortBy=updatedAt sorts inventory rows by their updated_at timestamp', async () => {
+    const asc = await request(getTestApp())
+      .get(`/api/inventory?locationId=${locationId}&pageSize=100&sortBy=updatedAt&sortDir=asc`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(asc.status).toBe(200);
+    const ascTimestamps = asc.body.items.map((i: { updatedAt: string }) => new Date(i.updatedAt).getTime());
+    for (let i = 1; i < ascTimestamps.length; i++) {
+      expect(ascTimestamps[i]).toBeGreaterThanOrEqual(ascTimestamps[i - 1]);
+    }
+
+    const desc = await request(getTestApp())
+      .get(`/api/inventory?locationId=${locationId}&pageSize=100&sortBy=updatedAt&sortDir=desc`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(desc.status).toBe(200);
+    const descTimestamps = desc.body.items.map((i: { updatedAt: string }) => new Date(i.updatedAt).getTime());
+    for (let i = 1; i < descTimestamps.length; i++) {
+      expect(descTimestamps[i]).toBeLessThanOrEqual(descTimestamps[i - 1]);
     }
   });
 
