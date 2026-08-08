@@ -10,7 +10,7 @@ type Role = string;
 type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'transfer' | 'history' | 'alerts';
 
 interface InventoryRow {
-  bookId: number; bookTitle: string; bookIsbn: string;
+  bookId: number; bookTitle: string; bookIsbn: string; bookIsActive: boolean;
   locationId: number; locationName: string; branchId: number;
   quantity: number; reserved: number; available: number;
   reorderPoint: number; version: number;
@@ -118,6 +118,11 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
   const { showToast } = useToast();
   const [q, setQ] = useState('');
   const [lowOnly, setLowOnly] = useState(initialLowOnly);
+  // Deactivated books are hidden by default — they can't be sold, reordered,
+  // or restocked any more, so Stock Levels/Adjust/Transfer/Stock In/Stock Out
+  // shouldn't surface them for selection. This checkbox is an explicit
+  // audit-only escape hatch to see them without reactivating first.
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [editRow, setEditRow] = useState<InventoryRow | null>(null);
@@ -126,10 +131,11 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (lowOnly) params.set('lowStockOnly', 'true');
+  if (includeInactive) params.set('includeInactive', 'true');
   params.set('page', String(page)); params.set('pageSize', String(pageSize));
 
   const { data, isLoading, isFetching, isError, refetch } = useQuery<InventoryList>({
-    queryKey: ['inventory', q, lowOnly, page, pageSize],
+    queryKey: ['inventory', q, lowOnly, includeInactive, page, pageSize],
     queryFn: () => api.get<InventoryList>(`/inventory?${params.toString()}`),
     placeholderData: prev => prev,
     staleTime: 0,
@@ -156,6 +162,10 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
         <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
           <input type="checkbox" checked={lowOnly} onChange={e => { setLowOnly(e.target.checked); setPage(1); }} className="rounded border-gray-300 dark:border-gray-600 text-amber-500" />
           Low stock only
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" title="Deactivated books are hidden from search and stock actions by default">
+          <input type="checkbox" checked={includeInactive} onChange={e => { setIncludeInactive(e.target.checked); setPage(1); }} className="rounded border-gray-300 dark:border-gray-600 text-gray-500" />
+          Show inactive books
         </label>
         <div className="flex-1" />
         <span className="text-xs text-gray-400">{isLoading ? '…' : `${data?.total ?? 0} records`}{isFetching && !isLoading && ' ↻'}</span>
@@ -192,7 +202,12 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
             ) : data.items.map(row => (
               <tr key={`${row.bookId}-${row.locationId}`} className={`hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors ${row.isLowStock ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}`}>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-gray-900 dark:text-white text-sm line-clamp-1">{row.bookTitle}</div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="font-medium text-gray-900 dark:text-white text-sm line-clamp-1">{row.bookTitle}</div>
+                    {!row.bookIsActive && (
+                      <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 rounded-full font-medium">Inactive</span>
+                    )}
+                  </div>
                   <div className="text-xs font-mono text-gray-400">{row.bookIsbn}</div>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{row.locationName}</td>

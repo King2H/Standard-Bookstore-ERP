@@ -110,6 +110,38 @@ describe('Inventory', () => {
     });
   });
 
+  it('Deactivated books are hidden from the inventory list by default, and reappear with includeInactive=true', async () => {
+    const bookRes = await db.query(
+      `INSERT INTO books (isbn, title, is_active) VALUES ($1, 'Inv Test Deactivated Book', true) RETURNING id`,
+      [`978inv${Date.now()}`],
+    );
+    const inactiveBookId = bookRes.rows[0].id as number;
+    await db.query(
+      `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1, $2, 5, 1, 0)`,
+      [inactiveBookId, locationId],
+    );
+    await db.query(`UPDATE books SET is_active = false WHERE id = $1`, [inactiveBookId]);
+
+    try {
+      const hidden = await request(getTestApp())
+        .get(`/api/inventory?locationId=${locationId}&pageSize=100`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(hidden.status).toBe(200);
+      expect(hidden.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
+
+      const shown = await request(getTestApp())
+        .get(`/api/inventory?locationId=${locationId}&pageSize=100&includeInactive=true`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(shown.status).toBe(200);
+      const row = shown.body.items.find((i: { bookId: number }) => i.bookId === inactiveBookId);
+      expect(row).toBeDefined();
+      expect(row.bookIsActive).toBe(false);
+    } finally {
+      await db.query(`DELETE FROM inventory WHERE book_id = $1`, [inactiveBookId]);
+      await db.query(`DELETE FROM books WHERE id = $1`, [inactiveBookId]);
+    }
+  });
+
   // ── POST /api/inventory/adjust ────────────────────────────────────────────
 
   it('Admin can adjust stock upward (correction)', async () => {
@@ -249,6 +281,30 @@ describe('Inventory', () => {
     );
     expect(found).toBeDefined();
     expect(found.isLowStock).toBe(true);
+  });
+
+  it('Low-stock endpoint excludes deactivated books', async () => {
+    const bookRes = await db.query(
+      `INSERT INTO books (isbn, title, is_active) VALUES ($1, 'Inv Test Deactivated Low Stock Book', true) RETURNING id`,
+      [`978lsinv${Date.now()}`],
+    );
+    const inactiveBookId = bookRes.rows[0].id as number;
+    await db.query(
+      `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1, $2, 1, 5, 0)`,
+      [inactiveBookId, locationId],
+    );
+    await db.query(`UPDATE books SET is_active = false WHERE id = $1`, [inactiveBookId]);
+
+    try {
+      const res = await request(getTestApp())
+        .get('/api/inventory/low-stock?pageSize=100')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
+    } finally {
+      await db.query(`DELETE FROM inventory WHERE book_id = $1`, [inactiveBookId]);
+      await db.query(`DELETE FROM books WHERE id = $1`, [inactiveBookId]);
+    }
   });
 
   // ── GET /api/inventory/history ────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 interface ReceivablesPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
@@ -65,6 +66,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
 
   // ── Filters ──────────────────────────────────────────────────────────────────
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState(initialContext.status ?? '');
   const [sourceFilter, setSourceFilter] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -98,13 +100,13 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   });
 
   // ── Queries ───────────────────────────────────────────────────────────────────
-  const params = new URLSearchParams({ branchId: String(branchId), page: String(page), pageSize: '25' });
+  const params = new URLSearchParams({ branchId: String(branchId), page: String(page), pageSize: String(pageSize) });
   if (statusFilter) params.set('status', statusFilter);
   if (sourceFilter) params.set('sourceType', sourceFilter);
   if (overdueOnly) params.set('overdueOnly', 'true');
 
   const { data, isLoading } = useQuery<ReceivableList>({
-    queryKey: ['receivables', branchId, page, statusFilter, sourceFilter, overdueOnly],
+    queryKey: ['receivables', branchId, page, pageSize, statusFilter, sourceFilter, overdueOnly],
     queryFn: () => api.get(`/receivables?${params}`),
   });
 
@@ -208,7 +210,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         <div className="ml-auto text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} records</div>
       </div>
 
-      {/* Table */}
+      {/* Table + Pagination */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-gray-400">Loading...</div>
@@ -311,20 +313,14 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
             </table>
           </div>
         )}
+        {data && (
+          <Pagination
+            page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+            onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+            itemLabel="receivable"
+          />
+        )}
       </div>
-
-      {/* Pagination */}
-      {data && data.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-          <span>Page {data.page} of {data.totalPages}</span>
-          <div className="flex gap-2">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-            <button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-          </div>
-        </div>
-      )}
 
       {/* ── Collect Payment modal ────────────────────────────────────────────── */}
       {collectingId && (() => {

@@ -91,6 +91,9 @@ router.get(
         q:          qs(req.query.q),
         page:       qi(req.query.page, 1),
         pageSize:   qi(req.query.pageSize, 25),
+        // Deactivated books are hidden unless explicitly requested — see
+        // listInventory()'s includeInactive doc comment.
+        includeInactive: qb(req.query.includeInactive) ?? false,
       }));
       res.json(result);
     } catch (err) { next(err); }
