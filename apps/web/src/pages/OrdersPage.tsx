@@ -3,6 +3,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
@@ -75,6 +76,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
 
   // List state
   const [listPage, setListPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState(initialContext.status ?? '');
   // Module 6: dashboard drill-downs (Monthly Sales KPI) pass a date range —
   // wire it through instead of silently discarding it.
@@ -97,8 +99,8 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
 
   // Queries
   const { data: listData, isLoading } = useQuery<OrderListResponse>({
-    queryKey: ['orders-list', listPage, branchId, statusFilter, dateFromFilter, dateToFilter],
-    queryFn: () => api.get(`/orders?branchId=${branchId}&page=${listPage}&pageSize=20${statusFilter ? `&status=${statusFilter}` : ''}${dateFromFilter ? `&dateFrom=${dateFromFilter}` : ''}${dateToFilter ? `&dateTo=${dateToFilter}` : ''}`),
+    queryKey: ['orders-list', listPage, listPageSize, branchId, statusFilter, dateFromFilter, dateToFilter],
+    queryFn: () => api.get(`/orders?branchId=${branchId}&page=${listPage}&pageSize=${listPageSize}${statusFilter ? `&status=${statusFilter}` : ''}${dateFromFilter ? `&dateFrom=${dateFromFilter}` : ''}${dateToFilter ? `&dateTo=${dateToFilter}` : ''}`),
     enabled: tab === 'list',
   });
 
@@ -208,7 +210,11 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   return (
     <div className="flex flex-col h-full">
       <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
-        {(['list', 'new'] as Tab[]).map(t => (
+        {/* Layout standardization: Operation (New Order) tab button shown
+            before History (Orders) — visual order only. Default active tab
+            stays 'list' so sidebar nav and Dashboard drill-downs (Module 6)
+            still land on the filtered order list, unchanged. */}
+        {(['new', 'list'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
             {t === 'list' ? '📋 Orders' : '+ New Order'}
           </button>
@@ -358,16 +364,14 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
               </table>
             )}
             {(!listData?.items || listData.items.length === 0) && !isLoading && <p className="text-center text-gray-400 text-sm py-8">No orders found</p>}
+            {listData && (
+              <Pagination
+                page={listPage} pageSize={listPageSize} total={listData.total} totalPages={listData.totalPages}
+                onPageChange={setListPage} onPageSizeChange={makePageSizeHandler(setListPage, setListPageSize)}
+                itemLabel="order"
+              />
+            )}
           </div>
-          {listData && listData.totalPages > 1 && (
-            <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
-              <span>Page {listData.page} of {listData.totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={listPage <= 1} onClick={() => setListPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-                <button disabled={listPage >= listData.totalPages} onClick={() => setListPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

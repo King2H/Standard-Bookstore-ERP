@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 
@@ -728,6 +729,7 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
   const [editingPO, setEditingPO] = useState<PO | undefined>(undefined);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
   // Module 6: the dashboard's Procurement Expense KPI drill-down passes a
@@ -736,14 +738,14 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
   const [dateToFilter, setDateToFilter] = useState(initialContext.dateTo ?? '');
   const [branchFilter] = useState(initialContext.branchId ?? '');
 
-  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (filterStatus) params.set('status', filterStatus);
   if (dateFromFilter) params.set('dateFrom', dateFromFilter);
   if (dateToFilter) params.set('dateTo', dateToFilter);
   if (branchFilter) params.set('branchId', branchFilter);
 
   const { data, isLoading } = useQuery<POListResponse>({
-    queryKey: ['purchase-orders', page, filterStatus, dateFromFilter, dateToFilter, branchFilter],
+    queryKey: ['purchase-orders', page, pageSize, filterStatus, dateFromFilter, dateToFilter, branchFilter],
     queryFn: () => api.get(`/purchase-orders?${params}`),
   });
 
@@ -864,17 +866,14 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
             </tbody>
           </table>
         )}
+        {data && (
+          <Pagination
+            page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+            onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+            itemLabel="purchase order"
+          />
+        )}
       </div>
-
-      {data && data.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-          <span>Page {data.page} of {data.totalPages}</span>
-          <div className="flex gap-2">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-            <button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

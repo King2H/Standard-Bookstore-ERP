@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'transfer' | 'history' | 'alerts';
@@ -118,16 +119,17 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
   const [q, setQ] = useState('');
   const [lowOnly, setLowOnly] = useState(initialLowOnly);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [editRow, setEditRow] = useState<InventoryRow | null>(null);
   const [newReorder, setNewReorder] = useState('');
 
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (lowOnly) params.set('lowStockOnly', 'true');
-  params.set('page', String(page)); params.set('pageSize', '25');
+  params.set('page', String(page)); params.set('pageSize', String(pageSize));
 
   const { data, isLoading, isFetching, isError, refetch } = useQuery<InventoryList>({
-    queryKey: ['inventory', q, lowOnly, page],
+    queryKey: ['inventory', q, lowOnly, page, pageSize],
     queryFn: () => api.get<InventoryList>(`/inventory?${params.toString()}`),
     placeholderData: prev => prev,
     staleTime: 0,
@@ -242,17 +244,13 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
-        <span className="text-xs text-gray-500">{data ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, data.total)} of ${data.total}` : '—'}</span>
-        <div className="flex items-center gap-1">
-          <PagBtn onClick={() => setPage(1)} disabled={page === 1} label="«" />
-          <PagBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} label="‹" />
-          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded font-medium">{page}</span>
-          <PagBtn onClick={() => setPage(p => Math.min(data?.totalPages ?? 1, p + 1))} disabled={page === (data?.totalPages ?? 1)} label="›" />
-          <PagBtn onClick={() => setPage(data?.totalPages ?? 1)} disabled={page === (data?.totalPages ?? 1)} label="»" />
-        </div>
-      </div>
+      {data && (
+        <Pagination
+          page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+          onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+          itemLabel="inventory record"
+        />
+      )}
     </div>
   );
 }
@@ -550,16 +548,17 @@ function HistoryTab() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const params = new URLSearchParams();
   if (movementType) params.set('movementType', movementType);
   if (reasonCode) params.set('reasonCode', reasonCode);
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
-  params.set('page', String(page)); params.set('pageSize', '25');
+  params.set('page', String(page)); params.set('pageSize', String(pageSize));
 
   const { data, isLoading, isFetching } = useQuery<HistoryList>({
-    queryKey: ['inventory-history', movementType, reasonCode, dateFrom, dateTo, page],
+    queryKey: ['inventory-history', movementType, reasonCode, dateFrom, dateTo, page, pageSize],
     queryFn: () => api.get<HistoryList>(`/inventory/history?${params.toString()}`),
     placeholderData: prev => prev,
   });
@@ -639,26 +638,24 @@ function HistoryTab() {
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
-        <span className="text-xs text-gray-500">{data ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, data.total)} of ${data.total}` : '—'}</span>
-        <div className="flex items-center gap-1">
-          <PagBtn onClick={() => setPage(1)} disabled={page === 1} label="«" />
-          <PagBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} label="‹" />
-          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded font-medium">{page}</span>
-          <PagBtn onClick={() => setPage(p => Math.min(data?.totalPages ?? 1, p + 1))} disabled={page === (data?.totalPages ?? 1)} label="›" />
-          <PagBtn onClick={() => setPage(data?.totalPages ?? 1)} disabled={page === (data?.totalPages ?? 1)} label="»" />
-        </div>
-      </div>
+      {data && (
+        <Pagination
+          page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+          onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+          itemLabel="history entry"
+        />
+      )}
     </div>
   );
 }
 
 // ── Low Stock Alerts Tab ──────────────────────────────────────────────────────
 function AlertsTab({ userRole: _userRole, userPermissions: _userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
-  const { data, isLoading, refetch } = useQuery<{ items: InventoryRow[]; total: number }>({
-    queryKey: ['inventory-low-stock'],
-    queryFn: () => api.get('/inventory/low-stock'),
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const { data, isLoading, refetch } = useQuery<{ items: InventoryRow[]; total: number; page: number; totalPages: number }>({
+    queryKey: ['inventory-low-stock', page, pageSize],
+    queryFn: () => api.get(`/inventory/low-stock?page=${page}&pageSize=${pageSize}`),
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -723,6 +720,13 @@ function AlertsTab({ userRole: _userRole, userPermissions: _userPermissions }: {
           </table>
         )}
       </div>
+      {data && data.items.length > 0 && (
+        <Pagination
+          page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+          onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+          itemLabel="low-stock item"
+        />
+      )}
     </div>
   );
 }
@@ -750,15 +754,6 @@ function SkeletonRow({ cols }: { cols: number }) {
         </td>
       ))}
     </tr>
-  );
-}
-
-function PagBtn({ onClick, disabled, label }: { onClick: () => void; disabled: boolean; label: string }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300">
-      {label}
-    </button>
   );
 }
 

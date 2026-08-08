@@ -345,20 +345,51 @@ export async function transferStock(opts: {
 }
 // ── Get low-stock items for a branch ─────────────────────────────────────────
 
-export async function getLowStock(branchId: number): Promise<InventoryRow[]> {
-  const result = await db.query(
-    `SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
-            i.location_id, l.name AS location_name, l.branch_id,
-            i.quantity, i.reorder_point, i.version, i.updated_at,
-            true AS is_low_stock
-     FROM inventory i
-     JOIN locations l ON l.id = i.location_id
-     JOIN books b ON b.id = i.book_id
-     WHERE l.branch_id = $1 AND i.quantity <= i.reorder_point
-     ORDER BY i.quantity ASC, b.title ASC`,
-    [branchId],
-  );
-  return result.rows.map(mapInventoryRow);
+// Pagination & Layout Standardization: this used to return every low-stock
+// row for the branch unbounded (no LIMIT/OFFSET at all) — a branch with a
+// large catalog sitting below reorder point would load its entire low-stock
+// list into the browser in one shot. page/pageSize are optional (default
+// page 1, pageSize 25, same defaults used across the rest of this module)
+// so any existing caller that doesn't pass them still gets a first page of
+// results rather than an error.
+export async function getLowStock(
+  branchId: number,
+  page = 1,
+  pageSize = 25,
+): Promise<{ items: InventoryRow[]; total: number; page: number; totalPages: number }> {
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(100, pageSize);
+  const offset = (safePage - 1) * safePageSize;
+
+  const [countRes, dataRes] = await Promise.all([
+    db.query(
+      `SELECT COUNT(*) FROM inventory i
+       JOIN locations l ON l.id = i.location_id
+       WHERE l.branch_id = $1 AND i.quantity <= i.reorder_point`,
+      [branchId],
+    ),
+    db.query(
+      `SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
+              i.location_id, l.name AS location_name, l.branch_id,
+              i.quantity, i.reorder_point, i.version, i.updated_at,
+              true AS is_low_stock
+       FROM inventory i
+       JOIN locations l ON l.id = i.location_id
+       JOIN books b ON b.id = i.book_id
+       WHERE l.branch_id = $1 AND i.quantity <= i.reorder_point
+       ORDER BY i.quantity ASC, b.title ASC
+       LIMIT $2 OFFSET $3`,
+      [branchId, safePageSize, offset],
+    ),
+  ]);
+
+  const total = parseInt(countRes.rows[0].count as string, 10);
+  return {
+    items: dataRes.rows.map(mapInventoryRow),
+    total,
+    page: safePage,
+    totalPages: Math.max(1, Math.ceil(total / safePageSize)),
+  };
 }
 
 // ── Get inventory history ─────────────────────────────────────────────────────

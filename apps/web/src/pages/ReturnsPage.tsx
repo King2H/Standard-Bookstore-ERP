@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 interface ReturnsPageProps { userRole?: Role; userPermissions?: string[]; }
@@ -46,6 +47,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
 
   // ── List state ────────────────────────────────────────────────────────────────
   const [listPage, setListPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // ── Queries ───────────────────────────────────────────────────────────────────
@@ -66,8 +68,8 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
   });
 
   const { data: listData, isLoading: listLoading } = useQuery<ReturnListResponse>({
-    queryKey: ['returns-list', listPage, branchId],
-    queryFn: () => api.get(`/returns?branchId=${branchId}&page=${listPage}&pageSize=20`),
+    queryKey: ['returns-list', listPage, listPageSize, branchId],
+    queryFn: () => api.get(`/returns?branchId=${branchId}&page=${listPage}&pageSize=${listPageSize}`),
     enabled: tab === 'list',
   });
 
@@ -307,16 +309,14 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
             {(!listData?.items || listData.items.length === 0) && !listLoading && (
               <p className="text-center text-gray-400 text-sm py-8">No returns found</p>
             )}
+            {listData && (
+              <Pagination
+                page={listPage} pageSize={listPageSize} total={listData.total} totalPages={listData.totalPages}
+                onPageChange={setListPage} onPageSizeChange={makePageSizeHandler(setListPage, setListPageSize)}
+                itemLabel="return"
+              />
+            )}
           </div>
-          {listData && listData.totalPages > 1 && (
-            <div className="flex justify-between items-center mt-3 text-sm text-gray-500 dark:text-gray-400">
-              <span>Page {listData.page} of {listData.totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={listPage <= 1} onClick={() => setListPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-                <button disabled={listPage >= listData.totalPages} onClick={() => setListPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

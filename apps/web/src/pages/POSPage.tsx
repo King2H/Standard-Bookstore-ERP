@@ -4,6 +4,7 @@ import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import QuickAddCustomer, { type QuickCustomerPayload } from '../components/QuickAddCustomer.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -183,6 +184,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
   const [payBankAccountId, setPayBankAccountId]   = useState<number | ''>('');
   const [receipt, setReceipt]                     = useState<Transaction | null>(null);
   const [histPage, setHistPage]                   = useState(1);
+  const [histPageSize, setHistPageSize]           = useState(DEFAULT_PAGE_SIZE);
 
   // Discount state
   const [defaultDiscountType, setDefaultDiscountType]     = useState<DiscountPresetType>('Normal');
@@ -223,8 +225,8 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
   });
 
   const { data: histData, isLoading: histLoading } = useQuery<TxListResponse>({
-    queryKey: ['pos-history', histPage, branchId, histDateFrom, histDateTo],
-    queryFn:  () => api.get(`/pos/transactions?branchId=${branchId}&page=${histPage}&pageSize=20${histDateFrom ? `&dateFrom=${histDateFrom}` : ''}${histDateTo ? `&dateTo=${histDateTo}` : ''}`),
+    queryKey: ['pos-history', histPage, histPageSize, branchId, histDateFrom, histDateTo],
+    queryFn:  () => api.get(`/pos/transactions?branchId=${branchId}&page=${histPage}&pageSize=${histPageSize}${histDateFrom ? `&dateFrom=${histDateFrom}` : ''}${histDateTo ? `&dateTo=${histDateTo}` : ''}`),
     enabled:  branchId !== null && tab === 'history',
   });
 
@@ -714,16 +716,14 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
             {(!histData?.items || histData.items.length === 0) && !histLoading && (
               <div className="p-12 text-center"><div className="text-4xl mb-3">📋</div><p className="text-sm text-gray-400">No transactions found</p></div>
             )}
+            {histData && (
+              <Pagination
+                page={histPage} pageSize={histPageSize} total={histData.total} totalPages={histData.totalPages}
+                onPageChange={setHistPage} onPageSizeChange={makePageSizeHandler(setHistPage, setHistPageSize)}
+                itemLabel="transaction"
+              />
+            )}
           </div>
-          {histData && histData.totalPages > 1 && (
-            <div className="flex justify-between items-center mt-4 text-sm text-gray-500">
-              <span>Page {histData.page} of {histData.totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={histPage <= 1} onClick={() => setHistPage(p => p - 1)} className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium text-sm">← Prev</button>
-                <button disabled={histPage >= histData.totalPages} onClick={() => setHistPage(p => p + 1)} className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium text-sm">Next →</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

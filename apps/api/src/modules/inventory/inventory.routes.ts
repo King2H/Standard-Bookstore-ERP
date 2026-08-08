@@ -104,8 +104,12 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const items = await withRetry(() => inventoryService.getLowStock(req.staff!.branchId));
-      res.json({ items, total: items.length });
+      const result = await withRetry(() => inventoryService.getLowStock(
+        req.staff!.branchId,
+        qi(req.query.page, 1),
+        qi(req.query.pageSize, 25),
+      ));
+      res.json(result);
     } catch (err) { next(err); }
   },
 );

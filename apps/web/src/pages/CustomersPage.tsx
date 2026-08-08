@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 
@@ -71,6 +72,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState('');
   const [filterActive, setFilterActive] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -89,12 +91,12 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
   const [creditRefType, setCreditRefType] = useState('');
   const [creditRefId, setCreditRefId] = useState('');
 
-  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (q) params.set('q', q);
   if (filterActive) params.set('isActive', filterActive);
 
   const { data, isLoading } = useQuery<CustomerListResponse>({
-    queryKey: ['customers', page, q, filterActive],
+    queryKey: ['customers', page, pageSize, q, filterActive],
     queryFn: () => api.get(`/customers?${params}`),
   });
 
@@ -262,17 +264,14 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
               </tbody>
             </table>
           )}
+          {data && (
+            <Pagination
+              page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+              onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+              itemLabel="customer"
+            />
+          )}
         </div>
-
-        {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-            <span>Page {data.page} of {data.totalPages}</span>
-            <div className="flex gap-2">
-              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-              <button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-            </div>
-          </div>
-        )}
 
         {/* Create Customer Drawer */}
         {drawerOpen && (

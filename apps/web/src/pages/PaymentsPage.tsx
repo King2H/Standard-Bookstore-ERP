@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 interface PaymentsPageProps { userRole?: Role; userPermissions?: string[]; }
@@ -68,6 +69,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
 
   // Pending orders state
   const [pendingPage, setPendingPage] = useState(1);
+  const [pendingPageSize, setPendingPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedOrder, setSelectedOrder] = useState<UnpaidOrder | null>(null);
 
   // Payment collection state
@@ -80,6 +82,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
 
   // History state
   const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
@@ -89,15 +92,15 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
   // ── Queries ──────────────────────────────────────────────────────────────────
 
   const { data: unpaidData, isLoading: unpaidLoading } = useQuery<UnpaidOrdersResponse>({
-    queryKey: ['unpaid-orders', branchId, pendingPage],
-    queryFn: () => api.get(`/payments/unpaid-orders?branchId=${branchId}&page=${pendingPage}&pageSize=20`),
+    queryKey: ['unpaid-orders', branchId, pendingPage, pendingPageSize],
+    queryFn: () => api.get(`/payments/unpaid-orders?branchId=${branchId}&page=${pendingPage}&pageSize=${pendingPageSize}`),
     enabled: tab === 'pending',
     refetchInterval: 30_000,
   });
 
   const { data: historyData, isLoading: historyLoading } = useQuery<PaymentListResponse>({
-    queryKey: ['payments-list', historyPage, statusFilter],
-    queryFn: () => api.get(`/payments?page=${historyPage}&pageSize=20${statusFilter ? `&status=${statusFilter}` : ''}`),
+    queryKey: ['payments-list', historyPage, historyPageSize, statusFilter],
+    queryFn: () => api.get(`/payments?page=${historyPage}&pageSize=${historyPageSize}${statusFilter ? `&status=${statusFilter}` : ''}`),
     enabled: tab === 'history',
   });
 
@@ -336,14 +339,12 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
             </div>
           )}
 
-          {unpaidData && unpaidData.totalPages > 1 && (
-            <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
-              <span>Page {unpaidData.page} of {unpaidData.totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={pendingPage <= 1} onClick={() => setPendingPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-                <button disabled={pendingPage >= unpaidData.totalPages} onClick={() => setPendingPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-              </div>
-            </div>
+          {unpaidData && unpaidData.items.length > 0 && (
+            <Pagination
+              page={pendingPage} pageSize={pendingPageSize} total={unpaidData.total} totalPages={unpaidData.totalPages}
+              onPageChange={setPendingPage} onPageSizeChange={makePageSizeHandler(setPendingPage, setPendingPageSize)}
+              itemLabel="pending payment"
+            />
           )}
         </div>
       )}
@@ -585,17 +586,14 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
             {(!historyData?.items || historyData.items.length === 0) && !historyLoading && (
               <p className="text-center text-gray-400 text-sm py-8">No payments found</p>
             )}
+            {historyData && (
+              <Pagination
+                page={historyPage} pageSize={historyPageSize} total={historyData.total} totalPages={historyData.totalPages}
+                onPageChange={setHistoryPage} onPageSizeChange={makePageSizeHandler(setHistoryPage, setHistoryPageSize)}
+                itemLabel="payment"
+              />
+            )}
           </div>
-
-          {historyData && historyData.totalPages > 1 && (
-            <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
-              <span>Page {historyData.page} of {historyData.totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={historyPage <= 1} onClick={() => setHistoryPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-                <button disabled={historyPage >= historyData.totalPages} onClick={() => setHistoryPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
