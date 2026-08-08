@@ -22,6 +22,10 @@ router.get(
       const result = await paymentsService.listUnpaidOrders({
         branchId:   qi(req.query.branchId, 0) || undefined,
         customerId: qi(req.query.customerId, 0) || undefined,
+        // Deep-link pre-fill from Sales History / Receivables — see
+        // listUnpaidOrders()'s entityId doc comment.
+        entityId:   qs(req.query.entityId),
+        sourceType: qs(req.query.sourceType),
         page:       qi(req.query.page, 1),
         pageSize:   qi(req.query.pageSize, 25),
       });

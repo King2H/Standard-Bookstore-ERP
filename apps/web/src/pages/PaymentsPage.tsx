@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
@@ -7,7 +7,18 @@ import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
-interface PaymentsPageProps { userRole?: Role; userPermissions?: string[]; }
+interface PaymentsPageProps {
+  userRole?: Role; userPermissions?: string[];
+  /** Single Authoritative Payment Collection Workflow: Sales History's "View
+   *  Payments" and Receivables' "Open in Payments" navigate here instead of
+   *  offering their own Collect action. `orderId` + `sourceType` ('order' |
+   *  'pos' | 'exchange_difference') pre-select and land on the Collect tab
+   *  for that specific entity (matching listUnpaidOrders()'s id/source_type
+   *  values — a receivable's own id for 'exchange_difference'). `tab:
+   *  'history'` alone (no orderId) just opens Payment History; paired with
+   *  orderId it also pre-filters History to that entity. */
+  initialContext?: Record<string, string>;
+}
 
 interface Payment {
   id: string; paymentReference: string; orderId: string; amount: number;
@@ -60,12 +71,12 @@ const isFulfilledOrder = (pay: Payment): boolean => {
 
 type Tab = 'pending' | 'history' | 'collect';
 
-export default function PaymentsPage({ userRole, userPermissions }: PaymentsPageProps) {
+export default function PaymentsPage({ userRole, userPermissions, initialContext = {} }: PaymentsPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
   const branchId = getCurrentBranchId() ?? 1;
-  const [tab, setTab] = useState<Tab>('pending');
+  const [tab, setTab] = useState<Tab>(initialContext.tab === 'history' ? 'history' : 'pending');
 
   // Pending orders state
   const [pendingPage, setPendingPage] = useState(1);
@@ -88,6 +99,12 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
   const [refundingId, setRefundingId] = useState<string | null>(null);
   const [refundAmount, setRefundAmount] = useState('');
   const [refundReason, setRefundReason] = useState('');
+  // Deep-link filter from Sales History's "View Payments" — narrows History
+  // to payments for one specific order/transaction. Cleared by the user via
+  // the "✕ Clear filter" chip, independent of statusFilter.
+  const [historyEntityFilter, setHistoryEntityFilter] = useState<string | null>(
+    initialContext.tab === 'history' ? (initialContext.orderId ?? null) : null,
+  );
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -99,10 +116,36 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
   });
 
   const { data: historyData, isLoading: historyLoading } = useQuery<PaymentListResponse>({
-    queryKey: ['payments-list', historyPage, historyPageSize, statusFilter],
-    queryFn: () => api.get(`/payments?page=${historyPage}&pageSize=${historyPageSize}${statusFilter ? `&status=${statusFilter}` : ''}`),
+    queryKey: ['payments-list', historyPage, historyPageSize, statusFilter, historyEntityFilter],
+    queryFn: () => api.get(`/payments?page=${historyPage}&pageSize=${historyPageSize}${statusFilter ? `&status=${statusFilter}` : ''}${historyEntityFilter ? `&orderId=${historyEntityFilter}` : ''}`),
     enabled: tab === 'history',
   });
+
+  // Deep-link pre-fill for the Collect tab: Sales History and Receivables
+  // navigate here with a specific entity already known. Reuses the exact
+  // same selectOrderForPayment() the Pending tab's own "Collect" button
+  // calls — no separate/parallel pre-fill logic.
+  useEffect(() => {
+    if (!initialContext.orderId || !initialContext.sourceType || initialContext.tab === 'history') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get<UnpaidOrdersResponse>(
+          `/payments/unpaid-orders?branchId=${branchId}&entityId=${initialContext.orderId}&sourceType=${initialContext.sourceType}&pageSize=1`,
+        );
+        if (cancelled) return;
+        if (res.items.length) {
+          selectOrderForPayment(res.items[0]);
+        } else {
+          showToast('That item has no outstanding balance to collect (it may already be paid).', 'info');
+        }
+      } catch {
+        if (!cancelled) showToast('Could not load that item for payment collection.', 'error');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialContext.orderId, initialContext.sourceType]);
 
   // Fetch active bank accounts for this branch — only when Bank method is selected
   const { data: bankAccountsData } = useQuery<{ items: BankAccount[] }>({
@@ -140,6 +183,10 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
       qc.invalidateQueries({ queryKey: ['orders-list'] });
       qc.invalidateQueries({ queryKey: ['customer-for-payment'] });
       qc.invalidateQueries({ queryKey: ['customers'] });
+      // Orders create their own receivable row (order_credit_sale) — keep
+      // Receivables in sync in case the user navigates there next.
+      qc.invalidateQueries({ queryKey: ['receivables'] });
+      qc.invalidateQueries({ queryKey: ['receivables-summary'] });
       setTab('pending');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
@@ -155,6 +202,33 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
       qc.invalidateQueries({ queryKey: ['unpaid-orders'] });
       qc.invalidateQueries({ queryKey: ['payments-list'] });
       qc.invalidateQueries({ queryKey: ['customers'] });
+      qc.invalidateQueries({ queryKey: ['receivables'] });
+      qc.invalidateQueries({ queryKey: ['receivables-summary'] });
+      // Keeps Sales History's transaction list in sync (Module: Sales
+      // History status column) if the user navigates back there.
+      qc.invalidateQueries({ queryKey: ['pos-history'] });
+      setTab('pending');
+    },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+
+  // Exchange-difference receivable collection — the one source type that has
+  // no order/transaction row of its own, so it goes through the same
+  // existing dispatcher Receivables' removed Collect button used to call
+  // (POST /receivables/:id/collect -- unchanged; still branches internally
+  // to payments/pos/receivables service functions per source type). id here
+  // is the receivable's own id (see UnpaidOrder doc comment on
+  // PaymentsPageProps).
+  const receivableCollectMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: unknown }) => api.post(`/receivables/${id}/collect`, body),
+    onSuccess: () => {
+      showToast('Payment collected', 'success');
+      setAmount(''); setTxRef(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
+      qc.invalidateQueries({ queryKey: ['unpaid-orders'] });
+      qc.invalidateQueries({ queryKey: ['payments-list'] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      qc.invalidateQueries({ queryKey: ['receivables'] });
+      qc.invalidateQueries({ queryKey: ['receivables-summary'] });
       setTab('pending');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
@@ -180,8 +254,11 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
     setSelectedBankAccountId(null);
     setTxRef('');
 
-    // POS credit sales don't have a backoffice /orders/:id/balance endpoint
-    if (order.sourceType === 'pos') {
+    // POS credit sales and exchange-difference receivables don't have a
+    // backoffice /orders/:id/balance endpoint (that endpoint is order-table-
+    // specific) — build the balance directly from the unpaid-orders row,
+    // same as the POS branch.
+    if (order.sourceType === 'pos' || order.sourceType === 'exchange_difference') {
       setOrderBalance({
         orderTotal: order.total,
         discountTotal: 0,
@@ -232,6 +309,21 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
       posPayMut.mutate({
         txId: selectedOrder.id,
         payments: [{ method: paymentMethod as 'cash' | 'bank' | 'store_credit' | 'loyalty_points', amount: parseFloat(amount), reference: txRef || undefined }],
+      });
+      return;
+    }
+
+    // Exchange-difference receivables are collected via the receivables
+    // dispatcher (id = the receivable's own id, not the exchange's)
+    if (selectedOrder.sourceType === 'exchange_difference') {
+      receivableCollectMut.mutate({
+        id: selectedOrder.id,
+        body: {
+          amount: parseFloat(amount),
+          paymentMethod,
+          bankAccountId: paymentMethod === 'bank' ? selectedBankAccountId : undefined,
+          notes: txRef || undefined,
+        },
       });
       return;
     }
@@ -304,6 +396,9 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                         {order.sourceType === 'pos' && (
                           <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded font-semibold">POS Credit</span>
                         )}
+                        {order.sourceType === 'exchange_difference' && (
+                          <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] rounded font-semibold">Exchange</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
                         {order.customerName ? (
@@ -357,7 +452,9 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
-                  {selectedOrder.sourceType === 'pos' ? '🏷️ POS Credit Sale — Collecting Payment' : 'Collecting Payment For'}
+                  {selectedOrder.sourceType === 'pos' ? '🏷️ POS Credit Sale — Collecting Payment'
+                    : selectedOrder.sourceType === 'exchange_difference' ? '🔁 Exchange Balance — Collecting Payment'
+                    : 'Collecting Payment For'}
                 </p>
                 <p className="text-base font-bold text-blue-900 dark:text-blue-200 mt-0.5">{selectedOrder.orderNumber}</p>
                 {selectedOrder.customerName && (
@@ -494,7 +591,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
             </div>
 
             <button onClick={submitPayment} disabled={
-              (createMut.isPending || posPayMut.isPending) ||
+              (createMut.isPending || posPayMut.isPending || receivableCollectMut.isPending) ||
               !amount ||
               parseFloat(amount) <= 0 ||
               (paymentMethod === 'bank' && !selectedBankAccountId) ||
@@ -502,7 +599,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
               (paymentMethod === 'loyalty_points' && (!selectedOrder?.customerName || (customerData != null && parseFloat(amount) > customerData.loyaltyBalance)))
             }
               className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
-              {(createMut.isPending || posPayMut.isPending) ? 'Processing...' : `✓ Record Payment — ${currency} ${parseFloat(amount || '0').toFixed(2)}`}
+              {(createMut.isPending || posPayMut.isPending || receivableCollectMut.isPending) ? 'Processing...' : `✓ Record Payment — ${currency} ${parseFloat(amount || '0').toFixed(2)}`}
             </button>
           </div>
         </div>
@@ -511,7 +608,7 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
       {/* ── Payment History Tab ── */}
       {tab === 'history' && (
         <div className="flex-1 overflow-auto p-4 space-y-3">
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center flex-wrap">
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setHistoryPage(1); }}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">All statuses</option>
@@ -519,6 +616,12 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                 <option key={s} value={s}>{s.replace('_', ' ')}</option>
               ))}
             </select>
+            {historyEntityFilter && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg">
+                Filtered to one sale
+                <button onClick={() => { setHistoryEntityFilter(null); setHistoryPage(1); }} className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200" title="Clear filter">✕</button>
+              </span>
+            )}
           </div>
 
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
@@ -538,6 +641,9 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                           {pay.sourceType === 'pos' && (
                             <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded font-semibold">POS</span>
                           )}
+                          {pay.sourceType === 'exchange' && (
+                            <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] rounded font-semibold">Exchange</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{pay.entityNumber ?? `#${pay.orderId}`}</td>
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(pay.amount).toFixed(2)}</td>
@@ -545,9 +651,11 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[pay.status] ?? ''}`}>{pay.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(pay.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
-                          {/* POS payments cannot be refunded here — use POS Returns flow */}
+                          {/* POS payments cannot be refunded here — use POS Returns flow.
+                              Exchange-difference collections aren't order_payments rows
+                              either, so this generic refund endpoint doesn't apply to them. */}
                           {/* Task 13.1: Also hide for FULFILLED/COMPLETED orders — use Returns module */}
-                          {canRefund(userRole, userPermissions) && pay.status !== 'failed' && pay.status !== 'refunded' && pay.sourceType !== 'pos' && !isFulfilledOrder(pay) && (
+                          {canRefund(userRole, userPermissions) && pay.status !== 'failed' && pay.status !== 'refunded' && pay.sourceType !== 'pos' && pay.sourceType !== 'exchange' && !isFulfilledOrder(pay) && (
                             refundingId === pay.id ? (
                               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                                 <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="Amount"
@@ -567,6 +675,9 @@ export default function PaymentsPage({ userRole, userPermissions }: PaymentsPage
                           )}
                           {pay.sourceType === 'pos' && pay.status !== 'refunded' && (
                             <span className="text-xs text-gray-400 italic">POS Returns only</span>
+                          )}
+                          {pay.sourceType === 'exchange' && (
+                            <span className="text-xs text-gray-400 italic">Manage via Exchanges</span>
                           )}
                         </td>
                       </tr>

@@ -84,7 +84,13 @@ interface Transaction {
 }
 
 interface TxListResponse { items: Transaction[]; total: number; page: number; totalPages: number; }
-interface POSPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
+interface POSPageProps {
+  userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>;
+  /** Single Authoritative Payment Collection Workflow: Sales History no
+   *  longer collects payment directly — "View Payments" navigates to the
+   *  Payments module's History tab, pre-filtered to this transaction. */
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 
@@ -159,7 +165,7 @@ type Tab = 'pos' | 'history';
 //  Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function POSPage({ userRole, userPermissions, initialContext = {} }: POSPageProps) {
+export default function POSPage({ userRole, userPermissions, initialContext = {}, onNavigate }: POSPageProps) {
   const qc          = useQueryClient();
   const { showToast } = useToast();
   const currency    = useCurrency();
@@ -312,13 +318,6 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
     mutationFn: (body: unknown) => api.post<Transaction>('/pos/transactions', body),
     onSuccess:  (tx) => { setReceipt(tx); showToast(`Sale ${tx.transactionNumber} completed`, 'success'); },
     onError:    (e: Error) => showToast(e.message, 'error'),
-  });
-
-  const collectMut = useMutation({
-    mutationFn: ({ txId, pmts }: { txId: string; pmts: Array<{ method: string; amount: number }> }) =>
-      api.post<Transaction>(`/pos/transactions/${txId}/payment`, { payments: pmts }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pos-history'] }); showToast('Payment recorded', 'success'); },
-    onError:   (e: Error) => showToast(e.message, 'error'),
   });
 
   const voidMut = useMutation({
@@ -693,17 +692,17 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                             {canVoid(userRole, userPermissions) && tx.status === 'completed' && (
                               <button onClick={() => { if (confirm('Void this transaction?')) voidMut.mutate(tx.id); }} className="text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-2 py-1 rounded-lg font-medium transition-colors whitespace-nowrap">Void</button>
                             )}
-                            {tx.status === 'completed' && tx.paymentStatus !== 'paid' && (
+                            {/* Single Authoritative Payment Collection Workflow: Sales
+                                History no longer collects payment itself (Payments is
+                                the only module that can) — this is a pure view action,
+                                opening Payments' History pre-filtered to this
+                                transaction. Collecting an outstanding balance happens
+                                from Payments' own Pending tab. */}
+                            {tx.status === 'completed' && (
                               <button
-                                onClick={() => {
-                                  const amt = prompt(`Collect payment\n${tx.transactionNumber}\nOutstanding: ${currency} ${Number(tx.amountDue).toFixed(2)}\n\nEnter amount:`);
-                                  if (!amt) return;
-                                  const parsed = parseFloat(amt);
-                                  if (!parsed || parsed <= 0) return;
-                                  collectMut.mutate({ txId: tx.id, pmts: [{ method: 'cash', amount: parsed }] });
-                                }}
-                                className="text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 px-2 py-1 rounded-lg font-semibold transition-colors whitespace-nowrap"
-                              >Collect</button>
+                                onClick={() => onNavigate?.('payments', { tab: 'history', orderId: tx.id, sourceType: 'pos' })}
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 px-2 py-1 rounded-lg font-semibold transition-colors whitespace-nowrap"
+                              >View Payments</button>
                             )}
                           </div>
                         </td>

@@ -186,6 +186,33 @@ export async function list(opts: {
       FROM transaction_payments tp
       JOIN transactions t ON t.id = tp.transaction_id
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+      UNION ALL
+      -- Exchange-difference receivable collections, recorded by
+      -- receivablesService.collectPayment() into financial_transactions
+      -- (see receivables.routes.ts /:id/collect dispatcher) rather than
+      -- order_payments/transaction_payments -- surfaced here so a payment
+      -- collected via the Payments module's exchange branch shows up in
+      -- History exactly like an order/POS payment does.
+      SELECT
+        ft.id::text AS id,
+        'PAY-EXC-' || ft.id AS payment_reference,
+        e.id::text AS order_id,
+        e.exchange_reference AS entity_number,
+        'exchange' AS source_type,
+        ft.amount,
+        ft.currency,
+        ft.method AS payment_method,
+        'success' AS status,
+        NULL::text AS transaction_reference,
+        'Exchange Receivable Collection' AS notes,
+        ft.created_at AS processed_at,
+        ft.created_at,
+        ft.staff_id AS processed_by,
+        NULL::integer AS bank_account_id,
+        NULL::text AS order_status
+      FROM financial_transactions ft
+      JOIN exchanges e ON e.id = ft.exchange_id
+      WHERE ft.type = 'payment' AND ft.exchange_id IS NOT NULL
     )
     SELECT * FROM u
     ${where}
@@ -210,6 +237,15 @@ export async function list(opts: {
       FROM transaction_payments tp
       JOIN transactions t ON t.id = tp.transaction_id
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+      UNION ALL
+      SELECT
+        e.id::text AS order_id,
+        'success' AS status,
+        ft.method AS payment_method,
+        ft.created_at
+      FROM financial_transactions ft
+      JOIN exchanges e ON e.id = ft.exchange_id
+      WHERE ft.type = 'payment' AND ft.exchange_id IS NOT NULL
     )
     SELECT COUNT(*) FROM u
     ${where}
@@ -566,6 +602,16 @@ export async function createRefund(
 export async function listUnpaidOrders(opts: {
   branchId?: number;
   customerId?: number;
+  /** Exact-match lookup for a single entity, paired with sourceType — used by
+   *  the Payments module's deep-link pre-fill when Sales History's "View
+   *  Payments" or Receivables' "Open in Payments" navigates here with a
+   *  specific transaction/order/receivable id already known. Matches the
+   *  `id`/`source_type` values this same function already returns (order id
+   *  for 'order', POS transaction id for 'pos', receivable id for
+   *  'exchange_difference' — the receivable's own id, not the exchange's,
+   *  since collection for that branch is keyed by receivable id). */
+  entityId?: string;
+  sourceType?: string;
   page?: number;
   pageSize?: number;
 }): Promise<{
@@ -580,12 +626,14 @@ export async function listUnpaidOrders(opts: {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, opts.pageSize ?? 25);
   const offset = (page - 1) * pageSize;
-  
+
   const conditions: string[] = [];
   const params: unknown[] = [];
 
   if (opts.branchId) { params.push(opts.branchId); conditions.push(`u.branch_id = $${params.length}`); }
   if (opts.customerId) { params.push(opts.customerId); conditions.push(`u.customer_id = $${params.length}`); }
+  if (opts.entityId) { params.push(opts.entityId); conditions.push(`u.id = $${params.length}`); }
+  if (opts.sourceType) { params.push(opts.sourceType); conditions.push(`u.source_type = $${params.length}`); }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const li = params.length + 1;
@@ -656,6 +704,30 @@ export async function listUnpaidOrders(opts: {
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
       WHERE r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
         AND t.status = 'completed'
+      UNION ALL
+      -- Exchange-difference receivables (Customer_Pays exchanges with an open
+      -- balance). id is the RECEIVABLE's own id, not the exchange's -- that's
+      -- what /receivables/:id/collect (the existing, unchanged dispatcher
+      -- this branch's Collect action posts to) is keyed by.
+      SELECT
+        r.id::text AS id,
+        e.exchange_reference AS order_number,
+        r.original_amount AS total,
+        CASE WHEN r.status = 'PartiallyPaid' THEN 'partial' ELSE 'unpaid' END AS payment_status,
+        r.status,
+        'Exchange' AS channel,
+        r.created_at,
+        c.full_name AS customer_name,
+        c.customer_code,
+        (r.original_amount - r.outstanding_amount) AS total_paid,
+        'exchange_difference' AS source_type,
+        r.branch_id,
+        r.customer_id
+      FROM receivables r
+      JOIN exchanges e ON e.id = r.source_entity_id
+      LEFT JOIN customers c ON c.id = r.customer_id
+      WHERE r.source_type = 'exchange_difference'
+        AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
     )
     SELECT * FROM u
     ${where}
@@ -668,7 +740,8 @@ export async function listUnpaidOrders(opts: {
       SELECT
         o.id,
         o.branch_id,
-        o.customer_id
+        o.customer_id,
+        'order' AS source_type
       FROM orders o
       WHERE (
         (o.sale_type = 'credit_sale'
@@ -689,11 +762,21 @@ export async function listUnpaidOrders(opts: {
       SELECT
         t.id,
         t.branch_id,
-        t.customer_id
+        t.customer_id,
+        'pos' AS source_type
       FROM transactions t
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
       WHERE r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
         AND t.status = 'completed'
+      UNION ALL
+      SELECT
+        r.id AS id,
+        r.branch_id,
+        r.customer_id,
+        'exchange_difference' AS source_type
+      FROM receivables r
+      WHERE r.source_type = 'exchange_difference'
+        AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
     )
     SELECT COUNT(*) FROM u
     ${where}

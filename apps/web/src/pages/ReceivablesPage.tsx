@@ -6,16 +6,26 @@ import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
-interface ReceivablesPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
+interface ReceivablesPageProps {
+  userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>;
+  /** Single Authoritative Payment Collection Workflow: Receivables no longer
+   *  collects payment directly — "Open in Payments" navigates to the
+   *  Payments module's Collect flow, pre-filled for this receivable. */
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}
 
 type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
 type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
-type PaymentMethod = 'cash' | 'bank' | 'store_credit';
 
 interface ReceivableRow {
   id: string;
   sourceType: ReceivableSourceType;
   sourceRefId: string;
+  /** The underlying order/POS-transaction id (order_credit_sale, pos_credit_sale)
+   *  — used to route "Open in Payments" to the matching Payments unpaid-orders
+   *  row. Not used for exchange_difference, which routes on this receivable's
+   *  own `id` instead (see openInPayments()). */
+  sourceEntityId: string;
   customerId: number;
   customerName: string | null;
   customerCode: string | null;
@@ -58,7 +68,7 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function ReceivablesPage({ userRole, userPermissions, initialContext = {} }: ReceivablesPageProps) {
+export default function ReceivablesPage({ userRole, userPermissions, initialContext = {}, onNavigate }: ReceivablesPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -76,28 +86,6 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   const [dueDateDraft, setDueDateDraft] = useState('');
   const [writeOffId, setWriteOffId] = useState<string | null>(null);
   const [writeOffNotes, setWriteOffNotes] = useState('');
-  const [collectingId, setCollectingId] = useState<string | null>(null);
-  const [collectCustomerId, setCollectCustomerId] = useState<number | null>(null);
-  const [collectAmount, setCollectAmount] = useState('');
-  const [collectMethod, setCollectMethod] = useState<PaymentMethod>('cash');
-  const [collectBankAccountId, setCollectBankAccountId] = useState<number | ''>('');
-  const [collectNotes, setCollectNotes] = useState('');
-
-  const { data: bankAccountsData } = useQuery<{ items: Array<{ id: number; accountName: string; bankName: string }> }>({
-    queryKey: ['bank-accounts-for-receivables', branchId],
-    queryFn: () => api.get(`/branches/${branchId}/bank-accounts`),
-    enabled: collectMethod === 'bank',
-  });
-
-  // Store credit was already accepted as a collect method server-side, but
-  // the modal never showed the customer's available balance — staff only
-  // found out it was insufficient after submitting and getting a 422. Fetch
-  // it whenever the modal is open so it's visible before that happens.
-  const { data: collectingCustomer } = useQuery<{ storeCreditBalance: number }>({
-    queryKey: ['customer-for-collect', collectCustomerId],
-    queryFn: () => api.get(`/customers/${collectCustomerId}`),
-    enabled: !!collectCustomerId,
-  });
 
   // ── Queries ───────────────────────────────────────────────────────────────────
   const params = new URLSearchParams({ branchId: String(branchId), page: String(page), pageSize: String(pageSize) });
@@ -122,20 +110,10 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   };
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
-  // Collect: the normal "customer paid" action — routes server-side to the
-  // receivable's own source-type payment pipeline (order/POS/exchange), so
-  // the amount and method are always recorded, store credit is deducted when
-  // used, and the collection shows up in Payments/Dashboard reporting.
-  const collectMut = useMutation({
-    mutationFn: ({ id, amount, paymentMethod, bankAccountId, notes }: { id: string; amount: number; paymentMethod: PaymentMethod; bankAccountId?: number; notes?: string }) =>
-      api.post(`/receivables/${id}/collect`, { amount, paymentMethod, bankAccountId, notes: notes || undefined }),
-    onSuccess: () => {
-      inv();
-      setCollectingId(null); setCollectCustomerId(null); setCollectAmount(''); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes('');
-      showToast('Payment collected', 'success');
-    },
-    onError: (e: Error) => showToast(e.message, 'error'),
-  });
+  // Collect used to live here (POST /receivables/:id/collect) — Single
+  // Authoritative Payment Collection Workflow moved it to the Payments
+  // module; see openInPayments() below, which navigates there instead of
+  // calling that endpoint directly.
 
   // Write off: bad-debt only — records no payment. Restricted server-side to
   // Admin/Manager/Finance_Officer.
@@ -159,6 +137,18 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   // Write-off is stricter than routine collection — matches the backend's
   // requireRole('Admin', 'Manager', 'Finance_Officer') on POST /:id/settle.
   const canWriteOff = () => ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
+
+  // "Open in Payments" — routes to the same entity Payments' own
+  // unpaid-orders list keys on: the order/POS-transaction id for those two
+  // source types, or this receivable's own id for exchange_difference
+  // (Payments has no exchange row of its own to point at).
+  function openInPayments(rec: ReceivableRow) {
+    if (rec.sourceType === 'exchange_difference') {
+      onNavigate?.('payments', { orderId: rec.id, sourceType: 'exchange_difference' });
+    } else {
+      onNavigate?.('payments', { orderId: rec.sourceEntityId, sourceType: rec.sourceType === 'pos_credit_sale' ? 'pos' : 'order' });
+    }
+  }
 
   const receivables = data?.items ?? [];
   const fmt = (n: number) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -285,12 +275,14 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                             className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">
                             📅
                           </button>
-                          {/* Collect payment — the normal "customer paid" action */}
+                          {/* Single Authoritative Payment Collection Workflow: Receivables
+                              no longer collects payment itself — this opens the Payments
+                              module's Collect flow, pre-filled for this receivable. */}
                           <button
-                            onClick={() => { setCollectingId(rec.id); setCollectCustomerId(rec.customerId); setCollectAmount(rec.outstandingAmount.toFixed(2)); setCollectMethod('cash'); setCollectBankAccountId(''); setCollectNotes(''); }}
-                            title="Collect payment"
+                            onClick={() => openInPayments(rec)}
+                            title="Open in Payments to collect"
                             className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
-                            💰 Collect
+                            ↗ Open in Payments
                           </button>
                           {/* Write off — bad debt only, restricted */}
                           {canWriteOff() && (
@@ -322,76 +314,6 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         )}
       </div>
 
-      {/* ── Collect Payment modal ────────────────────────────────────────────── */}
-      {collectingId && (() => {
-        const rec = receivables.find(r => r.id === collectingId);
-        if (!rec) return null;
-        const amt = parseFloat(collectAmount) || 0;
-        const storeCreditBalance = collectingCustomer?.storeCreditBalance ?? null;
-        const storeCreditInsufficient = collectMethod === 'store_credit' && storeCreditBalance != null && amt > storeCreditBalance + 0.01;
-        const invalid = amt <= 0 || amt > rec.outstandingAmount + 0.01 || (collectMethod === 'bank' && !collectBankAccountId) || storeCreditInsufficient;
-        return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => { setCollectingId(null); setCollectCustomerId(null); }}>
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Collect Payment</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {rec.customerName ?? 'Customer'} · Outstanding: <strong>{fmt(rec.outstandingAmount)}</strong> ({SOURCE_LABELS[rec.sourceType]})
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Amount ({currency})</label>
-                <input type="number" min={0.01} max={rec.outstandingAmount} step="0.01" value={collectAmount} onChange={e => setCollectAmount(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Method</label>
-                <select value={collectMethod} onChange={e => setCollectMethod(e.target.value as PaymentMethod)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500">
-                  <option value="cash">Cash</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="store_credit">Store Credit{storeCreditBalance != null ? ` (${fmt(storeCreditBalance)} available)` : ''}</option>
-                </select>
-              </div>
-              {collectMethod === 'bank' && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bank Account</label>
-                  <select value={collectBankAccountId} onChange={e => setCollectBankAccountId(Number(e.target.value) || '')}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500">
-                    <option value="">Select bank account…</option>
-                    {(bankAccountsData?.items ?? []).map(ba => <option key={ba.id} value={ba.id}>{ba.accountName} — {ba.bankName}</option>)}
-                  </select>
-                </div>
-              )}
-              {collectMethod === 'store_credit' && (
-                <p className={`text-xs rounded-lg px-3 py-2 ${storeCreditInsufficient ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
-                  {storeCreditBalance == null
-                    ? 'Loading available store credit…'
-                    : storeCreditInsufficient
-                      ? `⚠️ Only ${fmt(storeCreditBalance)} available — reduce the amount or choose another method.`
-                      : `✓ ${fmt(storeCreditBalance)} available on this customer's account.`}
-                </p>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
-                <input value={collectNotes} onChange={e => setCollectNotes(e.target.value)} placeholder="Reference, description…"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => { setCollectingId(null); setCollectCustomerId(null); }}
-                  className="flex-1 px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
-                <button
-                  onClick={() => collectMut.mutate({ id: rec.id, amount: amt, paymentMethod: collectMethod, bankAccountId: collectBankAccountId || undefined, notes: collectNotes })}
-                  disabled={invalid || collectMut.isPending}
-                  className="flex-1 px-4 py-2 text-sm font-medium bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg transition-colors">
-                  {collectMut.isPending ? 'Collecting…' : 'Collect'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* ── Write Off modal ──────────────────────────────────────────────────── */}
       {writeOffId && (() => {
         const rec = receivables.find(r => r.id === writeOffId);
@@ -402,7 +324,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Write Off Receivable</h3>
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
-                  ⚠️ This marks {fmt(rec.outstandingAmount)} as uncollectible — no payment is recorded, and it will not appear in Payments reporting. Use Collect instead if the customer actually paid.
+                  ⚠️ This marks {fmt(rec.outstandingAmount)} as uncollectible — no payment is recorded, and it will not appear in Payments reporting. Use "Open in Payments" instead if the customer actually paid.
                 </p>
               </div>
               <div>

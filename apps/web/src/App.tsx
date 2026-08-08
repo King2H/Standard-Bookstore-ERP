@@ -233,13 +233,13 @@ export default function App() {
               {currentPage === 'suppliers'    && <SuppliersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'procurement'  && <ProcurementPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'customers'    && <CustomersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
+              {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
               {currentPage === 'returns'      && <ReturnsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
-              {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
+              {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'installments' && <InstallmentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'exchanges'    && <ExchangesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'receivables'  && <ReceivablesPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
+              {currentPage === 'receivables'  && <ReceivablesPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
               {currentPage === 'profile'      && <ProfilePage />}
 
               {/* Inactivity warning overlay */}
