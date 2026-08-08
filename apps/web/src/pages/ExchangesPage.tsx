@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
@@ -102,6 +102,19 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
     queryKey: ['exc-locations', branchId],
     queryFn: () => api.get(`/branches/${branchId}/locations?pageSize=50`),
   });
+
+  // Bug fix: locationId used to stay '' until the staff manually picked one
+  // from the dropdown below, so book search's availability lookup (which
+  // requires a locationId) silently never ran — stock never showed. Default
+  // it to the branch's default-fulfillment location (or first location) as
+  // soon as locations load, same fallback Orders' New Order screen uses; the
+  // dropdown still lets staff override it before completing the exchange.
+  useEffect(() => {
+    if (locationId !== '' || !locData?.items?.length) return;
+    const def = locData.items.find(l => l.isDefaultFulfillment) ?? locData.items[0];
+    if (def) setLocationId(def.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locData]);
 
   const { data: bookResults } = useQuery<{ items: BookResult[] }>({
     queryKey: ['exc-books', bookSearch, locationId, branchId],

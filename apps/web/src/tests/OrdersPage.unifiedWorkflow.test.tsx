@@ -100,6 +100,39 @@ describe('OrdersPage — Stock Visibility (create-time cap)', () => {
     const resultButton = screen.getByText('Sold Out Book').closest('button');
     expect(resultButton).toBeDisabled();
   });
+
+  it('auto-selects the branch\'s only location so availability shows without a manual location pick', async () => {
+    // Regression: book search used to key off `selectedLocationId` alone,
+    // which is only ever set via the Fulfillment Location dropdown — a
+    // dropdown that itself only renders when a branch has *more than one*
+    // location. Single-location branches (the common case) never sent a
+    // locationId at all, so availability silently never showed.
+    getMock.mockImplementation((path: string) => {
+      if (path.startsWith('/orders?')) return Promise.resolve({ items: [], total: 0, page: 1, totalPages: 1 });
+      if (path.startsWith('/branches/')) return Promise.resolve({ items: [{ id: 7, name: 'Main Store', isDefaultFulfillment: true }] });
+      if (path.startsWith('/order-books') || path.startsWith('/books/with-availability')) {
+        return Promise.resolve({
+          items: [{
+            id: 3, title: 'Single Loc Book', isbn: '333', defaultPrice: 10, branchPrice: 10,
+            availability: { locationId: 7, locationName: 'Main Store', onHand: 5, reserved: 0, available: 5 },
+          }],
+        });
+      }
+      return Promise.resolve({ items: [] });
+    });
+
+    const user = userEvent.setup();
+    renderOrdersPage();
+
+    await user.click(screen.getByRole('button', { name: /New Order/i }));
+    await user.type(screen.getByPlaceholderText('Search books to add...'), 'Single');
+
+    await waitFor(() => {
+      const call = getMock.mock.calls.map(c => c[0] as string).find(p => p.startsWith('/books/with-availability') || p.startsWith('/order-books'));
+      expect(call).toContain('locationId=7');
+    });
+    expect(await screen.findByText('5 avail')).toBeInTheDocument();
+  });
 });
 
 describe('OrdersPage — Payment Mode Capture (cash_sale confirm)', () => {

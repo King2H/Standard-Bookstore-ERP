@@ -126,12 +126,6 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
     enabled: customerSearch.length > 1,
   });
 
-  const { data: bookResults } = useQuery<{ items: BookResult[] }>({
-    queryKey: ['order-books', bookSearch, branchId, selectedLocationId],
-    queryFn: () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}${selectedLocationId ? `&locationId=${selectedLocationId}` : ''}`),
-    enabled: bookSearch.length > 1,
-  });
-
   // Fetch branch locations so we can pass locationId to book search for stock availability
   const { data: branchLocations } = useQuery<{ items: Array<{ id: number; name: string; isDefaultFulfillment: boolean }> }>({
     queryKey: ['branch-locations-orders', branchId],
@@ -141,6 +135,19 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   });
   // Auto-select the default fulfillment location when locations load
   const effectiveLocationId = selectedLocationId ?? branchLocations?.items?.find(l => l.isDefaultFulfillment)?.id ?? branchLocations?.items?.[0]?.id ?? null;
+
+  const { data: bookResults } = useQuery<{ items: BookResult[] }>({
+    // Bug fix: this used to key/query off `selectedLocationId` alone, which is
+    // only ever set by the Fulfillment Location dropdown — a dropdown that
+    // itself only renders when a branch has more than one location (see
+    // below). Single-location branches (the common case) never set it, so
+    // stock availability silently never showed in book search. `effectiveLocationId`
+    // already carries the same default-fulfillment/first-location fallback the
+    // order submission itself uses — use that here too.
+    queryKey: ['order-books', bookSearch, branchId, effectiveLocationId],
+    queryFn: () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}${effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''}`),
+    enabled: bookSearch.length > 1,
+  });
 
   // Mutations
   const createMut = useMutation({
