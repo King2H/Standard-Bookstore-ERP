@@ -5,6 +5,7 @@ import * as locationAccessService from './locationAccess.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = parseInt(req.params.branchId as string, 10);
+      const branchId = paramInt(req.params.branchId);
       const role = req.staff!.role;
 
       // Admins and Managers always see all locations â€” they manage them
@@ -60,7 +61,7 @@ router.post(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = parseInt(req.params.branchId as string, 10);
+      const branchId = paramInt(req.params.branchId);
       const parsed = nameSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid location payload', { issues: parsed.error.issues });
@@ -83,7 +84,7 @@ router.put(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const parsed = nameSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid location payload', { issues: parsed.error.issues });
@@ -105,7 +106,7 @@ router.put(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const location = await locationService.setDefaultLocation(id, req.staff!);
       res.json(location);
     } catch (err) {
@@ -122,7 +123,7 @@ router.delete(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       await locationService.deleteLocation(id, req.staff!);
       res.json({ message: 'Location deleted' });
     } catch (err) {
@@ -141,7 +142,7 @@ router.get(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       const assignments = await locationAccessService.getStaffLocationAssignments(staffId);
       res.json({
         items: assignments,
@@ -164,7 +165,7 @@ router.put(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       const parsed = z.array(z.number().int().positive()).safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Body must be an array of location IDs', { issues: parsed.error.issues });

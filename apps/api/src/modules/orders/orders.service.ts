@@ -237,6 +237,14 @@ export async function create(
   const maxDiscPct = await getMaxLineDiscountPct(staffCtx.branchId, staffCtx.role);
 
   for (const item of data.items) {
+    // Bug Sweep: quantity had no application-level bound — a zero/negative
+    // value fell through to order_line_items' CHECK (quantity > 0), which
+    // the error handler doesn't recognize as an AppError, surfacing as a
+    // raw 500 instead of a clean 400.
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new ValidationError(`Quantity for book ${item.bookId} must be a positive integer`);
+    }
+
     const bookRes = await db.query('SELECT id, title, is_active FROM books WHERE id = $1', [item.bookId]);
     if (!bookRes.rows.length) throw new NotFoundError('Book ' + item.bookId);
     const book = bookRes.rows[0];
@@ -272,8 +280,13 @@ export async function create(
       // Enforce max-discount cap
       enforceDiscountCap(resolvedDiscount.discountPct, maxDiscPct);
     } else {
-      // Backward-compatible: plain discountAmount only
-      const discountAmount = parseFloat((item.discountAmount ?? 0).toFixed(2));
+      // Backward-compatible: plain discountAmount only.
+      // Bug Sweep: clamp to 0 — a negative discountAmount was passed
+      // straight through, which (since totalPrice = unitPrice*qty -
+      // discountAmount) would INCREASE the line total rather than
+      // discount it. Mirrors the clamp resolveDiscountFields() already
+      // applies on the engine-fields path above.
+      const discountAmount = Math.max(0, parseFloat((item.discountAmount ?? 0).toFixed(2)));
       const lineValue = unitPrice * item.quantity;
       const discountPct = lineValue > 0
         ? Math.round((discountAmount / lineValue) * 10000) / 100

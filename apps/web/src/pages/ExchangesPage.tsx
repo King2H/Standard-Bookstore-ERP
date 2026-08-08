@@ -573,7 +573,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   </div>
                   {incomingItems.map(item => (
                     <div key={item.bookId} className="flex items-center gap-2 text-xs">
-                      <span className="flex-1 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
+                      <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
                       <input type="number" min="1" value={item.quantity} onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                       <input
                         type="number" min="0.01" step="0.01" value={item.unitPrice}
@@ -593,7 +593,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
               <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400">📤 Outgoing (Customer Takes)</h3>
               {outgoingItems.length === 0 ? <p className="text-xs text-gray-400">No items yet</p> : outgoingItems.map(item => (
                 <div key={item.bookId} className="flex items-center gap-2 text-xs">
-                  <span className="flex-1 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
+                  <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
                   <input type="number" min="1" value={item.quantity} onChange={e => setOutgoingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                   <input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => setOutgoingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, unitPrice: parseFloat(e.target.value) || 0 } : i))} className="w-20 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                   <button onClick={() => setOutgoingItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
@@ -760,7 +760,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
               {returnedItems.length === 0 ? <p className="text-xs text-gray-400">No items yet</p> : returnedItems.map(item => (
                 <div key={item.bookId} className="space-y-1 text-xs border-b border-gray-100 dark:border-gray-800 pb-2 last:border-0">
                   <div className="flex items-center gap-2">
-                    <span className="flex-1 truncate text-gray-900 dark:text-white font-medium">{item.bookTitle}</span>
+                    <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white font-medium">{item.bookTitle}</span>
                     <button onClick={() => setReturnedItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
                   </div>
                   <div className="flex items-center gap-2">
@@ -787,7 +787,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
               <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400">📤 New Items</h3>
               {newItems.length === 0 ? <p className="text-xs text-gray-400">No items yet</p> : newItems.map(item => (
                 <div key={item.bookId} className="flex items-center gap-2 text-xs">
-                  <span className="flex-1 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
+                  <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
                   <input type="number" min="1" value={item.quantity} onChange={e => setNewItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                   <input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => setNewItems(items => items.map(i => i.bookId === item.bookId ? { ...i, unitPrice: parseFloat(e.target.value) || 0 } : i))} className="w-20 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                   <button onClick={() => setNewItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>

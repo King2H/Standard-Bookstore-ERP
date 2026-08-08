@@ -531,7 +531,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                       disabled={b.availability != null && b.availability.available === 0}
                       className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0 ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/30'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
+                        <p className="font-medium text-gray-900 dark:text-white truncate min-w-0">{b.title}</p>
                         {b.availability != null && (
                           <span className={`text-xs font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-full ${b.availability.available === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : b.availability.available <= 3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'}`}>
                             {b.availability.available === 0 ? 'Out of stock' : `${b.availability.available} avail`}

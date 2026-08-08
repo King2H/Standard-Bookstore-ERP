@@ -7,6 +7,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { getBookAvailability } from '../inventory/inventoryTransaction.service.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
@@ -251,7 +252,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const branchId = req.query.branchId
         ? qi(req.query.branchId, 0)
         : req.staff!.branchId;
@@ -271,7 +272,7 @@ router.put(
   requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const parsed = bookUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid book payload', { issues: parsed.error.issues });
@@ -292,7 +293,7 @@ router.post(
   requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       await catalogService.deactivateBook(id, req.staff!);
       res.json({ message: 'Book deactivated' });
     } catch (err) {
@@ -309,7 +310,7 @@ router.post(
   requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       await catalogService.reactivateBook(id, req.staff!);
       res.json({ message: 'Book reactivated' });
     } catch (err) {
@@ -326,7 +327,7 @@ router.get(
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const page = qi(req.query.page, 1);
       const pageSize = qi(req.query.pageSize, 25);
       const history = await catalogService.getBookEditHistory(id, page, pageSize);
@@ -344,7 +345,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const result = await db_query_prices(id);
       res.json(result);
     } catch (err) {
@@ -361,8 +362,8 @@ router.put(
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const bookId = parseInt(req.params.id as string, 10);
-      const branchId = parseInt(req.params.branchId as string, 10);
+      const bookId = paramInt(req.params.id);
+      const branchId = paramInt(req.params.branchId);
       const parsed = priceSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid price payload', { issues: parsed.error.issues });

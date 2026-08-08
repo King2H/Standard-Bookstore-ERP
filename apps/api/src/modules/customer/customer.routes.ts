@@ -2,10 +2,15 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as customerService from './customer.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
-const pi = (v: string | string[]): number => parseInt(Array.isArray(v) ? v[0] : v, 10);
+// Bug Sweep: was a bare parseInt() with no NaN guard — a non-numeric :id
+// (e.g. GET /api/customers/abc) reached the DB as literal "NaN" and
+// Postgres rejected it as an unhandled error, surfacing as a raw 500
+// instead of a clean 400. paramInt() throws ValidationError on NaN.
+const pi = paramInt;
 const qs = (v: unknown): string | undefined => (typeof v === 'string' ? v : Array.isArray(v) ? (v[0] as string | undefined) : undefined);
 const qi = (v: unknown, fallback: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fallback : fallback; };
 const qb = (v: unknown): boolean | undefined => { const s = qs(v); return s === undefined ? undefined : s === 'true'; };

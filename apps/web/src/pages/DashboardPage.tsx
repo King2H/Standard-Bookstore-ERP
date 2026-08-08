@@ -609,7 +609,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               <div className="space-y-1.5">
                 {inventory.lowStockItems.slice(0, 4).map(item => (
                   <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs">
-                    <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
+                    <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
                     <span className="text-gray-500 dark:text-gray-400 truncate max-w-[80px]">{item.locationName}</span>
                     <span className="font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">{item.quantity} left</span>
                   </div>
@@ -811,7 +811,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     {inventory.topSellingBooks.slice(0, 8).map((b, i) => (
                       <div key={b.bookId} className="flex items-center gap-2 text-xs">
                         <span className="text-gray-400 w-4">{i + 1}.</span>
-                        <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{b.title}</span>
+                        <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{b.title}</span>
                         <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">{b.unitsSold} sold</span>
                         <span className="text-green-600 dark:text-green-400 whitespace-nowrap">{fmtShort(b.revenue)}</span>
                       </div>
@@ -825,7 +825,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {inventory.lowStockItems.slice(0, 6).map(item => (
                       <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">
-                        <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
+                        <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
                         <span className="text-gray-500 dark:text-gray-400 truncate">{item.locationName}</span>
                         <span className="text-amber-700 dark:text-amber-300 font-medium whitespace-nowrap">{item.quantity}/{item.reorderPoint}</span>
                       </div>
@@ -861,7 +861,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     {customers.topCustomers.slice(0, 8).map((c, i) => (
                       <div key={c.customerId} className="flex items-center gap-2 text-xs">
                         <span className="text-gray-400 w-4">{i + 1}.</span>
-                        <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{c.fullName}</span>
+                        <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{c.fullName}</span>
                         <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">{c.orderCount} orders</span>
                         <span className="text-blue-600 dark:text-blue-400 font-medium whitespace-nowrap">{fmtShort(c.totalSpend)}</span>
                       </div>

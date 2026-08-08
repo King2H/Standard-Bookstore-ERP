@@ -6,6 +6,7 @@ import { ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { computeExchangeAllowedActions } from './exchanges.service.js';
 import type { Permission } from '../../lib/permissions.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -97,7 +98,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const exchange = await exchangesService.getById(parseInt(req.params.id as string, 10));
+      const exchange = await exchangesService.getById(paramInt(req.params.id));
       const permissions = (req.staff?.permissions ?? []) as Permission[];
       res.json({
         ...exchange,
@@ -115,7 +116,7 @@ router.post(
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const exchange = await exchangesService.reviewExchange(parseInt(req.params.id as string, 10), req.staff!);
+      const exchange = await exchangesService.reviewExchange(paramInt(req.params.id), req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({
         ...exchange,
@@ -133,7 +134,7 @@ router.post(
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const exchange = await exchangesService.approveExchange(parseInt(req.params.id as string, 10), req.staff!);
+      const exchange = await exchangesService.approveExchange(paramInt(req.params.id), req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({
         ...exchange,
@@ -163,7 +164,7 @@ router.post(
         throw new ValidationError('idempotencyKey is required for settlement');
       }
       const exchange = await exchangesService.settleExchange(
-        parseInt(req.params.id as string, 10),
+        paramInt(req.params.id),
         entries,
         idempotencyKey,
         req.staff!,
@@ -186,7 +187,7 @@ router.post(
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const exchange = await exchangesService.cancelExchange(parseInt(req.params.id as string, 10), req.staff!);
+      const exchange = await exchangesService.cancelExchange(paramInt(req.params.id), req.staff!);
       res.json(exchange);
     } catch (err) { next(err); }
   },

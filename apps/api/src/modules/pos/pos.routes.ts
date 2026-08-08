@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as posService from './pos.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole, requirePermission } from '../../middleware/rbac.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
@@ -11,7 +12,8 @@ const qi = (v: unknown, fallback: number): number => {
   const s = qs(v);
   return s ? parseInt(s, 10) || fallback : fallback;
 };
-const pi = (v: string | string[]): number => parseInt(Array.isArray(v) ? v[0] : v, 10);
+// Bug Sweep: was a bare parseInt() with no NaN guard — see customer.routes.ts's comment.
+const pi = paramInt;
 
 // ── POST /api/pos/transactions ────────────────────────────────────────────────
 

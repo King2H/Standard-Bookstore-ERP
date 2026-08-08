@@ -274,6 +274,13 @@ export async function createTransaction(
   const resolvedItems: ResolvedItem[] = [];
 
   for (const item of data.items) {
+    // Bug Sweep: quantity had no application-level bound — a zero/negative
+    // value fell through to transaction_line_items' CHECK (quantity > 0),
+    // surfacing as a raw 500 instead of a clean 400.
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new ValidationError(`Quantity for book ${item.bookId} must be a positive integer`);
+    }
+
     const bookRes = await db.query(`SELECT id, title, isbn, is_active FROM books WHERE id = $1`, [item.bookId]);
     if (!bookRes.rows.length) throw new NotFoundError(`Book ${item.bookId}`);
     const book = bookRes.rows[0] as { id: number; title: string; isbn: string; is_active: boolean };
@@ -291,7 +298,14 @@ export async function createTransaction(
     if (unitPrice === null) throw new BusinessError('PRICE_NOT_SET', `Price not set for book ${item.bookId}`);
 
     const lineBase = parseFloat((unitPrice * item.quantity).toFixed(2));
-    const discountPct = item.discountPct ?? 0;
+    // Bug Sweep: clamp to [0, 100] — an out-of-range (in particular
+    // negative) discountPct passed straight through, which would produce a
+    // negative discountAmount below and INCREASE lineTotal above lineBase
+    // instead of discounting it; it also silently bypassed the max-discount
+    // cap check further down (`discountPct > 0 && ...` never triggers for a
+    // negative value). Mirrors the clamp resolveDiscountFields() (the
+    // shared discount engine used by Orders) already applies.
+    const discountPct = Math.min(100, Math.max(0, item.discountPct ?? 0));
     // When the client sends discountMode='Amount', use the provided discountAmount directly
     // (clamped to lineBase) so both sides agree on lineTotal. Fall back to pct-derived amount.
     let discountAmount: number;

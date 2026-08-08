@@ -9,6 +9,7 @@ import { ValidationError, BusinessError, ForbiddenError, ServiceUnavailableError
 import { db } from '../../db/index.js';
 import { loginRateLimit } from '../../middleware/rateLimit.js';
 import { setCsrfCookie } from '../../middleware/csrf.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
@@ -488,7 +489,7 @@ router.put(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       const { fullName } = req.body;
       if (!fullName || typeof fullName !== 'string') {
         throw new ValidationError('fullName is required');
@@ -520,7 +521,7 @@ router.post(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
 
       // A staff member cannot deactivate themselves
       if (staffId === req.staff!.staffId) {
@@ -576,7 +577,7 @@ router.post(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       await authService.reactivateStaff(staffId);
       res.json({ message: 'Staff reactivated' });
     } catch (err) {
@@ -594,7 +595,7 @@ router.put(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       const { isAllBranches } = req.body;
       if (typeof isAllBranches !== 'boolean') {
         throw new ValidationError('isAllBranches must be a boolean');
@@ -640,7 +641,7 @@ router.put(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       const parsed = assignRolesSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid roles payload', { issues: parsed.error.issues });
@@ -671,7 +672,7 @@ router.get(
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       const staff = await authService.getStaffById(staffId);
       res.json(staff);
     } catch (err) {
@@ -689,7 +690,7 @@ router.post(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       const { temporaryPassword } = req.body;
       if (!temporaryPassword || typeof temporaryPassword !== 'string') {
         throw new ValidationError('temporaryPassword is required');
@@ -711,7 +712,7 @@ router.post(
   requireRole('Super_Admin', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const staffId = parseInt(req.params.id as string, 10);
+      const staffId = paramInt(req.params.id);
       await authService.unlockAccount(staffId, req.staff!);
       res.json({ message: 'Account unlocked' });
     } catch (err) {

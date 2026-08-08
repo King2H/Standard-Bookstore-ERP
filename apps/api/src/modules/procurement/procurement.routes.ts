@@ -2,12 +2,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as procurementService from './procurement.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
 const qs = (v: unknown): string | undefined => (typeof v === 'string' ? v : Array.isArray(v) ? (v[0] as string | undefined) : undefined);
 const qi = (v: unknown, fallback: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fallback : fallback; };
-const pi = (v: string | string[]): number => parseInt(Array.isArray(v) ? v[0] : v, 10);
+// Bug Sweep: was a bare parseInt() with no NaN guard — see customer.routes.ts's comment.
+const pi = paramInt;
 
 // ── GET /api/purchase-orders ──────────────────────────────────────────────────
 

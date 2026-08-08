@@ -834,7 +834,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                     className={`w-full text-left px-3 py-2 border-b border-gray-50 dark:border-gray-800/60 transition-colors ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100'}`}
                   >
                     <div className="flex items-start justify-between gap-1.5">
-                      <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight flex-1">{b.title}</p>
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight flex-1 min-w-0">{b.title}</p>
                       <p className="text-xs font-bold text-blue-700 dark:text-blue-400 tabular-nums flex-shrink-0">{(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">

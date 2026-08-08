@@ -331,6 +331,16 @@ export async function createExchange(
     throw new ValidationError('locationId is required for an exchange');
   }
 
+  // Bug Sweep: quantity had no application-level bound on either side — a
+  // zero/negative value fell through to exchange_incoming_items'/
+  // exchange_outgoing_items' CHECK (quantity > 0), surfacing as a raw 500
+  // instead of a clean 400.
+  for (const item of [...(data.incomingItems ?? []), ...(data.outgoingItems ?? [])]) {
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new ValidationError(`Quantity for book ${item.bookId} must be a positive integer`);
+    }
+  }
+
   // Validate all books exist and are active
   const allBookIds = [
     ...(data.incomingItems ?? []).map(i => i.bookId),
@@ -352,6 +362,16 @@ export async function createExchange(
   for (const item of data.incomingItems ?? []) {
     if (!(item.unitPrice > 0)) {
       throw new ValidationError(`Customer allowance value is required for incoming book ${item.bookId} and must be greater than zero`);
+    }
+  }
+
+  // Bug Sweep: the same boundary check as above was missing on the outgoing
+  // (resale) side — a zero/negative unitPrice would corrupt totalOutgoing
+  // and could flip settlement_type in the customer's favor (understating
+  // what they owe, or overstating a store refund).
+  for (const item of data.outgoingItems ?? []) {
+    if (!(item.unitPrice > 0)) {
+      throw new ValidationError(`Selling price is required for outgoing book ${item.bookId} and must be greater than zero`);
     }
   }
 
