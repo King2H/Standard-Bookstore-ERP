@@ -21,13 +21,13 @@ vi.mock('../lib/api.js', () => ({
   getCurrentBranchId: () => 1,
 }));
 
-function renderOrdersPage() {
+function renderOrdersPage(onNavigate = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  return { onNavigate, ...render(
     <QueryClientProvider client={qc}>
-      <OrdersPage userRole="Admin" userPermissions={[]} />
+      <OrdersPage userRole="Admin" userPermissions={[]} onNavigate={onNavigate} />
     </QueryClientProvider>,
-  );
+  ) };
 }
 
 function makeOrdersListPage(order: Record<string, unknown>) {
@@ -200,5 +200,57 @@ describe('OrdersPage — order detail surfaces payment method and due date', () 
 
     await waitFor(() => expect(screen.getByText('2099-12-31')).toBeInTheDocument());
     expect(screen.getByText(/Due date/)).toBeInTheDocument();
+  });
+});
+
+describe('OrdersPage — View Payments (unpaid/partial, i.e. credit orders)', () => {
+  function makeOrder(overrides: Record<string, unknown>) {
+    return {
+      id: '20', orderNumber: 'ORD-20', customerId: 5, branchId: 1, channel: 'in_store',
+      status: 'CONFIRMED', currency: 'ETB', saleType: 'credit_sale',
+      subtotal: 100, total: 100, cancelReason: null, createdAt: new Date().toISOString(),
+      allowedActions: [],
+      ...overrides,
+    };
+  }
+
+  it('shows View Payments for an unpaid order and deep-links to Payments\' Collect tab', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.startsWith('/orders?')) return Promise.resolve(makeOrdersListPage(makeOrder({ paymentStatus: 'unpaid' })));
+      return Promise.resolve({ items: [] });
+    });
+    const user = userEvent.setup();
+    const { onNavigate } = renderOrdersPage();
+
+    await waitFor(() => expect(screen.getByText('ORD-20')).toBeInTheDocument());
+    const row = screen.getByText('ORD-20').closest('tr') as HTMLElement;
+    const viewBtn = within(row).getByRole('button', { name: /View Payments/i });
+
+    await user.click(viewBtn);
+    expect(onNavigate).toHaveBeenCalledWith('payments', { orderId: '20', sourceType: 'order' });
+  });
+
+  it('shows View Payments for a partially-paid order', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.startsWith('/orders?')) return Promise.resolve(makeOrdersListPage(makeOrder({ paymentStatus: 'partial' })));
+      return Promise.resolve({ items: [] });
+    });
+    renderOrdersPage();
+
+    await waitFor(() => expect(screen.getByText('ORD-20')).toBeInTheDocument());
+    const row = screen.getByText('ORD-20').closest('tr') as HTMLElement;
+    expect(within(row).getByRole('button', { name: /View Payments/i })).toBeInTheDocument();
+  });
+
+  it('hides View Payments for a fully-paid order — nothing left to collect', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.startsWith('/orders?')) return Promise.resolve(makeOrdersListPage(makeOrder({ paymentStatus: 'paid', saleType: 'cash_sale' })));
+      return Promise.resolve({ items: [] });
+    });
+    renderOrdersPage();
+
+    await waitFor(() => expect(screen.getByText('ORD-20')).toBeInTheDocument());
+    const row = screen.getByText('ORD-20').closest('tr') as HTMLElement;
+    expect(within(row).queryByRole('button', { name: /View Payments/i })).not.toBeInTheDocument();
   });
 });

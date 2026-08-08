@@ -7,7 +7,13 @@ import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../component
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
-interface OrdersPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
+interface OrdersPageProps {
+  userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>;
+  /** "View Payments" (unpaid/partial or credit orders) deep-links into the
+   *  Payments module's Collect tab, pre-selected for that order — same
+   *  pattern as POS Sales History's "View Payments". */
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}
 
 interface OrderLine { id: string; bookId: number; bookTitle: string; quantity: number; unitPrice: number; totalPrice: number; qtyReserved: number; qtyFulfilled: number; isBackordered: boolean; }
 interface Order {
@@ -76,7 +82,7 @@ const CASH_PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 type Tab = 'list' | 'new';
 
-export default function OrdersPage({ userRole, userPermissions = [], initialContext = {} }: OrdersPageProps) {
+export default function OrdersPage({ userRole, userPermissions = [], initialContext = {}, onNavigate }: OrdersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -369,6 +375,19 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                 </button>
                               );
                             })}
+                            {/* View Payments: deep-links into Payments' Collect tab,
+                                pre-selected for this order — same pattern as POS Sales
+                                History's "View Payments". Only offered when there's an
+                                outstanding balance to collect (paymentStatus unpaid/
+                                partial, which is exactly what credit_sale orders carry
+                                until settled — cash_sale orders are paid in full at
+                                confirm and never reach this state). */}
+                            {(order.paymentStatus === 'unpaid' || order.paymentStatus === 'partial') && (
+                              <button
+                                onClick={e => { e.stopPropagation(); onNavigate?.('payments', { orderId: order.id, sourceType: 'order' }); }}
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 px-2 py-0.5 rounded-lg font-semibold transition-colors whitespace-nowrap"
+                              >View Payments</button>
+                            )}
                             {/* Module 11 cleanup: removed a "legacy orders without
                                 allowedActions" fallback block that lived here. It was
                                 dead code — every response that can populate this list

@@ -235,7 +235,7 @@ export default function App() {
               {currentPage === 'customers'    && <CustomersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
               {currentPage === 'returns'      && <ReturnsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
+              {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
               {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
               {currentPage === 'installments' && <InstallmentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'exchanges'    && <ExchangesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
