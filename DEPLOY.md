@@ -106,7 +106,7 @@ After the API deploys, run migrations to create all tables and seed data.
    ```bash
    npm run migrate
    ```
-4. You should see all 34 migrations complete successfully
+4. You should see all 45 migrations complete successfully
 5. The database now has all tables + seed data (superadmin and admin accounts)
 
 ---

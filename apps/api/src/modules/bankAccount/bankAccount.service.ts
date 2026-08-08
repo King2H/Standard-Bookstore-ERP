@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { encrypt, decrypt, maskLast4 } from '../../lib/encryption.js';
+import { encrypt, maskLast4 } from '../../lib/encryption.js';
 import { NotFoundError, ConflictError, BusinessError } from '../../lib/errors.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -181,7 +181,7 @@ router.get(
     try {
       const rows = await reportsService.getInventoryExportRowsV2(parseFilters(req));
       const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `inventory-export-${today}.csv`, buildCsv(rows as Record<string, unknown>[], INVENTORY_COLUMNS));
+      sendCsv(res, `inventory-export-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], INVENTORY_COLUMNS));
     } catch (err) { next(err); }
   },
 );
@@ -193,7 +193,7 @@ router.get(
     try {
       const rows = await reportsService.getProcurementExportRows(parseFilters(req));
       const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `procurement-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], PROCUREMENT_COLUMNS));
+      sendCsv(res, `procurement-report-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], PROCUREMENT_COLUMNS));
     } catch (err) { next(err); }
   },
 );
@@ -205,7 +205,7 @@ router.get(
     try {
       const rows = await reportsService.getReceivablesExportRows(parseFilters(req));
       const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `receivables-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], RECEIVABLES_COLUMNS));
+      sendCsv(res, `receivables-report-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], RECEIVABLES_COLUMNS));
     } catch (err) { next(err); }
   },
 );

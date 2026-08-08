@@ -38,7 +38,6 @@ describe('Catalog — Books', () => {
   let salesToken: string;
   let branchId: number;
 
-  const TEST_ISBN = '9780000000001'; // valid ISBN-13 check digit: 0+0+0+0+0+0+0+0+0+0+0+0+1 → sum=1 → not valid
   // Use a real valid ISBN-13 for tests
   const VALID_ISBN_1 = '9780306406157'; // valid
   const VALID_ISBN_2 = '9780140449136'; // valid

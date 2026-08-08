@@ -38,7 +38,6 @@ async function cleanTestOutbox(): Promise<void> {
 
 describe('Notification System', () => {
   let managerToken: string;
-  let stockClerkToken: string;
   let branchId: number;
   let branchBId: number;
   let managerBToken: string;
@@ -56,8 +55,7 @@ describe('Notification System', () => {
     const manager = await createTestStaff({ username: 'notif_test_manager', role: 'Manager', branchId });
     managerToken = manager.token;
 
-    const clerk = await createTestStaff({ username: 'notif_test_clerk', role: 'Stock_Clerk', branchId });
-    stockClerkToken = clerk.token;
+    await createTestStaff({ username: 'notif_test_clerk', role: 'Stock_Clerk', branchId });
 
     const managerB = await createTestStaff({ username: 'notif_test_manager_b', role: 'Manager', branchId: branchBId });
     managerBToken = managerB.token;

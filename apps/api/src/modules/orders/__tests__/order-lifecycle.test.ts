@@ -157,7 +157,6 @@ async function cleanOrders(branchId: number): Promise<void> {
 
 describe('Order â†” Inventory Synchronization (corrected lifecycle)', () => {
   let managerToken: string;
-  let salesToken: string;
   let branchId: number;
   let locationId: number;
   let bookId: number;
@@ -165,7 +164,6 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
 
   let branchB: number;
   let locationB: number;
-  let managerTokenB: string;
 
   beforeAll(async () => {
     await cleanTestStaff(STAFF_PREFIX);
@@ -177,14 +175,12 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     branchId = branch.branchId;
     const mgr = await createTestStaff({ username: `${STAFF_PREFIX}mgr`, role: 'Manager', branchId });
     managerToken = mgr.token;
-    const sales = await createTestStaff({ username: `${STAFF_PREFIX}sales`, role: 'Sales', branchId });
-    salesToken = sales.token;
+    await createTestStaff({ username: `${STAFF_PREFIX}sales`, role: 'Sales', branchId });
     locationId = await getOrCreateLocation(branchId);
 
     const branchBResult = await createTestBranch({ name: `${BRANCH_PREFIX}B` });
     branchB = branchBResult.branchId;
-    const mgrB = await createTestStaff({ username: `${STAFF_PREFIX}mgrB`, role: 'Manager', branchId: branchB });
-    managerTokenB = mgrB.token;
+    await createTestStaff({ username: `${STAFF_PREFIX}mgrB`, role: 'Manager', branchId: branchB });
     locationB = await getOrCreateLocation(branchB);
 
     const book = await getActiveBook();

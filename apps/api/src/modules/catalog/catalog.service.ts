@@ -992,7 +992,14 @@ export async function createCategory(data: { name: string; parentId?: number | n
   }
 }
 
-export async function updateCategory(id: number, data: { name?: string; parentId?: number | null }, staffCtx: StaffCtx): Promise<CategoryRecord> {
+// NOTE: staffCtx is accepted (unlike createCategory, which uses it for the
+// audit_logs write) but currently unused here — updateCategory does not
+// write an audit log entry, unlike updateBook/updateAuthor. Kept in the
+// signature for call-site consistency with the other catalog update
+// functions; flagged during the Legacy Code Audit as a possible audit-log
+// coverage gap rather than changed, since adding logging is a behavior
+// change outside this audit's scope.
+export async function updateCategory(id: number, data: { name?: string; parentId?: number | null }, _staffCtx: StaffCtx): Promise<CategoryRecord> {
   const setClauses: string[] = [];
   const params: unknown[] = [];
   let p = 1;
@@ -1073,7 +1080,8 @@ export async function createPublisher(name: string, staffCtx: StaffCtx): Promise
   }
 }
 
-export async function updatePublisher(id: number, name: string, staffCtx: StaffCtx): Promise<PublisherRecord> {
+// NOTE: staffCtx currently unused here — see updateCategory's comment above.
+export async function updatePublisher(id: number, name: string, _staffCtx: StaffCtx): Promise<PublisherRecord> {
   try {
     const result = await db.query(`UPDATE publishers SET name=$1 WHERE id=$2 RETURNING *`, [name.trim(), id]);
     if (!result.rows.length) throw new NotFoundError('Publisher');

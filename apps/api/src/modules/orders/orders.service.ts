@@ -1040,12 +1040,23 @@ export async function collectPayment(
 /**
  * Computes the list of allowed actions for an order based on its current status,
  * sale type, and the permissions of the requesting staff member.
+ *
+ * Legacy Code Audit note: `paymentStatus`/`saleType` are accepted (and every
+ * call site — orders.routes.ts and the lifecycle test suites — still passes
+ * them) but no branch below currently reads either one; the old
+ * payment-status-gated 'pay' action was removed as part of the Task 7.x
+ * lifecycle-state-machine refactor once payment collection moved fully to
+ * the Payments module. Left in the signature rather than removed: dropping
+ * them would require touching every call site and the many lifecycle tests
+ * that assert against this exact 4-arg signature, for a purely cosmetic
+ * change — out of proportion for a "safe" cleanup pass. Underscore-prefixed
+ * to satisfy noUnusedParameters without altering behavior.
  */
 export function computeOrderAllowedActions(
   status: string,
   permissions: Permission[],
-  paymentStatus?: string,
-  saleType?: 'cash_sale' | 'credit_sale',
+  _paymentStatus?: string,
+  _saleType?: 'cash_sale' | 'credit_sale',
 ): string[] {
   const can = (p: Permission) => permissions.includes(p);
 

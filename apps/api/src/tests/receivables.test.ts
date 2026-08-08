@@ -23,12 +23,6 @@ import { db } from '../db/index.js';
 const STAFF_PREFIX = 'recv_test_';
 const BRANCH_PREFIX = 'Receivables Test ';
 
-async function getTestBook(): Promise<{ id: number; price: number }> {
-  const r = await db.query(`SELECT id, default_price FROM books WHERE is_active = true AND default_price IS NOT NULL LIMIT 1`);
-  if (!r.rows.length) throw new Error('No active books with price');
-  return { id: r.rows[0].id as number, price: parseFloat(r.rows[0].default_price as string) };
-}
-
 async function getOrCreateLocation(branchId: number): Promise<number> {
   const r = await db.query(`SELECT id FROM locations WHERE branch_id = $1 LIMIT 1`, [branchId]);
   if (r.rows.length) return r.rows[0].id as number;

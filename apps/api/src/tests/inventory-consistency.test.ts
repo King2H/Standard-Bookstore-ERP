@@ -85,7 +85,6 @@ async function ensureBookPrice(bookId: number, branchId: number): Promise<void> 
 
 describe('Inventory Consistency Scenarios', () => {
   let adminToken: string;
-  let staffId: number;
   let branchId: number;
   let locationId: number;
   let locationBId: number; // second location for location-isolation test
@@ -104,7 +103,6 @@ describe('Inventory Consistency Scenarios', () => {
       branchId,
     });
     adminToken = admin.token;
-    staffId = admin.staffId;
 
     // Primary location
     const locA = await db.query(

@@ -6,7 +6,7 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). ERP Production Hardening Complete. Multi-Role/Multi-Branch Auth Refactor Applied (May 2026). MVP Pre-Demo Fixes Applied (May 2026): Currency Consistency, SQL Parameterization, Dashboard Icon Fix, Inventory 500 Fix.**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). ERP Production Hardening Complete. Multi-Role/Multi-Branch Auth Refactor Applied (May 2026). MVP Pre-Demo Fixes Applied (May 2026): Currency Consistency, SQL Parameterization, Dashboard Icon Fix, Inventory 500 Fix. Unified Order Creation Workflow, Single Authoritative Payment Collection Workflow, Non-Destructive Exchange Virtual Receiving, and Dashboard Standardization & Unified Reports Engine Applied. Legacy Code Audit (dead code elimination + build hardening + documentation sync) Complete.**
 
 | Document | Status | Location |
 |----------|--------|----------|
@@ -43,6 +43,11 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 | 16 | Reporting Engine | ✅ Done |
 | 17 | Dashboard & UI | ✅ Done |
 | P5 | Real-Time Notification System (SSE) | ✅ Done |
+| — | Receivables & Customer Store Credit | ✅ Done |
+| — | Unified Order Creation Workflow | ✅ Done |
+| — | Single Authoritative Payment Collection Workflow | ✅ Done |
+| — | Non-Destructive Exchange Virtual Receiving | ✅ Done |
+| — | Dashboard Standardization & Unified Reports Engine | ✅ Done |
 
 ---
 
@@ -474,6 +479,60 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 
 ---
 
+## What's New — Mid/Late 2026
+
+### Unified Order Creation Workflow
+
+- A single order-creation surface (frontend + `POST /api/orders`) now covers walk-in, phone, and online channels with one consistent form and validation path instead of divergent flows per channel.
+- `sale_type` (`cash_sale` | `credit_sale`) is captured at creation time and drives downstream payment-status and RBAC behavior (see "Cash vs. Credit Rules" below).
+
+### Single Authoritative Payment Collection Workflow (Payments Module)
+
+- **The Payments module is the single place credit balances are collected**, across all three sources: order credit sales, POS credit sales, and exchange differences owed by the customer.
+- `receivables` (migration `1700000036`) is the unifying table: every outstanding balance — regardless of origin — becomes one `receivables` row with a `source_type` of `order_credit_sale`, `pos_credit_sale`, or `exchange_difference`, plus `source_ref_id`/`source_entity_id` back to the originating record.
+- `GET /api/payments/unpaid-orders` — the Payments module's worklist — returns a unified, paginated view across all three source types (`?sourceType=`, `?entityId=` for deep-linking from Sales History's "View Payments" or from Receivables' "Open in Payments").
+- `POST /api/payments` remains the single collection endpoint (idempotency-key protected); collecting against a POS credit sale or an exchange difference receivable routes through the same payment-recording path as an order payment, so payment history, refunds, and receipts are consistent regardless of origin.
+- Sales History (POS) and Orders each expose a "View Payments"/"Collect" action that hands off to the Payments module rather than collecting money in-place — POS and Orders never record a payment directly once a sale is unpaid/partial, they only originate the receivable.
+- `receivables.service.ts`'s `markOverdueReceivables()` scheduled job keeps `status = 'Overdue'` current across all three source types; this status is read directly (not re-derived) by the Dashboard's Overdue Receivables card and the Receivables report.
+
+### Customer Store Credit Lifecycle
+
+- `store_credit_accounts.balance` + `store_credit_history` (full audit trail: `ref_type`, `ref_id`, `amount`, `direction`) track each customer's store credit ledger.
+- **Earned**: a return refunded via `refundMethod: 'store_credit'`; an exchange settlement where `settlement_type = 'Store_Refunds'`; or a manual credit via `POST /api/customers/:id/store-credit/adjust` (Manager/Admin).
+- **Spent**: as a payment method (`store_credit`) in POS sales, Orders, and Exchange settlements — deducted at the moment of sale, never allowed to go negative.
+- `GET /api/customers/:id/store-credit` — current balance; `GET /api/customers/:id/store-credit/history` — full ledger for the customer profile view.
+
+### Cash vs. Credit Rules & RBAC (Orders / POS)
+
+- Both POS transactions and Orders carry a `payment_status` (`paid` / `partial` / `credit` for POS; `unpaid` / `partial` / `paid` / `refunded` for Orders) driven by `amount_paid` vs. the sale total — never inferred from `sale_type` alone, since a nominally "cash_sale" order can still be recorded with partial payment.
+- A credit sale (zero or partial payment at time of sale) requires a `customerId` — store credit and receivables collection both need a customer to attach the balance to; walk-in/anonymous sales must be paid in full.
+- `PROCESS_PAYMENT` permission gates who can create a payment/refund and who can fulfill a `CONFIRMED`/`PARTIALLY_PAID`/`PAID` order (fulfillment is a logistics event, gated the same way regardless of `paymentStatus`/`saleType` — see `computeOrderAllowedActions()`'s Task 7.2 fix, which removed an earlier payment-status-based fulfillment gate that was itself a bug condition). `CREATE_SALE` gates who can create/cancel a sale or order. Both are permission-based (union of all roles for the active branch), never a role-name check.
+
+### Non-Destructive Catalog Search & Virtual Receiving for Exchanges
+
+- **Quick Catalog Register** (`POST /api/books/quick-register`) — lets Sales/Manager/Admin register a book's catalog metadata (title, ISBN, author, etc.) directly from the Exchange screen when a customer's trade-in book isn't already in the catalog, *without* creating an inventory row. Purely additive: existing `POST /api/books` is unaffected.
+- **Acquisition Allowance Capture** — an exchange's incoming (trade-in) item requires a positive `evaluated_unit_price` (the store's Customer Allowance Value for that book) before the exchange can be created; a zero/negative allowance is rejected.
+- **Virtual Exchange Receiving** — `createExchange()`'s incoming-item stock-in is tagged with `reference_type = 'exchange_in'` and carries `unit_cost = evaluated_unit_price`, so a book acquired *only* via customer trade-in (never through a purchase order) still gets a real, non-zero cost basis.
+- **`costBasis.ts` fallback** (migration `1700000046`) — profit/valuation reporting (`computeNetProfit()`, `FinancialReportService`) falls back to this exchange-acquisition cost when a resold book has no `po_line_items` history at all, instead of silently treating its cost as zero.
+- Two exchange creation/storage shapes currently coexist: the UI-reachable "Quick Exchange" (`createExchange()`) writes to `exchange_incoming_items`/`exchange_outgoing_items`; a separate `initiate → review → approve → settle` lifecycle (`POST /api/exchanges/initiate` etc. — API-reachable, not yet wired into the UI) writes to the unified `exchange_items` table. Every reporting query that touches exchanges (financial reports, exports, dashboard KPIs) reads both shapes and guards against double-counting an exchange that has rows in the unified shape.
+
+### Dashboard Standardization & Unified Reports Engine
+
+- **`FinancialReportService`** (`modules/reports/financialReport.service.ts`) is the single engine behind both the Dashboard's Profit/Net-Sales-Revenue KPI cards *and* the Sales CSV export — both read the exact same underlying rows (`getUnifiedTransactionRows()`), so a Dashboard total for a date range reconciles 1:1 with the CSV export for that same range by construction, not by coincidence of two independently-written queries.
+- Covers all four revenue-moving channels as one line-item stream: **ORDER**, **POS**, **RETURN** (negative quantity/amount), **EXCHANGE** (signed by direction — incoming/trade-in reduces net revenue, outgoing/resale adds to it). Cancelled orders, voided POS sales, rejected returns, and cancelled exchanges are excluded automatically.
+- `GET /api/reports/sales/export` now returns one row per line item across all four channels (columns: `transaction_date`, `transaction_type`, `reference_number`, `branch`, `customer_name`, `book_title`, `book_isbn`, `quantity`, `unit_price`, `discount_amount`, `gross_amount`, `net_amount`, `payment_status`, `payment_method`) — previously Orders-only.
+- Dashboard KPI cards are organized into a 3-tier financial-impact hierarchy: **Primary** (Net Profit Today/Monthly, Gross Profit, Net Sales Revenue — bold, accent-badged) → **Secondary** (Cash Collected Today, Outstanding Receivables, Overdue Receivables) → **Tertiary** (Low Stock Alerts, Procurement Expense, Pending Orders).
+- This is deliberately *additive* to (not a replacement for) `lib/profit.service.ts`'s existing `computeNetProfit()`, which uses **collected-cash revenue recognition** for credit sales (recognizes revenue only once a receivable is actually collected). The new `*Unified`/`netSalesRevenue` KPI fields use a distinct, invoiced/gross-accrual model instead — both are legitimate, commonly-used financial lenses (cash vs. accrual) and are surfaced as separate, clearly-labeled fields; nothing about the existing `netProfit`/`grossProfit`/`fulfilledRevenue` fields' computation changed.
+
+### Legacy Code Audit — Dead Code Elimination & Build Hardening
+
+- `apps/api/tsconfig.json` now enables `noUnusedLocals`/`noUnusedParameters` (matching `apps/web`'s existing config), and the codebase was swept clean against it — dead imports, an orphaned SQL-helper function, and a redundant `computeNetProfit()` call inside `getKpis()` (its result was never read) were removed.
+- `npm run build` in `apps/api` was silently broken (`tsc` exited non-zero due to a `redis.ts` ESM/CJS type-resolution error and three `reports.routes.ts` CSV-export type-cast errors, all pre-existing) — fixed; the build now completes cleanly.
+- `workers/outboxPoller.ts` was importing `handleInstallmentOverdue` (from `installmentChecker.ts`) but never registering it against the `'InstallmentOverdue'` outbox event type it's meant to handle — every overdue-installment event was silently falling through with no effect since the checker was added. Wired in (log-only handler — no user-facing behavior change beyond a server log line). A related, separate gap was found and left as-is: the newer Phase 5 `'installment.overdue'` notification event is fully wired (type, template, handler) but is never actually emitted anywhere via `insertOutbox()` — flagged for a future pass rather than fixed here, since resolving it means deciding *where* installment-overdue notifications should originate, a product decision outside this audit's scope.
+- **Known, pre-existing, intentional**: the Bank Accounts module (`modules/bankAccount/`) has full backend routes/service, a full `BankAccountsPage.tsx` UI, and its own test suite, but `app.ts` currently has `bankAccountRouter`'s import and mount commented out ("disabled for this deployment phase"). The sidebar nav item and page are still reachable — every API call the page makes will 404 until the module is re-enabled. This audit intentionally left the disablement as-is (it reads as a deliberate, temporary deployment decision, not orphaned code) rather than silently re-enabling or deleting a working module; flagged here so it isn't mistaken for a regression.
+
+---
+
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18 + TypeScript + Vite |
@@ -483,7 +542,7 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 | Database | PostgreSQL 16 (raw pg driver, no ORM) |
 | Auth | JWT (15 min) + httpOnly refresh cookie (8 hours) |
 | Encryption | AES-256-GCM (column-level, bank account data) |
-| Migrations | node-pg-migrate (.cjs format, 34 migrations) |
+| Migrations | node-pg-migrate (.cjs format, 45 migrations) |
 | Testing | Vitest + Supertest (integration tests, real DB) |
 | Container | Docker + Docker Compose |
 
@@ -516,7 +575,7 @@ cd apps/api && npm test
 ```
 
 Tests use prefix-based cleanup — seed data is never touched.
-Current: 21 test files, 265 tests, 259 passing (6 pre-existing catalog failures unrelated to recent changes).
+Current: 42 test files, 517 tests, 507 passing. The 10 failures are all in `bankAccount.test.ts`, expected while the Bank Accounts module is disabled at the API layer (see "Legacy Code Audit" above) — every other suite passes. Run in batches of 5–8 files rather than the full suite in one `vitest run` if you hit `ECONNREFUSED`/connection-pool errors — a known artifact of this project's shared-DB integration-test setup under a single Postgres connection pool, not a code defect.
 
 ## Restoring Seed Data
 
@@ -573,6 +632,7 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - DELETE /api/config/branches/:branchId/:key (Admin)
 
 ### Bank Accounts
+> **Currently disabled at the API layer** ("disabled for this deployment phase" — see `app.ts`). Routes below exist in code and are still covered by tests, but `bankAccountRouter` is not mounted, so every request 404s. The sidebar UI page is still reachable but non-functional until this module is re-enabled.
 - GET/POST /api/branches/:branchId/bank-accounts
 - PUT/POST .../deactivate
 - GET/POST /api/branches/:branchId/reconciliation/import
@@ -583,6 +643,7 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - POST /api/books / GET/PUT /api/books/:id / POST .../deactivate|reactivate
 - GET /api/books/:id/history — field-level edit history
 - PUT /api/books/:id/prices/:branchId — branch price override
+- POST /api/books/quick-register — lightweight catalog-only registration (metadata, no inventory row) for a book encountered via Exchange trade-in that isn't already in the catalog (Sales, Manager, Admin)
 - GET/POST /api/authors|categories|publishers / PUT/DELETE .../:id
 - GET /api/book-formats / GET /api/book-editions
 
@@ -625,8 +686,9 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - GET /api/orders/:id/payments — list payments for order
 - GET /api/orders/:id/balance — { orderTotal, totalPaid, totalRefunded, outstanding, paymentStatus }
 
-### Payments (Slice 14)
-- POST /api/payments — record payment; body: { orderId, amount, paymentMethod, transactionReference?, bankAccountId? (required for bank method) }
+### Payments (Slice 14) — Single Authoritative Payment Collection Workflow
+- GET /api/payments/unpaid-orders — the Payments module's worklist: unified, paginated view across ALL credit-balance sources (order credit sales, POS credit sales, exchange differences), not orders alone; filters: branchId, customerId, entityId + sourceType (deep-link pre-fill from Sales History/Receivables)
+- POST /api/payments — record payment against an order specifically; body: { orderId, amount, paymentMethod, transactionReference?, bankAccountId? (required for bank method) }. See `POST /api/receivables/:id/collect` below for the source-type-agnostic entry point the unpaid-orders worklist actually posts to — it dispatches to this same endpoint's logic under the hood for `order_credit_sale` rows.
 - GET /api/payments — list; filters: orderId, status, paymentMethod, dateFrom, dateTo
 - GET /api/payments/:id — detail with refunds
 - POST /api/payments/:id/refund — process refund; body: { refundAmount, reason, bankAccountId? }
@@ -637,24 +699,34 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 - POST /api/installments/:id/pay — record installment payment; body: { amount }
 
 ### Exchanges (Slice 15)
-- POST /api/exchanges — create exchange (Sales, Manager, Admin); body: { locationId?, customerId?, notes?, incomingItems, outgoingItems }
+- POST /api/exchanges — create exchange, "Quick Exchange" (Sales, Manager, Admin); body: { locationId?, customerId?, notes?, incomingItems, outgoingItems }. Incoming items require a positive `evaluatedUnitPrice` (Acquisition Allowance) — see "Non-Destructive Catalog Search & Virtual Receiving" above.
 - GET /api/exchanges — list; filters: branchId, customerId, status, dateFrom, dateTo
 - GET /api/exchanges/:id — detail with incoming/outgoing items
 - POST /api/exchanges/:id/cancel — cancel exchange (Manager, Admin)
+- POST /api/exchanges/initiate / POST /api/exchanges/:id/review / POST /api/exchanges/:id/approve / POST /api/exchanges/:id/settle — a separate `INITIATED → REVIEWED → APPROVED → SETTLED → COMPLETED` lifecycle with multi-entry hybrid settlement, writing to the unified `exchange_items` table. API-reachable but not yet wired into the Exchanges UI (which uses the "Quick Exchange" endpoints above).
 
-### Reports (Slice 16)
+### Receivables — Unified Credit-Balance Collection Surface
+- GET /api/receivables/summary — outstanding/overdue totals across all source types (Manager, Admin, Finance_Officer)
+- GET /api/receivables — list; filters: branchId, customerId, sourceType (order_credit_sale | pos_credit_sale | exchange_difference), status (Pending | PartiallyPaid | Overdue | Settled)
+- GET /api/receivables/:id — detail
+- POST /api/receivables/:id/collect — record a payment against ANY receivable regardless of source (routes internally to the Payments module for order credit sales, POS's payment recording for POS credit sales, or its own ledger update for exchange differences); body: { amount, paymentMethod, bankAccountId?, notes? }
+- POST /api/receivables/:id/settle — write off as bad debt, no money movement (Manager, Admin, Finance_Officer — distinct from `/collect`, which requires `PROCESS_PAYMENT`)
+- `status = 'Overdue'` is maintained by a scheduled job (`markOverdueReceivables()`), not derived on read.
+
+### Reports (Slice 16) — FinancialReportService (Dashboard KPIs ↔ CSV Export, unified)
 - GET /api/reports/sales — total sales, orders, AOV; by period + by branch (Manager, Admin)
 - GET /api/reports/payments — collected/refunded/pending; by method + by period (Manager, Admin)
 - GET /api/reports/exchanges — exchange totals; by settlement type + by period (Manager, Admin)
 - GET /api/reports/inventory — stock summary, low-stock list, top-selling books, movement (Manager, Admin)
 - GET /api/reports/customers — totals, repeat customers, top spenders, new by period (Manager, Admin)
-- GET /api/reports/kpis — daily/monthly revenue, AOV, active customers, alerts (Manager, Admin)
+- GET /api/reports/kpis — Manager/Admin/Finance_Officer/Super_Admin. Existing collected-cash fields: daily/monthly revenue & sales, AOV, active customers, low-stock/pending-order/exchange alerts, netProfit, grossProfit, dailyNetProfit, monthlyNetProfit, procurementExpense, outstandingBalance. Plus the additive, gross-accrual `FinancialReportService` fields introduced by Dashboard Standardization: `dailyNetSalesRevenue`, `monthlyNetSalesRevenue`, `dailyNetProfitUnified`, `monthlyNetProfitUnified`, `grossProfitUnified`, `overdueReceivablesAmount` — these are the figures that reconcile 1:1 with the sales export below, and are what the Dashboard's Primary/Secondary KPI rows display.
 - Common filters: ?branchId=&dateFrom=&dateTo=&groupBy=day|week|month
-- GET /api/reports/sales/export — CSV download (Manager, Admin)
+- GET /api/reports/sales/export — CSV download (Manager, Admin). Sourced from `FinancialReportService`: one row per line item across all four channels (ORDER/POS/RETURN/EXCHANGE) — see "Dashboard Standardization & Unified Reports Engine" above for the full column list. Not order-only.
 - GET /api/reports/payments/export — CSV download (Manager, Admin)
 - GET /api/reports/inventory/export — CSV download (Manager, Admin)
 - GET /api/reports/customers/export — CSV download (Manager, Admin)
 - GET /api/reports/exchanges/export — CSV download (Manager, Admin)
+- GET /api/reports/procurement/export / GET /api/reports/receivables/export — CSV download (Manager, Admin)
 
 ### Notifications (Phase 5)
 - GET /api/notifications/stream — SSE endpoint; `Content-Type: text/event-stream`; sends `connected` event with unread count; heartbeat every 30s (all authenticated roles)
@@ -686,7 +758,7 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 
 ---
 
-## Migrations (34 total)
+## Migrations (45 total)
 
 | Migration | Purpose |
 |-----------|---------|
@@ -724,6 +796,19 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 | 1700000032_refresh_token_context | Refresh token branch context for multi-branch session management |
 | 1700000033_erp_hardening | Financial transactions, inventory reservations, order/exchange lifecycle state machines, permission-based RBAC |
 | 1700000034_staff_all_branches_flag | `is_all_branches` flag on staff for cross-branch access without per-branch role assignments |
+| 1700000035_discount_architecture | Discount architecture refinements |
+| 1700000036_create_receivables | `receivables` table — unifies order_credit_sale, pos_credit_sale, and exchange_difference outstanding balances behind one collection surface (Payments module) |
+| 1700000037_order_inventory_history_reason | Reason codes on order-driven inventory_history rows |
+| 1700000038_order_sale_type | `sale_type` (cash_sale / credit_sale) on orders |
+| 1700000039_order_due_date | Due date tracking for credit orders |
+| 1700000040_financial_analytics_indexes | Indexes supporting reporting/analytics query performance |
+| 1700000042_order_fulfilled_reference_type | `order_fulfilled` inventory_history reference_type |
+| 1700000043_inventory_history_default_partition | Default partition for inventory_history |
+| 1700000044_transfer_reference_type | `transfer` inventory_history reference_type |
+| 1700000045_supplier_payments | Supplier payment tracking |
+| 1700000046_exchange_virtual_receiving_cost_basis | cost_basis support for exchange-acquired books that were never procured via a PO (see "Non-Destructive Catalog Search & Virtual Receiving" above) |
+
+*(Migration 1700000041 does not exist — number intentionally skipped, not a gap to fill.)*
 
 ---
 

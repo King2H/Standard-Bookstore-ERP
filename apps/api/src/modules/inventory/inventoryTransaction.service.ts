@@ -27,7 +27,7 @@ import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { isNegativeStockAllowed } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
-import type { StaffCtx, ReasonCode, MovementType } from './inventory.service.js';
+import type { StaffCtx, ReasonCode } from './inventory.service.js';
 
 // ── Feature flag cache (shared with inventory.service.ts logic) ───────────────
 let _hasReservationsTable: boolean | null = null;

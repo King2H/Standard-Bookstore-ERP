@@ -48,7 +48,6 @@ const ORDER_C_TOTAL = 300.00;     // FULFILLED, no discount
 // Totals for assertions
 const FULFILLED_GROSS_TOTAL = ORDER_B_TOTAL + ORDER_C_TOTAL;   // 700 (only fulfilled orders)
 const ALL_ORDERS_GROSS_TOTAL = ORDER_A_TOTAL + ORDER_B_TOTAL + ORDER_C_TOTAL; // 1200 (all non-cancelled)
-const NET_OF_DISCOUNTS = ALL_ORDERS_GROSS_TOTAL - ORDER_B_DISCOUNT; // 1100 (if discount were deducted)
 const FULFILLED_NET_OF_DISCOUNTS = FULFILLED_GROSS_TOTAL - ORDER_B_DISCOUNT; // 600 (correct net)
 
 // ---- Shared state ------------------------------------------------------------
@@ -381,7 +380,6 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
  */
 
 const BUG2_POS_PREFIX     = 'BUG2POS-';
-const BUG2_POS_BRANCH     = 'ProfitBug Test ';   // same prefix → picked up by cleanTestBranches
 const POS_GRAND_TOTAL     = 250.00;
 
 let bug2PosAdminToken: string;
@@ -616,7 +614,6 @@ describe('Bug 2 -- Profit Calculation Preservation (POS Revenue Must Remain Sepa
  */
 
 const FIX_VERIFY_ORDER_PREFIX = 'BUG2FIX-';
-const FIX_VERIFY_BRANCH_PREFIX = 'ProfitFix Test ';
 
 // Expected values for this dataset (no purchase costs, no returns, no exchanges)
 const FIX_FULFILLED_REVENUE  = 700;   // Order B (400) + Order C (300)

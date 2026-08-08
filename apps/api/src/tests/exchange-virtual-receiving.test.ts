@@ -31,10 +31,6 @@ async function getOrCreateLocation(branchId: number): Promise<number> {
   return c.rows[0].id as number;
 }
 
-async function ensureInventory(bookId: number, locationId: number, qty = 20) {
-  await db.query(`INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,$3,5,0) ON CONFLICT (book_id, location_id) DO UPDATE SET quantity = $3, version = 0`, [bookId, locationId, qty]);
-}
-
 async function cleanExchanges(branchId: number) {
   await db.query(`DELETE FROM exchange_outgoing_items WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM exchange_incoming_items WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id = $1)`, [branchId]).catch(() => {});

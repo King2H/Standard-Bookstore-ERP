@@ -43,7 +43,6 @@ const BRANCH_PREFIX = 'BugCond Test ';
 // ── Setup helpers ─────────────────────────────────────────────────────────────
 
 let adminToken: string;
-let staffId: number;
 let branchId: number;
 let locationId: number;
 let bookId: number;
@@ -199,7 +198,6 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
 
     const admin = await createTestStaff({ username: 'bugcond_test_admin', role: 'Admin', branchId });
     adminToken = admin.token;
-    staffId = admin.staffId;
 
     // Create a location for this branch
     const locRes = await db.query(

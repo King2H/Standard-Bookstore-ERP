@@ -1,10 +1,6 @@
 import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
-import {
-  getEffectiveConfig,
-  getMaxLineDiscountPct,
-  isNegativeStockAllowed,
-} from '../config/config.service.js';
+import { getMaxLineDiscountPct } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as invTxSvc from '../inventory/inventoryTransaction.service.js';

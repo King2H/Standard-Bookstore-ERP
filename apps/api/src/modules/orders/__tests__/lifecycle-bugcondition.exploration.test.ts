@@ -146,28 +146,6 @@ async function listUnpaidOrders(token: string, branchId: number) {
     .set('X-Branch-Id', String(branchId));
 }
 
-async function createReturn(
-  token: string,
-  branchId: number,
-  orderId: string,
-  transactionLineItemId: number,
-  quantity: number,
-  disposition?: 'SELLABLE' | 'DAMAGED',
-) {
-  const body: Record<string, unknown> = {
-    orderId: Number(orderId),
-    refundMethod: 'cash',
-    lines: [{ transactionLineItemId, quantity }],
-  };
-  if (disposition) body.disposition = disposition;
-  
-  return request(getTestApp())
-    .post('/api/returns')
-    .set('Authorization', `Bearer ${token}`)
-    .set('X-Branch-Id', String(branchId))
-    .send(body);
-}
-
 async function cleanOrders(branchId: number): Promise<void> {
   await db.query(`DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});

@@ -128,10 +128,6 @@ export interface KpiReport {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function dateTrunc(groupBy: 'day' | 'week' | 'month'): string {
-  return `date_trunc('${groupBy}', created_at)`;
-}
-
 function buildDateConditions(
   filters: ReportFilters,
   tableAlias = '',
@@ -1014,14 +1010,18 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
   const today = todayRes.rows[0].today as string;
   const monthStart = todayRes.rows[0].month_start as string;
 
-  // Run computeNetProfit for both daily and monthly scopes in parallel,
-  // alongside the procurement expense, overdue receivables, and Dashboard
-  // Standardization & Unified Reports Engine queries — all independent.
+  // Run computeNetProfit for the daily scope in parallel, alongside the
+  // procurement expense, overdue receivables, and Dashboard Standardization
+  // & Unified Reports Engine queries — all independent. (The monthly scope
+  // is computed separately below via monthlyProfitResult — an earlier
+  // all-time-scoped computeNetProfit({ branchId }) call here was dead code:
+  // its result was never read, since every monthly figure below already
+  // comes from monthlyProfitResult. Removed during the Legacy Code Audit —
+  // it was an unnecessary extra DB query on every /reports/kpis request.)
   const [
-    profitResult, dailyProfitResult, procurementExpenseRes, overdueRes,
+    dailyProfitResult, procurementExpenseRes, overdueRes,
     dailyUnified, monthlyUnified,
   ] = await Promise.all([
-    computeNetProfit({ branchId }),                                            // monthly (no date scope = all-time → use month)
     computeNetProfit({ branchId, dateFrom: today, dateTo: today }),            // today
     db.query(
       `SELECT COALESCE(SUM(total_amount), 0)::NUMERIC AS val

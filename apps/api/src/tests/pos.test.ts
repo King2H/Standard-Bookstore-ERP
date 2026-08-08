@@ -318,9 +318,6 @@ describe('POS — Transactions', () => {
     // Tax disabled — grandTotal = subtotal
     const expectedGrand = expectedSubtotal;
 
-    const loyBefore = await db.query(`SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1`, [customerId]);
-    const ptsBefore = Number(loyBefore.rows[0].points_balance);
-
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)

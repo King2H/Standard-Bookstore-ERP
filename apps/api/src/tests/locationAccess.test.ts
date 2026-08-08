@@ -10,7 +10,6 @@ const BRANCH_PREFIX = 'LocAccess Test ';
 
 describe('Location Access Control', () => {
   let adminToken: string;
-  let adminStaffId: number;
   let restrictedToken: string;
   let restrictedStaffId: number;
   let branchId: number;
@@ -52,7 +51,6 @@ describe('Location Access Control', () => {
     // Admin — manages location assignments
     const admin = await createTestStaff({ username: 'locaccess_test_admin', role: 'Admin', branchId });
     adminToken = admin.token;
-    adminStaffId = admin.staffId;
 
     // Restricted staff — will be given explicit location assignments
     const restricted = await createTestStaff({ username: 'locaccess_test_restricted', role: 'Stock_Clerk', branchId });

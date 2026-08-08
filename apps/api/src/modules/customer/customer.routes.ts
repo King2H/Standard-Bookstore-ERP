@@ -90,7 +90,7 @@ router.post(
 router.get(
   '/customer-groups',
   authenticate,
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const groups = await customerService.listCustomerGroups();
       res.json({ items: groups });

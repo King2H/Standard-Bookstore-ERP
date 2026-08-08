@@ -26,9 +26,7 @@ async function cleanTestGroups() {
 
 describe('Customer Management', () => {
   let adminToken: string;
-  let managerToken: string;
   let salesToken: string;
-  let financeToken: string;
   let branchId: number;
 
   beforeAll(async () => {
@@ -41,14 +39,12 @@ describe('Customer Management', () => {
     const admin = await createTestStaff({ username: 'cust_test_admin', role: 'Admin', branchId });
     adminToken = admin.token;
 
-    const manager = await createTestStaff({ username: 'cust_test_manager', role: 'Manager', branchId });
-    managerToken = manager.token;
+    await createTestStaff({ username: 'cust_test_manager', role: 'Manager', branchId });
 
     const sales = await createTestStaff({ username: 'cust_test_sales', role: 'Sales', branchId });
     salesToken = sales.token;
 
-    const finance = await createTestStaff({ username: 'cust_test_finance', role: 'Finance_Officer', branchId });
-    financeToken = finance.token;
+    await createTestStaff({ username: 'cust_test_finance', role: 'Finance_Officer', branchId });
   });
 
   afterAll(async () => {
