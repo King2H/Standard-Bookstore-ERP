@@ -890,4 +890,70 @@ describe('Procurement — Purchase Orders', () => {
     expect(financeRes.status).toBe(201);
     expect(financeRes.body.financialStatus).toBe('paid');
   });
+
+  // ── 24. Expected delivery date timezone shift ────────────────────────────
+  // expected_delivery_date is a plain DATE column; the pg driver returns it
+  // as a JS Date built at local midnight in the *server process's* timezone,
+  // not UTC. Serializing that Date with .toISOString() (always UTC) used to
+  // silently roll it back a day whenever the server's local offset is ahead
+  // of UTC — exactly the case in Africa/Addis_Ababa (UTC+3). Run this whole
+  // scenario under that timezone to reproduce it, covering create, reload
+  // (getById), edit (PUT), and list — the four surfaces that all funnel
+  // through mapPORow().
+  describe('24. Expected delivery date — no timezone shift (UTC+3 / Africa/Addis_Ababa)', () => {
+    const originalTz = process.env.TZ;
+
+    beforeAll(() => { process.env.TZ = 'Africa/Addis_Ababa'; });
+    afterAll(() => { process.env.TZ = originalTz; });
+
+    it('Selecting 2026-08-08 saves 2026-08-08, and reloading/editing/listing retain it', async () => {
+      const createRes = await request(getTestApp())
+        .post('/api/purchase-orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('X-Branch-Id', String(branchId))
+        .send({
+          supplierId, branchId,
+          notes: 'proc_test tz expected delivery date',
+          expectedDeliveryDate: '2026-08-08',
+          lineItems: [{ bookId, quantity: 1, unitCost: 10 }],
+        });
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.expectedDeliveryDate).toBe('2026-08-08');
+      const poId = createRes.body.id;
+
+      // Reload (GET /:id)
+      const getRes = await request(getTestApp())
+        .get(`/api/purchase-orders/${poId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('X-Branch-Id', String(branchId));
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.expectedDeliveryDate).toBe('2026-08-08');
+
+      // Edit (PUT) to a different date, then reload again
+      const putRes = await request(getTestApp())
+        .put(`/api/purchase-orders/${poId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('X-Branch-Id', String(branchId))
+        .send({ expectedDeliveryDate: '2026-08-09' });
+      expect(putRes.status).toBe(200);
+      expect(putRes.body.expectedDeliveryDate).toBe('2026-08-09');
+
+      const getAfterEdit = await request(getTestApp())
+        .get(`/api/purchase-orders/${poId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('X-Branch-Id', String(branchId));
+      expect(getAfterEdit.body.expectedDeliveryDate).toBe('2026-08-09');
+
+      // List — same row, same field, via a different query path (mapPORow
+      // over the paginated list SELECT rather than the single-row SELECT).
+      const listRes = await request(getTestApp())
+        .get(`/api/purchase-orders?branchId=${branchId}&pageSize=100`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('X-Branch-Id', String(branchId));
+      expect(listRes.status).toBe(200);
+      const listed = listRes.body.items.find((po: { id: string }) => po.id === poId);
+      expect(listed).toBeDefined();
+      expect(listed.expectedDeliveryDate).toBe('2026-08-09');
+    });
+  });
 });

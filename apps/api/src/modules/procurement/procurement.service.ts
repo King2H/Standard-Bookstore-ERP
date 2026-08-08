@@ -94,6 +94,25 @@ export interface ReceiveItemInput {
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
 
+// expected_delivery_date is a plain DATE column (no time, no timezone) — but
+// the pg driver still hands it back as a JS Date built from that date's
+// year/month/day in the server process's *local* timezone. Reading it back
+// out with .toISOString() (always UTC) is the bug: whenever the server's
+// local offset is ahead of UTC (e.g. Africa/Addis_Ababa, UTC+3), that local
+// midnight falls on the *previous* UTC day, so toISOString() silently
+// returns the day before what was actually stored — a book selected/saved
+// as 2026-08-08 came back as 2026-08-07. Reading the same Date object back
+// with its *local* getters instead of toISOString() reverses exactly the
+// conversion pg-types applied, so it reconstructs the original calendar
+// date regardless of what the server's local timezone happens to be — no
+// hardcoded offset, no dependency on server TZ configuration.
+function dateOnlyToString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function mapPORow(row: Record<string, unknown>): PORow {
   return {
     id: String(row.id),
@@ -105,7 +124,7 @@ function mapPORow(row: Record<string, unknown>): PORow {
     currency: row.currency as string,
     expectedDeliveryDate: row.expected_delivery_date
       ? (row.expected_delivery_date instanceof Date
-          ? row.expected_delivery_date.toISOString().split('T')[0]
+          ? dateOnlyToString(row.expected_delivery_date)
           : String(row.expected_delivery_date))
       : null,
     notes: (row.notes as string | null) ?? null,
