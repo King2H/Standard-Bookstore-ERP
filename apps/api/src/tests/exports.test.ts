@@ -162,9 +162,13 @@ describe('Export Integrity (Module 7)', () => {
     await cleanTestBranches(BRANCH_PREFIX);
   });
 
-  // ── 1. Sales export net_profit no longer double-subtracts discount ────────
+  // ── 1. Unified sales export: ORDER row shape and net-amount math ──────────
+  // (Dashboard Standardization & Unified Reports Engine) — the CSV no longer
+  // has purchase_cost/net_profit columns (that's an accrual/COGS concept the
+  // new line-item-level export deliberately doesn't carry — see
+  // financialReport.service.ts); it verifies gross/discount/net instead.
 
-  it('1. Sales export net_profit = total − purchase_cost (discount not subtracted twice)', async () => {
+  it('1. Unified sales export: ORDER row has correct gross/discount/net amounts and reference', async () => {
     const res = await request(getTestApp())
       .get(`/api/reports/sales/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
@@ -172,14 +176,17 @@ describe('Export Integrity (Module 7)', () => {
 
     expect(res.status).toBe(200);
     const rows = parseCsv(res.text);
-    const row = rows.find(r => r.order_reference === `${ORDER_PREFIX}A`);
+    const row = rows.find(r => r.reference_number === `${ORDER_PREFIX}A`);
     expect(row).toBeDefined();
 
-    expect(parseFloat(row!.total_discount)).toBeCloseTo(ORDER_DISCOUNT, 2);
-    expect(parseFloat(row!.purchase_cost)).toBeCloseTo(PURCHASE_COST, 2);
-    // The bug computed total - purchaseCost - totalDiscount = 85 - 40 - 15 = 30.
-    // Correct: total is already net of discount, so net_profit = 85 - 40 = 45.
-    expect(parseFloat(row!.net_profit)).toBeCloseTo(ORDER_TOTAL - PURCHASE_COST, 2);
+    expect(row!.transaction_type).toBe('ORDER');
+    expect(row!.customer_name).toBe('Export Test Customer');
+    expect(parseInt(row!.quantity, 10)).toBe(QTY);
+    expect(parseFloat(row!.discount_amount)).toBeCloseTo(ORDER_DISCOUNT, 2);
+    expect(parseFloat(row!.gross_amount)).toBeCloseTo(ORDER_SUBTOTAL, 2);
+    // net_amount = order_line_items.total_price, already gross − discount.
+    expect(parseFloat(row!.net_amount)).toBeCloseTo(ORDER_TOTAL, 2);
+    expect(row!.payment_status).toBe('PAID');
   });
 
   // ── 2. Receivables export includes all source types ───────────────────────

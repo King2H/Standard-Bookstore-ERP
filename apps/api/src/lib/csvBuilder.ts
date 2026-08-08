@@ -10,22 +10,27 @@ export interface CsvColumnDef {
 
 // ── Column schemas ────────────────────────────────────────────────────────────
 
+// Dashboard Standardization & Unified Reports Engine — one row per line item
+// across all four revenue-moving channels (ORDER/POS/RETURN/EXCHANGE); see
+// financialReport.service.ts for how each channel maps onto this shape.
+// transaction_date is sourced as an already-local YYYY-MM-DD string (SQL
+// TO_CHAR(..., 'YYYY-MM-DD'), never a JS Date/toISOString() round-trip) —
+// kept as 'string' here so formatValue() doesn't re-parse it through Date().
 export const SALES_COLUMNS: CsvColumnDef[] = [
-  { key: 'order_reference',    header: 'order_reference',    type: 'string'  },
-  { key: 'date',               header: 'date',               type: 'date'    },
+  { key: 'transaction_date',   header: 'transaction_date',   type: 'string'  },
+  { key: 'transaction_type',   header: 'transaction_type',   type: 'string'  },
+  { key: 'reference_number',   header: 'reference_number',   type: 'string'  },
+  { key: 'branch',             header: 'branch',             type: 'string'  },
   { key: 'customer_name',      header: 'customer_name',      type: 'string'  },
-  { key: 'sale_type',          header: 'sale_type',          type: 'string'  },
-  { key: 'fulfillment_status', header: 'fulfillment_status', type: 'string'  },
-  { key: 'subtotal',           header: 'subtotal',           type: 'number'  },
-  { key: 'discount_normal',    header: 'discount_normal',    type: 'number'  },
-  { key: 'discount_merchant',  header: 'discount_merchant',  type: 'number'  },
-  { key: 'discount_special',   header: 'discount_special',   type: 'number'  },
-  { key: 'total_discount',     header: 'total_discount',     type: 'number'  },
-  { key: 'purchase_cost',      header: 'purchase_cost',      type: 'number'  },
-  { key: 'net_profit',         header: 'net_profit',         type: 'number'  },
+  { key: 'book_title',         header: 'book_title',         type: 'string'  },
+  { key: 'book_isbn',          header: 'book_isbn',          type: 'string'  },
+  { key: 'quantity',           header: 'quantity',           type: 'integer' },
+  { key: 'unit_price',         header: 'unit_price',         type: 'number'  },
+  { key: 'discount_amount',    header: 'discount_amount',    type: 'number'  },
+  { key: 'gross_amount',       header: 'gross_amount',       type: 'number'  },
+  { key: 'net_amount',         header: 'net_amount',         type: 'number'  },
   { key: 'payment_status',     header: 'payment_status',     type: 'string'  },
-  { key: 'collected_amount',   header: 'collected_amount',   type: 'number'  },
-  { key: 'outstanding_amount', header: 'outstanding_amount', type: 'number'  },
+  { key: 'payment_method',     header: 'payment_method',     type: 'string'  },
 ];
 
 export const INVENTORY_COLUMNS: CsvColumnDef[] = [

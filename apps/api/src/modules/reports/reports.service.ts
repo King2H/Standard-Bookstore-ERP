@@ -1,6 +1,7 @@
 import { db } from '../../db/index.js';
 import { computeNetProfit } from '../../lib/profit.service.js';
 import { costBasisLateralJoin } from '../../lib/costBasis.js';
+import { getUnifiedFinancialSummary } from './financialReport.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,19 @@ export interface KpiReport {
   grossProfit: number;          // fulfilledRevenue - purchaseCost (before returns/exchanges)
   dailyNetProfit: number;       // today's net profit
   monthlyNetProfit: number;     // current month net profit
+
+  // Dashboard Standardization & Unified Reports Engine (financialReport.service.ts) —
+  // gross-invoiced/accrual figures, reconciling 1:1 with the Sales CSV export
+  // for the same date range. Deliberately distinct from fulfilledRevenue/
+  // netProfit/grossProfit above (collected-cash revenue recognition for
+  // credit sales — an existing, separately-tested accounting policy this
+  // does not change). See financialReport.service.ts's module comment.
+  dailyNetSalesRevenue: number;
+  monthlyNetSalesRevenue: number;
+  dailyNetProfitUnified: number;
+  monthlyNetProfitUnified: number;
+  grossProfitUnified: number;
+  overdueReceivablesAmount: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -988,13 +1002,25 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
 
   const outstandingBalance = parseFloat(outstandingRes.rows[0].val);
 
-  // Run computeNetProfit for both daily and monthly scopes in parallel,
-  // alongside the procurement expense query — all three are independent.
-  const today = new Date().toISOString().slice(0, 10);
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString().slice(0, 10);
+  // "Today"/month-start as local, DB-session-derived date strings — never a
+  // JS Date's toISOString() (always UTC), which drifts a day off from the
+  // server's actual local date near midnight in non-UTC timezones (e.g.
+  // Africa/Addis_Ababa, UTC+3). Same fix pattern used throughout this
+  // session wherever a "today" boundary is computed (orders.service.ts
+  // confirm(), etc.).
+  const todayRes = await db.query(
+    `SELECT TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS today, TO_CHAR(date_trunc('month', CURRENT_DATE), 'YYYY-MM-DD') AS month_start`,
+  );
+  const today = todayRes.rows[0].today as string;
+  const monthStart = todayRes.rows[0].month_start as string;
 
-  const [profitResult, dailyProfitResult, procurementExpenseRes] = await Promise.all([
+  // Run computeNetProfit for both daily and monthly scopes in parallel,
+  // alongside the procurement expense, overdue receivables, and Dashboard
+  // Standardization & Unified Reports Engine queries — all independent.
+  const [
+    profitResult, dailyProfitResult, procurementExpenseRes, overdueRes,
+    dailyUnified, monthlyUnified,
+  ] = await Promise.all([
     computeNetProfit({ branchId }),                                            // monthly (no date scope = all-time → use month)
     computeNetProfit({ branchId, dateFrom: today, dateTo: today }),            // today
     db.query(
@@ -1005,15 +1031,38 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
          ${branchCond}`,
       params,
     ),
+    // Overdue Receivables — status is maintained by the markOverdueReceivables()
+    // scheduled job (receivables.service.ts), not derived here.
+    db.query(
+      `SELECT COALESCE(SUM(outstanding_amount), 0)::NUMERIC AS val
+       FROM receivables
+       WHERE status = 'Overdue'
+         ${branchCond}`,
+      params,
+    ),
+    getUnifiedFinancialSummary({ branchId, dateFrom: today, dateTo: today }),
+    getUnifiedFinancialSummary({ branchId, dateFrom: monthStart, dateTo: today }),
   ]);
   // Re-run for month-scoped profit (separate from all-time)
   const monthlyProfitResult = await computeNetProfit({ branchId, dateFrom: monthStart, dateTo: today });
 
   const procurementExpense = parseFloat(procurementExpenseRes.rows[0].val as string);
+  const overdueReceivablesAmount = parseFloat(overdueRes.rows[0].val as string);
 
   // Gross profit = monthly fulfilled revenue − purchase cost (before returns/exchanges)
   // Note: revenue is already post-discount, so no discount subtraction needed here.
   const grossProfit = monthlyProfitResult.fulfilledRevenue - monthlyProfitResult.purchaseCost;
+
+  // Unified (gross-invoiced) equivalents — reuse the SAME date-scoped
+  // purchaseCost computeNetProfit() already computed above (also
+  // costBasis.ts-aware), so this doesn't duplicate COGS logic, just applies
+  // it against the unified engine's Net Sales Revenue instead of
+  // computeNetProfit's collected-cash fulfilledRevenue.
+  const dailyNetProfitUnified = parseFloat((dailyUnified.netSalesRevenue - dailyProfitResult.purchaseCost).toFixed(2));
+  const monthlyNetProfitUnified = parseFloat((monthlyUnified.netSalesRevenue - monthlyProfitResult.purchaseCost).toFixed(2));
+  const grossProfitUnified = parseFloat(
+    ((monthlyUnified.grossSales - monthlyUnified.discounts) - monthlyProfitResult.purchaseCost).toFixed(2),
+  );
 
   return {
     dailySales,
@@ -1040,6 +1089,13 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
     grossProfit,
     dailyNetProfit:   dailyProfitResult.netProfit,
     monthlyNetProfit: monthlyProfitResult.netProfit,
+    // Dashboard Standardization & Unified Reports Engine
+    dailyNetSalesRevenue:   dailyUnified.netSalesRevenue,
+    monthlyNetSalesRevenue: monthlyUnified.netSalesRevenue,
+    dailyNetProfitUnified,
+    monthlyNetProfitUnified,
+    grossProfitUnified,
+    overdueReceivablesAmount,
   };
 }
 
