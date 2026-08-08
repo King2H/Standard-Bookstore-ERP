@@ -694,13 +694,15 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                             )}
                             {/* Single Authoritative Payment Collection Workflow: Sales
                                 History no longer collects payment itself (Payments is
-                                the only module that can) — this is a pure view action,
-                                opening Payments' History pre-filtered to this
-                                transaction. Collecting an outstanding balance happens
-                                from Payments' own Pending tab. */}
-                            {tx.status === 'completed' && (
+                                the only module that can) — this deep-links into
+                                Payments' Collect tab, pre-selected for this
+                                transaction, matching Receivables' "Open in Payments".
+                                Only shown for credit sales with an outstanding
+                                balance (partial/credit) — fully paid transactions
+                                have nothing left to collect. */}
+                            {tx.status === 'completed' && (tx.paymentStatus === 'partial' || tx.paymentStatus === 'credit') && (
                               <button
-                                onClick={() => onNavigate?.('payments', { tab: 'history', orderId: tx.id, sourceType: 'pos' })}
+                                onClick={() => onNavigate?.('payments', { orderId: tx.id, sourceType: 'pos' })}
                                 className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 px-2 py-1 rounded-lg font-semibold transition-colors whitespace-nowrap"
                               >View Payments</button>
                             )}
