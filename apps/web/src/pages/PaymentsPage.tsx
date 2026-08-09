@@ -55,9 +55,14 @@ const PAY_STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
   refunded: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
+// Bug fix: store_credit was mislabeled '📱 Telebirr' — duplicating the
+// genuinely-distinct 'mobile' entry right above it — instead of its own
+// '🎁 Store Credit' label. Matches OrdersPage.tsx's METHOD_LABELS, which
+// already gets this right ("constraint ('mobile' = Telebirr, 'store_credit'
+// = Store Credit) — no new values").
 const METHOD_LABELS: Record<string, string> = {
   cash: '💵 Cash', bank: '🏦 Bank Transfer', mobile: '📱 Telebirr', card: '💳 Card',
-  store_credit: '📱 Telebirr', loyalty_points: '⭐ Loyalty', other: 'Other',
+  store_credit: '🎁 Store Credit', loyalty_points: '⭐ Loyalty', other: 'Other',
 };
 
 const canRefund = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');

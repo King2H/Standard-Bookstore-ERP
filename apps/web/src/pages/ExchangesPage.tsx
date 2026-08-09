@@ -865,7 +865,13 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                         className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500">
                         <option value="cash">Cash</option>
                         <option value="bank">Bank</option>
-                        <option value="store_credit">Telebirr</option>
+                        {/* Bug fix: was mislabeled "Telebirr" — this settles
+                            the exchange difference against the customer's
+                            real store_credit_accounts balance (see
+                            exchanges.service.ts's applyExchangeSettlementEffects()),
+                            same as OrdersPage.tsx's/PaymentsPage.tsx's
+                            correctly-labeled Store Credit option. */}
+                        <option value="store_credit">Store Credit</option>
                       </select>
                     </div>
                   </div>

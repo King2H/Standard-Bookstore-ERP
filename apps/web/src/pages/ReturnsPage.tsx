@@ -224,7 +224,11 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
                 {(['cash', 'store_credit'] as const).map(m => (
                   <button key={m} onClick={() => setRefundMethod(m)}
                     className={`flex-1 py-2 text-sm rounded-lg transition-colors ${refundMethod === m ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
-                    {m === 'cash' ? '💵 Cash' : '📱 Telebirr'}
+                    {/* Bug fix: was mislabeled "Telebirr" — refund_method's
+                        only two values are cash/store_credit (see the
+                        returns migration's CHECK constraint); this credits
+                        store_credit_accounts.balance directly. */}
+                    {m === 'cash' ? '💵 Cash' : '🎁 Store Credit'}
                   </button>
                 ))}
               </div>
@@ -283,7 +287,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{ret.returnNumber}</td>
                         <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">#{ret.transactionId}</td>
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(ret.totalRefundAmount).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{ret.refundMethod === 'store_credit' ? 'Telebirr' : ret.refundMethod.replace('_', ' ')}</td>
+                        <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{ret.refundMethod === 'store_credit' ? 'Store Credit' : ret.refundMethod.replace('_', ' ')}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ret.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>{ret.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(ret.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">

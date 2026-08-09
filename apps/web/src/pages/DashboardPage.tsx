@@ -712,9 +712,14 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
                     formatter={(value: string) => {
                       const clean = value.replace('_', ' ');
-                      if (clean === 'store credit' || clean === 'mobile' || clean === 'store_credit') {
-                        return 'Telebirr';
-                      }
+                      // Bug fix: 'store_credit' was collapsed into the same
+                      // "Telebirr" label as 'mobile', hiding genuine Store
+                      // Credit usage from this legend entirely. These are
+                      // two distinct payment methods (see PaymentsPage.tsx's/
+                      // OrdersPage.tsx's METHOD_LABELS) and should read
+                      // distinctly here too.
+                      if (clean === 'mobile') return 'Telebirr';
+                      if (clean === 'store credit') return 'Store Credit';
                       return clean;
                     }}
                   />

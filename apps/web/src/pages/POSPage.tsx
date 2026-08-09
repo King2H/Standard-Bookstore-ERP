@@ -102,11 +102,21 @@ const canVoid = (r?: Role, perms?: string[]) =>
 // ── Payment ───────────────────────────────────────────────────────────────────
 
 type PaymentMethod = 'cash' | 'bank' | 'store_credit' | 'loyalty_points';
+// Bug fix: 'store_credit' was mislabeled "Telebirr" here — transactions'
+// payment method CHECK constraint has no separate 'mobile' value (unlike
+// orders/payments, which do), so this tab was quietly standing in as a
+// mobile-money button while actually debiting the customer's real store
+// credit balance underneath (see the "Available: {storeCreditBalance}"
+// panel below, which was always showing the correct — just mislabeled —
+// balance). OrdersPage.tsx already treats these as two distinct, correctly
+// labeled concepts ('mobile' = Telebirr, 'store_credit' = Store Credit);
+// matching that here, since POS has no genuine Telebirr/mobile channel to
+// conflate it with.
 const PAYMENT_TABS: { method: PaymentMethod; label: string; icon: string }[] = [
-  { method: 'cash',           label: 'Cash',     icon: '💵' },
-  { method: 'bank',           label: 'Bank',     icon: '🏦' },
-  { method: 'store_credit',   label: 'Telebirr', icon: '📱' },
-  { method: 'loyalty_points', label: 'Loyalty',  icon: '⭐' },
+  { method: 'cash',           label: 'Cash',         icon: '💵' },
+  { method: 'bank',           label: 'Bank',         icon: '🏦' },
+  { method: 'store_credit',   label: 'Store Credit', icon: '🎁' },
+  { method: 'loyalty_points', label: 'Loyalty',      icon: '⭐' },
 ];
 
 // ── Cart maths (no tax) ───────────────────────────────────────────────────────
@@ -574,7 +584,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 space-y-1.5">
                   {(receipt.payments ?? []).map((p, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500 capitalize">{p.method === 'store_credit' ? 'Telebirr' : p.method.replace(/_/g, ' ')}</span>
+                      <span className="text-gray-500 capitalize">{p.method === 'store_credit' ? 'Store Credit' : p.method.replace(/_/g, ' ')}</span>
                       <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {Number(p.amount).toFixed(2)}</span>
                     </div>
                   ))}
@@ -1140,7 +1150,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                     <div key={i} className="flex items-center justify-between text-xs">
                       <span className="text-gray-600 dark:text-gray-400 capitalize flex items-center gap-1">
                         <span>{PAYMENT_TABS.find(t => t.method === p.method)?.icon}</span>
-                        {p.method === 'store_credit' ? 'Telebirr' : p.method.replace(/_/g, ' ')}
+                        {p.method === 'store_credit' ? 'Store Credit' : p.method.replace(/_/g, ' ')}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{currency} {parseFloat(p.amount).toFixed(2)}</span>
