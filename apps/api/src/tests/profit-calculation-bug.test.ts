@@ -48,7 +48,6 @@ const ORDER_C_TOTAL = 300.00;     // FULFILLED, no discount
 // Totals for assertions
 const FULFILLED_GROSS_TOTAL = ORDER_B_TOTAL + ORDER_C_TOTAL;   // 700 (only fulfilled orders)
 const ALL_ORDERS_GROSS_TOTAL = ORDER_A_TOTAL + ORDER_B_TOTAL + ORDER_C_TOTAL; // 1200 (all non-cancelled)
-const NET_OF_DISCOUNTS = ALL_ORDERS_GROSS_TOTAL - ORDER_B_DISCOUNT; // 1100 (if discount were deducted)
 const FULFILLED_NET_OF_DISCOUNTS = FULFILLED_GROSS_TOTAL - ORDER_B_DISCOUNT; // 600 (correct net)
 
 // ---- Shared state ------------------------------------------------------------
@@ -381,7 +380,6 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
  */
 
 const BUG2_POS_PREFIX     = 'BUG2POS-';
-const BUG2_POS_BRANCH     = 'ProfitBug Test ';   // same prefix → picked up by cleanTestBranches
 const POS_GRAND_TOTAL     = 250.00;
 
 let bug2PosAdminToken: string;
@@ -597,8 +595,17 @@ describe('Bug 2 -- Profit Calculation Preservation (POS Revenue Must Remain Sepa
  *
  * Expected fixed values:
  *   fulfilledRevenue  = 400 + 300 = 700  (only FULFILLED orders)
- *   totalDiscounts    = 100              (Order B merchant discount)
- *   netProfit         = 700 - 100 = 600  (no purchase cost or returns in this dataset)
+ *   totalDiscounts    = 100              (Order B merchant discount, reporting-only)
+ *   netProfit         = 700              (revenue - cost - returns + exchange adj.)
+ *
+ * NOTE: netProfit does NOT subtract totalDiscounts. o.total (400 for Order B) is
+ * already post-discount -- it's what the customer actually paid (subtotal 500 -
+ * discount 100). totalDiscounts is a separate reporting field (shown on the KPI
+ * card so staff can see how much was discounted) but subtracting it from revenue
+ * that's already net-of-discount would double-count the discount and understate
+ * profit. See lib/profit.service.ts computeNetProfit() for the full reasoning.
+ * (This suite originally expected 700 - 100 = 600 before that reasoning was
+ * worked out; the formula below reflects the current, correct calculation.)
  *
  * These tests have their OWN beforeAll/afterAll to seed and clean data
  * independently (the exploration suite above cleans up in its afterAll).
@@ -607,12 +614,11 @@ describe('Bug 2 -- Profit Calculation Preservation (POS Revenue Must Remain Sepa
  */
 
 const FIX_VERIFY_ORDER_PREFIX = 'BUG2FIX-';
-const FIX_VERIFY_BRANCH_PREFIX = 'ProfitFix Test ';
 
 // Expected values for this dataset (no purchase costs, no returns, no exchanges)
 const FIX_FULFILLED_REVENUE  = 700;   // Order B (400) + Order C (300)
-const FIX_TOTAL_DISCOUNTS    = 100;   // Order B discount_total
-const FIX_NET_PROFIT         = 600;   // fulfilledRevenue - totalDiscounts = 700 - 100
+const FIX_TOTAL_DISCOUNTS    = 100;   // Order B discount_total (reporting-only, not subtracted)
+const FIX_NET_PROFIT         = 700;   // revenue is already post-discount; see note above
 
 let fixAdminToken: string;
 let fixBranchId: number;
@@ -759,15 +765,18 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     expect(typeof kpis.netProfit).toBe('number');
   });
 
-  // ── FV-2: kpis.netProfit equals correct net profit (600) ───────────────────
+  // ── FV-2: kpis.netProfit equals correct net profit (700) ───────────────────
 
   /**
-   * FV-2 -- Fix Verification: kpis.netProfit == 600 for the BUG2FIX- dataset
+   * FV-2 -- Fix Verification: kpis.netProfit == 700 for the BUG2FIX- dataset
    *
-   * fulfilledRevenue (700) - totalDiscounts (100) - purchaseCost (0) = 600
-   * CONFIRMED order (500) must NOT be counted.
+   * fulfilledRevenue (700) - purchaseCost (0) - returns (0) + exchangeAdj (0) = 700.
+   * totalDiscounts (100) is NOT subtracted -- order totals are already
+   * post-discount, so doing so would double-count the discount (see the
+   * describe-block comment above and lib/profit.service.ts for the full
+   * reasoning). CONFIRMED order (500) must NOT be counted.
    */
-  it('FV-2 -- GET /api/reports/kpis netProfit equals 600 (fulfilled-only minus discounts)', async () => {
+  it('FV-2 -- GET /api/reports/kpis netProfit equals 700 (fulfilled revenue, cost/returns-adjusted, not double-discounted)', async () => {
     const app = getTestApp();
 
     const res = await request(app)
@@ -820,15 +829,16 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     expect(totalDiscounts).toBe(FIX_TOTAL_DISCOUNTS);
   });
 
-  // ── FV-5: salesReport.summary.netProfit equals 600 ────────────────────────
+  // ── FV-5: salesReport.summary.netProfit equals 700 ────────────────────────
 
   /**
-   * FV-5 -- Fix Verification: salesReport.summary.netProfit == 600
+   * FV-5 -- Fix Verification: salesReport.summary.netProfit == 700
    *
    * The sales report now uses computeNetProfit() and must return the same
-   * net profit value as the KPI endpoint (consistency requirement).
+   * net profit value as the KPI endpoint (consistency requirement). See FV-2
+   * above for why totalDiscounts is not subtracted from fulfilledRevenue.
    */
-  it('FV-5 -- GET /api/reports/sales summary.netProfit equals 600 (consistent with KPI)', async () => {
+  it('FV-5 -- GET /api/reports/sales summary.netProfit equals 700 (consistent with KPI)', async () => {
     const app = getTestApp();
 
     const today = new Date().toISOString().slice(0, 10);

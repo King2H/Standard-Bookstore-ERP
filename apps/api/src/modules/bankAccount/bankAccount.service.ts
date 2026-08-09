@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { encrypt, decrypt, maskLast4 } from '../../lib/encryption.js';
+import { encrypt, maskLast4 } from '../../lib/encryption.js';
 import { NotFoundError, ConflictError, BusinessError } from '../../lib/errors.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -323,11 +323,12 @@ export async function importReconciliation(
     let unmatched = 0;
 
     for (const row of csvRows) {
-      // Attempt to match by amount + direction + date against transaction_payments
-      // (future slices will add order_payments matching)
-      const status: 'uncleared' | 'unmatched' = 'unmatched';
-      // Note: full matching logic will be wired in when transaction_payments table exists (Slice 11)
-      // For now all imports are 'unmatched' — this is correct per Req 4.7
+      // TODO(Slice 11): match by amount + direction + date against
+      // transaction_payments (and later order_payments) and set status to
+      // 'uncleared' on a match, incrementing `matched` below. Until that
+      // table/logic exists, every imported row is 'unmatched' — this is the
+      // documented behavior per Req 4.7, not a placeholder bug.
+      const status: 'unmatched' = 'unmatched';
 
       await client.query(
         `INSERT INTO bank_reconciliation
@@ -336,8 +337,7 @@ export async function importReconciliation(
         [bankAccountId, row.amount, row.direction, status, row.statementDate, row.notes ?? null],
       );
 
-      if (status === 'uncleared') matched++;
-      else unmatched++;
+      unmatched++;
     }
 
     await client.query(

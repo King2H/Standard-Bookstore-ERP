@@ -35,6 +35,7 @@ export interface InventoryRow {
   bookId: number;
   bookTitle: string;
   bookIsbn: string;
+  bookIsActive: boolean;
   locationId: number;
   locationName: string;
   branchId: number;
@@ -88,6 +89,18 @@ export async function listInventory(opts: {
   q?: string;
   page?: number;
   pageSize?: number;
+  /** Tri-state, matching catalogService.searchBooks()'s `isActive` contract
+   *  for consistency: true = active books only (DEFAULT — a deactivated
+   *  book can't be sold or reordered, so it's hidden from Stock Levels,
+   *  Adjust, Transfer, Stock In and Stock Out unless asked for), false =
+   *  inactive books only, undefined = no filter (both). Pass this straight
+   *  through from the same `is_active=true|false|all` query convention used
+   *  by GET /books — do not default a missing param to `true` yourself
+   *  inside a caller and then also default it here, or "all" becomes
+   *  unreachable (that was the Catalog "All" bug this mirrors the fix for). */
+  isActive?: boolean;
+  sortBy?: 'title' | 'updatedAt';
+  sortDir?: 'asc' | 'desc';
 }): Promise<{ items: InventoryRow[]; total: number; page: number; totalPages: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, opts.pageSize ?? 25);
@@ -100,6 +113,7 @@ export async function listInventory(opts: {
   if (opts.locationId) { conditions.push(`i.location_id = $${p++}`); params.push(opts.locationId); }
   if (opts.bookId) { conditions.push(`i.book_id = $${p++}`); params.push(opts.bookId); }
   if (opts.lowStockOnly) { conditions.push(`i.quantity <= i.reorder_point`); }
+  if (opts.isActive !== undefined) { conditions.push(`b.is_active = $${p++}`); params.push(opts.isActive); }
   if (opts.q) {
     conditions.push(`(lower(b.title) LIKE lower($${p}) OR b.isbn LIKE $${p})`);
     params.push(`%${opts.q.trim()}%`); p++;
@@ -110,6 +124,11 @@ export async function listInventory(opts: {
   const limitParam = p;
   const offsetParam = p + 1;
 
+  const sortDir = opts.sortDir === 'desc' ? 'DESC' : 'ASC';
+  const orderBy = opts.sortBy === 'updatedAt'
+    ? `i.updated_at ${sortDir}, b.title ASC`
+    : `b.title ${sortDir}, l.name ASC`;
+
   // Build reservation-aware query — falls back gracefully if table doesn't exist
   const hasResTable = await hasReservationsTable();
 
@@ -119,11 +138,14 @@ export async function listInventory(opts: {
   if (hasResTable) {
     countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
     dataQuery = `
-      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
+      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn, b.is_active AS book_is_active,
              i.location_id, l.name AS location_name, l.branch_id,
              i.quantity,
              COALESCE(SUM(r.quantity), 0)::int AS reserved,
-             GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0))::int AS available,
+             -- available = quantity, NOT quantity - reserved: confirm() already
+             -- physically deducts stock via stockOut() (order-payment-unification
+             -- spec, 3.5); the reservation row is bookkeeping, not a second hold.
+             i.quantity::int AS available,
              i.reorder_point, i.version, i.updated_at,
              (i.quantity <= i.reorder_point) AS is_low_stock
       FROM inventory i
@@ -134,14 +156,14 @@ export async function listInventory(opts: {
        AND r.location_id = i.location_id
        AND r.status = 'reserved'
       ${where}
-      GROUP BY i.book_id, b.title, b.isbn, i.location_id, l.name, l.branch_id,
+      GROUP BY i.book_id, b.title, b.isbn, b.is_active, i.location_id, l.name, l.branch_id,
                i.quantity, i.reorder_point, i.version, i.updated_at
-      ORDER BY b.title ASC, l.name ASC
+      ORDER BY ${orderBy}
       LIMIT $${limitParam} OFFSET $${offsetParam}`;
   } else {
     countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
     dataQuery = `
-      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
+      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn, b.is_active AS book_is_active,
              i.location_id, l.name AS location_name, l.branch_id,
              i.quantity,
              0::int AS reserved,
@@ -152,7 +174,7 @@ export async function listInventory(opts: {
       JOIN locations l ON l.id = i.location_id
       LEFT JOIN books b ON b.id = i.book_id
       ${where}
-      ORDER BY b.title ASC, l.name ASC
+      ORDER BY ${orderBy}
       LIMIT $${limitParam} OFFSET $${offsetParam}`;
   }
 
@@ -342,20 +364,54 @@ export async function transferStock(opts: {
 }
 // ── Get low-stock items for a branch ─────────────────────────────────────────
 
-export async function getLowStock(branchId: number): Promise<InventoryRow[]> {
-  const result = await db.query(
-    `SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
-            i.location_id, l.name AS location_name, l.branch_id,
-            i.quantity, i.reorder_point, i.version, i.updated_at,
-            true AS is_low_stock
-     FROM inventory i
-     JOIN locations l ON l.id = i.location_id
-     JOIN books b ON b.id = i.book_id
-     WHERE l.branch_id = $1 AND i.quantity <= i.reorder_point
-     ORDER BY i.quantity ASC, b.title ASC`,
-    [branchId],
-  );
-  return result.rows.map(mapInventoryRow);
+// Pagination & Layout Standardization: this used to return every low-stock
+// row for the branch unbounded (no LIMIT/OFFSET at all) — a branch with a
+// large catalog sitting below reorder point would load its entire low-stock
+// list into the browser in one shot. page/pageSize are optional (default
+// page 1, pageSize 25, same defaults used across the rest of this module)
+// so any existing caller that doesn't pass them still gets a first page of
+// results rather than an error.
+export async function getLowStock(
+  branchId: number,
+  page = 1,
+  pageSize = 25,
+): Promise<{ items: InventoryRow[]; total: number; page: number; totalPages: number }> {
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(100, pageSize);
+  const offset = (safePage - 1) * safePageSize;
+
+  const [countRes, dataRes] = await Promise.all([
+    // Deactivated books are excluded — no point alerting to reorder a
+    // discontinued title (same fix as listInventory() below).
+    db.query(
+      `SELECT COUNT(*) FROM inventory i
+       JOIN locations l ON l.id = i.location_id
+       JOIN books b ON b.id = i.book_id
+       WHERE l.branch_id = $1 AND i.quantity <= i.reorder_point AND b.is_active = true`,
+      [branchId],
+    ),
+    db.query(
+      `SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn, b.is_active AS book_is_active,
+              i.location_id, l.name AS location_name, l.branch_id,
+              i.quantity, i.reorder_point, i.version, i.updated_at,
+              true AS is_low_stock
+       FROM inventory i
+       JOIN locations l ON l.id = i.location_id
+       JOIN books b ON b.id = i.book_id
+       WHERE l.branch_id = $1 AND i.quantity <= i.reorder_point AND b.is_active = true
+       ORDER BY i.quantity ASC, b.title ASC
+       LIMIT $2 OFFSET $3`,
+      [branchId, safePageSize, offset],
+    ),
+  ]);
+
+  const total = parseInt(countRes.rows[0].count as string, 10);
+  return {
+    items: dataRes.rows.map(mapInventoryRow),
+    total,
+    page: safePage,
+    totalPages: Math.max(1, Math.ceil(total / safePageSize)),
+  };
 }
 
 // ── Get inventory history ─────────────────────────────────────────────────────
@@ -500,8 +556,10 @@ export async function getBookStockBreakdown(
         i.quantity,
         COALESCE(SUM(r.quantity), 0)::int AS reserved,
         COALESCE(i.damaged_quantity, 0)::int AS damaged,
-        GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0))::int AS available,
-        GREATEST(0, i.quantity - COALESCE(SUM(r.quantity), 0) - COALESCE(i.damaged_quantity, 0))::int AS sellable
+        -- available = quantity, NOT quantity - reserved (see inventoryTransaction.
+        -- service.ts getAvailableStock()); sellable further excludes damaged units.
+        i.quantity::int AS available,
+        GREATEST(0, i.quantity - COALESCE(i.damaged_quantity, 0))::int AS sellable
       FROM inventory i
       JOIN locations l ON l.id = i.location_id
       LEFT JOIN inventory_reservations r
@@ -545,7 +603,7 @@ export async function getBookStockBreakdown(
 
 async function getInventoryRow(bookId: number, locationId: number): Promise<InventoryRow | null> {
   const result = await db.query(
-    `SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn,
+    `SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn, b.is_active AS book_is_active,
             i.location_id, l.name AS location_name, l.branch_id,
             i.quantity, i.reorder_point, i.version, i.updated_at,
             (i.quantity <= i.reorder_point) AS is_low_stock
@@ -564,6 +622,7 @@ function mapInventoryRow(row: Record<string, unknown>): InventoryRow {
     bookId: row.book_id as number,
     bookTitle: row.book_title as string,
     bookIsbn: row.book_isbn as string,
+    bookIsActive: row.book_is_active != null ? (row.book_is_active as boolean) : true,
     locationId: row.location_id as number,
     locationName: row.location_name as string,
     branchId: row.branch_id as number,

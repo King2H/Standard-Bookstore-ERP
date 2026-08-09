@@ -3,6 +3,7 @@ import * as installmentsService from './installments.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { paramStr } from '../../lib/http.js';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.post(
       if (!req.body.numInstallments) throw new ValidationError('numInstallments is required');
       const plan = await installmentsService.createPlan(
         {
-          orderId:         parseInt(req.params.id, 10),
+          orderId:         parseInt(paramStr(req.params.id), 10),
           numInstallments: parseInt(req.body.numInstallments, 10),
           depositAmount:   req.body.depositAmount ? parseFloat(req.body.depositAmount) : undefined,
           firstDueDate:    req.body.firstDueDate,
@@ -37,7 +38,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const plan = await installmentsService.getPlanByOrder(parseInt(req.params.id, 10));
+      const plan = await installmentsService.getPlanByOrder(parseInt(paramStr(req.params.id), 10));
       if (!plan) { res.status(404).json({ error: 'NOT_FOUND', message: 'No installment plan for this order' }); return; }
       res.json(plan);
     } catch (err) { next(err); }
@@ -51,7 +52,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const plan = await installmentsService.getPlanById(req.params.id);
+      const plan = await installmentsService.getPlanById(paramStr(req.params.id));
       res.json(plan);
     } catch (err) { next(err); }
   },
@@ -67,7 +68,7 @@ router.post(
     try {
       if (!req.body.amount) throw new ValidationError('amount is required');
       const installment = await installmentsService.recordInstallmentPayment(
-        req.params.id,
+        paramStr(req.params.id),
         parseFloat(req.body.amount),
         req.staff!,
       );

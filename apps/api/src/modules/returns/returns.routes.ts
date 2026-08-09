@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as returnsService from './returns.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { paramStr } from '../../lib/http.js';
 
 const router = Router();
 
@@ -62,7 +63,7 @@ router.get(
   requireRole('Admin', 'Manager', 'Finance_Officer', 'Sales'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const ret = await returnsService.getById(parseInt(req.params.id, 10));
+      const ret = await returnsService.getById(parseInt(paramStr(req.params.id), 10));
       res.json(ret);
     } catch (err) { next(err); }
   },
@@ -76,7 +77,7 @@ router.post(
   requireRole('Manager', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const ret = await returnsService.rejectReturn(parseInt(req.params.id, 10), req.staff!);
+      const ret = await returnsService.rejectReturn(parseInt(paramStr(req.params.id), 10), req.staff!);
       res.json(ret);
     } catch (err) { next(err); }
   },

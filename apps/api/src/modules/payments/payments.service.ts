@@ -186,6 +186,33 @@ export async function list(opts: {
       FROM transaction_payments tp
       JOIN transactions t ON t.id = tp.transaction_id
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+      UNION ALL
+      -- Exchange-difference receivable collections, recorded by
+      -- receivablesService.collectPayment() into financial_transactions
+      -- (see receivables.routes.ts /:id/collect dispatcher) rather than
+      -- order_payments/transaction_payments -- surfaced here so a payment
+      -- collected via the Payments module's exchange branch shows up in
+      -- History exactly like an order/POS payment does.
+      SELECT
+        ft.id::text AS id,
+        'PAY-EXC-' || ft.id AS payment_reference,
+        e.id::text AS order_id,
+        e.exchange_reference AS entity_number,
+        'exchange' AS source_type,
+        ft.amount,
+        ft.currency,
+        ft.method AS payment_method,
+        'success' AS status,
+        NULL::text AS transaction_reference,
+        'Exchange Receivable Collection' AS notes,
+        ft.created_at AS processed_at,
+        ft.created_at,
+        ft.staff_id AS processed_by,
+        NULL::integer AS bank_account_id,
+        NULL::text AS order_status
+      FROM financial_transactions ft
+      JOIN exchanges e ON e.id = ft.exchange_id
+      WHERE ft.type = 'payment' AND ft.exchange_id IS NOT NULL
     )
     SELECT * FROM u
     ${where}
@@ -210,6 +237,15 @@ export async function list(opts: {
       FROM transaction_payments tp
       JOIN transactions t ON t.id = tp.transaction_id
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
+      UNION ALL
+      SELECT
+        e.id::text AS order_id,
+        'success' AS status,
+        ft.method AS payment_method,
+        ft.created_at
+      FROM financial_transactions ft
+      JOIN exchanges e ON e.id = ft.exchange_id
+      WHERE ft.type = 'payment' AND ft.exchange_id IS NOT NULL
     )
     SELECT COUNT(*) FROM u
     ${where}
@@ -290,12 +326,21 @@ export async function createPayment(
   if (order.total == null) throw new BusinessError('ORDER_INVALID', 'Order has no total. Ensure the order was created with valid book prices.');
   const customerId = (order.customer_id as number | null) ?? null;
 
-  // Store credit requires a customer on the order
+  // Store credit / loyalty points requires a customer on the order. The
+  // balance sufficiency itself is only fail-fast-checked here, on the plain
+  // (unlocked) connection, for a quick error before doing the rest of this
+  // function's work -- it is NOT the authoritative check. That check happens
+  // again below, inside the transaction, with FOR UPDATE (Module 4 fix: this
+  // pre-check used to be the ONLY check, and the deduction UPDATE below never
+  // re-verified sufficiency or locked the row, so two concurrent payments
+  // against the same balance could both pass, both deduct, and drive the
+  // balance negative -- pos.service.ts recordPayment() and receivables.
+  // service.ts collectPayment() already lock correctly; this was the one
+  // gap in an otherwise-consistent pattern).
   if (data.paymentMethod === 'store_credit') {
     if (!customerId) {
       throw new BusinessError('STORE_CREDIT_REQUIRES_CUSTOMER', 'Store credit payments require the order to be linked to a customer.');
     }
-    // Validate customer has sufficient store credit balance
     const scRes = await db.query('SELECT balance FROM store_credit_accounts WHERE customer_id = $1', [customerId]);
     if (!scRes.rows.length) {
       throw new BusinessError('INSUFFICIENT_STORE_CREDIT', 'Customer has no store credit account.');
@@ -343,8 +388,12 @@ export async function createPayment(
     await client.query('BEGIN');
 
     // Generate payment reference
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM order_payments WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
+    // orders.service.ts confirm() for the full rationale).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM order_payments WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const paymentReference = 'PAY-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
 
     const payRes = await client.query(
@@ -362,8 +411,21 @@ export async function createPayment(
       );
     }
 
-    // Deduct store credit from customer account
+    // Deduct store credit from customer account. Re-validate sufficiency here,
+    // under FOR UPDATE, since the check above ran on an unlocked connection
+    // before this transaction opened and cannot prevent two concurrent
+    // payments from both passing and driving the balance negative.
     if (data.paymentMethod === 'store_credit' && customerId) {
+      const scLockRes = await client.query(
+        'SELECT balance FROM store_credit_accounts WHERE customer_id = $1 FOR UPDATE',
+        [customerId],
+      );
+      const lockedAvailable = scLockRes.rows.length ? parseFloat(scLockRes.rows[0].balance as string) : 0;
+      if (lockedAvailable < data.amount - 0.01) {
+        throw new BusinessError('INSUFFICIENT_STORE_CREDIT',
+          `Insufficient store credit. Available: ETB ${lockedAvailable.toFixed(2)}, requested: ETB ${data.amount.toFixed(2)}`,
+          { available: lockedAvailable, requested: data.amount });
+      }
       await client.query(
         'UPDATE store_credit_accounts SET balance = balance - $1 WHERE customer_id = $2',
         [data.amount.toFixed(2), customerId],
@@ -375,8 +437,19 @@ export async function createPayment(
       );
     }
 
-    // Deduct loyalty points from customer account
+    // Deduct loyalty points from customer account. Same re-validation under
+    // FOR UPDATE as store credit above, for the same reason.
     if (data.paymentMethod === 'loyalty_points' && customerId) {
+      const lpLockRes = await client.query(
+        'SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1 FOR UPDATE',
+        [customerId],
+      );
+      const lockedAvailable = lpLockRes.rows.length ? parseFloat(lpLockRes.rows[0].points_balance as string) : 0;
+      if (lockedAvailable < data.amount - 0.01) {
+        throw new BusinessError('INSUFFICIENT_LOYALTY_POINTS',
+          `Insufficient loyalty points. Available: ${lockedAvailable.toFixed(0)} pts, requested: ${data.amount.toFixed(0)} pts`,
+          { available: lockedAvailable, requested: data.amount });
+      }
       await client.query(
         'UPDATE loyalty_accounts SET points_balance = points_balance - $1, updated_at = now() WHERE customer_id = $2',
         [data.amount.toFixed(2), customerId],
@@ -392,108 +465,12 @@ export async function createPayment(
     const newPaymentStatus = await computeOrderPaymentStatus(client, data.orderId);
     await client.query('UPDATE orders SET payment_status = $1, updated_at = now() WHERE id = $2', [newPaymentStatus, data.orderId]);
 
-    // ── Auto-fulfill cash_sale orders when fully paid and still CONFIRMED ──────
-    // For cash_sale: confirm() only creates a reservation; the stock deduction
-    // happens at fulfill(). When the full payment arrives via this module,
-    // we auto-fulfill so the operator does not need a second manual step.
-    // credit_sale is excluded — it may be fulfilled before payment (on credit).
-    let autoFulfilled = false;
-    if (newPaymentStatus === 'paid') {
-      try {
-        await client.query('SAVEPOINT before_auto_fulfill');
-        const orderStatusRes = await client.query(
-          'SELECT status, sale_type, location_id, branch_id FROM orders WHERE id = $1 FOR UPDATE',
-          [data.orderId],
-        );
-        if (orderStatusRes.rows.length) {
-          const currentStatus = orderStatusRes.rows[0].status as string;
-          const saleType = orderStatusRes.rows[0].sale_type as string;
-          const ns = (currentStatus === 'Pending' || currentStatus === 'Confirmed' || currentStatus === 'In_Progress')
-            ? 'CONFIRMED' : currentStatus;
-
-          if (saleType === 'cash_sale' && (ns === 'CONFIRMED' || ns === 'PAID')) {
-            // Resolve location
-            const orderLocationId = orderStatusRes.rows[0].location_id as number | null;
-            const branchIdForLoc = orderStatusRes.rows[0].branch_id as number;
-            let locationId: number;
-            if (orderLocationId) {
-              locationId = orderLocationId;
-            } else {
-              const defLoc = await client.query(
-                'SELECT id FROM locations WHERE branch_id = $1 AND is_default_fulfillment = true LIMIT 1',
-                [branchIdForLoc],
-              );
-              if (defLoc.rows.length) {
-                locationId = defLoc.rows[0].id as number;
-              } else {
-                const anyLoc = await client.query(
-                  'SELECT id FROM locations WHERE branch_id = $1 ORDER BY id LIMIT 1',
-                  [branchIdForLoc],
-                );
-                locationId = anyLoc.rows.length ? anyLoc.rows[0].id as number : branchIdForLoc;
-              }
-            }
-
-            // Load line items with reserved quantities
-            const lineItemsRes = await client.query(
-              'SELECT id, book_id, qty_reserved FROM order_line_items WHERE order_id = $1 AND qty_reserved > 0',
-              [data.orderId],
-            );
-
-            for (const li of lineItemsRes.rows) {
-              const qtyRes = li.qty_reserved as number;
-              if (qtyRes <= 0) continue;
-
-              // Deduct stock exactly once at fulfillment
-              await (await import('../inventory/inventoryTransaction.service.js')).stockOut(
-                {
-                  bookId: li.book_id as number,
-                  locationId,
-                  quantity: qtyRes,
-                  referenceType: 'order_fulfilled',
-                  referenceId: data.orderId,
-                  reasonCode: 'loss',
-                  notes: `Auto-fulfill on full payment – order ${data.orderId}`,
-                  staffCtx,
-                },
-                client,
-              );
-
-              await client.query(
-                'UPDATE order_line_items SET qty_fulfilled = qty_fulfilled + $1, qty_reserved = 0 WHERE id = $2',
-                [qtyRes, li.id],
-              );
-            }
-
-            // Release/deduct reservations
-            await client.query(
-              "UPDATE inventory_reservations SET status = 'deducted', updated_at = now() WHERE order_id = $1 AND status = 'reserved'",
-              [data.orderId],
-            ).catch(() => { /* graceful if table absent */ });
-
-            // Transition to COMPLETED
-            const usesNew = await client.query(
-              `SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid WHERE t.relname = 'orders' AND c.conname = 'orders_status_check'`,
-            );
-            const constraintDef: string = usesNew.rows[0]?.def ?? '';
-            const completedStatus = constraintDef.includes("'DRAFT'") ? 'COMPLETED' : 'Fulfilled';
-            await client.query(
-              'UPDATE orders SET status = $1, updated_at = now() WHERE id = $2',
-              [completedStatus, data.orderId],
-            );
-
-            await insertOutbox(client, 'order.fulfilled', { orderId: String(data.orderId), branchId: staffCtx.branchId });
-            await insertOutbox(client, 'order.completed', { orderId: String(data.orderId), branchId: staffCtx.branchId });
-            autoFulfilled = true;
-          }
-        }
-        await client.query('RELEASE SAVEPOINT before_auto_fulfill');
-      } catch (fulfillErr) {
-        await client.query('ROLLBACK TO SAVEPOINT before_auto_fulfill');
-        console.error('payments.createPayment: auto-fulfill failed (non-fatal)', fulfillErr);
-      }
-    }
-    void autoFulfilled; // suppress unused warning
+    // Module 9 cleanup: removed a dead "auto-fulfill cash_sale orders on full
+    // payment" block that used to live here (identified in Module 4). It was
+    // unreachable: this function unconditionally rejects cash_sale orders
+    // with CASH_ORDER_ALREADY_PAID near the top (cash orders are paid and
+    // marked so at confirm() time, never routed through createPayment()), so
+    // `saleType === 'cash_sale'` could never be true by the time this ran.
 
     // ── Sync order_credit_sale receivable — MANDATORY, inside main transaction ──
     // Bug 5 fix: receivable update is NO LONGER wrapped in a savepoint.
@@ -625,6 +602,16 @@ export async function createRefund(
 export async function listUnpaidOrders(opts: {
   branchId?: number;
   customerId?: number;
+  /** Exact-match lookup for a single entity, paired with sourceType — used by
+   *  the Payments module's deep-link pre-fill when Sales History's "View
+   *  Payments" or Receivables' "Open in Payments" navigates here with a
+   *  specific transaction/order/receivable id already known. Matches the
+   *  `id`/`source_type` values this same function already returns (order id
+   *  for 'order', POS transaction id for 'pos', receivable id for
+   *  'exchange_difference' — the receivable's own id, not the exchange's,
+   *  since collection for that branch is keyed by receivable id). */
+  entityId?: string;
+  sourceType?: string;
   page?: number;
   pageSize?: number;
 }): Promise<{
@@ -639,12 +626,14 @@ export async function listUnpaidOrders(opts: {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, opts.pageSize ?? 25);
   const offset = (page - 1) * pageSize;
-  
+
   const conditions: string[] = [];
   const params: unknown[] = [];
 
   if (opts.branchId) { params.push(opts.branchId); conditions.push(`u.branch_id = $${params.length}`); }
   if (opts.customerId) { params.push(opts.customerId); conditions.push(`u.customer_id = $${params.length}`); }
+  if (opts.entityId) { params.push(opts.entityId); conditions.push(`u.id = $${params.length}`); }
+  if (opts.sourceType) { params.push(opts.sourceType); conditions.push(`u.source_type = $${params.length}`); }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const li = params.length + 1;
@@ -715,6 +704,30 @@ export async function listUnpaidOrders(opts: {
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
       WHERE r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
         AND t.status = 'completed'
+      UNION ALL
+      -- Exchange-difference receivables (Customer_Pays exchanges with an open
+      -- balance). id is the RECEIVABLE's own id, not the exchange's -- that's
+      -- what /receivables/:id/collect (the existing, unchanged dispatcher
+      -- this branch's Collect action posts to) is keyed by.
+      SELECT
+        r.id::text AS id,
+        e.exchange_reference AS order_number,
+        r.original_amount AS total,
+        CASE WHEN r.status = 'PartiallyPaid' THEN 'partial' ELSE 'unpaid' END AS payment_status,
+        r.status,
+        'Exchange' AS channel,
+        r.created_at,
+        c.full_name AS customer_name,
+        c.customer_code,
+        (r.original_amount - r.outstanding_amount) AS total_paid,
+        'exchange_difference' AS source_type,
+        r.branch_id,
+        r.customer_id
+      FROM receivables r
+      JOIN exchanges e ON e.id = r.source_entity_id
+      LEFT JOIN customers c ON c.id = r.customer_id
+      WHERE r.source_type = 'exchange_difference'
+        AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
     )
     SELECT * FROM u
     ${where}
@@ -727,7 +740,8 @@ export async function listUnpaidOrders(opts: {
       SELECT
         o.id,
         o.branch_id,
-        o.customer_id
+        o.customer_id,
+        'order' AS source_type
       FROM orders o
       WHERE (
         (o.sale_type = 'credit_sale'
@@ -748,11 +762,21 @@ export async function listUnpaidOrders(opts: {
       SELECT
         t.id,
         t.branch_id,
-        t.customer_id
+        t.customer_id,
+        'pos' AS source_type
       FROM transactions t
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
       WHERE r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
         AND t.status = 'completed'
+      UNION ALL
+      SELECT
+        r.id AS id,
+        r.branch_id,
+        r.customer_id,
+        'exchange_difference' AS source_type
+      FROM receivables r
+      WHERE r.source_type = 'exchange_difference'
+        AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
     )
     SELECT COUNT(*) FROM u
     ${where}

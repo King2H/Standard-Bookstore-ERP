@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role } from '@bms/shared';
-import { AuthError } from '../lib/errors.js';
+import { AuthError, ServiceUnavailableError } from '../lib/errors.js';
 import { db } from '../db/index.js';
 
 interface JwtPayload {
@@ -12,7 +12,7 @@ interface JwtPayload {
   permissions?: string[];
 }
 
-export function authenticate(req: Request, _res: Response, next: NextFunction): void {
+export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
@@ -26,39 +26,36 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     return next(new AuthError('SERVER_ERROR', 'JWT secret not configured'));
   }
 
+  let payload: JwtPayload;
   try {
-    const payload = jwt.verify(token, secret) as JwtPayload;
-
-    // F-016: Check staff is still active on every request
-    db.query('SELECT is_active FROM staff WHERE id = $1', [payload.staffId])
-      .then(result => {
-        if (!result.rows.length || !result.rows[0].is_active) {
-          return next(new AuthError('ACCOUNT_INACTIVE', 'Your account has been deactivated'));
-        }
-        req.staff = {
-          staffId: payload.staffId,
-          role: payload.role,
-          roles: payload.roles ?? [payload.role],
-          branchId: payload.branchId,
-          permissions: payload.permissions,
-        };
-        next();
-      })
-      .catch(() => {
-        // DB error — fail open to avoid locking out on transient DB issues
-        req.staff = {
-          staffId: payload.staffId,
-          role: payload.role,
-          roles: payload.roles ?? [payload.role],
-          branchId: payload.branchId,
-          permissions: payload.permissions,
-        };
-        next();
-      });
+    payload = jwt.verify(token, secret) as JwtPayload;
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
       return next(new AuthError('TOKEN_EXPIRED', 'Access token has expired'));
     }
     return next(new AuthError('INVALID_TOKEN', 'Invalid access token'));
   }
+
+  // F-016: Check staff is still active on every request.
+  // Fails closed: a DB error here must NOT grant access. A deactivated staff
+  // member (or a stolen token for one) must not slip through during a
+  // transient DB issue — availability of one request is not worth an
+  // unauthorized action against inventory/payments/receivables.
+  try {
+    const result = await db.query('SELECT is_active FROM staff WHERE id = $1', [payload.staffId]);
+    if (!result.rows.length || !result.rows[0].is_active) {
+      return next(new AuthError('ACCOUNT_INACTIVE', 'Your account has been deactivated'));
+    }
+  } catch {
+    return next(new ServiceUnavailableError('Unable to verify account status — please retry'));
+  }
+
+  req.staff = {
+    staffId: payload.staffId,
+    role: payload.role,
+    roles: payload.roles ?? [payload.role],
+    branchId: payload.branchId,
+    permissions: payload.permissions,
+  };
+  next();
 }

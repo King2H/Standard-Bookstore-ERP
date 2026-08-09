@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 interface Supplier { id: number; name: string; contactInfo: Record<string, string>; leadTimeDays: number; pricingTerms: string | null; supplierType: 'external' | 'publisher'; publisherId: number | null; publisherName: string | null; isActive: boolean; isBlacklisted: boolean; createdAt: string; }
@@ -18,6 +19,7 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterActive, setFilterActive] = useState('');
@@ -26,13 +28,13 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [form, setForm] = useState({ ...EMPTY });
 
-  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (q) params.set('q', q);
   if (filterType) params.set('supplierType', filterType);
   if (filterActive) params.set('isActive', filterActive);
   if (filterBlacklisted) params.set('isBlacklisted', filterBlacklisted);
 
-  const { data, isLoading } = useQuery<SupplierListResponse>({ queryKey: ['suppliers', page, q, filterType, filterActive, filterBlacklisted], queryFn: () => api.get(`/suppliers?${params}`) });
+  const { data, isLoading } = useQuery<SupplierListResponse>({ queryKey: ['suppliers', page, pageSize, q, filterType, filterActive, filterBlacklisted], queryFn: () => api.get(`/suppliers?${params}`) });
   const { data: pubData } = useQuery<{ items: Publisher[] }>({ queryKey: ['publishers-list'], queryFn: () => api.get('/publishers?pageSize=200'), enabled: drawerOpen });
 
   const inv = () => qc.invalidateQueries({ queryKey: ['suppliers'] });
@@ -87,8 +89,14 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
             </tbody>
           </table>
         )}
+        {data && (
+          <Pagination
+            page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+            onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+            itemLabel="supplier"
+          />
+        )}
       </div>
-      {data && data.totalPages > 1 && <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400"><span>Page {data.page} of {data.totalPages}</span><div className="flex gap-2"><button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button><button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button></div></div>}
       {drawerOpen && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/40" onClick={closeDrawer} />

@@ -38,7 +38,6 @@ describe('Catalog — Books', () => {
   let salesToken: string;
   let branchId: number;
 
-  const TEST_ISBN = '9780000000001'; // valid ISBN-13 check digit: 0+0+0+0+0+0+0+0+0+0+0+0+1 → sum=1 → not valid
   // Use a real valid ISBN-13 for tests
   const VALID_ISBN_1 = '9780306406157'; // valid
   const VALID_ISBN_2 = '9780140449136'; // valid
@@ -373,6 +372,21 @@ describe('Catalog — Books', () => {
       .get(`/api/books?isbn=${VALID_ISBN_2}`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(listAfter.body.items.length).toBe(0);
+
+    // Explicit is_active=false finds it...
+    const listInactive = await request(app)
+      .get(`/api/books?isbn=${VALID_ISBN_2}&is_active=false`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(listInactive.body.items.map((b: { id: number }) => b.id)).toContain(bookId);
+
+    // ...and is_active=all must too (bug regression: "All" used to send no
+    // is_active param at all, which fell through to the same default an
+    // omitted param gets — active-only — so a deactivated book never
+    // actually showed up under "All").
+    const listAll = await request(app)
+      .get(`/api/books?isbn=${VALID_ISBN_2}&is_active=all`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(listAll.body.items.map((b: { id: number }) => b.id)).toContain(bookId);
   });
 
   // ── Autocomplete ───────────────────────────────────────────────────────────

@@ -3,10 +3,17 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import { useCurrency } from '../lib/useCurrency.js';
 
 type Role = string;
-interface OrdersPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
+interface OrdersPageProps {
+  userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>;
+  /** "View Payments" (unpaid/partial or credit orders) deep-links into the
+   *  Payments module's Collect tab, pre-selected for that order — same
+   *  pattern as POS Sales History's "View Payments". */
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}
 
 interface OrderLine { id: string; bookId: number; bookTitle: string; quantity: number; unitPrice: number; totalPrice: number; qtyReserved: number; qtyFulfilled: number; isBackordered: boolean; }
 interface Order {
@@ -16,6 +23,8 @@ interface Order {
   subtotal: number; total: number; cancelReason: string | null;
   createdAt: string; lineItems?: OrderLine[];
   allowedActions?: string[];
+  paymentMethod?: string | null;
+  dueDate?: string | null;
 }
 interface OrderListResponse { items: Order[]; total: number; page: number; totalPages: number; }
 interface Customer { id: number; customerCode: string; fullName: string; }
@@ -64,9 +73,16 @@ const canCreate = (r?: Role, perms?: string[]) =>
   (perms && perms.includes('CREATE_SALE')) ||
   ['Sales', 'Manager', 'Admin', 'Super_Admin'].includes(r ?? '');
 
+// Payment Mode Capture: the 4 methods this ticket asks for, captured at cash-sale
+// confirmation. Vocabulary matches order_payments.payment_method's existing CHECK
+// constraint ('mobile' = Telebirr, 'store_credit' = Store Credit) — no new values.
+const CASH_PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: '💵 Cash', bank: '🏦 Bank Transfer', mobile: '📱 Telebirr', store_credit: '🎁 Store Credit',
+};
+
 type Tab = 'list' | 'new';
 
-export default function OrdersPage({ userRole, userPermissions = [], initialContext = {} }: OrdersPageProps) {
+export default function OrdersPage({ userRole, userPermissions = [], initialContext = {}, onNavigate }: OrdersPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -75,10 +91,18 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
 
   // List state
   const [listPage, setListPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState(initialContext.status ?? '');
+  // Module 6: dashboard drill-downs (Monthly Sales KPI) pass a date range —
+  // wire it through instead of silently discarding it.
+  const [dateFromFilter, setDateFromFilter] = useState(initialContext.dateFrom ?? '');
+  const [dateToFilter, setDateToFilter] = useState(initialContext.dateTo ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmDueDate, setConfirmDueDate] = useState('');
+  const [confirmPaymentMethod, setConfirmPaymentMethod] = useState('');
 
   // New order state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -87,12 +111,12 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   const [channel, setChannel] = useState<'in_store' | 'phone' | 'online'>('in_store');
   const [bookSearch, setBookSearch] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
-  const [orderItems, setOrderItems] = useState<Array<{ bookId: number; bookTitle: string; quantity: number; unitPrice: number; discountPct: number; discountType: string; discountMode: string; }>>([]);
+  const [orderItems, setOrderItems] = useState<Array<{ bookId: number; bookTitle: string; quantity: number; unitPrice: number; discountPct: number; discountType: string; discountMode: string; availableStock: number | null; }>>([]);
 
   // Queries
   const { data: listData, isLoading } = useQuery<OrderListResponse>({
-    queryKey: ['orders-list', listPage, branchId, statusFilter],
-    queryFn: () => api.get(`/orders?branchId=${branchId}&page=${listPage}&pageSize=20${statusFilter ? `&status=${statusFilter}` : ''}`),
+    queryKey: ['orders-list', listPage, listPageSize, branchId, statusFilter, dateFromFilter, dateToFilter],
+    queryFn: () => api.get(`/orders?branchId=${branchId}&page=${listPage}&pageSize=${listPageSize}${statusFilter ? `&status=${statusFilter}` : ''}${dateFromFilter ? `&dateFrom=${dateFromFilter}` : ''}${dateToFilter ? `&dateTo=${dateToFilter}` : ''}`),
     enabled: tab === 'list',
   });
 
@@ -100,12 +124,6 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
     queryKey: ['order-customers', customerSearch],
     queryFn: () => api.get(`/customers?q=${encodeURIComponent(customerSearch)}&pageSize=5`),
     enabled: customerSearch.length > 1,
-  });
-
-  const { data: bookResults } = useQuery<{ items: BookResult[] }>({
-    queryKey: ['order-books', bookSearch, branchId, selectedLocationId],
-    queryFn: () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}${selectedLocationId ? `&locationId=${selectedLocationId}` : ''}`),
-    enabled: bookSearch.length > 1,
   });
 
   // Fetch branch locations so we can pass locationId to book search for stock availability
@@ -117,6 +135,19 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   });
   // Auto-select the default fulfillment location when locations load
   const effectiveLocationId = selectedLocationId ?? branchLocations?.items?.find(l => l.isDefaultFulfillment)?.id ?? branchLocations?.items?.[0]?.id ?? null;
+
+  const { data: bookResults } = useQuery<{ items: BookResult[] }>({
+    // Bug fix: this used to key/query off `selectedLocationId` alone, which is
+    // only ever set by the Fulfillment Location dropdown — a dropdown that
+    // itself only renders when a branch has more than one location (see
+    // below). Single-location branches (the common case) never set it, so
+    // stock availability silently never showed in book search. `effectiveLocationId`
+    // already carries the same default-fulfillment/first-location fallback the
+    // order submission itself uses — use that here too.
+    queryKey: ['order-books', bookSearch, branchId, effectiveLocationId],
+    queryFn: () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=8&branchId=${branchId}${effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''}`),
+    enabled: bookSearch.length > 1,
+  });
 
   // Mutations
   const createMut = useMutation({
@@ -139,17 +170,41 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       showToast('Order updated', 'success');
       setCancelingId(null);
       setCancelReason('');
+      setConfirmingId(null);
+      setConfirmDueDate('');
+      setConfirmPaymentMethod('');
+    },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+
+  // Module 9: admin-only cleanup for Draft/Cancelled orders (service layer
+  // enforces the status gate + dependency checks — see orders.service.ts
+  // deleteOrder()).
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/orders/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders-list'] });
+      showToast('Order deleted', 'success');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
   function addItem(book: BookResult) {
     const price = book.branchPrice ?? book.defaultPrice ?? 0;
+    const availableStock = book.availability?.available ?? null;
     const existing = orderItems.find(i => i.bookId === book.id);
     if (existing) {
+      if (availableStock != null && existing.quantity >= availableStock) {
+        showToast(`Only ${availableStock} in stock for "${book.title}"`, 'error');
+        return;
+      }
       setOrderItems(items => items.map(i => i.bookId === book.id ? { ...i, quantity: i.quantity + 1 } : i));
     } else {
-      setOrderItems(items => [...items, { bookId: book.id, bookTitle: book.title, quantity: 1, unitPrice: price, discountPct: 0, discountType: 'Normal', discountMode: 'Percentage' }]);
+      if (availableStock != null && availableStock <= 0) {
+        showToast(`"${book.title}" is out of stock`, 'error');
+        return;
+      }
+      setOrderItems(items => [...items, { bookId: book.id, bookTitle: book.title, quantity: 1, unitPrice: price, discountPct: 0, discountType: 'Normal', discountMode: 'Percentage', availableStock }]);
     }
     setBookSearch('');
   }
@@ -188,7 +243,11 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   return (
     <div className="flex flex-col h-full">
       <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
-        {(['list', 'new'] as Tab[]).map(t => (
+        {/* Layout standardization: Operation (New Order) tab button shown
+            before History (Orders) — visual order only. Default active tab
+            stays 'list' so sidebar nav and Dashboard drill-downs (Module 6)
+            still land on the filtered order list, unchanged. */}
+        {(['new', 'list'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
             {t === 'list' ? '📋 Orders' : '+ New Order'}
           </button>
@@ -198,13 +257,30 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       {/* ── Orders List ── */}
       {tab === 'list' && (
         <div className="flex-1 overflow-auto p-4 space-y-3">
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setListPage(1); }}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">All statuses</option>
+              {/* Matches the Dashboard's Pending Orders drill-down exactly (Module 6/
+                  hotfix) — without this explicit option, arriving here with that
+                  filter pre-applied left the <select> showing "All statuses" (no
+                  option matched the comma-joined value), which looked like the
+                  drill-down hadn't applied any filter even though it had. */}
+              <option value="Confirmed,In_Progress,CONFIRMED,PAID">Pending Fulfillment (Confirmed/Paid)</option>
               {['DRAFT','CONFIRMED','PAID','FULFILLED','COMPLETED','CANCELLED',
                 'Pending','Confirmed','In_Progress','Fulfilled','Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            <input type="date" value={dateFromFilter} onChange={e => { setDateFromFilter(e.target.value); setListPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <span className="text-xs text-gray-400">to</span>
+            <input type="date" value={dateToFilter} onChange={e => { setDateToFilter(e.target.value); setListPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {(statusFilter || dateFromFilter || dateToFilter) && (
+              <button onClick={() => { setStatusFilter(''); setDateFromFilter(''); setDateToFilter(''); setListPage(1); }}
+                className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Clear
+              </button>
+            )}
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
             {isLoading ? <div className="p-8 text-center text-gray-400">Loading...</div> : (
@@ -245,6 +321,51 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                   </button>
                                 );
                               }
+                              // Module 4: credit_sale orders must carry a due date on the
+                              // receivable created at confirm — prompt for it inline instead
+                              // of firing the plain confirm action.
+                              if (action === 'confirm' && order.saleType === 'credit_sale') {
+                                return confirmingId === order.id ? (
+                                  <div key="confirm-credit" className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                    <input type="date" value={confirmDueDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setConfirmDueDate(e.target.value)}
+                                      className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                                    <button
+                                      disabled={!confirmDueDate}
+                                      onClick={() => actionMut.mutate({ id: order.id, action: 'confirm', body: { dueDate: confirmDueDate } })}
+                                      className="text-xs bg-blue-600 disabled:opacity-40 text-white px-2 py-0.5 rounded">OK</button>
+                                    <button onClick={() => { setConfirmingId(null); setConfirmDueDate(''); }} className="text-xs text-gray-500 px-1">✕</button>
+                                  </div>
+                                ) : (
+                                  <button key="confirm-credit-open" onClick={e => { e.stopPropagation(); setConfirmingId(order.id); setConfirmDueDate(''); }}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>
+                                    Confirm (set due date)
+                                  </button>
+                                );
+                              }
+                              // Payment Mode Capture: a cash order's payment method is
+                              // recorded automatically at confirm — prompt for it inline,
+                              // mirroring the credit_sale due-date prompt above.
+                              if (action === 'confirm' && order.saleType === 'cash_sale') {
+                                return confirmingId === order.id ? (
+                                  <div key="confirm-cash" className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                    <select value={confirmPaymentMethod} onChange={e => setConfirmPaymentMethod(e.target.value)}
+                                      className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                                      <option value="">Payment method…</option>
+                                      {Object.entries(CASH_PAYMENT_METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                    </select>
+                                    <button
+                                      disabled={!confirmPaymentMethod}
+                                      onClick={() => actionMut.mutate({ id: order.id, action: 'confirm', body: { paymentMethod: confirmPaymentMethod } })}
+                                      className="text-xs bg-blue-600 disabled:opacity-40 text-white px-2 py-0.5 rounded">OK</button>
+                                    <button onClick={() => { setConfirmingId(null); setConfirmPaymentMethod(''); }} className="text-xs text-gray-500 px-1">✕</button>
+                                  </div>
+                                ) : (
+                                  <button key="confirm-cash-open" onClick={e => { e.stopPropagation(); setConfirmingId(order.id); setConfirmPaymentMethod(''); }}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>
+                                    Confirm (set payment method)
+                                  </button>
+                                );
+                              }
                               // 'pay' action removed — payment is collected via Finance → Payments
                               if (action === 'print') {
                                 return (
@@ -261,24 +382,41 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                 </button>
                               );
                             })}
-                            {/* Fallback for legacy orders that don't return allowedActions */}
-                            {!order.allowedActions && (
-                              <>
-                                {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Pending' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'confirm' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.confirm}`}>Confirm</button>}
-                                {['Manager','Admin'].includes(userRole ?? '') && order.status === 'Confirmed' && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'progress' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.progress}`}>Progress</button>}
-                                {['Manager','Admin'].includes(userRole ?? '') && ['Confirmed','In_Progress','PARTIALLY_PAID'].includes(order.status) && <button onClick={e => { e.stopPropagation(); actionMut.mutate({ id: order.id, action: 'fulfill' }); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.fulfill}`}>Fulfill</button>}
-                                {['Manager','Admin'].includes(userRole ?? '') && !['Fulfilled','Cancelled'].includes(order.status) && (
-                                  cancelingId === order.id ? (
-                                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                                      <input value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason..." className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-28" />
-                                      <button onClick={() => actionMut.mutate({ id: order.id, action: 'cancel', body: { reason: cancelReason || 'No reason' } })} className="text-xs bg-red-600 text-white px-2 py-0.5 rounded">OK</button>
-                                      <button onClick={() => setCancelingId(null)} className="text-xs text-gray-500 px-1">✕</button>
-                                    </div>
-                                  ) : (
-                                    <button onClick={e => { e.stopPropagation(); setCancelingId(order.id); }} className={`text-xs px-2 py-0.5 rounded transition-colors ${ACTION_STYLES.cancel}`}>Cancel</button>
-                                  )
-                                )}
-                              </>
+                            {/* View Payments: deep-links into Payments' Collect tab,
+                                pre-selected for this order — same pattern as POS Sales
+                                History's "View Payments". Only offered when there's an
+                                outstanding balance to collect (paymentStatus unpaid/
+                                partial, which is exactly what credit_sale orders carry
+                                until settled — cash_sale orders are paid in full at
+                                confirm and never reach this state). */}
+                            {(order.paymentStatus === 'unpaid' || order.paymentStatus === 'partial') && (
+                              <button
+                                onClick={e => { e.stopPropagation(); onNavigate?.('payments', { orderId: order.id, sourceType: 'order' }); }}
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 px-2 py-0.5 rounded-lg font-semibold transition-colors whitespace-nowrap"
+                              >View Payments</button>
+                            )}
+                            {/* Module 11 cleanup: removed a "legacy orders without
+                                allowedActions" fallback block that lived here. It was
+                                dead code — every response that can populate this list
+                                (GET /orders, GET /orders/:id) has always attached
+                                allowedActions server-side via computeOrderAllowedActions()
+                                (orders.routes.ts) since that field was introduced, so
+                                order.allowedActions is never undefined in practice. The
+                                fallback had also drifted out of date with real fixes made
+                                since: it used only the legacy status vocabulary
+                                ('Pending'/'Confirmed'), and its 'confirm' button called
+                                actionMut with no body, which would violate Module 4's
+                                mandatory-due-date-for-credit-orders confirm requirement had
+                                it ever actually rendered. */}
+                            {/* Module 9: admin-only delete for Draft/Cancelled orders. */}
+                            {userRole === 'Admin' && ['DRAFT', 'Pending', 'CANCELLED', 'Cancelled'].includes(order.status) && (
+                              <button
+                                onClick={e => { e.stopPropagation(); if (confirm(`Permanently delete order ${order.orderNumber}? This cannot be undone.`)) deleteMut.mutate(order.id); }}
+                                disabled={deleteMut.isPending}
+                                className="text-xs px-2 py-0.5 rounded transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50"
+                              >
+                                🗑 Delete
+                              </button>
                             )}
                           </div>
                         </td>
@@ -296,16 +434,14 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
               </table>
             )}
             {(!listData?.items || listData.items.length === 0) && !isLoading && <p className="text-center text-gray-400 text-sm py-8">No orders found</p>}
+            {listData && (
+              <Pagination
+                page={listPage} pageSize={listPageSize} total={listData.total} totalPages={listData.totalPages}
+                onPageChange={setListPage} onPageSizeChange={makePageSizeHandler(setListPage, setListPageSize)}
+                itemLabel="order"
+              />
+            )}
           </div>
-          {listData && listData.totalPages > 1 && (
-            <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
-              <span>Page {listData.page} of {listData.totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={listPage <= 1} onClick={() => setListPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-                <button disabled={listPage >= listData.totalPages} onClick={() => setListPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -395,7 +531,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                       disabled={b.availability != null && b.availability.available === 0}
                       className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0 ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/30'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
+                        <p className="font-medium text-gray-900 dark:text-white truncate min-w-0">{b.title}</p>
                         {b.availability != null && (
                           <span className={`text-xs font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-full ${b.availability.available === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : b.availability.available <= 3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'}`}>
                             {b.availability.available === 0 ? 'Out of stock' : `${b.availability.available} avail`}
@@ -428,7 +564,20 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                     <div className="flex items-center gap-1">
                       <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i))} className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold">-</button>
                       <span className="w-8 text-center text-sm">{item.quantity}</span>
-                      <button onClick={() => setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: i.quantity + 1 } : i))} className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold">+</button>
+                      <button
+                        onClick={() => {
+                          if (item.availableStock != null && item.quantity >= item.availableStock) {
+                            showToast(`Only ${item.availableStock} in stock for "${item.bookTitle}"`, 'error');
+                            return;
+                          }
+                          setOrderItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: i.quantity + 1 } : i));
+                        }}
+                        disabled={item.availableStock != null && item.quantity >= item.availableStock}
+                        className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                      >+</button>
+                      {item.availableStock != null && (
+                        <span className="text-[10px] text-gray-400 ml-1">/{item.availableStock} avail</span>
+                      )}
                     </div>
                     {/* Discount controls */}
                     <div className="flex items-center gap-1">
@@ -471,7 +620,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
 
 function OrderDetailLoader({ orderId }: { orderId: string }) {
   const currency = useCurrency();
-  const { data } = useQuery<{ status?: string; lineItems?: OrderLine[] }>({
+  const { data } = useQuery<{ status?: string; lineItems?: OrderLine[]; paymentMethod?: string | null; dueDate?: string | null; saleType?: 'cash_sale' | 'credit_sale' }>({
     queryKey: ['order-detail', orderId],
     queryFn: () => api.get(`/orders/${orderId}`),
   });
@@ -485,7 +634,18 @@ function OrderDetailLoader({ orderId }: { orderId: string }) {
     : status;
 
   return (
-    <table className="text-xs w-full max-w-2xl">
+    <>
+      {(data.paymentMethod || data.dueDate) && (
+        <div className="flex gap-4 mb-2 text-xs text-gray-600 dark:text-gray-400">
+          {data.paymentMethod && (
+            <span>💳 Payment method: <span className="font-medium text-gray-900 dark:text-white">{CASH_PAYMENT_METHOD_LABELS[data.paymentMethod] ?? data.paymentMethod}</span></span>
+          )}
+          {data.dueDate && (
+            <span>📅 Due date: <span className="font-medium text-gray-900 dark:text-white">{data.dueDate}</span></span>
+          )}
+        </div>
+      )}
+      <table className="text-xs w-full max-w-2xl">
       <thead>
         <tr className="text-gray-500 dark:text-gray-400">
           {['Book', 'Ordered', 'Reserved', 'Fulfilled', 'Stock State', 'Price'].map(h => (
@@ -543,6 +703,7 @@ function OrderDetailLoader({ orderId }: { orderId: string }) {
           );
         })}
       </tbody>
-    </table>
+      </table>
+    </>
   );
 }

@@ -37,6 +37,17 @@ interface KpiReport {
   grossProfit: number;
   dailyNetProfit: number;
   monthlyNetProfit: number;
+  // Dashboard Standardization & Unified Reports Engine — gross-invoiced/accrual
+  // figures sourced from FinancialReportService, reconciling 1:1 with the
+  // Sales CSV export for the same date range. Deliberately distinct from
+  // dailyNetProfit/monthlyNetProfit/grossProfit above (collected-cash revenue
+  // recognition for credit sales — a separate, unchanged accounting policy).
+  dailyNetSalesRevenue: number;
+  monthlyNetSalesRevenue: number;
+  dailyNetProfitUnified: number;
+  monthlyNetProfitUnified: number;
+  grossProfitUnified: number;
+  overdueReceivablesAmount: number;
 }
 interface DiscountByType { Normal: number; Merchant: number; Special: number; }
 interface SalesSummary {
@@ -60,7 +71,11 @@ interface ExchangeReport {
   byPeriod: Array<{ period: string; count: number; incomingValue: number; outgoingValue: number }>;
 }
 interface InventoryReport {
-  summary: { totalBooks: number; totalStockUnits: number; lowStockItems: number; outOfStockItems: number };
+  // availableStock/reservedStock: the backend (reports.service.ts's
+  // getInventoryReport()) has always computed and returned both — this
+  // interface just never declared them, so the Inventory Insights panel
+  // below silently dropped them instead of showing available stock.
+  summary: { totalBooks: number; totalStockUnits: number; availableStock: number; reservedStock: number; lowStockItems: number; outOfStockItems: number };
   lowStockItems: Array<{ bookId: number; title: string; locationId: number; locationName: string; quantity: number; reorderPoint: number }>;
   topSellingBooks: Array<{ bookId: number; title: string; unitsSold: number; revenue: number }>;
   stockMovement: Array<{ period: string; stockIn: number; stockOut: number }>;
@@ -95,6 +110,56 @@ function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; v
       </div>
       <p className="text-xl font-bold text-gray-900 dark:text-white leading-none pl-1">{value}</p>
       {sub && <p className="text-xs text-gray-400 dark:text-gray-500 pl-1">{sub}</p>}
+    </div>
+  );
+}
+
+// ── Highlight KPI Card ────────────────────────────────────────────────────────
+// Dashboard Standardization & Unified Reports Engine — Primary Row (Profit &
+// Net Sales) cards. Visually distinct from KpiCard: bolder typography, a
+// tinted accent background badge instead of a plain white card, so the
+// bottom-line financial metrics read as top priority at a glance. Supports
+// either a single `value` or a today+monthly pair (`todayValue`/`monthlyValue`,
+// e.g. Net Profit) rendered side-by-side within the same card.
+
+const HIGHLIGHT_ACCENTS: Record<'emerald' | 'teal' | 'blue' | 'rose', { card: string; badge: string }> = {
+  emerald: { card: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800', badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
+  teal:    { card: 'bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800',             badge: 'bg-teal-500/15 text-teal-700 dark:text-teal-300' },
+  blue:    { card: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800',             badge: 'bg-blue-500/15 text-blue-700 dark:text-blue-300' },
+  rose:    { card: 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800',             badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' },
+};
+
+function HighlightKpiCard({ label, value, todayValue, monthlyValue, sub, icon, accent, negative, onClick }: {
+  label: string; value?: string; todayValue?: string; monthlyValue?: string; sub?: string;
+  icon: React.ReactNode; accent: 'emerald' | 'teal' | 'blue' | 'rose'; negative?: boolean; onClick?: () => void;
+}) {
+  const resolvedAccent = negative ? 'rose' : accent;
+  const colors = HIGHLIGHT_ACCENTS[resolvedAccent];
+  const valueClass = negative ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white';
+  return (
+    <div
+      onClick={onClick}
+      className={`rounded-xl border-2 p-4 flex flex-col gap-2 min-w-0 ${colors.card} ${onClick ? 'cursor-pointer hover:shadow-md transition-all duration-150' : ''}`}
+    >
+      <div className="flex items-center gap-2">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${colors.badge}`}>{icon}</div>
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 leading-tight">{label}</p>
+      </div>
+      {todayValue !== undefined && monthlyValue !== undefined ? (
+        <div className="flex items-end gap-5 pl-1">
+          <div>
+            <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">Today</p>
+            <p className={`text-2xl font-extrabold leading-none ${valueClass}`}>{todayValue}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">Monthly</p>
+            <p className={`text-2xl font-extrabold leading-none ${valueClass}`}>{monthlyValue}</p>
+          </div>
+        </div>
+      ) : (
+        <p className={`text-2xl font-extrabold leading-none pl-1 ${valueClass}`}>{value}</p>
+      )}
+      {sub && <p className="text-xs text-gray-500 dark:text-gray-400 pl-1">{sub}</p>}
     </div>
   );
 }
@@ -385,9 +450,17 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         ))}
       </div>
 
-      {/* ── KPI Cards ── */}
+      {/* ── KPI Cards ──────────────────────────────────────────────────────────
+          Dashboard Standardization & Unified Reports Engine — reorganized
+          into a 3-tier financial-impact hierarchy: Primary (Profit & Net
+          Sales, bold/accent-badged), Secondary (Cash Flow & Liquidity),
+          Tertiary (Operational & Inventory Controls). All figures sourced
+          from GET /reports/kpis (reportsService.getKpis(), backed by
+          FinancialReportService for the Primary row's *Unified fields) — the
+          same engine and rows that back the Sales CSV export, so these
+          totals reconcile 1:1 with it for the same date range. ── */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-4">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Live Overview</span>
           <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
@@ -399,108 +472,126 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             </span>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {kpiLoading ? (
-            Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 h-20 animate-pulse" />
-            ))
-          ) : kpis ? (
-            <>
-              {/* Row 1 — Revenue & Profit */}
-              <KpiCard
-                label="Monthly Sales"
-                value={fmtShort(kpis.monthlySales)}
-                sub="All channels · this month"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
-                color="bg-blue-100 dark:bg-blue-900/30"
-                onClick={() => {
-                  const now = new Date();
-                  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-                  const today = now.toISOString().slice(0, 10);
-                  onNavigate?.('orders', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
-                }}
-              />
-              <KpiCard
-                label="Today's Sales"
-                value={fmtShort(kpis.dailySales)}
-                sub="Orders + POS + Exchanges"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>}
-                color="bg-indigo-100 dark:bg-indigo-900/30"
-                onClick={() => {
-                  const today = new Date().toISOString().slice(0, 10);
-                  onNavigate?.('pos', { dateFrom: today, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
-                }}
-              />
-              <KpiCard
-                label="Gross Profit"
-                value={fmtShort(kpis.grossProfit)}
-                sub="Fulfilled revenue − cost"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
-                color={kpis.grossProfit >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'}
-              />
-              <KpiCard
-                label="Today's Net Profit"
-                value={fmtShort(kpis.dailyNetProfit)}
-                sub="Today · after cost & returns"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                color={kpis.dailyNetProfit >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}
-              />
-              <KpiCard
-                label="Monthly Net Profit"
-                value={fmtShort(kpis.monthlyNetProfit)}
-                sub="This month · after cost & returns"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>}
-                color={kpis.monthlyNetProfit >= 0 ? 'bg-teal-100 dark:bg-teal-900/30' : 'bg-red-100 dark:bg-red-900/30'}
-              />
 
-              {/* Row 2 — Credit & Operational */}
-              <KpiCard
-                label="Outstanding Credit"
-                value={fmtShort(kpis.outstandingBalance)}
-                sub="Unpaid receivables"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
-                color={kpis.outstandingBalance > 0 ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-gray-100 dark:bg-gray-800'}
-                onClick={() => onNavigate?.('receivables', { status: 'Pending,PartiallyPaid,Overdue', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
-              />
-              <KpiCard
-                label="Discount Total"
-                value={fmtShort(kpis.totalDiscounts)}
-                sub="Fulfilled orders · all types"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M17 17h.01M7 17L17 7M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z" /></svg>}
-                color="bg-orange-100 dark:bg-orange-900/30"
-              />
-              <KpiCard
-                label="Procurement Expense"
-                value={fmtShort(kpis.procurementExpense)}
-                sub="Received POs · this month"
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
-                color="bg-violet-100 dark:bg-violet-900/30"
-                onClick={() => {
-                  const now = new Date();
-                  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-                  const today = now.toISOString().slice(0, 10);
-                  onNavigate?.('procurement', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
-                }}
-              />
-              <KpiCard
-                label="Pending Orders"
-                value={kpis.pendingOrders.toString()}
-                sub={kpis.pendingOrders > 0 ? 'Awaiting action' : 'All clear'}
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
-                color={kpis.pendingOrders > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
-                onClick={() => onNavigate?.('orders', { status: 'pending,confirmed,CONFIRMED,Pending', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
-              />
-              <KpiCard
-                label="Low Stock"
-                value={kpis.lowStockAlerts.toString()}
-                sub={kpis.lowStockAlerts > 0 ? 'Needs attention' : 'All good'}
-                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
-                color={kpis.lowStockAlerts > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
-                onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
-              />
-            </>
-          ) : null}
-        </div>
+        {kpiLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 h-24 animate-pulse" />
+            ))}
+          </div>
+        ) : kpis ? (
+          <div className="space-y-5">
+
+            {/* ── Primary Row — Financial Performance & Profitability ── */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Financial Performance &amp; Profitability</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <HighlightKpiCard
+                  label="Net Profit"
+                  todayValue={fmtShort(kpis.dailyNetProfitUnified)}
+                  monthlyValue={fmtShort(kpis.monthlyNetProfitUnified)}
+                  sub="Net Sales − COGS"
+                  accent="emerald"
+                  negative={kpis.dailyNetProfitUnified < 0 || kpis.monthlyNetProfitUnified < 0}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                />
+                <HighlightKpiCard
+                  label="Gross Profit"
+                  value={fmtShort(kpis.grossProfitUnified)}
+                  sub="Fulfilling revenue − COGS · this month"
+                  accent="teal"
+                  negative={kpis.grossProfitUnified < 0}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
+                />
+                <HighlightKpiCard
+                  label="Net Sales Revenue"
+                  value={fmtShort(kpis.monthlyNetSalesRevenue)}
+                  sub={`Today: ${fmtShort(kpis.dailyNetSalesRevenue)} · Orders + POS + Exchanges`}
+                  accent="blue"
+                  negative={kpis.monthlyNetSalesRevenue < 0}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
+                  onClick={() => {
+                    const now = new Date();
+                    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+                    const today = now.toISOString().slice(0, 10);
+                    onNavigate?.('orders', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* ── Secondary Row — Cash Flow & Liquidity ── */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Cash Flow &amp; Liquidity</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <KpiCard
+                  label="Cash Collected Today"
+                  value={fmtShort(kpis.dailyRevenue)}
+                  sub="Settled payments · Payments module"
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a4 4 0 00-8 0v2M5 9h14l1 12H4L5 9z" /></svg>}
+                  color="bg-green-100 dark:bg-green-900/30"
+                  onClick={() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    onNavigate?.('payments', { dateFrom: today, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
+                  }}
+                />
+                <KpiCard
+                  label="Outstanding Receivables"
+                  value={fmtShort(kpis.outstandingBalance)}
+                  sub="Unpaid credit + exchange differences"
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
+                  color={kpis.outstandingBalance > 0 ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  onClick={() => onNavigate?.('receivables', { status: 'Pending,PartiallyPaid,Overdue', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+                />
+                <KpiCard
+                  label="Overdue Receivables"
+                  value={fmtShort(kpis.overdueReceivablesAmount)}
+                  sub="Past due date"
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                  color={kpis.overdueReceivablesAmount > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  onClick={() => onNavigate?.('receivables', { status: 'Overdue', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+                />
+              </div>
+            </div>
+
+            {/* ── Tertiary Row — Operational & Inventory Controls ── */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Operational &amp; Inventory Controls</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <KpiCard
+                  label="Low Stock Alerts"
+                  value={kpis.lowStockAlerts.toString()}
+                  sub={kpis.lowStockAlerts > 0 ? 'At or below reorder threshold' : 'All good'}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
+                  color={kpis.lowStockAlerts > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+                />
+                <KpiCard
+                  label="Procurement Expense"
+                  value={fmtShort(kpis.procurementExpense)}
+                  sub="Received POs · this month"
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
+                  color="bg-violet-100 dark:bg-violet-900/30"
+                  onClick={() => {
+                    const now = new Date();
+                    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+                    const today = now.toISOString().slice(0, 10);
+                    onNavigate?.('procurement', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
+                  }}
+                />
+                <KpiCard
+                  label="Pending Orders"
+                  value={kpis.pendingOrders.toString()}
+                  sub={kpis.pendingOrders > 0 ? 'Awaiting fulfillment' : 'All clear'}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
+                  color={kpis.pendingOrders > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+                />
+              </div>
+            </div>
+
+          </div>
+        ) : null}
       </div>
 
       {/* ── Alerts & Activity ── */}
@@ -522,7 +613,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               <div className="space-y-1.5">
                 {inventory.lowStockItems.slice(0, 4).map(item => (
                   <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs">
-                    <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
+                    <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
                     <span className="text-gray-500 dark:text-gray-400 truncate max-w-[80px]">{item.locationName}</span>
                     <span className="font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">{item.quantity} left</span>
                   </div>
@@ -538,7 +629,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           {(kpis?.pendingOrders ?? 0) > 0 && (
             <div
               className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 cursor-pointer hover:border-orange-400 dark:hover:border-orange-600 transition-colors"
-              onClick={() => onNavigate?.('orders', { status: 'pending,confirmed,CONFIRMED,Pending', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+              onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
             >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-orange-600 dark:text-orange-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></span>
@@ -548,7 +639,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 </span>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400">
-                {kpis?.pendingOrders} order{(kpis?.pendingOrders ?? 0) !== 1 ? 's' : ''} awaiting confirmation or fulfillment.
+                {kpis?.pendingOrders} confirmed order{(kpis?.pendingOrders ?? 0) !== 1 ? 's' : ''} awaiting fulfillment.
               </p>
               <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-medium">View Orders</p>
             </div>
@@ -564,8 +655,20 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           <Section title="Sales Trend" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
             {sales?.byPeriod && sales.byPeriod.length > 0 ? (
               <>
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Total Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.totalSales)}</p></div>
+                {/* Module 10: this card and the trend line below are sourced from
+                    getSalesReport(), which is Orders-channel only (o.total) —
+                    POS sales are tracked separately in summary.totalPosSales.
+                    Previously labeled bare "Total Sales", which read as the
+                    all-channel figure the Monthly/Today's Sales KPI cards up
+                    top actually show, silently excluding POS revenue. Relabeled
+                    for accuracy and the (already-computed but unused) POS
+                    figure is now surfaced alongside it instead of combining
+                    the two into one number — combining would desync this
+                    summary from the still-Orders-only trend line/branch chart
+                    below it. */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Order Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.totalSales)}</p></div>
+                  <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">POS Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.totalPosSales)}</p></div>
                   <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Orders</p><p className="text-base font-bold text-gray-900 dark:text-white">{sales.summary.totalOrders}</p></div>
                   <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Avg Order</p><p className="text-base font-bold text-gray-900 dark:text-white">{fmtShort(sales.summary.averageOrderValue)}</p></div>
                 </div>
@@ -576,7 +679,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
                     <Tooltip formatter={(v: number) => fmt(v)} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Line type="monotone" dataKey="totalSales" name="Sales (ETB)" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="totalSales" name="Order Sales (ETB)" stroke="#3b82f6" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="totalOrders" name="Orders" stroke="#10b981" strokeWidth={2} dot={false} yAxisId={0} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -613,9 +716,14 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
                     formatter={(value: string) => {
                       const clean = value.replace('_', ' ');
-                      if (clean === 'store credit' || clean === 'mobile' || clean === 'store_credit') {
-                        return 'Telebirr';
-                      }
+                      // Bug fix: 'store_credit' was collapsed into the same
+                      // "Telebirr" label as 'mobile', hiding genuine Store
+                      // Credit usage from this legend entirely. These are
+                      // two distinct payment methods (see PaymentsPage.tsx's/
+                      // OrdersPage.tsx's METHOD_LABELS) and should read
+                      // distinctly here too.
+                      if (clean === 'mobile') return 'Telebirr';
+                      if (clean === 'store credit') return 'Store Credit';
                       return clean;
                     }}
                   />
@@ -630,7 +738,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Sales by branch */}
-        <Section title="Sales by Branch" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
+        <Section title="Order Sales by Branch" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
           {sales?.byBranch && sales.byBranch.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={sales.byBranch} layout="vertical">
@@ -638,7 +746,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
                 <YAxis type="category" dataKey="branchName" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip formatter={(v: number) => fmt(v)} />
-                <Bar dataKey="totalSales" name="Sales (ETB)" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="totalSales" name="Order Sales (ETB)" fill="#3b82f6" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <Empty />}
@@ -692,10 +800,12 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         <Section title="Inventory Insights" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
           {inventory ? (
             <>
-              <div className="grid grid-cols-4 gap-2 mb-4">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
                 {[
                   { label: 'Books', value: inventory.summary.totalBooks, color: 'text-gray-900 dark:text-white' },
                   { label: 'Units', value: inventory.summary.totalStockUnits, color: 'text-gray-900 dark:text-white' },
+                  { label: 'Available', value: inventory.summary.availableStock, color: 'text-emerald-600 dark:text-emerald-400' },
+                  { label: 'Reserved', value: inventory.summary.reservedStock, color: 'text-blue-600 dark:text-blue-400' },
                   { label: 'Low Stock', value: inventory.summary.lowStockItems, color: 'text-amber-600 dark:text-amber-400' },
                   { label: 'Out of Stock', value: inventory.summary.outOfStockItems, color: 'text-red-600 dark:text-red-400' },
                 ].map(c => (
@@ -712,7 +822,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     {inventory.topSellingBooks.slice(0, 8).map((b, i) => (
                       <div key={b.bookId} className="flex items-center gap-2 text-xs">
                         <span className="text-gray-400 w-4">{i + 1}.</span>
-                        <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{b.title}</span>
+                        <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{b.title}</span>
                         <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">{b.unitsSold} sold</span>
                         <span className="text-green-600 dark:text-green-400 whitespace-nowrap">{fmtShort(b.revenue)}</span>
                       </div>
@@ -726,7 +836,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {inventory.lowStockItems.slice(0, 6).map(item => (
                       <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">
-                        <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
+                        <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
                         <span className="text-gray-500 dark:text-gray-400 truncate">{item.locationName}</span>
                         <span className="text-amber-700 dark:text-amber-300 font-medium whitespace-nowrap">{item.quantity}/{item.reorderPoint}</span>
                       </div>
@@ -762,7 +872,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     {customers.topCustomers.slice(0, 8).map((c, i) => (
                       <div key={c.customerId} className="flex items-center gap-2 text-xs">
                         <span className="text-gray-400 w-4">{i + 1}.</span>
-                        <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{c.fullName}</span>
+                        <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{c.fullName}</span>
                         <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">{c.orderCount} orders</span>
                         <span className="text-blue-600 dark:text-blue-400 font-medium whitespace-nowrap">{fmtShort(c.totalSpend)}</span>
                       </div>

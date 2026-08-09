@@ -60,3 +60,13 @@ apps/api/coverage/
 # ─── Scripts output ────────────────────────────────────────
 # reseed.mjs is tracked; exclude any generated output files
 apps/api/scripts/*.log
+
+# ─── Ad-hoc debug/scratch output ────────────────────────────
+# One-off test/build output redirected to a file during local debugging.
+# Never commit these — capture output in the terminal or a real test report instead.
+apps/api/*-out.txt
+apps/api/*-output.txt
+apps/api/test-final*.txt
+apps/api/test_results*.txt
+tmp_*.py
+tmp_*.mjs

@@ -4,6 +4,7 @@ import * as inventoryService from './inventory.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { paramStr } from '../../lib/http.js';
 
 const router = Router();
 
@@ -90,6 +91,19 @@ router.get(
         q:          qs(req.query.q),
         page:       qi(req.query.page, 1),
         pageSize:   qi(req.query.pageSize, 25),
+        // Tri-state, same is_active=true|false|all convention as GET /books
+        // (catalog.routes.ts) — omitted defaults to active-only so existing
+        // callers (Adjust/Transfer/Stock In/Stock Out's book search) that
+        // never pass this param keep getting active-only results; 'all'
+        // must map to `undefined` (no filter), not to a default, or "All"
+        // becomes unreachable exactly like the Catalog bug this mirrors.
+        isActive: qs(req.query.is_active) === undefined
+          ? true
+          : qs(req.query.is_active) === 'all'
+            ? undefined
+            : qs(req.query.is_active) === 'true',
+        sortBy:  qs(req.query.sortBy) as 'title' | 'updatedAt' | undefined,
+        sortDir: qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
       }));
       res.json(result);
     } catch (err) { next(err); }
@@ -103,8 +117,12 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const items = await withRetry(() => inventoryService.getLowStock(req.staff!.branchId));
-      res.json({ items, total: items.length });
+      const result = await withRetry(() => inventoryService.getLowStock(
+        req.staff!.branchId,
+        qi(req.query.page, 1),
+        qi(req.query.pageSize, 25),
+      ));
+      res.json(result);
     } catch (err) { next(err); }
   },
 );
@@ -263,7 +281,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const bookId = parseInt(req.params.bookId, 10);
+      const bookId = parseInt(paramStr(req.params.bookId), 10);
       if (!bookId || bookId <= 0) throw new ValidationError('Invalid bookId');
       const branchId = req.query.branchId ? qi(req.query.branchId, 0) || undefined : req.staff!.branchId;
       const items = await inventoryService.getBookStockBreakdown(bookId, branchId);

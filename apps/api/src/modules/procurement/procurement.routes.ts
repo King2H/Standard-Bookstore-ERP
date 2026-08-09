@@ -2,12 +2,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as procurementService from './procurement.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
 const qs = (v: unknown): string | undefined => (typeof v === 'string' ? v : Array.isArray(v) ? (v[0] as string | undefined) : undefined);
 const qi = (v: unknown, fallback: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fallback : fallback; };
-const pi = (v: string | string[]): number => parseInt(Array.isArray(v) ? v[0] : v, 10);
+// Bug Sweep: was a bare parseInt() with no NaN guard — see customer.routes.ts's comment.
+const pi = paramInt;
 
 // ── GET /api/purchase-orders ──────────────────────────────────────────────────
 
@@ -139,6 +141,34 @@ router.post(
         req.staff!,
       );
       res.json(po);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/purchase-orders/:id/payments ────────────────────────────────────
+// Module 1 (stabilization sprint) — record a manual supplier payment against
+// a PO. financial_status is derived from the sum of these rows (plus any
+// auto-settled cash-terms receipt payments) — PO completion (close) never
+// implies payment completion, and this is the only way to move a credit-terms
+// PO out of 'unpaid'.
+
+router.post(
+  '/purchase-orders/:id/payments',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { amount, paymentMethod, notes } = req.body as {
+        amount: number;
+        paymentMethod?: string;
+        notes?: string | null;
+      };
+      const po = await procurementService.createSupplierPayment(
+        pi(req.params.id),
+        { amount, paymentMethod, notes },
+        req.staff!,
+      );
+      res.status(201).json(po);
     } catch (err) { next(err); }
   },
 );

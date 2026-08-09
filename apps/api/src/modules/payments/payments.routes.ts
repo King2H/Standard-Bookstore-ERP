@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
+import { paramStr } from '../../lib/http.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -21,6 +22,10 @@ router.get(
       const result = await paymentsService.listUnpaidOrders({
         branchId:   qi(req.query.branchId, 0) || undefined,
         customerId: qi(req.query.customerId, 0) || undefined,
+        // Deep-link pre-fill from Sales History / Receivables — see
+        // listUnpaidOrders()'s entityId doc comment.
+        entityId:   qs(req.query.entityId),
+        sourceType: qs(req.query.sourceType),
         page:       qi(req.query.page, 1),
         pageSize:   qi(req.query.pageSize, 25),
       });
@@ -94,7 +99,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payment = await paymentsService.getById(parseInt(req.params.id, 10));
+      const payment = await paymentsService.getById(parseInt(paramStr(req.params.id), 10));
       res.json(payment);
     } catch (err) { next(err); }
   },
@@ -111,7 +116,7 @@ router.post(
       if (!req.body.refundAmount) throw new ValidationError('refundAmount is required');
       if (!req.body.reason) throw new ValidationError('reason is required');
       const refund = await paymentsService.createRefund(
-        parseInt(req.params.id, 10),
+        parseInt(paramStr(req.params.id), 10),
         {
           refundAmount: parseFloat(req.body.refundAmount),
           reason: req.body.reason,
@@ -131,7 +136,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payment = await paymentsService.getById(parseInt(req.params.id, 10));
+      const payment = await paymentsService.getById(parseInt(paramStr(req.params.id), 10));
       res.json({ items: payment.refunds ?? [] });
     } catch (err) { next(err); }
   },
@@ -144,7 +149,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payments = await paymentsService.listByOrder(parseInt(req.params.id, 10));
+      const payments = await paymentsService.listByOrder(parseInt(paramStr(req.params.id), 10));
       res.json({ items: payments });
     } catch (err) { next(err); }
   },
@@ -157,7 +162,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const balance = await paymentsService.getOrderBalance(parseInt(req.params.id, 10));
+      const balance = await paymentsService.getOrderBalance(parseInt(paramStr(req.params.id), 10));
       res.json(balance);
     } catch (err) { next(err); }
   },

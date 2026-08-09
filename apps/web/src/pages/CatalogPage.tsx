@@ -134,6 +134,10 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
     if (authorId) p.set('author', authorId);
     if (status === 'active') p.set('is_active', 'true');
     else if (status === 'inactive') p.set('is_active', 'false');
+    // Bug fix: "All" used to send no is_active param at all, which the
+    // backend then defaulted to active-only (same default an omitted param
+    // gets everywhere else) — "All" never actually included inactive books.
+    else if (status === 'all') p.set('is_active', 'all');
     p.set('sortBy', sortBy); p.set('sortDir', sortDir);
     p.set('page', String(page)); p.set('pageSize', '25');
     return p.toString();

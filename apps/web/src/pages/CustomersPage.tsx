@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 
@@ -12,6 +13,10 @@ interface Customer {
   dateOfBirth: string | null; address: string | null; city: string | null;
   isActive: boolean; createdAt: string;
   loyaltyBalance: number; lifetimePoints: number; storeCreditBalance: number;
+  /** SUM of outstanding_amount across all non-Settled receivables, regardless
+   *  of source (order/POS/exchange) -- the authoritative "owes the store"
+   *  figure (Module 3). */
+  outstandingReceivables: number;
   groups: Array<{ id: number; name: string; discountPct: number }>;
 }
 
@@ -21,7 +26,16 @@ interface StoreCreditHistoryItem { id: number; amount: number; direction: 'credi
 interface HistoryResponse<T> { items: T[]; total: number; page: number; totalPages: number; }
 
 type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
-type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference';
+type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
+
+// Module 8: matches ReceivablesPage.tsx's SOURCE_LABELS. The inline table
+// here previously used a two-way ternary (pos_credit_sale vs. "everything
+// else") that mislabeled order_credit_sale receivables as "Exchange Diff."
+const RECEIVABLE_SOURCE_LABELS: Record<ReceivableSourceType, string> = {
+  pos_credit_sale:     'POS Credit Sale',
+  order_credit_sale:   'Order Credit Sale',
+  exchange_difference: 'Exchange Diff.',
+};
 
 interface ReceivableRow {
   id: string;
@@ -58,6 +72,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState('');
   const [filterActive, setFilterActive] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -76,12 +91,12 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
   const [creditRefType, setCreditRefType] = useState('');
   const [creditRefId, setCreditRefId] = useState('');
 
-  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (q) params.set('q', q);
   if (filterActive) params.set('isActive', filterActive);
 
   const { data, isLoading } = useQuery<CustomerListResponse>({
-    queryKey: ['customers', page, q, filterActive],
+    queryKey: ['customers', page, pageSize, q, filterActive],
     queryFn: () => api.get(`/customers?${params}`),
   });
 
@@ -249,17 +264,14 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
               </tbody>
             </table>
           )}
+          {data && (
+            <Pagination
+              page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+              onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+              itemLabel="customer"
+            />
+          )}
         </div>
-
-        {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-            <span>Page {data.page} of {data.totalPages}</span>
-            <div className="flex gap-2">
-              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-              <button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
-            </div>
-          </div>
-        )}
 
         {/* Create Customer Drawer */}
         {drawerOpen && (
@@ -450,28 +462,22 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
               <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{currency} {c.storeCreditBalance.toFixed(2)}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Available to spend</p>
             </div>
-            {/* Outstanding POS credit debt */}
-            {creditHistory && (() => {
-              const posDebits = creditHistory.items
-                .filter((h: StoreCreditHistoryItem) => h.refType === 'pos_credit_sale')
-                .reduce((s: number, h: StoreCreditHistoryItem) => s + h.amount, 0);
-              const posCredits = creditHistory.items
-                .filter((h: StoreCreditHistoryItem) => h.refType === 'pos_credit_settlement')
-                .reduce((s: number, h: StoreCreditHistoryItem) => s + h.amount, 0);
-              const outstanding = Math.max(0, posDebits - posCredits);
-              return (
-                <div className={`bg-white dark:bg-gray-900 rounded-xl border p-6 text-center ${outstanding > 0 ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-800'}`}>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Outstanding Credit Sales</p>
-                  <p className={`text-3xl font-bold ${outstanding > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                    {currency} {outstanding.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    {outstanding > 0 ? '⚠️ Amount owed to store' : '✓ No outstanding debt'}
-                  </p>
-                </div>
-              );
-            })()}
-
+            {/* Outstanding balance — sum of all non-Settled receivables
+                (order, POS, and exchange credit sales alike). Module 3: this
+                used to be derived from a POS-only slice of store credit
+                history (pos_credit_sale debits minus pos_credit_settlement
+                credits), which silently excluded order- and exchange-sourced
+                debt. c.outstandingReceivables is the authoritative figure,
+                synchronized the same way the Receivables page is. */}
+            <div className={`bg-white dark:bg-gray-900 rounded-xl border p-6 text-center ${c.outstandingReceivables > 0 ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-800'}`}>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Outstanding Balance</p>
+              <p className={`text-3xl font-bold ${c.outstandingReceivables > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {currency} {c.outstandingReceivables.toFixed(2)}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                {c.outstandingReceivables > 0 ? '⚠️ Amount owed to store' : '✓ No outstanding debt'}
+              </p>
+            </div>
           </div>
 
           {canAdjustCredit(userRole, userPermissions) && (
@@ -568,7 +574,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                       </td>
                       <td className="px-4 py-2">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                          {r.sourceType === 'pos_credit_sale' ? 'Credit Sale' : 'Exchange Diff.'}
+                          {RECEIVABLE_SOURCE_LABELS[r.sourceType] ?? r.sourceType}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-gray-500 dark:text-gray-500 text-xs font-mono">

@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import cookieParser from 'cookie-parser';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { loggerMiddleware } from './middleware/logger.js';
@@ -26,7 +26,6 @@ import reportsRouter from './modules/reports/reports.routes.js';
 import installmentsRouter from './modules/payments/installments.routes.js';
 import notificationsRouter from './modules/notifications/notifications.routes.js';
 import receivablesRouter from './modules/receivables/receivables.routes.js';
-import { loginRateLimit } from './middleware/rateLimit.js';
 import { csrfMiddleware } from './middleware/csrf.js';
 
 export function createApp() {
@@ -61,14 +60,14 @@ export function createApp() {
     next();
   });
 
-  // â”€â”€ Core middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Core middleware ──────────────────────────────────────────────────
   app.use(express.json());
   app.use(cookieParser());
   app.use(requestIdMiddleware);
   app.use(loggerMiddleware);
   app.use(csrfMiddleware);
 
-  // â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Routes ────────────────────────────────────────────────────────────
   app.use('/api', healthRouter);
   app.use('/api', authRouter);
   app.use('/api', branchRouter);
@@ -101,7 +100,7 @@ export function createApp() {
     });
   });
 
-  // â”€â”€ Error handler (must be last) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Error handler (must be last) ─────────────────────────────────────
   app.use(errorHandler);
 
   return app;

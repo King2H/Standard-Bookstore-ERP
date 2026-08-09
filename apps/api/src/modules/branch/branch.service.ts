@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { ConflictError, NotFoundError, BusinessError } from '../../lib/errors.js';
+import { ConflictError, NotFoundError } from '../../lib/errors.js';
 
 export interface Branch {
   id: number;

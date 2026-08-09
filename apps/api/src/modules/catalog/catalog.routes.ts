@@ -4,9 +4,10 @@ import { db } from '../../db/index.js';
 import * as catalogService from './catalog.service.js';
 import * as catalogSearchService from './catalogSearch.service.js';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { getBookAvailability } from '../inventory/inventoryTransaction.service.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 
@@ -19,6 +20,21 @@ const qi = (v: unknown, fallback?: number): number | undefined => {
   return Number.isFinite(n) && !Number.isNaN(n) ? n : fallback;
 };
 const qid = (v: unknown, fallback: number): number => qi(v, fallback) ?? fallback;
+
+// Tri-state is_active resolver shared by /books and /books/with-availability:
+// omitted -> true (active-only default — a deactivated book must stay out of
+// the default listing/search); 'true'/'false' -> exact filter; 'all' -> no
+// filter (both). Bug fix: the Catalog UI's "All" status option used to send
+// no is_active param at all, which fell through to the same default as an
+// omitted param and silently filtered to active-only — "All" never actually
+// showed inactive books. searchBooks() already treats `isActive: undefined`
+// as "no filter"; the bug was that this endpoint had no way to reach that
+// state on purpose. 'all' is that explicit signal.
+function resolveIsActiveFilter(raw: string | undefined): boolean | undefined {
+  if (raw === undefined) return true;
+  if (raw === 'all') return undefined;
+  return raw === 'true';
+}
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
@@ -47,6 +63,20 @@ const bookWriteSchema = z.object({
 
 const bookUpdateSchema = bookWriteSchema.partial().omit({ isbn: true });
 
+// Non-Destructive Catalog Search & Virtual Receiving: a lightweight subset of
+// bookWriteSchema for the Exchange screen's "Quick Catalog Register" modal —
+// just enough to create a searchable catalog entry (ISBN/Barcode, Title,
+// Author, Base List Price) without leaving the Exchange flow. Reuses
+// catalogService.createBook() itself (same INSERT, same is_active=true
+// default, same duplicate-ISBN handling) — this is metadata registration
+// only, it never touches inventory.
+const quickRegisterSchema = z.object({
+  isbn:         z.string().min(10).max(17).optional().or(z.literal('')),
+  title:        z.string().min(1).max(500),
+  author:       z.string().max(200).optional().or(z.literal('')),
+  defaultPrice: z.number().nonnegative().optional(),
+});
+
 const priceSchema = z.object({
   price: z.number().nonnegative(),
 });
@@ -66,9 +96,10 @@ router.get(
         genre:      qs(req.query.genre),
         category:   qs(req.query.category),
         tag:        qs(req.query.tag),
-        isActive:   req.query.is_active !== undefined
-          ? req.query.is_active === 'true'
-          : undefined,
+        // See resolveIsActiveFilter() above: defaults to active-only,
+        // matching /books/with-availability below; ?is_active=false shows
+        // only inactive books; ?is_active=all shows both.
+        isActive:   resolveIsActiveFilter(qs(req.query.is_active)),
         // Use explicit query param if provided, otherwise fall back to the JWT branch
         // so stock quantities are always scoped to the user's active branch.
         branchId:   qi(req.query.branchId) ?? req.staff?.branchId,
@@ -114,7 +145,7 @@ router.get(
         genre:      qs(req.query.genre),
         category:   qs(req.query.category),
         tag:        qs(req.query.tag),
-        isActive:   req.query.is_active !== undefined ? req.query.is_active === 'true' : true,
+        isActive:   resolveIsActiveFilter(qs(req.query.is_active)),
         branchId,
         sortBy:     qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
         sortDir:    qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
@@ -182,6 +213,38 @@ router.post(
   },
 );
 
+// ── POST /api/books/quick-register ────────────────────────────────────────────
+// Non-Destructive Catalog Search & Virtual Receiving: lets Sales register a
+// catalog-only entry for a book that's never been in the Catalog, without
+// leaving the Exchange screen — gated by CREATE_SALE (the same permission
+// Exchange creation itself requires), deliberately looser than POST /books'
+// Admin/Manager/Stock_Clerk role gate, and deliberately narrow (no genre,
+// publisher, categories, etc. — those can be filled in later via full Catalog
+// management by staff who have that access). Creates catalog metadata only;
+// does NOT touch inventory (mirrors catalogService.createBook() exactly).
+
+router.post(
+  '/books/quick-register',
+  authenticate,
+  requirePermission('CREATE_SALE'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = quickRegisterSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid quick-register payload', { issues: parsed.error.issues });
+      }
+      const { isbn, title, author, defaultPrice } = parsed.data;
+      const book = await catalogService.createBook(
+        { isbn: isbn ?? '', title, authors: author ? [author] : [], defaultPrice },
+        req.staff!,
+      );
+      res.status(201).json(book);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // ── GET /api/books/:id ────────────────────────────────────────────────────────
 
 router.get(
@@ -189,7 +252,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const branchId = req.query.branchId
         ? qi(req.query.branchId, 0)
         : req.staff!.branchId;
@@ -209,7 +272,7 @@ router.put(
   requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const parsed = bookUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid book payload', { issues: parsed.error.issues });
@@ -230,7 +293,7 @@ router.post(
   requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       await catalogService.deactivateBook(id, req.staff!);
       res.json({ message: 'Book deactivated' });
     } catch (err) {
@@ -247,7 +310,7 @@ router.post(
   requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       await catalogService.reactivateBook(id, req.staff!);
       res.json({ message: 'Book reactivated' });
     } catch (err) {
@@ -264,7 +327,7 @@ router.get(
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const page = qi(req.query.page, 1);
       const pageSize = qi(req.query.pageSize, 25);
       const history = await catalogService.getBookEditHistory(id, page, pageSize);
@@ -282,7 +345,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id as string, 10);
+      const id = paramInt(req.params.id);
       const result = await db_query_prices(id);
       res.json(result);
     } catch (err) {
@@ -299,8 +362,8 @@ router.put(
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const bookId = parseInt(req.params.id as string, 10);
-      const branchId = parseInt(req.params.branchId as string, 10);
+      const bookId = paramInt(req.params.id);
+      const branchId = paramInt(req.params.branchId);
       const parsed = priceSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid price payload', { issues: parsed.error.issues });

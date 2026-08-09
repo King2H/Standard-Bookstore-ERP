@@ -32,6 +32,26 @@ exports.up = function (pgm) {
   // Also create named partitions for the current month + next 6 months so that
   // queries against those months benefit from partition pruning (performance).
   // Each CREATE is wrapped in a DO block so it is idempotent.
+  //
+  // Bug fix: the original version only checked for a partition with the same
+  // NAME before creating one, but the base table (1700000014_create_inventory)
+  // already has fixed-name partitions — inventory_history_p_cur, _p_prev,
+  // _p_next1, _p_next2 — covering "now()" at the time THAT migration ran. If
+  // this migration runs in the same calendar month (guaranteed on any fresh
+  // install, since 1700000014 and 1700000043 both apply in the same batch),
+  // its i=0 iteration computes the exact same date range as the pre-existing
+  // _p_cur partition. Postgres correctly rejects the CREATE TABLE with
+  // "would overlap partition inventory_history_p_cur" — but node-pg-migrate
+  // runs the whole pending batch in one transaction, so that single error
+  // rolled back every migration in the run, including ones with no bugs.
+  // On a database that had already been migrated up through 1700000014 in an
+  // earlier calendar month, no overlap occurs and the old code worked fine —
+  // which is how this shipped without being caught.
+  //
+  // Fix: catch the overlap error per-partition instead of asserting no
+  // partition exists by name. A range already covered by ANY partition
+  // (named or default) means there is nothing to do for that month, so we
+  // log and move on rather than aborting the migration.
   pgm.sql(`
     DO $$
     DECLARE
@@ -45,7 +65,7 @@ exports.up = function (pgm) {
         p_end   := p_start + interval '1 month';
         p_name  := 'inventory_history_p_' || to_char(p_start, 'YYYY_MM');
 
-        -- Skip if this partition already exists
+        -- Skip if a partition with this exact name already exists
         IF NOT EXISTS (
           SELECT 1 FROM pg_class c
           JOIN pg_inherits inh ON inh.inhrelid = c.oid
@@ -53,10 +73,21 @@ exports.up = function (pgm) {
           WHERE par.relname = 'inventory_history'
             AND c.relname = p_name
         ) THEN
-          EXECUTE format(
-            'CREATE TABLE %I PARTITION OF inventory_history FOR VALUES FROM (%L) TO (%L)',
-            p_name, p_start, p_end
-          );
+          BEGIN
+            EXECUTE format(
+              'CREATE TABLE %I PARTITION OF inventory_history FOR VALUES FROM (%L) TO (%L)',
+              p_name, p_start, p_end
+            );
+          EXCEPTION
+            -- 42P17 = invalid_table_definition, raised by Postgres as
+            -- "would overlap partition X" when the range is already covered
+            -- by a differently-named partition (e.g. inventory_history_p_cur).
+            -- Matched by SQLSTATE directly — Postgres 16 does not expose this
+            -- code under the documented condition-name alias in PL/pgSQL.
+            -- 42P07 = duplicate_table, in case of a concurrent/racing create.
+            WHEN SQLSTATE '42P17' OR SQLSTATE '42P07' THEN
+              RAISE NOTICE 'Skipping partition %: range already covered by an existing partition', p_name;
+          END;
         END IF;
       END LOOP;
     END$$;

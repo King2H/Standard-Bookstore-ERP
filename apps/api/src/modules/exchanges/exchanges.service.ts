@@ -118,6 +118,27 @@ function mapItemRow(row: Record<string, unknown>, priceField: string): ExchangeI
 }
 
 async function fetchItems(exchangeId: string): Promise<{ incoming: ExchangeItemRow[]; outgoing: ExchangeItemRow[] }> {
+  // Module 2 fix: initiateExchange() (the draft -> confirmed -> settled/cancelled
+  // lifecycle) writes items to the unified exchange_items table, not to the
+  // legacy exchange_incoming_items/exchange_outgoing_items pair that
+  // createExchange() (the older single-step path) uses. This function only
+  // ever queried the legacy tables, so every exchange created via initiate
+  // came back from getById()/list() with empty incomingItems/outgoingItems --
+  // the items were correctly stored and correctly drove inventory at
+  // settlement, but never surfaced to any caller (API response, frontend
+  // detail view, review/approve screens). An exchange only ever has rows in
+  // one of the two storage shapes, so check the unified table first.
+  const unifiedRes = await db.query(
+    'SELECT ei.*, b.title AS book_title FROM exchange_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = $1 ORDER BY ei.id',
+    [exchangeId],
+  );
+  if (unifiedRes.rows.length) {
+    return {
+      incoming: unifiedRes.rows.filter((r: Record<string, unknown>) => r.type === 'returned').map(r => mapItemRow(r, 'unit_price')),
+      outgoing: unifiedRes.rows.filter((r: Record<string, unknown>) => r.type === 'new').map(r => mapItemRow(r, 'unit_price')),
+    };
+  }
+
   const [inRes, outRes] = await Promise.all([
     db.query('SELECT ei.*, b.title AS book_title FROM exchange_incoming_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = $1 ORDER BY ei.id', [exchangeId]),
     db.query('SELECT eo.*, b.title AS book_title FROM exchange_outgoing_items eo JOIN books b ON b.id = eo.book_id WHERE eo.exchange_id = $1 ORDER BY eo.id', [exchangeId]),
@@ -190,6 +211,98 @@ export async function list(opts: {
   };
 }
 
+// ── applyExchangeSettlementEffects ──────────────────────────────────────────────
+// Shared financial-effects hook, extracted so createExchange() (Quick Exchange,
+// the sole exchange creation path per operator decision -- Initiate Exchange
+// is UI-disabled) and settleExchange() (kept for API completeness) apply the
+// identical logic instead of two divergent copies. Runs once an exchange's
+// net balance is locked in:
+//   - Store_Refunds: credits the customer's store credit account, and (if
+//     the exchange is tied to an original credit-sale order) reduces that
+//     order's open receivable by the refund amount.
+//   - Customer_Pays: opens a receivable for the difference -- this is the
+//     ONLY place the money the customer now owes is tracked anywhere; skip
+//     it and the debt is simply lost.
+// A customerId is required for any non-Even settlement (enforced by callers
+// before this runs) -- there is no ledger to post a Customer_Pays/
+// Store_Refunds balance against otherwise. Never throws: a hook failure
+// must not roll back the exchange itself (matches the pre-existing
+// non-fatal try/catch pattern for these hooks).
+async function applyExchangeSettlementEffects(
+  params: {
+    exchangeId: string;
+    exchangeReference: string;
+    branchId: number;
+    customerId: number | null;
+    settlementType: string;
+    netBalance: number;
+    originalOrderId: number | null;
+    dueDate?: string | null;
+  },
+  client: import('pg').PoolClient,
+): Promise<void> {
+  const { exchangeId, exchangeReference, branchId, customerId, settlementType, netBalance, originalOrderId, dueDate } = params;
+  if (!customerId || settlementType === 'Even') return;
+  const absBalance = Math.abs(netBalance);
+  if (absBalance <= 0.01) return;
+
+  // Store credit ledger — informational for Customer_Pays, a real credit for Store_Refunds
+  await client.query(
+    `INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0) ON CONFLICT (customer_id) DO NOTHING`,
+    [customerId],
+  );
+  if (settlementType === 'Store_Refunds') {
+    await client.query(`UPDATE store_credit_accounts SET balance = balance + $1 WHERE customer_id = $2`, [absBalance.toFixed(2), customerId]);
+    await client.query(
+      `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction) VALUES ($1, 'exchange_refund', $2, $3, 'credit')`,
+      [customerId, exchangeReference, absBalance.toFixed(2)],
+    );
+  } else if (settlementType === 'Customer_Pays') {
+    await client.query(
+      `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction) VALUES ($1, 'exchange_payment', $2, $3, 'debit')`,
+      [customerId, exchangeReference, absBalance.toFixed(2)],
+    );
+  }
+
+  // Reduce an open credit-sale receivable tied to the original order (Store_Refunds only)
+  if (originalOrderId && settlementType === 'Store_Refunds') {
+    try {
+      const origOrderRes = await client.query(`SELECT o.id, o.sale_type FROM orders o WHERE o.id = $1`, [originalOrderId]);
+      if (origOrderRes.rows.length && origOrderRes.rows[0].sale_type === 'credit_sale') {
+        const openRecRes = await client.query(
+          `SELECT r.id, r.outstanding_amount FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = $1 AND r.status != 'Settled' LIMIT 1`,
+          [originalOrderId],
+        );
+        if (openRecRes.rows.length) {
+          const currentOutstanding = parseFloat(openRecRes.rows[0].outstanding_amount as string);
+          const newOutstanding = Math.max(0, parseFloat((currentOutstanding - netBalance).toFixed(2)));
+          await updateReceivableOnPayment(
+            { sourceType: 'order_credit_sale', sourceEntityId: originalOrderId, newOutstandingAmount: newOutstanding, isFullySettled: newOutstanding <= 0.01 },
+            client,
+          );
+        }
+      }
+    } catch (recErr) {
+      console.error('[exchange.settle] CREDIT receivable adjustment failed (non-fatal):', recErr);
+    }
+  }
+
+  // Open a receivable for Customer_Pays -- the only record of this debt anywhere
+  if (settlementType === 'Customer_Pays') {
+    try {
+      await client.query('SAVEPOINT before_exchange_receivable');
+      await createReceivable(
+        { sourceType: 'exchange_difference', sourceRefId: exchangeReference, sourceEntityId: parseInt(exchangeId, 10), customerId, branchId, originalAmount: netBalance, dueDate: dueDate ?? null },
+        client,
+      );
+      await client.query('RELEASE SAVEPOINT before_exchange_receivable');
+    } catch (hookErr) {
+      await client.query('ROLLBACK TO SAVEPOINT before_exchange_receivable').catch(() => null);
+      console.error('[receivable hook] createReceivable (exchange) failed (non-fatal):', hookErr);
+    }
+  }
+}
+
 // ── createExchange ────────────────────────────────────────────────────────────
 // Single-step atomic exchange: validates items, updates inventory, settles.
 
@@ -208,6 +321,26 @@ export async function createExchange(
     throw new ValidationError('Exchange must have at least one incoming or outgoing item');
   }
 
+  // Location is mandatory: every exchange moves physical stock (incoming
+  // items restore it, outgoing items deduct it), and both the availability
+  // check and the invTxSvc.stockIn()/stockOut() calls below are silently
+  // skipped without one -- that silent skip (location was previously
+  // optional) is what let an exchange execute with no inventory effect and
+  // no stock-availability enforcement at all.
+  if (!data.locationId) {
+    throw new ValidationError('locationId is required for an exchange');
+  }
+
+  // Bug Sweep: quantity had no application-level bound on either side — a
+  // zero/negative value fell through to exchange_incoming_items'/
+  // exchange_outgoing_items' CHECK (quantity > 0), surfacing as a raw 500
+  // instead of a clean 400.
+  for (const item of [...(data.incomingItems ?? []), ...(data.outgoingItems ?? [])]) {
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new ValidationError(`Quantity for book ${item.bookId} must be a positive integer`);
+    }
+  }
+
   // Validate all books exist and are active
   const allBookIds = [
     ...(data.incomingItems ?? []).map(i => i.bookId),
@@ -219,14 +352,41 @@ export async function createExchange(
     if (!bookRes.rows[0].is_active) throw new BusinessError('BOOK_INACTIVE', 'Book ' + bookId + ' is not active');
   }
 
-  // Validate outgoing items have sufficient stock
-  const locationId = data.locationId ?? null;
-  if (locationId && data.outgoingItems && data.outgoingItems.length > 0) {
+  // Acquisition Allowance Capture / Valuation Integrity: every incoming item's
+  // unitPrice IS the Customer Allowance Value — the trade-in credit granted
+  // to the customer, which becomes that unit's cost basis in inventory below
+  // (Virtual Exchange Receiving). A zero/blank allowance would receive stock
+  // with no real cost basis, corrupting COGS for every future sale of that
+  // book (see costBasis.ts) — reject it up front instead of silently letting
+  // it through.
+  for (const item of data.incomingItems ?? []) {
+    if (!(item.unitPrice > 0)) {
+      throw new ValidationError(`Customer allowance value is required for incoming book ${item.bookId} and must be greater than zero`);
+    }
+  }
+
+  // Bug Sweep: the same boundary check as above was missing on the outgoing
+  // (resale) side — a zero/negative unitPrice would corrupt totalOutgoing
+  // and could flip settlement_type in the customer's favor (understating
+  // what they owe, or overstating a store refund).
+  for (const item of data.outgoingItems ?? []) {
+    if (!(item.unitPrice > 0)) {
+      throw new ValidationError(`Selling price is required for outgoing book ${item.bookId} and must be greater than zero`);
+    }
+  }
+
+  // Validate outgoing items have sufficient stock — via the centralized
+  // inventoryTransaction.service.ts, not a raw query (Module 2: this call
+  // site was reading inventory.quantity directly, bypassing the single
+  // source of truth for "available" that invTxSvc.stockOut() itself uses a
+  // few lines below; a raw duplicate of that formula is exactly the class of
+  // bug that caused the reservation double-counting fix earlier this sprint).
+  const locationId: number = data.locationId as number;
+  if (data.outgoingItems && data.outgoingItems.length > 0) {
     for (const item of data.outgoingItems) {
-      const invRes = await db.query('SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2', [item.bookId, locationId]);
-      const available = invRes.rows[0]?.quantity ?? 0;
-      if (available < item.quantity) {
-        throw new BusinessError('INSUFFICIENT_STOCK', 'Insufficient stock for book ' + item.bookId + '. Available: ' + available + ', requested: ' + item.quantity, { available, requested: item.quantity });
+      const stock = await invTxSvc.getAvailableStock(item.bookId, locationId);
+      if (stock.available < item.quantity) {
+        throw new BusinessError('INSUFFICIENT_STOCK', 'Insufficient stock for book ' + item.bookId + '. Available: ' + stock.available + ', requested: ' + item.quantity, { available: stock.available, requested: item.quantity });
       }
     }
   }
@@ -245,13 +405,28 @@ export async function createExchange(
   else if (netBalance > 0) settlementType = 'Customer_Pays';
   else settlementType = 'Store_Refunds';
 
+  // A non-Even exchange creates a real financial obligation (a receivable
+  // the customer owes, or store credit the store owes them) that has to be
+  // posted against someone -- without a customer there is nowhere to record
+  // it, and it would be silently dropped (see applyExchangeSettlementEffects).
+  if (settlementType !== 'Even' && !data.customerId) {
+    throw new BusinessError(
+      'CUSTOMER_REQUIRED_FOR_SETTLEMENT',
+      `A customer is required for a ${settlementType === 'Customer_Pays' ? 'Customer Pays' : 'Store Refunds'} exchange so the ${netBalance > 0 ? 'amount owed' : 'refund'} can be tracked.`,
+    );
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
 
     // Generate exchange reference
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM exchanges WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
+    // orders.service.ts confirm() for the full rationale).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM exchanges WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const exchangeReference = 'EXC-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
 
     // INSERT exchange
@@ -276,27 +451,42 @@ export async function createExchange(
     }
 
     // Update inventory via centralized service — incoming items increase stock, outgoing decrease
-    if (locationId) {
-      for (const item of data.incomingItems ?? []) {
-        await client.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [item.bookId, locationId]);
-        // Increase stock via centralized service (Requirements 2.1, 2.12)
-        await invTxSvc.stockIn(
-          { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_in', referenceId: exchangeId, reasonCode: 'return', notes: 'Exchange incoming', staffCtx },
-          client,
-        );
-      }
-
-      for (const item of data.outgoingItems ?? []) {
-        // Decrease stock via centralized service — reservation-aware (Requirements 2.1, 2.13)
-        await invTxSvc.stockOut(
-          { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_out', referenceId: exchangeId, reasonCode: 'loss', notes: 'Exchange outgoing', staffCtx },
-          client,
-        );
-      }
+    for (const item of data.incomingItems ?? []) {
+      await client.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [item.bookId, locationId]);
+      // Virtual Exchange Receiving: increase stock via centralized service
+      // (Requirements 2.1, 2.12), tagged with the 'customer_exchange' SOURCE
+      // and the Customer Allowance Value as this stock-in event's unit cost
+      // basis — the whole point of this feature is that a book that was
+      // never procured through Procurement still gets a real, non-zero cost
+      // (see costBasis.ts) instead of silently costing $0 in COGS/profit.
+      await invTxSvc.stockIn(
+        { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'customer_exchange', referenceId: exchangeId, reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: item.unitPrice },
+        client,
+      );
     }
 
-    // Mark as Completed (settlement handled separately via POST /exchanges/:id/settle)
+    for (const item of data.outgoingItems ?? []) {
+      // Decrease stock via centralized service — reservation-aware (Requirements 2.1, 2.13)
+      await invTxSvc.stockOut(
+        { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_out', referenceId: exchangeId, reasonCode: 'loss', notes: 'Exchange outgoing', staffCtx },
+        client,
+      );
+    }
+
+    // Mark as Completed
     await client.query("UPDATE exchanges SET status = 'Completed', updated_at = now() WHERE id = $1", [exchangeId]);
+
+    // Post the financial effect of a non-Even settlement (receivable /
+    // store credit) now, in the same transaction as the inventory move --
+    // Quick Exchange has no separate settle step, so this IS confirmation.
+    await applyExchangeSettlementEffects(
+      {
+        exchangeId, exchangeReference, branchId: staffCtx.branchId,
+        customerId: data.customerId ?? null, settlementType, netBalance,
+        originalOrderId: null, dueDate: null,
+      },
+      client,
+    );
 
     await client.query("INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'CREATE','exchange',$3,$4,$5)", [staffCtx.staffId, staffCtx.role, exchangeId, staffCtx.branchId, JSON.stringify({ exchangeReference, totalIncoming, totalOutgoing, netBalance, settlementType })]);
 
@@ -398,12 +588,28 @@ export async function initiateExchange(
     throw new ValidationError('Exchange must have at least one item');
   }
 
+  // Same location requirement as createExchange() (Module 2) — settleExchange()
+  // silently skips every inventory movement it would otherwise make when
+  // locationId is absent.
+  if (!data.locationId) {
+    throw new ValidationError('locationId is required for an exchange');
+  }
+
   // Validate all books exist and are active
   const allBookIds = data.items.map(i => i.bookId);
   for (const bookId of allBookIds) {
     const bookRes = await db.query('SELECT id, is_active FROM books WHERE id = $1', [bookId]);
     if (!bookRes.rows.length) throw new NotFoundError('Book ' + bookId);
     if (!bookRes.rows[0].is_active) throw new BusinessError('BOOK_INACTIVE', 'Book ' + bookId + ' is not active');
+  }
+
+  // Acquisition Allowance Capture / Valuation Integrity — same requirement as
+  // createExchange() (see there for the full rationale): a returned item's
+  // unitPrice becomes its cost basis in inventory once settled.
+  for (const item of data.items.filter(i => i.type === 'returned')) {
+    if (!(item.unitPrice > 0)) {
+      throw new ValidationError(`Customer allowance value is required for incoming book ${item.bookId} and must be greater than zero`);
+    }
   }
 
   let resolvedCustomerId = data.customerId ?? null;
@@ -439,13 +645,27 @@ export async function initiateExchange(
   else if (netBalance < -0.01) settlementType = 'Store_Refunds';
   else settlementType = 'Even';
 
+  // Same reasoning as createExchange() — a non-Even settlement has to be
+  // posted against a customer or it's untrackable (applyExchangeSettlementEffects
+  // silently no-ops without one).
+  if (settlementType !== 'Even' && !resolvedCustomerId) {
+    throw new BusinessError(
+      'CUSTOMER_REQUIRED_FOR_SETTLEMENT',
+      `A customer is required for a ${settlementType === 'Customer_Pays' ? 'Customer Pays' : 'Store Refunds'} exchange so the ${netBalance > 0 ? 'amount owed' : 'refund'} can be tracked.`,
+    );
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
 
     // Generate exchange reference
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM exchanges WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
+    // orders.service.ts confirm() for the full rationale).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM exchanges WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const exchangeReference = 'EXC-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
 
     // INSERT exchange with lifecycle_status = 'INITIATED'
@@ -594,6 +814,26 @@ export async function approveExchange(exchangeId: string | number, staffCtx: Sta
     throw new BusinessError('INVALID_LIFECYCLE_TRANSITION', `Exchange must be in REVIEWED status to approve. Current: ${exchange.lifecycleStatus}`);
   }
 
+  // Module 2: validate available stock before confirmation. Previously the
+  // only check was deep inside settleExchange()'s call to invTxSvc.stockOut(),
+  // which runs after review AND approval -- a stock shortfall (e.g. sold via
+  // POS between initiation and settlement) only surfaced as a failure at the
+  // very last step, discarding the review/approval work. Outgoing ('new')
+  // items are what get deducted at settlement, so they're what must be
+  // checked here.
+  if (exchange.locationId) {
+    for (const item of exchange.outgoingItems ?? []) {
+      const stock = await invTxSvc.getAvailableStock(item.bookId, exchange.locationId);
+      if (stock.available < item.quantity) {
+        throw new BusinessError(
+          'INSUFFICIENT_STOCK',
+          `Insufficient stock for "${item.bookTitle}". Available: ${stock.available}, Requested: ${item.quantity}`,
+          { bookId: item.bookId, available: stock.available, requested: item.quantity },
+        );
+      }
+    }
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -706,9 +946,11 @@ export async function settleExchange(
           );
 
           if (condition === 'resellable') {
-            // Restore resellable stock via centralized service (Requirement 2.12)
+            // Virtual Exchange Receiving: restore resellable stock via
+            // centralized service (Requirement 2.12), tagged and cost-based
+            // the same way createExchange() does (see there for rationale).
             await invTxSvc.stockIn(
-              { bookId, locationId, quantity: qty, referenceType: 'exchange_in', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Exchange returned resellable', staffCtx },
+              { bookId, locationId, quantity: qty, referenceType: 'customer_exchange', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: parseFloat(item.unit_price as string) },
               client,
             );
           } else if (condition === 'damaged') {
@@ -810,80 +1052,18 @@ export async function settleExchange(
       ],
     );
 
-    // ── Customer store credit integration ────────────────────────────────────
-    // When the store owes the customer (Store_Refunds), credit their store credit account.
-    // When the customer owes the store (Customer_Pays), record the debt in store credit history.
-    if (exchange.customerId) {
-      const absBalance = Math.abs(exchange.netBalance);
-      if (absBalance > 0.01) {
-        // Ensure store_credit_accounts row exists
-        await client.query(
-          `INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0)
-           ON CONFLICT (customer_id) DO NOTHING`,
-          [exchange.customerId],
-        );
-
-        if (exchange.settlementType === 'Store_Refunds') {
-          // Store owes customer — add to their store credit balance
-          await client.query(
-            `UPDATE store_credit_accounts SET balance = balance + $1 WHERE customer_id = $2`,
-            [absBalance.toFixed(2), exchange.customerId],
-          );
-          await client.query(
-            `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
-             VALUES ($1, 'exchange_refund', $2, $3, 'credit')`,
-            [exchange.customerId, exchange.exchangeReference, absBalance.toFixed(2)],
-          );
-        } else if (exchange.settlementType === 'Customer_Pays') {
-          // Customer owes store — record as debt in store credit history (informational)
-          await client.query(
-            `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
-             VALUES ($1, 'exchange_payment', $2, $3, 'debit')`,
-            [exchange.customerId, exchange.exchangeReference, absBalance.toFixed(2)],
-          );
-        }
-      }
-    }
-
-    // ── Task 11.3: For CREDIT order exchanges with Store_Refunds, adjust receivable ─
-    // If the exchange has an original_order_id with sale_type='credit_sale' and there
-    // is an open order_credit_sale receivable, reduce it by the exchange refund amount.
-    // This runs inside the same transaction as all inventory mutations (task 11.1).
-    if (exchange.originalOrderId && exchange.settlementType === 'Store_Refunds' && exchange.netBalance > 0.01) {
-      try {
-        const origOrderRes = await client.query(
-          `SELECT o.id, o.sale_type FROM orders o WHERE o.id = $1`,
-          [exchange.originalOrderId],
-        );
-        if (origOrderRes.rows.length && origOrderRes.rows[0].sale_type === 'credit_sale') {
-          const openRecRes = await client.query(
-            `SELECT r.id, r.outstanding_amount
-             FROM receivables r
-             WHERE r.source_type = 'order_credit_sale'
-               AND r.source_entity_id = $1
-               AND r.status != 'Settled'
-             LIMIT 1`,
-            [exchange.originalOrderId],
-          );
-          if (openRecRes.rows.length) {
-            const currentOutstanding = parseFloat(openRecRes.rows[0].outstanding_amount as string);
-            const newOutstanding = Math.max(0, parseFloat((currentOutstanding - exchange.netBalance).toFixed(2)));
-            await updateReceivableOnPayment(
-              {
-                sourceType: 'order_credit_sale',
-                sourceEntityId: exchange.originalOrderId,
-                newOutstandingAmount: newOutstanding,
-                isFullySettled: newOutstanding <= 0.01,
-              },
-              client,
-            );
-          }
-        }
-      } catch (recErr) {
-        // Non-fatal: log but don't roll back the exchange settlement
-        console.error('[exchange.settle] CREDIT receivable adjustment failed (non-fatal):', recErr);
-      }
-    }
+    // Post the financial effect of a non-Even settlement (store credit /
+    // receivable) — same shared hook Quick Exchange uses (module 2 refactor,
+    // deduplicated from three near-identical inline blocks previously here).
+    await applyExchangeSettlementEffects(
+      {
+        exchangeId: String(exchangeId), exchangeReference: exchange.exchangeReference,
+        branchId: exchange.branchId, customerId: exchange.customerId,
+        settlementType: exchange.settlementType, netBalance: exchange.netBalance,
+        originalOrderId: exchange.originalOrderId, dueDate,
+      },
+      client,
+    );
 
     // Outbox events
     await insertOutbox(client, 'exchange.settled', {
@@ -898,30 +1078,6 @@ export async function settleExchange(
       netBalance: exchange.netBalance,
       branchId: staffCtx.branchId,
     });
-
-    // ── Receivable hook — create debt record for Customer_Pays exchanges ───────
-    // Wrapped in try/catch so a hook failure never breaks the exchange settlement.
-    if (exchange.settlementType === 'Customer_Pays' && exchange.netBalance > 0.01 && exchange.customerId) {
-      try {
-        await client.query('SAVEPOINT before_exchange_receivable');
-        await createReceivable(
-          {
-            sourceType: 'exchange_difference',
-            sourceRefId: exchange.exchangeReference,
-            sourceEntityId: parseInt(String(exchangeId), 10),
-            customerId: exchange.customerId,
-            branchId: exchange.branchId,
-            originalAmount: exchange.netBalance,
-            dueDate: dueDate ?? null,
-          },
-          client,
-        );
-        await client.query('RELEASE SAVEPOINT before_exchange_receivable');
-      } catch (hookErr) {
-        await client.query('ROLLBACK TO SAVEPOINT before_exchange_receivable').catch(() => null);
-        console.error('[receivable hook] createReceivable (exchange) failed (non-fatal):', hookErr);
-      }
-    }
 
     await client.query('COMMIT');
     return getById(exchangeId);

@@ -4,6 +4,7 @@ import * as bankAccountService from './bankAccount.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { paramStr } from '../../lib/http.js';
 
 const router = Router({ mergeParams: true });
 
@@ -42,7 +43,7 @@ router.get(
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = parseInt(req.params.branchId, 10);
+      const branchId = parseInt(paramStr(req.params.branchId), 10);
       const page = parseInt(req.query.page as string ?? '1', 10);
       const pageSize = Math.min(parseInt(req.query.pageSize as string ?? '25', 10), 100);
       const isActive = req.query.isActive !== undefined
@@ -65,7 +66,7 @@ router.post(
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = parseInt(req.params.branchId, 10);
+      const branchId = parseInt(paramStr(req.params.branchId), 10);
       const parsed = createSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid bank account payload', { issues: parsed.error.issues });
@@ -90,7 +91,7 @@ router.get(
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(paramStr(req.params.id), 10);
       const account = await bankAccountService.getBankAccount(id);
       res.json(account);
     } catch (err) {
@@ -107,7 +108,7 @@ router.put(
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(paramStr(req.params.id), 10);
       const parsed = updateSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid bank account update payload', { issues: parsed.error.issues });
@@ -129,7 +130,7 @@ router.post(
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(paramStr(req.params.id), 10);
       await bankAccountService.deactivateBankAccount(id, req.staff!);
       res.json({ message: 'Bank account deactivated' });
     } catch (err) {
@@ -201,7 +202,7 @@ router.put(
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const entryId = parseInt(req.params.entryId, 10);
+      const entryId = parseInt(paramStr(req.params.entryId), 10);
       const parsed = clearSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid clear payload', { issues: parsed.error.issues });

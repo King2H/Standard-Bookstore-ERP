@@ -36,6 +36,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
   let managerToken: string;
   let branchId: number;
   let locationId: number;
+  let customerId: number;
   let book1: { id: number; price: number };
   let book2: { id: number; price: number };
 
@@ -58,10 +59,19 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     book2 = books[1];
     await ensureInventory(book1.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
+
+    const custRes = await db.query(
+      `INSERT INTO customers (full_name, customer_code, is_active) VALUES ('Exc Test Customer', 'EXC-TEST-001', true) RETURNING id`,
+    );
+    customerId = custRes.rows[0].id as number;
   });
 
   afterAll(async () => {
     await cleanExchanges(branchId);
+    await db.query(`DELETE FROM store_credit_history WHERE customer_id = $1`, [customerId]).catch(() => {});
+    await db.query(`DELETE FROM store_credit_accounts WHERE customer_id = $1`, [customerId]).catch(() => {});
+    await db.query(`DELETE FROM receivables WHERE customer_id = $1`, [customerId]).catch(() => {});
+    await db.query(`DELETE FROM customers WHERE id = $1`, [customerId]).catch(() => {});
     await db.query(`DELETE FROM inventory_history WHERE location_id IN (SELECT id FROM locations WHERE branch_id = $1)`, [branchId]);
     await db.query(`DELETE FROM inventory WHERE location_id IN (SELECT id FROM locations WHERE branch_id = $1)`, [branchId]);
     await cleanTestStaff(STAFF_PREFIX);
@@ -94,7 +104,40 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
 
   // ── 2. Customer pays (outgoing > incoming) ─────────────────────────────────
 
-  it('2. Customer pays exchange → settlementType=Customer_Pays', async () => {
+  it('2. Customer pays exchange → settlementType=Customer_Pays, opens a receivable', async () => {
+    await ensureInventory(book1.id, locationId, 20);
+    await ensureInventory(book2.id, locationId, 20);
+
+    const res = await request(getTestApp())
+      .post('/api/exchanges')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        locationId,
+        customerId,
+        incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 100 }],
+        outgoingItems:  [{ bookId: book2.id, quantity: 1, unitPrice: 200 }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.settlementType).toBe('Customer_Pays');
+    expect(Number(res.body.netBalance)).toBeCloseTo(100, 2);
+    expect(Number(res.body.totalIncomingValue)).toBeCloseTo(100, 2);
+    expect(Number(res.body.totalOutgoingValue)).toBeCloseTo(200, 2);
+
+    // Module 2 fix: Quick Exchange now posts the financial effect immediately
+    // (it has no separate settle step) -- a receivable for the difference.
+    const recRes = await db.query(
+      `SELECT * FROM receivables WHERE source_type = 'exchange_difference' AND source_entity_id = $1`,
+      [res.body.id],
+    );
+    expect(recRes.rows.length).toBe(1);
+    expect(parseFloat(recRes.rows[0].original_amount as string)).toBeCloseTo(100, 2);
+  });
+
+  // ── 2b. Non-Even exchange without a customer is rejected ──────────────────
+
+  it('2b. Customer pays exchange without a customer → 422 CUSTOMER_REQUIRED_FOR_SETTLEMENT', async () => {
     await ensureInventory(book1.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
 
@@ -108,18 +151,17 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
         outgoingItems:  [{ bookId: book2.id, quantity: 1, unitPrice: 200 }],
       });
 
-    expect(res.status).toBe(201);
-    expect(res.body.settlementType).toBe('Customer_Pays');
-    expect(Number(res.body.netBalance)).toBeCloseTo(100, 2);
-    expect(Number(res.body.totalIncomingValue)).toBeCloseTo(100, 2);
-    expect(Number(res.body.totalOutgoingValue)).toBeCloseTo(200, 2);
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe('CUSTOMER_REQUIRED_FOR_SETTLEMENT');
   });
 
   // ── 3. Store refunds (incoming > outgoing) ─────────────────────────────────
 
-  it('3. Store refunds exchange → settlementType=Store_Refunds', async () => {
+  it('3. Store refunds exchange → settlementType=Store_Refunds, credits store credit', async () => {
     await ensureInventory(book1.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
+    const balBefore = await db.query(`SELECT balance FROM store_credit_accounts WHERE customer_id = $1`, [customerId]);
+    const before = balBefore.rows.length ? parseFloat(balBefore.rows[0].balance as string) : 0;
 
     const res = await request(getTestApp())
       .post('/api/exchanges')
@@ -127,6 +169,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
       .set('X-Branch-Id', String(branchId))
       .send({
         locationId,
+        customerId,
         incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 300 }],
         outgoingItems:  [{ bookId: book2.id, quantity: 1, unitPrice: 100 }],
       });
@@ -134,6 +177,10 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     expect(res.status).toBe(201);
     expect(res.body.settlementType).toBe('Store_Refunds');
     expect(Number(res.body.netBalance)).toBeCloseTo(-200, 2);
+
+    // Module 2 fix: Store_Refunds credits store credit immediately.
+    const balAfter = await db.query(`SELECT balance FROM store_credit_accounts WHERE customer_id = $1`, [customerId]);
+    expect(parseFloat(balAfter.rows[0].balance as string)).toBeCloseTo(before + 200, 2);
   });
 
   // ── 4. Inventory updated correctly ─────────────────────────────────────────
@@ -153,6 +200,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
       .set('X-Branch-Id', String(branchId))
       .send({
         locationId,
+        customerId,
         incomingItems: [{ bookId: book1.id, quantity: 2, unitPrice: 100 }],
         outgoingItems:  [{ bookId: book2.id, quantity: 3, unitPrice: 100 }],
       });
@@ -197,6 +245,18 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     expect(res.status).toBe(400);
   });
 
+  // ── 6b. Missing location → 400 ─────────────────────────────────────────────
+
+  it('6b. Missing locationId → 400 VALIDATION_ERROR (no silent no-op on inventory)', async () => {
+    const res = await request(getTestApp())
+      .post('/api/exchanges')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 50 }], outgoingItems: [] });
+
+    expect(res.status).toBe(400);
+  });
+
   // ── 7. Cancel exchange ──────────────────────────────────────────────────────
 
   it('7. Cancel Initiated exchange → status=Cancelled', async () => {
@@ -205,7 +265,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
       .post('/api/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ locationId, incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 50 }], outgoingItems: [] });
+      .send({ locationId, customerId, incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 50 }], outgoingItems: [] });
     expect(createRes.status).toBe(201);
     const excId = createRes.body.id;
 

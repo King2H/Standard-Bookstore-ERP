@@ -49,6 +49,23 @@ async function createTestOrder(token: string, branchId: number, bookId: number):
   return res.body.id;
 }
 
+// POST /api/payments rejects cash_sale orders with CASH_ORDER_ALREADY_PAID
+// (payments.service.ts "Bug 2" guard -- cash orders are paid automatically
+// at confirmation; manual payment collection is a credit-order-only
+// feature). createTestOrder() above defaults to cash_sale, which is right
+// for tests unrelated to payment collection (e.g. #6's 400-shape check),
+// but any test that actually POSTs to /api/payments needs a credit_sale
+// order with a customer instead.
+async function createCreditTestOrder(token: string, branchId: number, bookId: number, customerId: number): Promise<string> {
+  const res = await request(getTestApp())
+    .post('/api/orders')
+    .set('Authorization', `Bearer ${token}`)
+    .set('X-Branch-Id', String(branchId))
+    .send({ items: [{ bookId, quantity: 1 }], saleType: 'credit_sale', customerId });
+  if (res.status !== 201) throw new Error(`Order creation failed: ${JSON.stringify(res.body)}`);
+  return res.body.id;
+}
+
 describe('Post-MVP Hardening', () => {
   let adminToken: string;
   let branchId: number;
@@ -56,6 +73,7 @@ describe('Post-MVP Hardening', () => {
   let bookId: number;
   let bookPrice: number;
   let bankAccountId: number;
+  let customerId: number;
 
   beforeAll(async () => {
     await cleanTestStaff(STAFF_PREFIX);
@@ -72,6 +90,13 @@ describe('Post-MVP Hardening', () => {
     bookPrice = book.price;
     await ensureInventory(bookId, locationId, 50);
     bankAccountId = await createTestBankAccount(branchId);
+
+    const custRes = await db.query(
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
+       VALUES ($1, $2, 'Hardening Test Customer', true, now()) RETURNING id`,
+      [branchId, `HARD-TEST-${Date.now()}`],
+    );
+    customerId = custRes.rows[0].id as number;
   });
 
   afterAll(async () => {
@@ -86,6 +111,7 @@ describe('Post-MVP Hardening', () => {
     await db.query(`DELETE FROM bank_accounts WHERE id = $1`, [bankAccountId]);
     await db.query(`DELETE FROM idempotency_keys WHERE endpoint = '/payments'`);
     await db.query(`DELETE FROM customers WHERE full_name LIKE 'PII Test%'`);
+    await db.query(`DELETE FROM customers WHERE full_name = 'Hardening Test Customer'`);
     await cleanTestStaff(STAFF_PREFIX);
     await cleanTestBranches(BRANCH_PREFIX);
   });
@@ -165,7 +191,7 @@ describe('Post-MVP Hardening', () => {
     });
 
     it('7. Bank payment with valid bank_account_id → 201 + reconciliation entry created', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
+      const orderId = await createCreditTestOrder(adminToken, branchId, bookId, customerId);
 
       const res = await request(getTestApp())
         .post('/api/payments')
@@ -217,7 +243,7 @@ describe('Post-MVP Hardening', () => {
 
   describe('Idempotency', () => {
     it('9. Duplicate payment with same Idempotency-Key returns stored response', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
+      const orderId = await createCreditTestOrder(adminToken, branchId, bookId, customerId);
       const idempotencyKey = `test-idem-${Date.now()}`;
       const body = { orderId, amount: bookPrice, paymentMethod: 'cash' };
 
@@ -244,7 +270,7 @@ describe('Post-MVP Hardening', () => {
     });
 
     it('10. Payment without Idempotency-Key works normally', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
+      const orderId = await createCreditTestOrder(adminToken, branchId, bookId, customerId);
 
       const res = await request(getTestApp())
         .post('/api/payments')

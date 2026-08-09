@@ -755,7 +755,6 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
   const FIX_UNIQUE_PUBLISHER = 'Zephyr Unique Publisher Bug1Fix';
   const FIX_UNIQUE_DESCRIPTION_TOKEN = 'ZBUG1DESCTOKEN_FIX_9999';
   const FIX_TARGET_ISBN = '9780999900002';
-  const FIX_STAFF_PREFIX = 'cat_fix_';
   const FIX_BRANCH_PREFIX = 'CatFix Test ';
 
   async function cleanFixTestBooks(): Promise<void> {

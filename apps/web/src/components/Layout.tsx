@@ -146,7 +146,7 @@ function SidebarItem({ item, isActive, expanded, onClick }: SidebarItemProps) {
     >
       <span className="text-sm flex-shrink-0 w-4 text-center">{item.icon}</span>
       {expanded && (
-        <span className="truncate flex-1 text-left">{item.label}</span>
+        <span className="truncate flex-1 min-w-0 text-left">{item.label}</span>
       )}
       {expanded && isActive && (
         <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />

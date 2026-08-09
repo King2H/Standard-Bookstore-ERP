@@ -1,10 +1,6 @@
 import { db } from '../../db/index.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
-import {
-  getEffectiveConfig,
-  getMaxLineDiscountPct,
-  isNegativeStockAllowed,
-} from '../config/config.service.js';
+import { getMaxLineDiscountPct } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
@@ -278,6 +274,13 @@ export async function createTransaction(
   const resolvedItems: ResolvedItem[] = [];
 
   for (const item of data.items) {
+    // Bug Sweep: quantity had no application-level bound — a zero/negative
+    // value fell through to transaction_line_items' CHECK (quantity > 0),
+    // surfacing as a raw 500 instead of a clean 400.
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new ValidationError(`Quantity for book ${item.bookId} must be a positive integer`);
+    }
+
     const bookRes = await db.query(`SELECT id, title, isbn, is_active FROM books WHERE id = $1`, [item.bookId]);
     if (!bookRes.rows.length) throw new NotFoundError(`Book ${item.bookId}`);
     const book = bookRes.rows[0] as { id: number; title: string; isbn: string; is_active: boolean };
@@ -295,7 +298,14 @@ export async function createTransaction(
     if (unitPrice === null) throw new BusinessError('PRICE_NOT_SET', `Price not set for book ${item.bookId}`);
 
     const lineBase = parseFloat((unitPrice * item.quantity).toFixed(2));
-    const discountPct = item.discountPct ?? 0;
+    // Bug Sweep: clamp to [0, 100] — an out-of-range (in particular
+    // negative) discountPct passed straight through, which would produce a
+    // negative discountAmount below and INCREASE lineTotal above lineBase
+    // instead of discounting it; it also silently bypassed the max-discount
+    // cap check further down (`discountPct > 0 && ...` never triggers for a
+    // negative value). Mirrors the clamp resolveDiscountFields() (the
+    // shared discount engine used by Orders) already applies.
+    const discountPct = Math.min(100, Math.max(0, item.discountPct ?? 0));
     // When the client sends discountMode='Amount', use the provided discountAmount directly
     // (clamped to lineBase) so both sides agree on lineTotal. Fall back to pct-derived amount.
     let discountAmount: number;
@@ -381,10 +391,13 @@ export async function createTransaction(
     // Inventory availability is checked inside invTxSvc.stockOut (reservation-aware).
     // No pre-check needed here — removing the old raw-quantity check prevents stale reads.
 
-    // Generate transaction number
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query(`SELECT COUNT(*) FROM transactions WHERE DATE(created_at) = CURRENT_DATE`);
+    // Generate transaction number. Module 9: date-stamp derived from the
+    // DB's CURRENT_DATE (see orders.service.ts confirm() for the full
+    // rationale) instead of Node's new Date() (always UTC).
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM transactions WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const transactionNumber = `POS-${dateStr}-${String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0')}`;
 
     // INSERT transaction
@@ -416,7 +429,8 @@ export async function createTransaction(
     }
 
     // Decrement inventory via centralized InventoryTransactionService (Requirement 2.1, 2.3, 2.4)
-    // Uses reservation-aware availability: available = quantity - SUM(active_reservations)
+    // Availability check is available = quantity (reservations are bookkeeping,
+    // not a second hold -- see inventoryTransaction.service.ts getAvailableStock()).
     for (const item of resolvedItems) {
       await invTxSvc.stockOut(
         {

@@ -3,17 +3,29 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
-interface ReceivablesPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
+interface ReceivablesPageProps {
+  userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>;
+  /** Single Authoritative Payment Collection Workflow: Receivables no longer
+   *  collects payment directly — "Open in Payments" navigates to the
+   *  Payments module's Collect flow, pre-filled for this receivable. */
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}
 
 type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
-type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference';
+type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
 
 interface ReceivableRow {
   id: string;
   sourceType: ReceivableSourceType;
   sourceRefId: string;
+  /** The underlying order/POS-transaction id (order_credit_sale, pos_credit_sale)
+   *  — used to route "Open in Payments" to the matching Payments unpaid-orders
+   *  row. Not used for exchange_difference, which routes on this receivable's
+   *  own `id` instead (see openInPayments()). */
+  sourceEntityId: string;
   customerId: number;
   customerName: string | null;
   customerCode: string | null;
@@ -46,7 +58,8 @@ const STATUS_COLORS: Record<ReceivableStatus, string> = {
 };
 
 const SOURCE_LABELS: Record<ReceivableSourceType, string> = {
-  pos_credit_sale:    'Credit Sale',
+  pos_credit_sale:     'POS Credit Sale',
+  order_credit_sale:   'Order Credit Sale',
   exchange_difference: 'Exchange Diff.',
 };
 
@@ -55,7 +68,7 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function ReceivablesPage({ userRole, userPermissions, initialContext = {} }: ReceivablesPageProps) {
+export default function ReceivablesPage({ userRole, userPermissions, initialContext = {}, onNavigate }: ReceivablesPageProps) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -63,6 +76,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
 
   // ── Filters ──────────────────────────────────────────────────────────────────
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState(initialContext.status ?? '');
   const [sourceFilter, setSourceFilter] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -70,17 +84,17 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   // ── Inline state ─────────────────────────────────────────────────────────────
   const [editingDueDateId, setEditingDueDateId] = useState<string | null>(null);
   const [dueDateDraft, setDueDateDraft] = useState('');
-  const [settlingId, setSettlingId] = useState<string | null>(null);
-  const [settleNotes, setSettleNotes] = useState('');
+  const [writeOffId, setWriteOffId] = useState<string | null>(null);
+  const [writeOffNotes, setWriteOffNotes] = useState('');
 
   // ── Queries ───────────────────────────────────────────────────────────────────
-  const params = new URLSearchParams({ branchId: String(branchId), page: String(page), pageSize: '25' });
+  const params = new URLSearchParams({ branchId: String(branchId), page: String(page), pageSize: String(pageSize) });
   if (statusFilter) params.set('status', statusFilter);
   if (sourceFilter) params.set('sourceType', sourceFilter);
   if (overdueOnly) params.set('overdueOnly', 'true');
 
   const { data, isLoading } = useQuery<ReceivableList>({
-    queryKey: ['receivables', branchId, page, statusFilter, sourceFilter, overdueOnly],
+    queryKey: ['receivables', branchId, page, pageSize, statusFilter, sourceFilter, overdueOnly],
     queryFn: () => api.get(`/receivables?${params}`),
   });
 
@@ -96,10 +110,17 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   };
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
-  const settleMut = useMutation({
+  // Collect used to live here (POST /receivables/:id/collect) — Single
+  // Authoritative Payment Collection Workflow moved it to the Payments
+  // module; see openInPayments() below, which navigates there instead of
+  // calling that endpoint directly.
+
+  // Write off: bad-debt only — records no payment. Restricted server-side to
+  // Admin/Manager/Finance_Officer.
+  const writeOffMut = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes: string }) =>
       api.post(`/receivables/${id}/settle`, { notes: notes || undefined }),
-    onSuccess: () => { inv(); setSettlingId(null); setSettleNotes(''); showToast('Receivable settled', 'success'); },
+    onSuccess: () => { inv(); setWriteOffId(null); setWriteOffNotes(''); showToast('Receivable written off', 'success'); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
@@ -113,6 +134,21 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   const canWrite = (perms?: string[]) =>
     perms?.includes('PROCESS_PAYMENT') ||
     ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
+  // Write-off is stricter than routine collection — matches the backend's
+  // requireRole('Admin', 'Manager', 'Finance_Officer') on POST /:id/settle.
+  const canWriteOff = () => ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
+
+  // "Open in Payments" — routes to the same entity Payments' own
+  // unpaid-orders list keys on: the order/POS-transaction id for those two
+  // source types, or this receivable's own id for exchange_difference
+  // (Payments has no exchange row of its own to point at).
+  function openInPayments(rec: ReceivableRow) {
+    if (rec.sourceType === 'exchange_difference') {
+      onNavigate?.('payments', { orderId: rec.id, sourceType: 'exchange_difference' });
+    } else {
+      onNavigate?.('payments', { orderId: rec.sourceEntityId, sourceType: rec.sourceType === 'pos_credit_sale' ? 'pos' : 'order' });
+    }
+  }
 
   const receivables = data?.items ?? [];
   const fmt = (n: number) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -140,12 +176,20 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
           className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Statuses</option>
+          {/* Matches the Dashboard's Outstanding Credit drill-down exactly
+              (Module 6/hotfix) — without this explicit option, arriving here
+              with that filter pre-applied left the <select> showing "All
+              Statuses" (no option matched the comma-joined value), which
+              looked like the drill-down hadn't applied any filter even
+              though it had. */}
+          <option value="Pending,PartiallyPaid,Overdue">Outstanding (Pending/Partial/Overdue)</option>
           {['Pending', 'PartiallyPaid', 'Settled', 'Overdue'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
           className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Types</option>
-          <option value="pos_credit_sale">Credit Sale</option>
+          <option value="pos_credit_sale">POS Credit Sale</option>
+          <option value="order_credit_sale">Order Credit Sale</option>
           <option value="exchange_difference">Exchange Diff.</option>
         </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
@@ -156,7 +200,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         <div className="ml-auto text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} records</div>
       </div>
 
-      {/* Table */}
+      {/* Table + Pagination */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-gray-400">Loading...</div>
@@ -231,22 +275,22 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                             className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">
                             📅
                           </button>
-                          {/* Manual settle */}
-                          {settlingId === rec.id ? (
-                            <div className="flex gap-1 items-center">
-                              <input value={settleNotes} onChange={e => setSettleNotes(e.target.value)} placeholder="Notes…"
-                                className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-28 focus:outline-none focus:ring-1 focus:ring-green-500" />
-                              <button onClick={() => settleMut.mutate({ id: rec.id, notes: settleNotes })}
-                                disabled={settleMut.isPending}
-                                className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50">✓</button>
-                              <button onClick={() => setSettlingId(null)}
-                                className="px-2 py-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => { setSettlingId(rec.id); setSettleNotes(''); }}
-                              title="Mark as settled"
-                              className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
-                              ✓ Settle
+                          {/* Single Authoritative Payment Collection Workflow: Receivables
+                              no longer collects payment itself — this opens the Payments
+                              module's Collect flow, pre-filled for this receivable. */}
+                          <button
+                            onClick={() => openInPayments(rec)}
+                            title="Open in Payments to collect"
+                            className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
+                            ↗ Open in Payments
+                          </button>
+                          {/* Write off — bad debt only, restricted */}
+                          {canWriteOff() && (
+                            <button
+                              onClick={() => { setWriteOffId(rec.id); setWriteOffNotes(''); }}
+                              title="Write off (no payment collected)"
+                              className="px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                              ✕ Write Off
                             </button>
                           )}
                         </div>
@@ -261,20 +305,47 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
             </table>
           </div>
         )}
+        {data && (
+          <Pagination
+            page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+            onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+            itemLabel="receivable"
+          />
+        )}
       </div>
 
-      {/* Pagination */}
-      {data && data.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-          <span>Page {data.page} of {data.totalPages}</span>
-          <div className="flex gap-2">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Prev</button>
-            <button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800">Next</button>
+      {/* ── Write Off modal ──────────────────────────────────────────────────── */}
+      {writeOffId && (() => {
+        const rec = receivables.find(r => r.id === writeOffId);
+        if (!rec) return null;
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setWriteOffId(null)}>
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Write Off Receivable</h3>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
+                  ⚠️ This marks {fmt(rec.outstandingAmount)} as uncollectible — no payment is recorded, and it will not appear in Payments reporting. Use "Open in Payments" instead if the customer actually paid.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+                <input value={writeOffNotes} onChange={e => setWriteOffNotes(e.target.value)} placeholder="Why is this being written off?"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setWriteOffId(null)}
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+                <button
+                  onClick={() => writeOffMut.mutate({ id: rec.id, notes: writeOffNotes })}
+                  disabled={writeOffMut.isPending}
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+                  {writeOffMut.isPending ? 'Writing off…' : 'Write Off'}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

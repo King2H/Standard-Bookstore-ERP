@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
 type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'transfer' | 'history' | 'alerts';
 
 interface InventoryRow {
-  bookId: number; bookTitle: string; bookIsbn: string;
+  bookId: number; bookTitle: string; bookIsbn: string; bookIsActive: boolean;
   locationId: number; locationName: string; branchId: number;
   quantity: number; reserved: number; available: number;
   reorderPoint: number; version: number;
@@ -117,23 +118,46 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
   const { showToast } = useToast();
   const [q, setQ] = useState('');
   const [lowOnly, setLowOnly] = useState(initialLowOnly);
+  // Deactivated books are hidden by default — they can't be sold, reordered,
+  // or restocked any more, so Stock Levels/Adjust/Transfer/Stock In/Stock Out
+  // shouldn't surface them for selection. Mirrors Catalog's own status
+  // filter (Active/Inactive/All) rather than an additive checkbox, so
+  // switching modes replaces the list instead of layering onto it — an
+  // additive "show inactive too" checkbox made an active book look like it
+  // was appearing in both an "active" and an "inactive" view at once.
+  const [status, setStatus] = useState<'active' | 'inactive' | 'all'>('active');
+  const [sortBy, setSortBy] = useState<'title' | 'updatedAt'>('title');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [editRow, setEditRow] = useState<InventoryRow | null>(null);
   const [newReorder, setNewReorder] = useState('');
 
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (lowOnly) params.set('lowStockOnly', 'true');
-  params.set('page', String(page)); params.set('pageSize', '25');
+  // Same is_active=true|false|all convention as GET /books — 'active' is the
+  // default and is sent explicitly rather than omitted, purely so the query
+  // string stays self-describing; the backend treats an omitted param the
+  // same way.
+  params.set('is_active', status === 'active' ? 'true' : status === 'inactive' ? 'false' : 'all');
+  params.set('sortBy', sortBy); params.set('sortDir', sortDir);
+  params.set('page', String(page)); params.set('pageSize', String(pageSize));
 
   const { data, isLoading, isFetching, isError, refetch } = useQuery<InventoryList>({
-    queryKey: ['inventory', q, lowOnly, page],
+    queryKey: ['inventory', q, lowOnly, status, sortBy, sortDir, page, pageSize],
     queryFn: () => api.get<InventoryList>(`/inventory?${params.toString()}`),
     placeholderData: prev => prev,
     staleTime: 0,
     retry: 2,
     refetchOnWindowFocus: true,
   });
+
+  function toggleSort(col: 'title' | 'updatedAt') {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir('asc'); }
+    setPage(1);
+  }
 
   const reorderMut = useMutation({
     mutationFn: ({ bookId, locId, rp }: { bookId: number; locId: number; rp: number }) =>
@@ -155,6 +179,13 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
           <input type="checkbox" checked={lowOnly} onChange={e => { setLowOnly(e.target.checked); setPage(1); }} className="rounded border-gray-300 dark:border-gray-600 text-amber-500" />
           Low stock only
         </label>
+        <select value={status} onChange={e => { setStatus(e.target.value as typeof status); setPage(1); }}
+          title="Deactivated books are hidden from search and stock actions unless Inactive or All is selected"
+          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="all">All</option>
+        </select>
         <div className="flex-1" />
         <span className="text-xs text-gray-400">{isLoading ? '…' : `${data?.total ?? 0} records`}{isFetching && !isLoading && ' ↻'}</span>
       </div>
@@ -179,7 +210,12 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Available</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Reorder At</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Updated</th>
+              <th className="px-4 py-3 text-left">
+                <button onClick={() => toggleSort('updatedAt')}
+                  className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition-colors ${sortBy === 'updatedAt' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                  Updated <span className="text-xs">{sortBy === 'updatedAt' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                </button>
+              </th>
               {canManage(userRole, userPermissions) && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>}
             </tr>
           </thead>
@@ -190,7 +226,12 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
             ) : data.items.map(row => (
               <tr key={`${row.bookId}-${row.locationId}`} className={`hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors ${row.isLowStock ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}`}>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-gray-900 dark:text-white text-sm line-clamp-1">{row.bookTitle}</div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="font-medium text-gray-900 dark:text-white text-sm line-clamp-1">{row.bookTitle}</div>
+                    {!row.bookIsActive && (
+                      <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 rounded-full font-medium">Inactive</span>
+                    )}
+                  </div>
                   <div className="text-xs font-mono text-gray-400">{row.bookIsbn}</div>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{row.locationName}</td>
@@ -242,17 +283,13 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
-        <span className="text-xs text-gray-500">{data ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, data.total)} of ${data.total}` : '—'}</span>
-        <div className="flex items-center gap-1">
-          <PagBtn onClick={() => setPage(1)} disabled={page === 1} label="«" />
-          <PagBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} label="‹" />
-          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded font-medium">{page}</span>
-          <PagBtn onClick={() => setPage(p => Math.min(data?.totalPages ?? 1, p + 1))} disabled={page === (data?.totalPages ?? 1)} label="›" />
-          <PagBtn onClick={() => setPage(data?.totalPages ?? 1)} disabled={page === (data?.totalPages ?? 1)} label="»" />
-        </div>
-      </div>
+      {data && (
+        <Pagination
+          page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+          onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+          itemLabel="inventory record"
+        />
+      )}
     </div>
   );
 }
@@ -550,16 +587,17 @@ function HistoryTab() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const params = new URLSearchParams();
   if (movementType) params.set('movementType', movementType);
   if (reasonCode) params.set('reasonCode', reasonCode);
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
-  params.set('page', String(page)); params.set('pageSize', '25');
+  params.set('page', String(page)); params.set('pageSize', String(pageSize));
 
   const { data, isLoading, isFetching } = useQuery<HistoryList>({
-    queryKey: ['inventory-history', movementType, reasonCode, dateFrom, dateTo, page],
+    queryKey: ['inventory-history', movementType, reasonCode, dateFrom, dateTo, page, pageSize],
     queryFn: () => api.get<HistoryList>(`/inventory/history?${params.toString()}`),
     placeholderData: prev => prev,
   });
@@ -639,26 +677,24 @@ function HistoryTab() {
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
-        <span className="text-xs text-gray-500">{data ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, data.total)} of ${data.total}` : '—'}</span>
-        <div className="flex items-center gap-1">
-          <PagBtn onClick={() => setPage(1)} disabled={page === 1} label="«" />
-          <PagBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} label="‹" />
-          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded font-medium">{page}</span>
-          <PagBtn onClick={() => setPage(p => Math.min(data?.totalPages ?? 1, p + 1))} disabled={page === (data?.totalPages ?? 1)} label="›" />
-          <PagBtn onClick={() => setPage(data?.totalPages ?? 1)} disabled={page === (data?.totalPages ?? 1)} label="»" />
-        </div>
-      </div>
+      {data && (
+        <Pagination
+          page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+          onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+          itemLabel="history entry"
+        />
+      )}
     </div>
   );
 }
 
 // ── Low Stock Alerts Tab ──────────────────────────────────────────────────────
 function AlertsTab({ userRole: _userRole, userPermissions: _userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
-  const { data, isLoading, refetch } = useQuery<{ items: InventoryRow[]; total: number }>({
-    queryKey: ['inventory-low-stock'],
-    queryFn: () => api.get('/inventory/low-stock'),
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const { data, isLoading, refetch } = useQuery<{ items: InventoryRow[]; total: number; page: number; totalPages: number }>({
+    queryKey: ['inventory-low-stock', page, pageSize],
+    queryFn: () => api.get(`/inventory/low-stock?page=${page}&pageSize=${pageSize}`),
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -723,6 +759,13 @@ function AlertsTab({ userRole: _userRole, userPermissions: _userPermissions }: {
           </table>
         )}
       </div>
+      {data && data.items.length > 0 && (
+        <Pagination
+          page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+          onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
+          itemLabel="low-stock item"
+        />
+      )}
     </div>
   );
 }
@@ -750,15 +793,6 @@ function SkeletonRow({ cols }: { cols: number }) {
         </td>
       ))}
     </tr>
-  );
-}
-
-function PagBtn({ onClick, disabled, label }: { onClick: () => void; disabled: boolean; label: string }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300">
-      {label}
-    </button>
   );
 }
 

@@ -77,6 +77,7 @@ describe('POS — Transactions', () => {
   let salesToken: string;
   let managerToken: string;
   let adminToken: string;
+  let superAdminToken: string;
   let branchId: number;
   let locationId: number;
   let bookId: number;
@@ -104,6 +105,9 @@ describe('POS — Transactions', () => {
 
     const admin = await createTestStaff({ username: 'pos_test_admin', role: 'Admin', branchId });
     adminToken = admin.token;
+
+    const superAdmin = await createTestStaff({ username: 'pos_test_superadmin', role: 'Super_Admin', branchId });
+    superAdminToken = superAdmin.token;
 
     locationId = await getTestLocation(branchId);
     const book = await getTestBook();
@@ -313,9 +317,6 @@ describe('POS — Transactions', () => {
     const expectedSubtotal = parseFloat((bookPrice * qty).toFixed(2));
     // Tax disabled — grandTotal = subtotal
     const expectedGrand = expectedSubtotal;
-
-    const loyBefore = await db.query(`SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1`, [customerId]);
-    const ptsBefore = Number(loyBefore.rows[0].points_balance);
 
     const res = await request(getTestApp())
       .post('/api/pos/transactions')
@@ -635,5 +636,34 @@ describe('POS — Transactions', () => {
     );
     expect(Number(rec2.rows[0].outstanding_amount)).toBeCloseTo(origAmount - p1 - p2, 2);
     expect(rec2.rows[0].status).toBe('PartiallyPaid');
+  });
+
+  // ── 15. RBAC — Super_Admin cannot create a POS sale ─────────────────────────
+  // Regression test for the requireRole → requirePermission('CREATE_SALE')
+  // fix: Super_Admin is a governance-only role (see lib/permissions.ts) and
+  // has no path to POS in the sidebar (Layout.tsx). The backend previously
+  // granted it access anyway via requireRole; it must not.
+
+  it('15. Super_Admin → 403 PERMISSION_DENIED on POST /pos/transactions', async () => {
+    const res = await request(getTestApp())
+      .post('/api/pos/transactions')
+      .set('Authorization', `Bearer ${superAdminToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ branchId, locationId, items: [{ bookId, quantity: 1 }], payments: [] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('PERMISSION_DENIED');
+  });
+
+  it('15b. Sales/Manager/Admin still create a POS sale (permission-based check unaffected)', async () => {
+    for (const token of [salesToken, managerToken, adminToken]) {
+      const res = await request(getTestApp())
+        .post('/api/pos/transactions')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Branch-Id', String(branchId))
+        .send({ branchId, locationId, items: [{ bookId, quantity: 1 }], payments: [{ method: 'cash', amount: bookPrice }] });
+
+      expect(res.status).toBe(201);
+    }
   });
 });

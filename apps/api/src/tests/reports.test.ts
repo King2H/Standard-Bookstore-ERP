@@ -3,7 +3,6 @@ import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
-import { db } from '../db/index.js';
 
 const STAFF_PREFIX = 'rpt_test_';
 const BRANCH_PREFIX = 'Report Test ';

@@ -21,6 +21,19 @@ type EventHandler = (payload: Record<string, unknown>) => Promise<void>;
 
 const HANDLERS: Record<string, EventHandler> = {
   LoyaltyAccrualRequested: handleLoyaltyAccrual,
+  // Legacy Code Audit finding: installmentChecker.ts's daily cron has always
+  // inserted 'InstallmentOverdue' (PascalCase) outbox rows and imported
+  // handleInstallmentOverdue specifically to process them, but this map
+  // never had a matching key — every such event silently fell through
+  // pollOnce()'s handler lookup and was marked failed with no side effect.
+  // (Distinct from the newer Phase 5 'installment.overdue' — dot-case —
+  // notification event, which IS routed below but is never actually
+  // emitted anywhere via insertOutbox(); that gap is unrelated and left
+  // as-is, flagged separately.) Wiring this up is additive/log-only
+  // (handleInstallmentOverdue only console.logs today) — no user-facing
+  // behavior changes, it just stops discarding an event that was always
+  // meant to be handled.
+  InstallmentOverdue: handleInstallmentOverdue,
   // Phase 5 — Notification system: all notification event types route to handleNotification
   'inventory.stock_in': handleNotification,
   'inventory.stock_out': handleNotification,

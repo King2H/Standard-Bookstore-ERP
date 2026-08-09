@@ -411,7 +411,26 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     const orderId = createRes.body.id as number;
     expect(createRes.body.status).toBe('DRAFT');
 
-    // ── Step 2: Confirm the order — should succeed ───────────────────────────
+    // ── Step 1b: Draft a second CASH order for the full INITIAL_QTY, while
+    // all of it is still available (Unified Order Creation Workflow: create()
+    // now also validates available stock, so this can't be over the *original*
+    // total the way a truly oversized request could — it has to be drafted
+    // before order 1 consumes any of it, then become insufficient once order 1
+    // is confirmed below). ────────────────────────────────────────────────────
+    const OVER_QTY = INITIAL_QTY;
+    const overCreateRes = await request(getTestApp())
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        locationId,
+        saleType: 'cash_sale',
+        items: [{ bookId, quantity: OVER_QTY }],
+      });
+    expect(overCreateRes.status).toBe(201);
+    const overOrderId = overCreateRes.body.id as number;
+
+    // ── Step 2: Confirm the first order — should succeed ─────────────────────
     const confirmRes = await request(getTestApp())
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
@@ -431,23 +450,10 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     const confirmedStatus = (orderRes.body.status as string).toLowerCase();
     expect(['confirmed', 'in_progress']).toContain(confirmedStatus);
 
-    // ── Step 3: Create a second DRAFT order that requests MORE than available ─
-    // After confirm above, the soft reservation means available = qty - reserved.
-    // Create an order requesting MORE than the total remaining qty.
-    const OVER_QTY = INITIAL_QTY + 1; // definitely exceeds available
-    const overCreateRes = await request(getTestApp())
-      .post('/api/orders')
-      .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId))
-      .send({
-        locationId,
-        saleType: 'cash_sale',
-        items: [{ bookId, quantity: OVER_QTY }],
-      });
-    expect(overCreateRes.status).toBe(201);
-    const overOrderId = overCreateRes.body.id as number;
-
-    // ── Assertion 2: confirming the over-quantity order must be rejected ──────
+    // ── Assertion 2: confirming the now-over-quantity order must be rejected ──
+    // Order 1's confirm above consumed ORDER_QTY, leaving less than OVER_QTY
+    // available — order 2 (drafted before that, still requesting all of
+    // INITIAL_QTY) must now fail at its own confirm.
     // requirement 3.13: confirm() SHALL CONTINUE TO enforce hard stock rejection
     const overConfirmRes = await request(getTestApp())
       .post(`/api/orders/${overOrderId}/confirm`)
@@ -674,7 +680,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
       .post(`/api/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({});
+      .send({ dueDate: '2099-12-31' });
 
     expect(confirmRes.status).toBeGreaterThanOrEqual(200);
     expect(confirmRes.status).toBeLessThan(300);
@@ -721,40 +727,39 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
   // ──────────────────────────────────────────────────────────────────────────────
   // Task 2.6 — Preservation: Dashboard KPIs use live data
   //
-  // MUST PASS on unfixed code.
-  //
   // Verifies that the available-stock KPI formula is:
-  //   available = inventory.quantity - SUM(inventory_reservations.quantity WHERE status='reserved')
+  //   available = inventory.quantity
   //
   // This is the formula implemented in getAvailableStock() inside
   // inventoryTransaction.service.ts. There is no dedicated /api/dashboard endpoint;
-  // the KPI data is sourced directly from the inventory + inventory_reservations tables.
-  // The test therefore validates the formula by querying the DB directly in the same
-  // way getAvailableStock() does, confirming the live data contract is upheld.
+  // the KPI data is sourced directly from the inventory table. The test validates
+  // the formula by querying the DB directly the same way getAvailableStock() does,
+  // confirming the live data contract is upheld.
   //
   // Steps:
   //   1. Set inventory to a known quantity Q
-  //   2. Create and confirm an order for quantity R (creates a soft reservation of R)
-  //   3. Read inventory.quantity from DB → must still equal Q (soft reservation does
-  //      NOT change inventory.quantity on unfixed code — only confirm() does on fixed code;
-  //      on UNFIXED code, confirm() calls stockOut() which DOES deduct inventory.quantity)
-  //   4. Compute DB-level available = inventory.quantity - SUM(active_reservations)
+  //   2. Create and confirm an order for quantity R — confirm() both deducts
+  //      inventory.quantity by R (via stockOut()) AND inserts a 'reserved' row,
+  //      in the same DB transaction (order-payment-unification spec, 3.5: "SHALL
+  //      CONTINUE TO deduct... as currently implemented")
+  //   3. Read inventory.quantity from DB → now Q - R
+  //   4. DB-level available = inventory.quantity (== Q - R)
   //   5. Call getAvailableStock() via inventory API to confirm the API value matches
   //      the DB-computed value (formula consistency)
   //   6. Assert API available == DB-computed available
   //
-  // Note on unfixed vs fixed behaviour:
-  //   On UNFIXED code: confirm() calls invTxSvc.stockOut() which deducts inventory.quantity
-  //   by R AND creates a reservation. So inventory.quantity = Q - R, reserved = R,
-  //   available = (Q - R) - R = Q - 2R.  Both the DB formula and the API call agree on
-  //   this value — the KPI consistency (formula == API) is what we are preserving.
-  //   On FIXED code: confirm() only creates the reservation, inventory.quantity stays Q,
-  //   reserved = R, available = Q - R. Again, the formula and API must agree.
-  //   In both cases the assertion is: DB-formula-result == getAvailableStock()-result.
+  // Historical note: this test originally anticipated a "reserve-only, don't
+  // deduct at confirm" design that was never adopted -- order-payment-unification
+  // ratified the opposite (deduct immediately at confirm). Because the reservation
+  // row is only ever committed alongside the matching stockOut() in the same
+  // transaction, its quantity is always already reflected in inventory.quantity,
+  // so getAvailableStock() no longer subtracts it (see that function's comment in
+  // inventoryTransaction.service.ts for the full reasoning). This test's own
+  // formula recomputation below was updated to match.
   //
   // Validates: Requirements 7.2
   // ──────────────────────────────────────────────────────────────────────────────
-  it('2.6 Preservation: Dashboard KPIs use live data — available stock formula matches inventory.quantity - SUM(active_reservations)', async () => {
+  it('2.6 Preservation: Dashboard KPIs use live data — available stock formula matches inventory.quantity', async () => {
     const INITIAL_QTY = 20;
     const ORDER_QTY = 5;
 
@@ -806,8 +811,14 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     const reservedSum = parseInt(String(reservedRow.rows[0].reserved ?? 0), 10);
 
-    // DB-level formula (same as getAvailableStock())
-    const dbComputedAvailable = rawQuantity - reservedSum;
+    // DB-level formula (same as getAvailableStock()).
+    // available == quantity, NOT quantity - reserved: confirm() inserts the
+    // 'reserved' row and calls stockOut() (which already decremented
+    // inventory.quantity) in the same DB transaction, always — so a
+    // committed 'reserved' row's quantity is already reflected in
+    // inventory.quantity. Subtracting it again double-counts it. See the
+    // comment on getAvailableStock() in inventoryTransaction.service.ts.
+    const dbComputedAvailable = rawQuantity;
 
     // ── Step 4: Call inventory API to get available stock ─────────────────────
     // The inventory API endpoint returns available stock using getAvailableStock()
@@ -833,11 +844,13 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     }
 
     // ── Assertion: DB formula is internally consistent ────────────────────────
-    // The available value must equal quantity - reservedSum (the KPI formula).
-    // This assertion passes on both unfixed code (where quantity was deducted AND
-    // a reservation exists) and fixed code (where quantity is unchanged but reservation
-    // accounts for the committed stock).
-    expect(dbComputedAvailable).toBe(rawQuantity - reservedSum);
+    // available == quantity (reservations are informational only — see the
+    // formula note above). reservedSum is still read from the DB above (and
+    // asserted here to actually be > 0) purely to confirm the reservation row
+    // itself was written by confirm(), independent of whether it affects
+    // availability.
+    expect(dbComputedAvailable).toBe(rawQuantity);
+    expect(reservedSum).toBeGreaterThan(0);
 
     // ── Assertion: available must not exceed original quantity ─────────────────
     // No matter what code path ran, the available stock cannot exceed the initial
@@ -849,13 +862,9 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     expect(dbComputedAvailable).toBeGreaterThanOrEqual(0);
 
     // ── Assertion: after confirming ORDER_QTY units, available is reduced ─────
-    // On unfixed code: rawQuantity = INITIAL_QTY - ORDER_QTY (stockOut at confirm),
-    //                  reservedSum may be ORDER_QTY (reservation also created), so
-    //                  available = (INITIAL_QTY - ORDER_QTY) - ORDER_QTY = INITIAL_QTY - 2*ORDER_QTY
-    //                  OR if stockOut removes stock but no reservation: available = INITIAL_QTY - ORDER_QTY
-    // On fixed code:   rawQuantity = INITIAL_QTY, reservedSum = ORDER_QTY,
-    //                  available = INITIAL_QTY - ORDER_QTY = 15
-    // In either case, available < INITIAL_QTY (confirming the order reduced availability)
+    // confirm() deducts inventory.quantity by ORDER_QTY via stockOut() (see
+    // order-payment-unification spec, 3.5). rawQuantity = INITIAL_QTY - ORDER_QTY,
+    // available = rawQuantity < INITIAL_QTY (confirming the order reduced availability).
     expect(dbComputedAvailable).toBeLessThan(INITIAL_QTY);
   });
 

@@ -90,6 +90,10 @@ export interface OrderRow {
   cancelReason: string | null; notes: string | null;
   createdBy: number; createdAt: string; updatedAt: string; lineItems?: OrderLineItemRow[];
   allowedActions?: string[];
+  /** Payment method recorded for this order (cash orders: at confirm; populated via getById()'s subquery). */
+  paymentMethod?: string | null;
+  /** Credit sale due date (YYYY-MM-DD), sourced from the linked receivable; populated via getById()'s subquery. */
+  dueDate?: string | null;
 }
 
 export interface OrderLineItemRow {
@@ -113,6 +117,8 @@ function mapOrderRow(row: Record<string, unknown>): OrderRow {
     cancelReason: (row.cancel_reason as string | null) ?? null, notes: (row.notes as string | null) ?? null,
     createdBy: row.created_by as number,
     createdAt: (row.created_at as Date).toISOString(), updatedAt: (row.updated_at as Date).toISOString(),
+    paymentMethod: (row.payment_method as string | null | undefined) ?? null,
+    dueDate: (row.due_date as string | null | undefined) ?? null,
   };
 }
 
@@ -136,7 +142,13 @@ async function fetchLineItems(orderId: string): Promise<OrderLineItemRow[]> {
 }
 
 export async function getById(id: string | number): Promise<OrderRow> {
-  const res = await db.query('SELECT o.* FROM orders o WHERE o.id = $1', [id]);
+  const res = await db.query(
+    `SELECT o.*,
+       (SELECT op.payment_method FROM order_payments op WHERE op.order_id = o.id ORDER BY op.created_at ASC LIMIT 1) AS payment_method,
+       (SELECT TO_CHAR(r.due_date, 'YYYY-MM-DD') FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = o.id LIMIT 1) AS due_date
+     FROM orders o WHERE o.id = $1`,
+    [id],
+  );
   if (!res.rows.length) throw new NotFoundError('Order');
   const order = mapOrderRow(res.rows[0]);
   order.lineItems = await fetchLineItems(order.id);
@@ -155,7 +167,16 @@ export async function list(opts: {
   const params: unknown[] = [];
   if (opts.branchId)      { params.push(opts.branchId);      conditions.push('o.branch_id = $' + params.length); }
   if (opts.customerId)    { params.push(opts.customerId);    conditions.push('o.customer_id = $' + params.length); }
-  if (opts.status)        { params.push(opts.status);        conditions.push('o.status = $' + params.length); }
+  // Module 6: accept a comma-separated status list (dashboard drill-downs pass
+  // multiple statuses, e.g. "CONFIRMED,PAID") alongside the single-value case.
+  if (opts.status) {
+    const statuses = opts.status.split(',').map(s => s.trim()).filter(Boolean);
+    if (statuses.length > 1) {
+      params.push(statuses); conditions.push('o.status = ANY($' + params.length + '::text[])');
+    } else if (statuses.length === 1) {
+      params.push(statuses[0]); conditions.push('o.status = $' + params.length);
+    }
+  }
   if (opts.paymentStatus) { params.push(opts.paymentStatus); conditions.push('o.payment_status = $' + params.length); }
   if (opts.channel)       { params.push(opts.channel);       conditions.push('o.channel = $' + params.length); }
   if (opts.dateFrom)      { params.push(opts.dateFrom);      conditions.push('o.created_at >= $' + params.length); }
@@ -216,6 +237,14 @@ export async function create(
   const maxDiscPct = await getMaxLineDiscountPct(staffCtx.branchId, staffCtx.role);
 
   for (const item of data.items) {
+    // Bug Sweep: quantity had no application-level bound — a zero/negative
+    // value fell through to order_line_items' CHECK (quantity > 0), which
+    // the error handler doesn't recognize as an AppError, surfacing as a
+    // raw 500 instead of a clean 400.
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new ValidationError(`Quantity for book ${item.bookId} must be a positive integer`);
+    }
+
     const bookRes = await db.query('SELECT id, title, is_active FROM books WHERE id = $1', [item.bookId]);
     if (!bookRes.rows.length) throw new NotFoundError('Book ' + item.bookId);
     const book = bookRes.rows[0];
@@ -251,8 +280,13 @@ export async function create(
       // Enforce max-discount cap
       enforceDiscountCap(resolvedDiscount.discountPct, maxDiscPct);
     } else {
-      // Backward-compatible: plain discountAmount only
-      const discountAmount = parseFloat((item.discountAmount ?? 0).toFixed(2));
+      // Backward-compatible: plain discountAmount only.
+      // Bug Sweep: clamp to 0 — a negative discountAmount was passed
+      // straight through, which (since totalPrice = unitPrice*qty -
+      // discountAmount) would INCREASE the line total rather than
+      // discount it. Mirrors the clamp resolveDiscountFields() already
+      // applies on the engine-fields path above.
+      const discountAmount = Math.max(0, parseFloat((item.discountAmount ?? 0).toFixed(2)));
       const lineValue = unitPrice * item.quantity;
       const discountPct = lineValue > 0
         ? Math.round((discountAmount / lineValue) * 10000) / 100
@@ -286,11 +320,42 @@ export async function create(
   const total = subtotal;
   const initialStatus = await dbStatus('DRAFT');
 
+  // ── Stock visibility: cannot order more than available branch inventory ──
+  // A DRAFT order doesn't reserve or deduct stock yet (confirm() does that,
+  // with its own row-locked, authoritative INSUFFICIENT_STOCK check below,
+  // unchanged) — so a plain read-only availability check here is enough: it
+  // just stops the order from ever being created oversold in the first
+  // place, closer to where the user is adding items, instead of only
+  // surfacing as a confusing error much later at confirm.
+  if (!(await isNegativeStockAllowed())) {
+    const effectiveLocationId = await resolveEffectiveLocationId(data.locationId ?? null, staffCtx.branchId);
+    for (const item of resolvedItems) {
+      const stock = await invTxSvc.getAvailableStock(item.bookId, effectiveLocationId);
+      if (stock.available < item.quantity) {
+        const bookRes = await db.query('SELECT title FROM books WHERE id = $1', [item.bookId]);
+        const bookTitle = (bookRes.rows[0]?.title as string | undefined) ?? `Book ${item.bookId}`;
+        throw new BusinessError(
+          'INSUFFICIENT_STOCK',
+          `Insufficient stock for "${bookTitle}". Available: ${stock.available}, Requested: ${item.quantity}`,
+        );
+      }
+    }
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const cntRes = await client.query('SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURRENT_DATE');
+    // Module 9: derive the date-stamp from the DB's own CURRENT_DATE instead
+    // of Node's new Date() (always UTC via toISOString()). The sequence
+    // count below is already scoped to CURRENT_DATE — computing the visible
+    // date-stamp from a separate, JS-side UTC clock let the two drift apart
+    // whenever the DB session timezone differs from UTC (e.g. EAT, UTC+3):
+    // during the first few hours of each local day the reference number
+    // would show yesterday's date while the counter had already rolled over.
+    const cntRes = await client.query(
+      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM orders WHERE DATE(created_at) = CURRENT_DATE`,
+    );
+    const dateStr = cntRes.rows[0].date_str as string;
     const orderNumber = 'ORD-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count, 10) + 1).padStart(4, '0');
     const orderRes = await client.query(
       `INSERT INTO orders
@@ -353,6 +418,26 @@ export async function create(
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
 }
 
+// Standalone counterpart to resolveLocationId() below, usable before an
+// OrderRow/transaction exists (e.g. from create(), pre-INSERT). Same
+// fallback chain: explicit locationId → branch default-fulfillment location
+// → any location in the branch → branchId itself. Uses the plain `db` pool
+// since it only ever runs outside a transaction.
+async function resolveEffectiveLocationId(locationId: number | null, branchId: number): Promise<number> {
+  if (locationId) return locationId;
+  const defRes = await db.query(
+    'SELECT id FROM locations WHERE branch_id = $1 AND is_default_fulfillment = true LIMIT 1',
+    [branchId],
+  );
+  if (defRes.rows.length) return defRes.rows[0].id as number;
+  const anyRes = await db.query(
+    'SELECT id FROM locations WHERE branch_id = $1 ORDER BY id LIMIT 1',
+    [branchId],
+  );
+  if (anyRes.rows.length) return anyRes.rows[0].id as number;
+  return branchId;
+}
+
 async function resolveLocationId(client: pg.PoolClient, order: OrderRow, staffCtx: StaffCtx): Promise<number> {
   if (order.locationId) return order.locationId;
   // Try branch default fulfillment location
@@ -371,9 +456,59 @@ async function resolveLocationId(client: pg.PoolClient, order: OrderRow, staffCt
   return staffCtx.branchId;
 }
 
-export async function confirm(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
+const CASH_PAYMENT_METHODS = ['cash', 'bank', 'mobile', 'store_credit'] as const;
+
+export async function confirm(
+  orderId: string | number,
+  staffCtx: StaffCtx,
+  dueDate?: string | null,
+  paymentMethod?: string | null,
+): Promise<OrderRow> {
   const order = await getById(orderId);
   if (normaliseStatus(order.status) !== 'DRAFT') throw new BusinessError('INVALID_STATE', "Cannot confirm order in status '" + order.status + "'");
+
+  // Module 4: a credit order must carry a due date on the receivable it is
+  // about to create — otherwise the receivable is un-chaseable (never goes
+  // Overdue, never surfaces on aging reports). Required up front, before the
+  // transaction opens, so a missing date fails fast without touching stock.
+  if (order.saleType === 'credit_sale' && order.customerId) {
+    if (!dueDate) {
+      throw new ValidationError('due_date is required to confirm a credit sale order');
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      throw new ValidationError('due_date must be in YYYY-MM-DD format');
+    }
+    // Due date must be today or later. Compared as ISO YYYY-MM-DD strings
+    // (both zero-padded) so this never round-trips through a JS Date object
+    // — TO_CHAR(CURRENT_DATE, ...) reads the DB session's own local date,
+    // avoiding the UTC-shift bugs a Date().toISOString() comparison would
+    // introduce for non-UTC server timezones (e.g. Africa/Addis_Ababa).
+    const todayRes = await db.query(`SELECT TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS today`);
+    const today = todayRes.rows[0].today as string;
+    if (dueDate < today) {
+      throw new ValidationError(`due_date must be today (${today}) or later`);
+    }
+  }
+
+  // Payment Mode Capture: every cash order must have a payment method
+  // persisted against it — the Create Order confirm form (OrdersPage.tsx)
+  // requires the staff member to pick one before it will submit. Callers
+  // that don't supply one (older/other integration points, e.g. programmatic
+  // confirms elsewhere in the app) fall back to 'cash', matching the
+  // "cash order" naming itself — the method is still always recorded,
+  // it's just assumed to be cash absent a more specific selection, so this
+  // never becomes a caller-breaking hard requirement at the API layer.
+  let effectivePaymentMethod: string | null = null;
+  if (order.saleType === 'cash_sale') {
+    effectivePaymentMethod = paymentMethod || 'cash';
+    if (!(CASH_PAYMENT_METHODS as readonly string[]).includes(effectivePaymentMethod)) {
+      throw new ValidationError(`payment_method must be one of: ${CASH_PAYMENT_METHODS.join(', ')}`);
+    }
+    if (effectivePaymentMethod === 'store_credit' && !order.customerId) {
+      throw new BusinessError('STORE_CREDIT_REQUIRES_CUSTOMER', 'Store credit payment requires a customer to be selected');
+    }
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -451,6 +586,47 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx): Pro
     // ── Fix 9.1 (CASH): set payment_status = 'paid' atomically at confirmation ──
     if (order.saleType === 'cash_sale') {
       await client.query("UPDATE orders SET payment_status = 'paid', updated_at = now() WHERE id = $1", [orderId]);
+
+      // ── Payment Mode Capture: persist the payment method as an order_payments
+      // record. This is a system-recorded side effect of confirmation (the
+      // order is paid in full immediately) — distinct from the Payments
+      // module's manual collection flow, which paymentsService.createPayment()
+      // already refuses for cash_sale orders (CASH_ORDER_ALREADY_PAID).
+      if (effectivePaymentMethod === 'store_credit') {
+        const scRes = await client.query(
+          'SELECT balance FROM store_credit_accounts WHERE customer_id = $1 FOR UPDATE',
+          [order.customerId],
+        );
+        const available = scRes.rows.length ? parseFloat(scRes.rows[0].balance as string) : 0;
+        if (available < order.total - 0.01) {
+          throw new BusinessError(
+            'INSUFFICIENT_STORE_CREDIT',
+            `Insufficient store credit. Available: ETB ${available.toFixed(2)}, requested: ETB ${order.total.toFixed(2)}`,
+            { available, requested: order.total },
+          );
+        }
+        await client.query(
+          'UPDATE store_credit_accounts SET balance = balance - $1 WHERE customer_id = $2',
+          [order.total.toFixed(2), order.customerId],
+        );
+        await client.query(
+          `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction)
+           VALUES ($1, 'order_cash_sale', $2, $3, 'debit')`,
+          [order.customerId, String(orderId), order.total.toFixed(2)],
+        );
+      }
+
+      const payCntRes = await client.query(
+        `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM order_payments WHERE DATE(created_at) = CURRENT_DATE`,
+      );
+      const payDateStr = payCntRes.rows[0].date_str as string;
+      const paymentReference = 'PAY-' + payDateStr + '-' + String(parseInt(payCntRes.rows[0].count, 10) + 1).padStart(4, '0');
+      await client.query(
+        `INSERT INTO order_payments
+           (payment_reference, order_id, amount, currency, payment_method, status, notes, processed_by)
+         VALUES ($1, $2, $3, 'ETB', $4, 'success', $5, $6)`,
+        [paymentReference, orderId, order.total.toFixed(2), effectivePaymentMethod, 'Recorded at order confirmation', staffCtx.staffId],
+      );
     }
 
     const confirmedStatus = await dbStatus('CONFIRMED');
@@ -488,6 +664,7 @@ export async function confirm(orderId: string | number, staffCtx: StaffCtx): Pro
               customerId: order.customerId,
               branchId: order.branchId,
               originalAmount: outstandingAmount,
+              dueDate: dueDate ?? null,
             },
             client,
           );
@@ -675,18 +852,21 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
       }
     }
 
-    const cancelledStatus = await dbStatus('CANCELLED');
-    await client.query('UPDATE orders SET status = $1, cancel_reason = $2, updated_at = now() WHERE id = $3', [cancelledStatus, reason, orderId]);
-    await client.query(
-      "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','order',$3,$4,$5)",
-      [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId,
-       JSON.stringify({ action: 'cancel', fromStatus: order.status, toStatus: 'CANCELLED', reason, financialLifecycleFrozen: true, note: 'Payment collection disabled. Receivable voided. No further financial transactions allowed.' })],
-    );
-    await insertOutbox(client, 'order.cancelled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId, reason });
-
     // ── Settle any open order_credit_sale receivable ───────────────────────────
     // Task 6.3: Hard failure — if receivable settlement fails the whole transaction
     // rolls back. The savepoint that swallowed errors is removed.
+    //
+    // Bug fix: this MUST run before the order's own status flips to CANCELLED
+    // below. updateReceivableOnPayment() has its own defensive guard ("Bug 4")
+    // that silently no-ops if the linked order is already CANCELLED -- that
+    // guard exists to stop some OTHER caller (e.g. createPayment) from
+    // reactivating a receivable after the fact, but it can't distinguish that
+    // from cancel() itself trying to close the receivable out as part of the
+    // cancellation. Calling it after the UPDATE below meant this guard fired
+    // on cancel()'s own settlement attempt every time, unconditionally --
+    // receivables for cancelled credit orders never actually settled, leaving
+    // the phantom-debt state order-payment-unification (3.5, 4.3) says this
+    // is supposed to prevent.
     const recRes = await client.query(
       "SELECT 1 FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1 AND status != 'Settled' LIMIT 1",
       [orderId],
@@ -703,6 +883,15 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
       );
     }
 
+    const cancelledStatus = await dbStatus('CANCELLED');
+    await client.query('UPDATE orders SET status = $1, cancel_reason = $2, updated_at = now() WHERE id = $3', [cancelledStatus, reason, orderId]);
+    await client.query(
+      "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','order',$3,$4,$5)",
+      [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId,
+       JSON.stringify({ action: 'cancel', fromStatus: order.status, toStatus: 'CANCELLED', reason, financialLifecycleFrozen: true, note: 'Payment collection disabled. Receivable voided. No further financial transactions allowed.' })],
+    );
+    await insertOutbox(client, 'order.cancelled', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId, reason });
+
     await client.query('COMMIT');
     return getById(orderId);
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -710,6 +899,70 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
 
 export async function updatePaymentStatus(orderId: string | number, paymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded'): Promise<void> {
   await db.query('UPDATE orders SET payment_status = $1, updated_at = now() WHERE id = $2', [paymentStatus, orderId]);
+}
+
+// ── deleteOrder (Module 9 — admin-only cleanup for Draft/Cancelled orders) ────
+//
+// Only DRAFT (never confirmed) or CANCELLED orders are eligible — anything
+// further along the lifecycle must be cancelled first, not deleted, so its
+// history survives. Even within those two statuses, deletion is blocked if
+// any financial or inventory record still references the order: a DRAFT
+// order cancelled without ever being confirmed has none of these (confirm()
+// is the only place stock gets deducted or a receivable created), but a
+// CONFIRMED-then-CANCELLED order can have real history (payments collected
+// before cancellation, a settled receivable, linked exchanges, inventory
+// movement) that must be retained, not silently destroyed. order_line_items
+// and inventory_reservations are ON DELETE CASCADE and clean up
+// automatically; everything else is checked explicitly since
+// receivables.source_entity_id is a polymorphic reference with no FK.
+export async function deleteOrder(orderId: string | number, staffCtx: StaffCtx): Promise<void> {
+  const order = await getById(orderId);
+  const status = normaliseStatus(order.status);
+  if (status !== 'DRAFT' && status !== 'CANCELLED') {
+    throw new BusinessError(
+      'INVALID_STATE',
+      `Cannot delete order in status '${order.status}'. Only Draft or Cancelled orders can be deleted — cancel it first.`,
+    );
+  }
+
+  const [payRes, recRes, instRes, exchRes, histRes] = await Promise.all([
+    db.query('SELECT 1 FROM order_payments WHERE order_id = $1 LIMIT 1', [orderId]),
+    db.query(
+      "SELECT 1 FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1 LIMIT 1",
+      [orderId],
+    ),
+    db.query('SELECT 1 FROM installment_plans WHERE order_id = $1 LIMIT 1', [orderId]),
+    db.query('SELECT 1 FROM exchanges WHERE original_order_id = $1 LIMIT 1', [orderId]),
+    db.query(
+      "SELECT 1 FROM inventory_history WHERE reference_type IN ('order_confirmed','order_cancelled') AND reference_id = $1 LIMIT 1",
+      [String(orderId)],
+    ),
+  ]);
+  const blockers: string[] = [];
+  if (payRes.rows.length) blockers.push('payments');
+  if (recRes.rows.length) blockers.push('a receivable');
+  if (instRes.rows.length) blockers.push('an installment plan');
+  if (exchRes.rows.length) blockers.push('a linked exchange');
+  if (histRes.rows.length) blockers.push('inventory movement history');
+  if (blockers.length) {
+    throw new BusinessError(
+      'ORDER_HAS_DEPENDENCIES',
+      `Cannot delete order ${order.orderNumber}: it has ${blockers.join(', ')} on record. Orders with financial or inventory history must be retained.`,
+      { blockers },
+    );
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM orders WHERE id = $1', [orderId]);
+    await client.query(
+      "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'DELETE','order',$3,$4,$5)",
+      [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId,
+       JSON.stringify({ orderNumber: order.orderNumber, status: order.status })],
+    );
+    await client.query('COMMIT');
+  } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
 }
 
 /**
@@ -800,12 +1053,23 @@ export async function collectPayment(
 /**
  * Computes the list of allowed actions for an order based on its current status,
  * sale type, and the permissions of the requesting staff member.
+ *
+ * Legacy Code Audit note: `paymentStatus`/`saleType` are accepted (and every
+ * call site — orders.routes.ts and the lifecycle test suites — still passes
+ * them) but no branch below currently reads either one; the old
+ * payment-status-gated 'pay' action was removed as part of the Task 7.x
+ * lifecycle-state-machine refactor once payment collection moved fully to
+ * the Payments module. Left in the signature rather than removed: dropping
+ * them would require touching every call site and the many lifecycle tests
+ * that assert against this exact 4-arg signature, for a purely cosmetic
+ * change — out of proportion for a "safe" cleanup pass. Underscore-prefixed
+ * to satisfy noUnusedParameters without altering behavior.
  */
 export function computeOrderAllowedActions(
   status: string,
   permissions: Permission[],
-  paymentStatus?: string,
-  saleType?: 'cash_sale' | 'credit_sale',
+  _paymentStatus?: string,
+  _saleType?: 'cash_sale' | 'credit_sale',
 ): string[] {
   const can = (p: Permission) => permissions.includes(p);
 

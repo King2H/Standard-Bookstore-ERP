@@ -97,7 +97,6 @@ describe('Config — System', () => {
 });
 
 describe('Config — Branch', () => {
-  let superAdminToken: string;
   let adminToken: string;
   let managerToken: string;
   let salesToken: string;
@@ -109,8 +108,7 @@ describe('Config — Branch', () => {
     const branch = await createTestBranch({ name: 'Config Br Branch' });
     branchId = branch.branchId;
 
-    const sa = await createTestStaff({ username: 'cfg_br_sa', role: 'Super_Admin', branchId });
-    superAdminToken = sa.token;
+    await createTestStaff({ username: 'cfg_br_sa', role: 'Super_Admin', branchId });
 
     const adm = await createTestStaff({ username: 'cfg_br_admin', role: 'Admin', branchId });
     adminToken = adm.token;

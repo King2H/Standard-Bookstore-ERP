@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { NotFoundError, ConflictError, BusinessError } from '../../lib/errors.js';
+import { NotFoundError, ConflictError } from '../../lib/errors.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

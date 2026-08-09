@@ -6,6 +6,7 @@ import { ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { computeOrderAllowedActions } from './orders.service.js';
 import { Permission } from '../../lib/permissions.js';
+import { paramInt } from '../../lib/http.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -81,7 +82,7 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.getById(parseInt(req.params.id as string, 10));
+      const order = await ordersService.getById(paramInt(req.params.id));
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }
@@ -96,9 +97,28 @@ router.post(
   requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.confirm(parseInt(req.params.id as string, 10), req.staff!);
+      const dueDate = typeof req.body?.dueDate === 'string' ? req.body.dueDate : null;
+      const paymentMethod = typeof req.body?.paymentMethod === 'string' ? req.body.paymentMethod : null;
+      const order = await ordersService.confirm(paramInt(req.params.id), req.staff!, dueDate, paymentMethod);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── DELETE /api/orders/:id ────────────────────────────────────────────────────
+// Module 9: admin-only cleanup for Draft/Cancelled orders. Service layer
+// enforces the status gate and dependency checks — see orders.service.ts
+// deleteOrder().
+
+router.delete(
+  '/orders/:id',
+  authenticate,
+  requireRole('Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await ordersService.deleteOrder(paramInt(req.params.id), req.staff!);
+      res.json({ message: 'Order deleted' });
     } catch (err) { next(err); }
   },
 );
@@ -111,7 +131,7 @@ router.post(
   requireRole('Manager', 'Admin', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.progress(parseInt(req.params.id as string, 10), req.staff!);
+      const order = await ordersService.progress(paramInt(req.params.id), req.staff!);
       res.json(order);
     } catch (err) { next(err); }
   },
@@ -143,7 +163,7 @@ router.post(
   requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const order = await ordersService.fulfill(parseInt(req.params.id as string, 10), req.staff!);
+      const order = await ordersService.fulfill(paramInt(req.params.id), req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }
@@ -159,7 +179,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const reason = req.body.reason ?? 'No reason provided';
-      const order = await ordersService.cancel(parseInt(req.params.id as string, 10), reason, req.staff!);
+      const order = await ordersService.cancel(paramInt(req.params.id), reason, req.staff!);
       const permissions = (req.staff!.permissions ?? []) as Permission[];
       res.json({ ...order, allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType) });
     } catch (err) { next(err); }
@@ -179,7 +199,7 @@ router.post(
         throw new ValidationError('amount must be a positive number');
       }
       const order = await ordersService.collectPayment(
-        parseInt(req.params.id as string, 10),
+        paramInt(req.params.id),
         amount,
         req.staff!,
       );

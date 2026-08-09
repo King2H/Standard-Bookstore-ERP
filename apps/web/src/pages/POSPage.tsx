@@ -4,6 +4,7 @@ import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import QuickAddCustomer, { type QuickCustomerPayload } from '../components/QuickAddCustomer.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -83,7 +84,13 @@ interface Transaction {
 }
 
 interface TxListResponse { items: Transaction[]; total: number; page: number; totalPages: number; }
-interface POSPageProps { userRole?: Role; userPermissions?: string[]; }
+interface POSPageProps {
+  userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>;
+  /** Single Authoritative Payment Collection Workflow: Sales History no
+   *  longer collects payment directly — "View Payments" navigates to the
+   *  Payments module's History tab, pre-filtered to this transaction. */
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 
@@ -95,11 +102,21 @@ const canVoid = (r?: Role, perms?: string[]) =>
 // ── Payment ───────────────────────────────────────────────────────────────────
 
 type PaymentMethod = 'cash' | 'bank' | 'store_credit' | 'loyalty_points';
+// Bug fix: 'store_credit' was mislabeled "Telebirr" here — transactions'
+// payment method CHECK constraint has no separate 'mobile' value (unlike
+// orders/payments, which do), so this tab was quietly standing in as a
+// mobile-money button while actually debiting the customer's real store
+// credit balance underneath (see the "Available: {storeCreditBalance}"
+// panel below, which was always showing the correct — just mislabeled —
+// balance). OrdersPage.tsx already treats these as two distinct, correctly
+// labeled concepts ('mobile' = Telebirr, 'store_credit' = Store Credit);
+// matching that here, since POS has no genuine Telebirr/mobile channel to
+// conflate it with.
 const PAYMENT_TABS: { method: PaymentMethod; label: string; icon: string }[] = [
-  { method: 'cash',           label: 'Cash',     icon: '💵' },
-  { method: 'bank',           label: 'Bank',     icon: '🏦' },
-  { method: 'store_credit',   label: 'Telebirr', icon: '📱' },
-  { method: 'loyalty_points', label: 'Loyalty',  icon: '⭐' },
+  { method: 'cash',           label: 'Cash',         icon: '💵' },
+  { method: 'bank',           label: 'Bank',         icon: '🏦' },
+  { method: 'store_credit',   label: 'Store Credit', icon: '🎁' },
+  { method: 'loyalty_points', label: 'Loyalty',      icon: '⭐' },
 ];
 
 // ── Cart maths (no tax) ───────────────────────────────────────────────────────
@@ -158,11 +175,16 @@ type Tab = 'pos' | 'history';
 //  Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function POSPage({ userRole, userPermissions }: POSPageProps) {
+export default function POSPage({ userRole, userPermissions, initialContext = {}, onNavigate }: POSPageProps) {
   const qc          = useQueryClient();
   const { showToast } = useToast();
   const currency    = useCurrency();
-  const [tab, setTab] = useState<Tab>('pos');
+  // Module 6: the dashboard's Today's Sales KPI drill-down passes a date
+  // range and expects the Sales History tab, pre-filtered — this page used
+  // to ignore initialContext entirely and always land on the POS terminal.
+  const [tab, setTab] = useState<Tab>(initialContext.dateFrom || initialContext.dateTo ? 'history' : 'pos');
+  const [histDateFrom, setHistDateFrom] = useState(initialContext.dateFrom ?? '');
+  const [histDateTo, setHistDateTo] = useState(initialContext.dateTo ?? '');
 
   // ── POS state ──────────────────────────────────────────────────────────────
   const [bookSearch, setBookSearch]               = useState('');
@@ -178,6 +200,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
   const [payBankAccountId, setPayBankAccountId]   = useState<number | ''>('');
   const [receipt, setReceipt]                     = useState<Transaction | null>(null);
   const [histPage, setHistPage]                   = useState(1);
+  const [histPageSize, setHistPageSize]           = useState(DEFAULT_PAGE_SIZE);
 
   // Discount state
   const [defaultDiscountType, setDefaultDiscountType]     = useState<DiscountPresetType>('Normal');
@@ -218,8 +241,8 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
   });
 
   const { data: histData, isLoading: histLoading } = useQuery<TxListResponse>({
-    queryKey: ['pos-history', histPage, branchId],
-    queryFn:  () => api.get(`/pos/transactions?branchId=${branchId}&page=${histPage}&pageSize=20`),
+    queryKey: ['pos-history', histPage, histPageSize, branchId, histDateFrom, histDateTo],
+    queryFn:  () => api.get(`/pos/transactions?branchId=${branchId}&page=${histPage}&pageSize=${histPageSize}${histDateFrom ? `&dateFrom=${histDateFrom}` : ''}${histDateTo ? `&dateTo=${histDateTo}` : ''}`),
     enabled:  branchId !== null && tab === 'history',
   });
 
@@ -305,13 +328,6 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
     mutationFn: (body: unknown) => api.post<Transaction>('/pos/transactions', body),
     onSuccess:  (tx) => { setReceipt(tx); showToast(`Sale ${tx.transactionNumber} completed`, 'success'); },
     onError:    (e: Error) => showToast(e.message, 'error'),
-  });
-
-  const collectMut = useMutation({
-    mutationFn: ({ txId, pmts }: { txId: string; pmts: Array<{ method: string; amount: number }> }) =>
-      api.post<Transaction>(`/pos/transactions/${txId}/payment`, { payments: pmts }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pos-history'] }); showToast('Payment recorded', 'success'); },
-    onError:   (e: Error) => showToast(e.message, 'error'),
   });
 
   const voidMut = useMutation({
@@ -508,7 +524,21 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl overflow-hidden">
             <div className={`px-6 py-5 text-center ${receipt.paymentStatus === 'paid' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
               <div className="text-4xl mb-2">{receipt.paymentStatus === 'paid' ? '✅' : '🟡'}</div>
-              <h2 className="text-xl font-bold text-white">{receipt.transactionNumber}</h2>
+              <div className="flex items-center justify-center gap-1.5">
+                <h2 className="text-xl font-bold text-white">{receipt.transactionNumber}</h2>
+                <button
+                  type="button"
+                  title="Copy Transaction ID"
+                  onClick={() => {
+                    navigator.clipboard.writeText(receipt.transactionNumber)
+                      .then(() => showToast('Transaction ID copied', 'success'))
+                      .catch(() => showToast('Could not copy — copy manually', 'error'));
+                  }}
+                  className="text-white/70 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+              </div>
               <p className="text-sm text-white/80 mt-1">{new Date(receipt.createdAt).toLocaleString()}</p>
               {receipt.paymentStatus !== 'paid' && (
                 <div className="space-y-1 mt-2">
@@ -554,7 +584,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 space-y-1.5">
                   {(receipt.payments ?? []).map((p, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500 capitalize">{p.method === 'store_credit' ? 'Telebirr' : p.method.replace(/_/g, ' ')}</span>
+                      <span className="text-gray-500 capitalize">{p.method === 'store_credit' ? 'Store Credit' : p.method.replace(/_/g, ' ')}</span>
                       <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {Number(p.amount).toFixed(2)}</span>
                     </div>
                   ))}
@@ -604,6 +634,19 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
       {/* ── History tab ──────────────────────────────────────────────────────── */}
       {tab === 'history' && (
         <div className="flex-1 overflow-auto p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <input type="date" value={histDateFrom} onChange={e => { setHistDateFrom(e.target.value); setHistPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <span className="text-xs text-gray-400">to</span>
+            <input type="date" value={histDateTo} onChange={e => { setHistDateTo(e.target.value); setHistPage(1); }}
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {(histDateFrom || histDateTo) && (
+              <button onClick={() => { setHistDateFrom(''); setHistDateTo(''); setHistPage(1); }}
+                className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Clear
+              </button>
+            )}
+          </div>
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
             {histLoading ? (
               <div className="p-12 text-center">
@@ -623,7 +666,20 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                   <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                     {(histData?.items ?? []).map(tx => (
                       <tr key={tx.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
-                        <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{tx.transactionNumber}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                          <button
+                            type="button"
+                            title="Copy Transaction ID"
+                            onClick={() => {
+                              navigator.clipboard.writeText(tx.transactionNumber)
+                                .then(() => showToast('Transaction ID copied', 'success'))
+                                .catch(() => showToast('Could not copy — copy manually', 'error'));
+                            }}
+                            className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
+                          >
+                            {tx.transactionNumber}
+                          </button>
+                        </td>
                         <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{currency} {Number(tx.grandTotal).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 tabular-nums whitespace-nowrap">{currency} {Number(tx.amountPaid ?? tx.grandTotal).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-amber-700 dark:text-amber-400 tabular-nums whitespace-nowrap">
@@ -646,17 +702,19 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                             {canVoid(userRole, userPermissions) && tx.status === 'completed' && (
                               <button onClick={() => { if (confirm('Void this transaction?')) voidMut.mutate(tx.id); }} className="text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-2 py-1 rounded-lg font-medium transition-colors whitespace-nowrap">Void</button>
                             )}
-                            {tx.status === 'completed' && tx.paymentStatus !== 'paid' && (
+                            {/* Single Authoritative Payment Collection Workflow: Sales
+                                History no longer collects payment itself (Payments is
+                                the only module that can) — this deep-links into
+                                Payments' Collect tab, pre-selected for this
+                                transaction, matching Receivables' "Open in Payments".
+                                Only shown for credit sales with an outstanding
+                                balance (partial/credit) — fully paid transactions
+                                have nothing left to collect. */}
+                            {tx.status === 'completed' && (tx.paymentStatus === 'partial' || tx.paymentStatus === 'credit') && (
                               <button
-                                onClick={() => {
-                                  const amt = prompt(`Collect payment\n${tx.transactionNumber}\nOutstanding: ${currency} ${Number(tx.amountDue).toFixed(2)}\n\nEnter amount:`);
-                                  if (!amt) return;
-                                  const parsed = parseFloat(amt);
-                                  if (!parsed || parsed <= 0) return;
-                                  collectMut.mutate({ txId: tx.id, pmts: [{ method: 'cash', amount: parsed }] });
-                                }}
-                                className="text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 px-2 py-1 rounded-lg font-semibold transition-colors whitespace-nowrap"
-                              >Collect</button>
+                                onClick={() => onNavigate?.('payments', { orderId: tx.id, sourceType: 'pos' })}
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 px-2 py-1 rounded-lg font-semibold transition-colors whitespace-nowrap"
+                              >View Payments</button>
                             )}
                           </div>
                         </td>
@@ -669,16 +727,14 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
             {(!histData?.items || histData.items.length === 0) && !histLoading && (
               <div className="p-12 text-center"><div className="text-4xl mb-3">📋</div><p className="text-sm text-gray-400">No transactions found</p></div>
             )}
+            {histData && (
+              <Pagination
+                page={histPage} pageSize={histPageSize} total={histData.total} totalPages={histData.totalPages}
+                onPageChange={setHistPage} onPageSizeChange={makePageSizeHandler(setHistPage, setHistPageSize)}
+                itemLabel="transaction"
+              />
+            )}
           </div>
-          {histData && histData.totalPages > 1 && (
-            <div className="flex justify-between items-center mt-4 text-sm text-gray-500">
-              <span>Page {histData.page} of {histData.totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={histPage <= 1} onClick={() => setHistPage(p => p - 1)} className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium text-sm">← Prev</button>
-                <button disabled={histPage >= histData.totalPages} onClick={() => setHistPage(p => p + 1)} className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium text-sm">Next →</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -788,7 +844,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                     className={`w-full text-left px-3 py-2 border-b border-gray-50 dark:border-gray-800/60 transition-colors ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100'}`}
                   >
                     <div className="flex items-start justify-between gap-1.5">
-                      <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight flex-1">{b.title}</p>
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight flex-1 min-w-0">{b.title}</p>
                       <p className="text-xs font-bold text-blue-700 dark:text-blue-400 tabular-nums flex-shrink-0">{(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
@@ -1094,7 +1150,7 @@ export default function POSPage({ userRole, userPermissions }: POSPageProps) {
                     <div key={i} className="flex items-center justify-between text-xs">
                       <span className="text-gray-600 dark:text-gray-400 capitalize flex items-center gap-1">
                         <span>{PAYMENT_TABS.find(t => t.method === p.method)?.icon}</span>
-                        {p.method === 'store_credit' ? 'Telebirr' : p.method.replace(/_/g, ' ')}
+                        {p.method === 'store_credit' ? 'Store Credit' : p.method.replace(/_/g, ' ')}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{currency} {parseFloat(p.amount).toFixed(2)}</span>
