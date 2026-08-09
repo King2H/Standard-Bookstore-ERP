@@ -120,13 +120,31 @@ export async function login(
     throw new AuthError('INVALID_CREDENTIALS', 'Invalid username or password');
   }
 
-  // 4. Verify branch role assignment — load ALL roles for this staff+branch
+  // 4. Verify branch role assignment — load ALL roles for this staff+branch.
+  // Bug fix: is_all_branches staff (Admin/Super_Admin by default, or anyone
+  // explicitly granted it) were rejected here with BRANCH_ACCESS_DENIED for
+  // any branch they don't hold an explicit staff_branch_roles row on — even
+  // though getBranchesForUser() (which builds the branch picker / decides
+  // autoSelectBranchId) already lists every active branch for them
+  // regardless of explicit roles, and switchBranch() already correctly
+  // allows switching into such a branch post-login. That mismatch meant an
+  // is_all_branches staff member could get a confusing "branch access
+  // denied" on their very first login whenever autoSelectBranchId (or a
+  // manually-picked branch) landed on a branch with no explicit role row —
+  // e.g. a newly created branch. Mirrors switchBranch()'s existing,
+  // already-correct is_all_branches handling.
+  let isAllBranches = false;
+  try {
+    const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staff.id]);
+    isAllBranches = abRes.rows[0]?.is_all_branches === true;
+  } catch { /* column may not exist yet */ }
+
   const allRolesResult = await db.query(
     `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC`,
     [staff.id, branchId],
   );
 
-  if (allRolesResult.rows.length === 0) {
+  if (allRolesResult.rows.length === 0 && !isAllBranches) {
     throw new AuthError(
       'BRANCH_ACCESS_DENIED',
       `No role assignment found for branch ${branchId}`,
@@ -134,8 +152,8 @@ export async function login(
   }
 
   const allRoles = allRolesResult.rows.map(r => r.role as string);
-  const role: Role = allRoles[0] as Role; // primary role (backward compat)
-  const permissions = getPermissionsForRoles(allRoles);
+  const role: Role = (allRoles[0] ?? 'Admin') as Role; // primary role (backward compat)
+  const permissions = getPermissionsForRoles(allRoles.length ? allRoles : ['Admin']);
 
   // 5. Reset failed attempts + update last_login on successful auth
   await db.query(
