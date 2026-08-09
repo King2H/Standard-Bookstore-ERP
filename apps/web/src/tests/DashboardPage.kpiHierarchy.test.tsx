@@ -54,7 +54,7 @@ const KPIS = {
 const EMPTY_SALES = { summary: { totalSales: 0, totalOrders: 0, averageOrderValue: 0, totalPosSales: 0, totalPosTransactions: 0, totalDiscountAmount: 0, discountByType: { Normal: 0, Merchant: 0, Special: 0 } }, byPeriod: [], byBranch: [] };
 const EMPTY_PAYMENTS = { summary: { totalCollected: 0, totalRefunded: 0, netCollected: 0, pendingPayments: 0 }, byMethod: [], byPeriod: [] };
 const EMPTY_EXCHANGES = { summary: { totalExchanges: 0, totalIncomingValue: 0, totalOutgoingValue: 0, netExchangeImpact: 0 }, bySettlementType: [], byPeriod: [] };
-const EMPTY_INVENTORY = { summary: { totalBooks: 0, totalStockUnits: 0, lowStockItems: 0, outOfStockItems: 0 }, lowStockItems: [], topSellingBooks: [], stockMovement: [] };
+const EMPTY_INVENTORY = { summary: { totalBooks: 0, totalStockUnits: 0, availableStock: 0, reservedStock: 0, lowStockItems: 0, outOfStockItems: 0 }, lowStockItems: [], topSellingBooks: [], stockMovement: [] };
 const EMPTY_CUSTOMERS = { summary: { totalCustomers: 0, activeCustomers: 0, repeatCustomers: 0, newCustomersInPeriod: 0 }, topCustomers: [], byPeriod: [] };
 
 function renderDashboard() {

@@ -71,7 +71,11 @@ interface ExchangeReport {
   byPeriod: Array<{ period: string; count: number; incomingValue: number; outgoingValue: number }>;
 }
 interface InventoryReport {
-  summary: { totalBooks: number; totalStockUnits: number; lowStockItems: number; outOfStockItems: number };
+  // availableStock/reservedStock: the backend (reports.service.ts's
+  // getInventoryReport()) has always computed and returned both — this
+  // interface just never declared them, so the Inventory Insights panel
+  // below silently dropped them instead of showing available stock.
+  summary: { totalBooks: number; totalStockUnits: number; availableStock: number; reservedStock: number; lowStockItems: number; outOfStockItems: number };
   lowStockItems: Array<{ bookId: number; title: string; locationId: number; locationName: string; quantity: number; reorderPoint: number }>;
   topSellingBooks: Array<{ bookId: number; title: string; unitsSold: number; revenue: number }>;
   stockMovement: Array<{ period: string; stockIn: number; stockOut: number }>;
@@ -796,10 +800,12 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         <Section title="Inventory Insights" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
           {inventory ? (
             <>
-              <div className="grid grid-cols-4 gap-2 mb-4">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
                 {[
                   { label: 'Books', value: inventory.summary.totalBooks, color: 'text-gray-900 dark:text-white' },
                   { label: 'Units', value: inventory.summary.totalStockUnits, color: 'text-gray-900 dark:text-white' },
+                  { label: 'Available', value: inventory.summary.availableStock, color: 'text-emerald-600 dark:text-emerald-400' },
+                  { label: 'Reserved', value: inventory.summary.reservedStock, color: 'text-blue-600 dark:text-blue-400' },
                   { label: 'Low Stock', value: inventory.summary.lowStockItems, color: 'text-amber-600 dark:text-amber-400' },
                   { label: 'Out of Stock', value: inventory.summary.outOfStockItems, color: 'text-red-600 dark:text-red-400' },
                 ].map(c => (
