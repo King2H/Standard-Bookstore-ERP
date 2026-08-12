@@ -670,8 +670,16 @@ export async function stockIn(opts: {
   referenceId?: number;
   notes?: string;
   staffCtx: StaffCtx;
+  /**
+   * Per-unit cost basis for this receiving event — e.g. a manual correction
+   * that is also establishing/adjusting a real cost. Optional: when omitted,
+   * this stock-in doesn't move inventory.average_cost (see
+   * inventoryTransaction.service.ts stockIn() — Weighted Average Cost only
+   * moves on receipts that carry a known cost).
+   */
+  unitCost?: number;
 }): Promise<InventoryRow> {
-  const { bookId, locationId, quantity, version, referenceId, notes, staffCtx } = opts;
+  const { bookId, locationId, quantity, version, referenceId, notes, staffCtx, unitCost } = opts;
   const referenceType: ReferenceType = opts.referenceType ?? 'manual';
 
   if (quantity <= 0) throw new ValidationError('Stock-in quantity must be positive');
@@ -692,6 +700,9 @@ export async function stockIn(opts: {
       [bookId, locationId],
     );
 
+    // Optimistic-lock check (invTxSvc.stockIn() re-acquires the same row
+    // lock below, which is a harmless no-op within this same transaction —
+    // it doesn't itself check `version`, so that check stays here).
     const current = await client.query(
       `SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
       [bookId, locationId],
@@ -705,25 +716,20 @@ export async function stockIn(opts: {
       throw new ConflictError('VERSION_CONFLICT', 'Inventory was modified. Please refresh and retry.', { currentVersion, providedVersion: version });
     }
 
+    // Mutation, weighted-average recalculation, and the inventory_history
+    // write all happen inside invTxSvc.stockIn() — the single source of
+    // truth for inventory mutations. This function no longer duplicates
+    // that logic.
+    await invTxSvc.stockIn(
+      {
+        bookId, locationId, quantity, staffCtx,
+        referenceType, referenceId, notes,
+        unitCost,
+      },
+      client,
+    );
+
     const newQty = currentQty + quantity;
-
-    const updated = await client.query(
-      `UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now()
-       WHERE book_id = $2 AND location_id = $3 AND version = $4
-       RETURNING quantity, version`,
-      [newQty, bookId, locationId, version],
-    );
-    if (!updated.rows.length) {
-      throw new ConflictError('VERSION_CONFLICT', 'Concurrent modification detected. Please retry.');
-    }
-
-    await client.query(
-      `INSERT INTO inventory_history
-         (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-       VALUES ($1, $2, $3, $4, $5, 'stock_in', 'stock_in', $6, $7, $8, $9)`,
-      [bookId, locationId, currentQty, newQty, quantity,
-       referenceType ?? null, referenceId ?? null, notes ?? null, staffCtx.staffId],
-    );
 
     await client.query(
       `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
@@ -795,6 +801,9 @@ export async function stockOut(opts: {
   try {
     await client.query('BEGIN');
 
+    // Optimistic-lock check (invTxSvc.stockOut() re-acquires the same row
+    // lock below, which is a harmless no-op within this same transaction —
+    // it doesn't itself check `version`, so that check stays here).
     const current = await client.query(
       `SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
       [bookId, locationId],
@@ -813,22 +822,16 @@ export async function stockOut(opts: {
       throw new BusinessError('INSUFFICIENT_STOCK', `Insufficient stock. Available: ${currentQty}, Requested: ${quantity}`);
     }
 
-    const updated = await client.query(
-      `UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now()
-       WHERE book_id = $2 AND location_id = $3 AND version = $4
-       RETURNING quantity, version`,
-      [newQty, bookId, locationId, version],
-    );
-    if (!updated.rows.length) {
-      throw new ConflictError('VERSION_CONFLICT', 'Concurrent modification detected. Please retry.');
-    }
-
-    await client.query(
-      `INSERT INTO inventory_history
-         (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-       VALUES ($1, $2, $3, $4, $5, 'stock_out', 'stock_out', $6, $7, $8, $9)`,
-      [bookId, locationId, currentQty, newQty, -quantity,
-       referenceType ?? null, referenceId ?? null, notes ?? null, staffCtx.staffId],
+    // Mutation and the inventory_history write (with unit_cost = current
+    // average_cost, per the Sales Posting Rule) happen inside
+    // invTxSvc.stockOut() — the single source of truth for inventory
+    // mutations. This function no longer duplicates that logic.
+    await invTxSvc.stockOut(
+      {
+        bookId, locationId, quantity, staffCtx,
+        referenceType, referenceId, notes,
+      },
+      client,
     );
 
     await client.query(

@@ -926,12 +926,17 @@ export async function receivePO(
       );
 
       // Increase inventory via centralized service (Requirements 2.1, 2.11)
+      // unitCost = this line's actual PO price — feeds the Weighted Average
+      // Cost recalculation (Inventory Valuation Policy). Previously omitted
+      // here entirely, which meant procurement receipts never moved
+      // inventory.average_cost regardless of what price was actually paid.
       await invTxSvc.stockIn(
         {
           bookId,
           locationId: effectiveLocationId,
           quantity: item.quantityReceived,
           referenceType: 'purchase_order',
+          unitCost: parseFloat(line.unit_cost),
           referenceId: String(id),
           reasonCode: 'initial',
           // stockIn's `notes` is string | undefined (it does `notes ?? null`

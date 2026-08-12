@@ -1148,11 +1148,13 @@ export async function getSalesExportRows(filters: ReportFilters): Promise<SalesE
     });
   }
 
-  // Purchase cost per order (most-recent PO unit cost × qty per line)
+  // Purchase cost per order — prefers the cost frozen on the line item at
+  // posting time (oli.unit_cost, Sales Posting Rule); falls back to
+  // costBasis.ts's most-recent-cost lookup only for pre-migration rows.
   const costRes = await db.query(
     `SELECT
        oli.order_id,
-       COALESCE(SUM(COALESCE(lc.unit_cost,0) * oli.quantity),0)::NUMERIC AS purchase_cost
+       COALESCE(SUM(COALESCE(oli.unit_cost, lc.unit_cost, 0) * oli.quantity),0)::NUMERIC AS purchase_cost
      FROM order_line_items oli
      ${costBasisLateralJoin('oli.book_id')}
      GROUP BY oli.order_id`,
@@ -1412,7 +1414,13 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
        i.quantity                                                          AS quantity_on_hand,
        ${reservedExpr}                                                     AS quantity_reserved,
        ${availableExpr}                                                    AS quantity_available,
-       COALESCE(lc.unit_cost, 0)::NUMERIC                                 AS unit_cost,
+       -- Inventory Valuation Policy: this per-(book,location) row's own
+       -- Weighted Average Cost is the authoritative valuation for what's
+       -- actually on hand here — more accurate than costBasis.ts's
+       -- most-recent-cost lookup (which isn't location-aware and doesn't
+       -- reflect blended receipts). Falls back to it only when average_cost
+       -- is still 0 (never received any valued stock at this location yet).
+       COALESCE(NULLIF(i.average_cost, 0), lc.unit_cost, 0)::NUMERIC       AS unit_cost,
        (SELECT MAX(ih.created_at)
         FROM inventory_history ih
         WHERE ih.book_id = i.book_id AND ih.location_id = i.location_id)  AS last_movement_date
@@ -1425,7 +1433,7 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
      ${costBasisLateralJoin('b.id')}
      ${where}
      GROUP BY b.id, i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id,
-              i.quantity${groupByReserved}, lc.unit_cost
+              i.quantity, i.average_cost${groupByReserved}, lc.unit_cost
      ORDER BY b.title ASC`,
     params,
   );

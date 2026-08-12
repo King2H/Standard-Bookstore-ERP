@@ -60,6 +60,8 @@ export interface TransactionLineItemRow {
   discountPct: number;
   discountAmount: number;
   lineTotal: number;
+  /** Cost this line was posted at (Weighted Average Cost at sale time). Null for pre-migration rows. */
+  unitCost: number | null;
 }
 
 export interface TransactionPaymentRow {
@@ -111,6 +113,7 @@ function mapLineItemRow(row: Record<string, unknown>): TransactionLineItemRow {
     discountPct: parseFloat(row.discount_pct as string),
     discountAmount: parseFloat(row.discount_amount as string),
     lineTotal: parseFloat(row.line_total as string),
+    unitCost: row.unit_cost != null ? parseFloat(row.unit_cost as string) : null,
   };
 }
 
@@ -130,7 +133,7 @@ function mapPaymentRow(row: Record<string, unknown>): TransactionPaymentRow {
 async function fetchLineItems(txId: string | number): Promise<TransactionLineItemRow[]> {
   const result = await db.query(
     `SELECT li.id, li.transaction_id, li.book_id, b.title AS book_title, b.isbn AS book_isbn,
-            li.quantity, li.unit_price, li.discount_pct, li.discount_amount, li.line_total
+            li.quantity, li.unit_price, li.discount_pct, li.discount_amount, li.line_total, li.unit_cost
      FROM transaction_line_items li
      LEFT JOIN books b ON b.id = li.book_id
      WHERE li.transaction_id = $1
@@ -411,28 +414,18 @@ export async function createTransaction(
     );
     const txId: string = String(txRes.rows[0].id);
 
-    // INSERT line items
-    for (const item of resolvedItems) {
-      await client.query(
-        `INSERT INTO transaction_line_items (transaction_id, book_id, quantity, unit_price, discount_pct, discount_amount, line_total)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [txId, item.bookId, item.quantity, item.unitPrice.toFixed(2), item.discountPct.toFixed(2), item.discountAmount.toFixed(2), item.lineTotal.toFixed(2)],
-      );
-    }
-
-    // INSERT payments (only if any)
-    for (const payment of payments) {
-      await client.query(
-        `INSERT INTO transaction_payments (transaction_id, method, amount, reference) VALUES ($1, $2, $3, $4)`,
-        [txId, payment.method, payment.amount.toFixed(2), payment.reference ?? null],
-      );
-    }
-
     // Decrement inventory via centralized InventoryTransactionService (Requirement 2.1, 2.3, 2.4)
     // Availability check is available = quantity (reservations are bookkeeping,
     // not a second hold -- see inventoryTransaction.service.ts getAvailableStock()).
+    //
+    // Sales Posting Rule: COGS = issued_qty × current average_cost_at_posting_time,
+    // and that cost must be persisted on the line item permanently — done here
+    // in the same loop as the stock-out, right after invTxSvc.stockOut() hands
+    // back the cost it just posted at, so it's frozen before the INSERT below
+    // and never silently recomputed later against a future, different cost.
+    const lineItemCosts: number[] = [];
     for (const item of resolvedItems) {
-      await invTxSvc.stockOut(
+      const { unitCost } = await invTxSvc.stockOut(
         {
           bookId: item.bookId,
           locationId: data.locationId,
@@ -442,6 +435,25 @@ export async function createTransaction(
           staffCtx,
         },
         client,
+      );
+      lineItemCosts.push(unitCost);
+    }
+
+    // INSERT line items
+    for (let i = 0; i < resolvedItems.length; i++) {
+      const item = resolvedItems[i];
+      await client.query(
+        `INSERT INTO transaction_line_items (transaction_id, book_id, quantity, unit_price, discount_pct, discount_amount, line_total, unit_cost)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [txId, item.bookId, item.quantity, item.unitPrice.toFixed(2), item.discountPct.toFixed(2), item.discountAmount.toFixed(2), item.lineTotal.toFixed(2), lineItemCosts[i].toFixed(2)],
+      );
+    }
+
+    // INSERT payments (only if any)
+    for (const payment of payments) {
+      await client.query(
+        `INSERT INTO transaction_payments (transaction_id, method, amount, reference) VALUES ($1, $2, $3, $4)`,
+        [txId, payment.method, payment.amount.toFixed(2), payment.reference ?? null],
       );
     }
 
@@ -705,7 +717,13 @@ export async function voidTransaction(id: string | number, staffCtx: StaffCtx): 
     await client.query('BEGIN');
 
     for (const item of tx.lineItems ?? []) {
-      // Restore inventory via centralized service (Requirement 2.9)
+      // Restore inventory via centralized service (Requirement 2.9).
+      // Return Posting Rule, applied to voids the same way: restore at the
+      // ORIGINAL issued unit cost (frozen on the line item at sale time),
+      // not the current average — this re-establishes the value at the
+      // price it actually left at and feeds it back into the moving
+      // average correctly. Falls back to no cost (average left unchanged)
+      // only for pre-migration sales that never had a cost persisted.
       await invTxSvc.stockIn(
         {
           bookId: item.bookId,
@@ -715,6 +733,7 @@ export async function voidTransaction(id: string | number, staffCtx: StaffCtx): 
           referenceId: String(tx.id),
           reasonCode: 'return',
           staffCtx,
+          unitCost: item.unitCost != null && item.unitCost > 0 ? item.unitCost : undefined,
         },
         client,
       );

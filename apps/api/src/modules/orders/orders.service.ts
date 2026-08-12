@@ -100,6 +100,8 @@ export interface OrderLineItemRow {
   id: string; orderId: string; bookId: number; bookTitle: string; bookIsbn: string;
   quantity: number; unitPrice: number; discountAmount: number; totalPrice: number;
   qtyReserved: number; qtyFulfilled: number; isBackordered: boolean;
+  /** Cost this line was posted at (Weighted Average Cost at confirm() time). Null until confirmed, or for pre-migration rows. */
+  unitCost: number | null;
 }
 
 function mapOrderRow(row: Record<string, unknown>): OrderRow {
@@ -130,6 +132,7 @@ function mapLineItemRow(row: Record<string, unknown>): OrderLineItemRow {
     discountAmount: parseFloat(row.discount_amount as string), totalPrice: parseFloat(row.total_price as string),
     qtyReserved: row.qty_reserved as number, qtyFulfilled: row.qty_fulfilled as number,
     isBackordered: row.is_backordered as boolean,
+    unitCost: row.unit_cost != null ? parseFloat(row.unit_cost as string) : null,
   };
 }
 
@@ -568,7 +571,11 @@ export async function confirm(
       // CONFIRM = stockOut. inventory.quantity is decremented exactly once here.
       // fulfill() calls fulfillReservation() which writes audit rows (delta=0)
       // without a second deduction.
-      await invTxSvc.stockOut(
+      //
+      // Sales Posting Rule: COGS = issued_qty × current average_cost at the
+      // moment of this stockOut, persisted on the line item permanently so
+      // it is never recomputed against a later, different procurement price.
+      const { unitCost } = await invTxSvc.stockOut(
         {
           bookId: item.bookId,
           locationId,
@@ -581,6 +588,7 @@ export async function confirm(
         },
         client,
       );
+      await client.query('UPDATE order_line_items SET unit_cost = $1 WHERE id = $2', [unitCost.toFixed(2), item.id]);
     }
 
     // ── Fix 9.1 (CASH): set payment_status = 'paid' atomically at confirmation ──
@@ -814,6 +822,10 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
 
       // Restore inventory.quantity for each line item that had reserved stock.
       // This must happen inside the transaction, before the receivable step.
+      // unitCost = the same cost this line was posted at during confirm()
+      // (hasDeductedStock guarantees confirm() already ran and persisted it)
+      // — restores at the price it actually left at, mirroring the Return
+      // Posting Rule.
       for (const item of order.lineItems ?? []) {
         if (item.qtyReserved <= 0) continue;
         await invTxSvc.stockIn(
@@ -826,6 +838,7 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
             reasonCode: 'return',
             notes: `Order cancellation – order ${String(orderId)}`,
             staffCtx,
+            unitCost: item.unitCost != null && item.unitCost > 0 ? item.unitCost : undefined,
           },
           client,
         );

@@ -356,10 +356,15 @@ export async function getBookAvailability(
  *
  * Requirements: 2.1, 2.10, 2.11, 2.12, 2.14
  */
+export interface StockInResult {
+  /** inventory.average_cost after this receipt (unchanged from before if no unitCost was supplied). */
+  averageCost: number;
+}
+
 export async function stockIn(
   params: StockInParams,
   externalClient?: PoolClient,
-): Promise<void> {
+): Promise<StockInResult> {
   const { bookId, locationId, quantity, referenceType, referenceId, notes, staffCtx, unitCost } = params;
   const reasonCode = params.reasonCode ?? 'return';
 
@@ -376,25 +381,40 @@ export async function stockIn(
 
     // Acquire row lock
     const current = await client.query(
-      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
+      `SELECT quantity, average_cost FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
       [bookId, locationId],
     );
     if (!current.rows.length) throw new NotFoundError(`Inventory record for book ${bookId} at location ${locationId}`);
 
     const qtyBefore = Number(current.rows[0].quantity);
+    const avgCostBefore = Number(current.rows[0].average_cost);
     const qtyAfter = qtyBefore + quantity;
 
+    // Weighted Average (Moving Average) Cost — Inventory Valuation Policy:
+    // blend the existing valued stock with this receipt's cost, weighted by
+    // quantity. Only receipts that carry a real unitCost move the average;
+    // an unvalued stock-in (unitCost omitted — e.g. a legacy/manual entry
+    // with no known cost) leaves the average exactly as it was rather than
+    // diluting it toward zero. Previously-sold units are unaffected: their
+    // cost was already frozen onto their sale line at the time they were
+    // issued (see stockOut()) and is never revisited here.
+    const avgCostAfter = unitCost != null
+      ? ((qtyBefore * avgCostBefore) + (quantity * unitCost)) / qtyAfter
+      : avgCostBefore;
+
     await client.query(
-      `UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now()
-       WHERE book_id = $2 AND location_id = $3`,
-      [qtyAfter, bookId, locationId],
+      `UPDATE inventory SET quantity = $1, average_cost = $2, version = version + 1, updated_at = now()
+       WHERE book_id = $3 AND location_id = $4`,
+      [qtyAfter, avgCostAfter.toFixed(4), bookId, locationId],
     );
+
+    const totalCost = unitCost != null ? unitCost * quantity : null;
 
     await client.query(
       `INSERT INTO inventory_history
          (book_id, location_id, qty_before, qty_after, delta,
-          reason_code, movement_type, reference_type, reference_id, notes, staff_id, unit_cost)
-       VALUES ($1, $2, $3, $4, $5, $6, 'stock_in', $7, $8, $9, $10, $11)`,
+          reason_code, movement_type, reference_type, reference_id, notes, staff_id, unit_cost, total_cost)
+       VALUES ($1, $2, $3, $4, $5, $6, 'stock_in', $7, $8, $9, $10, $11, $12)`,
       [
         bookId, locationId, qtyBefore, qtyAfter, quantity,
         reasonCode,
@@ -403,6 +423,7 @@ export async function stockIn(
         notes ?? null,
         staffCtx.staffId,
         unitCost != null ? unitCost.toFixed(2) : null,
+        totalCost != null ? totalCost.toFixed(2) : null,
       ],
     );
 
@@ -413,6 +434,8 @@ export async function stockIn(
       const meta = await fetchMeta(bookId, locationId);
       await emitStockNotifications(bookId, locationId, qtyAfter, meta.bookTitle, meta.locationName, meta.branchId);
     }
+
+    return { averageCost: avgCostAfter };
   } catch (err) {
     if (!useExternal) await client.query('ROLLBACK');
     throw err;
@@ -430,10 +453,25 @@ export async function stockIn(
  *
  * Requirements: 2.1, 2.2, 2.3, 2.4, 2.14, 2.19
  */
+export interface StockOutResult {
+  /**
+   * The unit cost this issuance was posted at — inventory.average_cost as
+   * of this moment (Sales Posting Rule: COGS = issued_qty × current
+   * average_cost_at_posting_time). Callers that represent a sale (POS line
+   * item, order line item, exchange outgoing item) must persist this onto
+   * their own row so it is frozen permanently and never recomputed later —
+   * that persistence is what makes historical profit immune to future
+   * procurement at a different price. Callers that don't represent a sale
+   * (loss/damage adjustments routed through here, order cancellation
+   * restocking) can simply ignore it.
+   */
+  unitCost: number;
+}
+
 export async function stockOut(
   params: StockOutParams,
   externalClient?: PoolClient,
-): Promise<void> {
+): Promise<StockOutResult> {
   const { bookId, locationId, quantity, referenceType, referenceId, notes, staffCtx } = params;
   const reasonCode = params.reasonCode ?? 'loss';
 
@@ -449,13 +487,14 @@ export async function stockOut(
 
     // Acquire row lock
     const current = await client.query(
-      `SELECT quantity, version FROM inventory
+      `SELECT quantity, version, average_cost FROM inventory
        WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
       [bookId, locationId],
     );
     if (!current.rows.length) throw new NotFoundError(`Inventory record for book ${bookId} at location ${locationId}`);
 
     const qtyBefore = Number(current.rows[0].quantity);
+    const averageCost = Number(current.rows[0].average_cost);
 
     // Reservation-aware availability check (Requirement 2.3)
     const stock = await getAvailableStock(bookId, locationId, client);
@@ -473,17 +512,24 @@ export async function stockOut(
 
     const qtyAfter = Math.max(0, qtyBefore - quantity);
 
+    // average_cost is NOT changed by an issuance — Weighted Average Cost
+    // only moves on valued receipts (stockIn); removing units (sale, loss,
+    // damage) at the existing average leaves the average of what remains
+    // unchanged. inventory_value (quantity × average_cost) still correctly
+    // drops with the lower quantity.
     await client.query(
       `UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now()
        WHERE book_id = $2 AND location_id = $3`,
       [qtyAfter, bookId, locationId],
     );
 
+    const totalCost = averageCost * quantity;
+
     await client.query(
       `INSERT INTO inventory_history
          (book_id, location_id, qty_before, qty_after, delta,
-          reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-       VALUES ($1, $2, $3, $4, $5, $6, 'stock_out', $7, $8, $9, $10)`,
+          reason_code, movement_type, reference_type, reference_id, notes, staff_id, unit_cost, total_cost)
+       VALUES ($1, $2, $3, $4, $5, $6, 'stock_out', $7, $8, $9, $10, $11, $12)`,
       [
         bookId, locationId, qtyBefore, qtyAfter, -quantity,
         reasonCode,
@@ -491,6 +537,8 @@ export async function stockOut(
         referenceId != null ? String(referenceId) : null,
         notes ?? null,
         staffCtx.staffId,
+        averageCost.toFixed(2),
+        totalCost.toFixed(2),
       ],
     );
 
@@ -500,6 +548,8 @@ export async function stockOut(
       const meta = await fetchMeta(bookId, locationId);
       await emitStockNotifications(bookId, locationId, qtyAfter, meta.bookTitle, meta.locationName, meta.branchId);
     }
+
+    return { unitCost: averageCost };
   } catch (err) {
     if (!useExternal) await client.query('ROLLBACK');
     throw err;
@@ -643,13 +693,14 @@ export async function transfer(
 
     // Read source
     const src = await client.query(
-      `SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2`,
+      `SELECT quantity, version, average_cost FROM inventory WHERE book_id = $1 AND location_id = $2`,
       [bookId, fromLocationId],
     );
     if (!src.rows.length) throw new NotFoundError('Source inventory record');
 
     const srcVersion = Number(src.rows[0].version);
     const srcQty = Number(src.rows[0].quantity);
+    const srcAvgCost = Number(src.rows[0].average_cost);
 
     // Optimistic lock on source
     if (srcVersion !== fromVersion) {
@@ -675,10 +726,20 @@ export async function transfer(
     );
 
     const dst = await client.query(
-      `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+      `SELECT quantity, average_cost FROM inventory WHERE book_id = $1 AND location_id = $2`,
       [bookId, toLocationId],
     );
     const dstQty = Number(dst.rows[0].quantity);
+    const dstAvgCost = Number(dst.rows[0].average_cost);
+
+    // Weighted Average Cost travels with the stock: the transferred units
+    // carry the SOURCE's average cost into the destination's blend (source's
+    // own average is unaffected — removing units at the existing average
+    // doesn't change the average of what remains, same as stockOut()).
+    const dstQtyAfter = dstQty + quantity;
+    const dstAvgCostAfter = dstQtyAfter > 0
+      ? ((dstQty * dstAvgCost) + (quantity * srcAvgCost)) / dstQtyAfter
+      : dstAvgCost;
 
     // Apply both updates
     await client.query(
@@ -687,9 +748,9 @@ export async function transfer(
       [quantity, bookId, fromLocationId],
     );
     await client.query(
-      `UPDATE inventory SET quantity = quantity + $1, version = version + 1, updated_at = now()
+      `UPDATE inventory SET quantity = quantity + $1, average_cost = $4, version = version + 1, updated_at = now()
        WHERE book_id = $2 AND location_id = $3`,
-      [quantity, bookId, toLocationId],
+      [quantity, bookId, toLocationId, dstAvgCostAfter.toFixed(4)],
     );
 
     // Shared transfer batch ID for traceability (Requirement 2.22).
@@ -706,13 +767,18 @@ export async function transfer(
     const batchIdRes = await client.query(`SELECT nextval('inventory_history_id_seq') AS id`);
     const transferBatchId = String(batchIdRes.rows[0].id);
 
+    // Both rows carry the SOURCE's average cost as unit_cost — that's the
+    // value that actually moved between locations (the destination's own
+    // average only exists after blending it in above).
+    const transferTotalCost = (srcAvgCost * quantity).toFixed(2);
+
     await client.query(
       `INSERT INTO inventory_history
          (book_id, location_id, qty_before, qty_after, delta,
-          reason_code, movement_type, reference_type, reference_id, notes, staff_id)
+          reason_code, movement_type, reference_type, reference_id, notes, staff_id, unit_cost, total_cost)
        VALUES
-         ($1, $2, $3, $4, $5, 'transfer_out', 'transfer_out', 'transfer', $8, $6, $7),
-         ($1, $9, $10, $11, $12, 'transfer_in', 'transfer_in', 'transfer', $8, $6, $7)`,
+         ($1, $2, $3, $4, $5, 'transfer_out', 'transfer_out', 'transfer', $8, $6, $7, $13, $14),
+         ($1, $9, $10, $11, $12, 'transfer_in', 'transfer_in', 'transfer', $8, $6, $7, $13, $14)`,
       [
         bookId,
         fromLocationId, srcQty, srcQty - quantity, -quantity,
@@ -720,6 +786,7 @@ export async function transfer(
         staffCtx.staffId,
         transferBatchId,
         toLocationId, dstQty, dstQty + quantity, quantity,
+        srcAvgCost.toFixed(2), transferTotalCost,
       ],
     );
 

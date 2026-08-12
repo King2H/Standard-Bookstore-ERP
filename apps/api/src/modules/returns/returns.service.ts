@@ -121,7 +121,7 @@ export async function createReturn(
     if (policy === 'store_credit_only' && data.refundMethod !== 'store_credit')
       throw new BusinessError('REFUND_METHOD_NOT_ALLOWED_AFTER_WINDOW', `Return window of ${windowDays} days exceeded. Only store_credit refunds are allowed.`, { windowDays, daysSinceTx: Math.floor(daysSinceTx) });
   }
-  interface RL { txLineItemId: number; bookId: number; quantity: number; unitPrice: number; discountPct: number; lineRefundAmount: number; }
+  interface RL { txLineItemId: number; bookId: number; quantity: number; unitPrice: number; discountPct: number; lineRefundAmount: number; unitCost: number | null; }
   const resolvedLines: RL[] = [];
   for (const input of data.lines) {
     const liRes = await db.query(`SELECT tli.* FROM transaction_line_items tli WHERE tli.id = $1 AND tli.transaction_id = $2`, [input.transactionLineItemId, data.transactionId]);
@@ -135,7 +135,13 @@ export async function createReturn(
     if (input.quantity > maxReturnable) throw new BusinessError('OVER_RETURN', `Cannot return ${input.quantity} units. Max returnable: ${maxReturnable}`, { soldQty, alreadyReturned, requested: input.quantity, maxReturnable });
     const unitPrice = parseFloat(li.unit_price as string);
     const discountPct = parseFloat(li.discount_pct as string);
-    resolvedLines.push({ txLineItemId: input.transactionLineItemId!, bookId: li.book_id as number, quantity: input.quantity, unitPrice, discountPct, lineRefundAmount: parseFloat((unitPrice * input.quantity * (1 - discountPct / 100)).toFixed(2)) });
+    // Return Posting Rule: a return, linked to its original sale, restores
+    // inventory and reverses COGS at the ORIGINAL issued unit cost — never
+    // the current average. transaction_line_item_id (the FK this return
+    // line was resolved from, above) is exactly that link. NULL only for
+    // sales that predate this migration and never had a cost persisted.
+    const unitCost = li.unit_cost != null ? parseFloat(li.unit_cost as string) : null;
+    resolvedLines.push({ txLineItemId: input.transactionLineItemId!, bookId: li.book_id as number, quantity: input.quantity, unitPrice, discountPct, lineRefundAmount: parseFloat((unitPrice * input.quantity * (1 - discountPct / 100)).toFixed(2)), unitCost });
   }
   const totalRefundAmount = parseFloat(resolvedLines.reduce((s, l) => s + l.lineRefundAmount, 0).toFixed(2));
   const maxWithoutAuth = await getMaxReturnValueWithoutAuth();
@@ -153,7 +159,10 @@ export async function createReturn(
       const disposition = (data.lines.find(l => l.transactionLineItemId === line.txLineItemId)?.disposition) ?? 'SELLABLE';
 
       if (disposition === 'SELLABLE') {
-        // Task 10.2: SELLABLE — restore inventory.quantity via stockIn()
+        // Task 10.2: SELLABLE — restore inventory.quantity via stockIn().
+        // unitCost = the original sale's persisted cost (see resolvedLines
+        // above) — restores at the price it actually left at, not
+        // whatever the moving average happens to be today.
         await invTxSvc.stockIn(
           {
             bookId: line.bookId,
@@ -164,6 +173,7 @@ export async function createReturn(
             reasonCode: 'return',
             notes: `Return of ${line.quantity} unit(s)`,
             staffCtx,
+            unitCost: line.unitCost != null && line.unitCost > 0 ? line.unitCost : undefined,
           },
           client,
         );

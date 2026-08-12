@@ -444,12 +444,6 @@ export async function createExchange(
       await client.query('INSERT INTO exchange_incoming_items (exchange_id, book_id, quantity, evaluated_unit_price, total_price) VALUES ($1,$2,$3,$4,$5)', [exchangeId, item.bookId, item.quantity, item.unitPrice.toFixed(2), totalPrice.toFixed(2)]);
     }
 
-    // INSERT outgoing items
-    for (const item of data.outgoingItems ?? []) {
-      const totalPrice = parseFloat((item.unitPrice * item.quantity).toFixed(2));
-      await client.query('INSERT INTO exchange_outgoing_items (exchange_id, book_id, quantity, selling_unit_price, total_price) VALUES ($1,$2,$3,$4,$5)', [exchangeId, item.bookId, item.quantity, item.unitPrice.toFixed(2), totalPrice.toFixed(2)]);
-    }
-
     // Update inventory via centralized service — incoming items increase stock, outgoing decrease
     for (const item of data.incomingItems ?? []) {
       await client.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [item.bookId, locationId]);
@@ -459,17 +453,28 @@ export async function createExchange(
       // basis — the whole point of this feature is that a book that was
       // never procured through Procurement still gets a real, non-zero cost
       // (see costBasis.ts) instead of silently costing $0 in COGS/profit.
+      // This also feeds the assessed valuation into the Weighted Average
+      // Cost recalculation (Exchange Rule: incoming items require assessed
+      // valuation, included in the moving-average).
       await invTxSvc.stockIn(
         { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'customer_exchange', referenceId: exchangeId, reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: item.unitPrice },
         client,
       );
     }
 
+    // Outgoing items: post at current average cost (Exchange Rule), persist
+    // it on the line item, THEN insert — stockOut must run first since the
+    // cost isn't known until it hands it back.
     for (const item of data.outgoingItems ?? []) {
       // Decrease stock via centralized service — reservation-aware (Requirements 2.1, 2.13)
-      await invTxSvc.stockOut(
+      const { unitCost } = await invTxSvc.stockOut(
         { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_out', referenceId: exchangeId, reasonCode: 'loss', notes: 'Exchange outgoing', staffCtx },
         client,
+      );
+      const totalPrice = parseFloat((item.unitPrice * item.quantity).toFixed(2));
+      await client.query(
+        'INSERT INTO exchange_outgoing_items (exchange_id, book_id, quantity, selling_unit_price, total_price, unit_cost) VALUES ($1,$2,$3,$4,$5,$6)',
+        [exchangeId, item.bookId, item.quantity, item.unitPrice.toFixed(2), totalPrice.toFixed(2), unitCost.toFixed(2)],
       );
     }
 
@@ -974,11 +979,14 @@ export async function settleExchange(
         }
       } else if (itemType === 'new') {
         if (locationId) {
-          // Deduct outgoing item via centralized service — reservation-aware (Requirement 2.13)
-          await invTxSvc.stockOut(
+          // Deduct outgoing item via centralized service — reservation-aware (Requirement 2.13).
+          // Exchange Rule: outgoing items post at current average cost,
+          // persisted on the line item permanently.
+          const { unitCost } = await invTxSvc.stockOut(
             { bookId, locationId, quantity: qty, referenceType: 'exchange_out', referenceId: String(exchangeId), reasonCode: 'loss', notes: 'Exchange new item issued', staffCtx },
             client,
           );
+          await client.query('UPDATE exchange_items SET unit_cost = $1 WHERE id = $2', [unitCost.toFixed(2), item.id]);
         }
       }
     }

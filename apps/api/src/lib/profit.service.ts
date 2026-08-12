@@ -9,6 +9,7 @@ export interface NetProfitResult {
   purchaseCost: number;
   totalDiscounts: number;     // order discount_total + POS discount_total
   returnsValue: number;
+  returnsCost: number;        // COGS credited back for returned units (Return Posting Rule)
   exchangeAdjustment: number;
   cashSalesRevenue: number;
   creditSalesRevenue: number;
@@ -49,14 +50,17 @@ function buildOrderFilters(opts: {
  *   - Orders (FULFILLED/COMPLETED) from the `orders` table
  *   - POS transactions (completed) from the `transactions` table
  *
- * All 7 sub-queries run in parallel via Promise.all.
+ * All 8 sub-queries run in parallel via Promise.all.
  *
  * Formula:
  *   netProfit = (orderRevenue + posRevenue)
  *             - purchaseCost
- *             - (orderDiscounts + posDiscounts)
  *             - returnsValue
+ *             + returnsCost
  *             + exchangeAdjustment
+ * (orderDiscounts + posDiscounts are already baked into orderRevenue/posRevenue
+ * — both are read post-discount — so they are a reporting field only, not
+ * subtracted again here; see totalDiscounts below.)
  */
 export async function computeNetProfit(opts: {
   branchId?: number;
@@ -117,12 +121,13 @@ export async function computeNetProfit(opts: {
   if (opts.dateTo)   { posCostParams.push(opts.dateTo);   posCostConds.push(`t.created_at::date <= $${posCostParams.length}::date`); }
   const posCostWhere = posCostConds.join(' AND ');
 
-  // ── Execute all 7 queries in parallel ────────────────────────────────────
+  // ── Execute all 8 queries in parallel ────────────────────────────────────
   const [
     revenueRes,
     orderCostRes,
     posCostRes,
     returnsRes,
+    returnsCostRes,
     exchangeRes,
     collectedRes,
     outstandingRes,
@@ -146,20 +151,24 @@ export async function computeNetProfit(opts: {
        WHERE ${revWhere}`,
       revParams,
     ),
-    // Q2a: Order-based purchase cost (most-recent cost basis × qty for fulfilled orders —
-    // procurement unit cost, falling back to Customer Exchange receiving cost for
-    // never-procured books; see costBasis.ts)
+    // Q2a: Order-based purchase cost. Sales Posting Rule: COGS is the unit
+    // cost frozen on the line item at the moment it was posted (oli.unit_cost)
+    // — never recomputed against whatever procurement has done since. Falls
+    // back to costBasis.ts's most-recent-cost lookup only for rows that
+    // predate that persistence (oli.unit_cost IS NULL).
     db.query(
-      `SELECT COALESCE(SUM(COALESCE(lc.unit_cost, 0) * oli.quantity), 0)::NUMERIC AS purchase_cost
+      `SELECT COALESCE(SUM(COALESCE(oli.unit_cost, lc.unit_cost, 0) * oli.quantity), 0)::NUMERIC AS purchase_cost
        FROM order_line_items oli
        JOIN orders o ON o.id = oli.order_id
        ${costBasisLateralJoin('oli.book_id')}
        WHERE ${costWhere}`,
       costParams,
     ),
-    // Q2b: POS-based purchase cost — exclude credit POS from cost too (not recognized yet)
+    // Q2b: POS-based purchase cost — same preference for the persisted
+    // sale-time cost over the historical fallback. Excludes credit POS from
+    // cost too (not recognized yet).
     db.query(
-      `SELECT COALESCE(SUM(COALESCE(lc.unit_cost, 0) * tli.quantity), 0)::NUMERIC AS purchase_cost
+      `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, lc.unit_cost, 0) * tli.quantity), 0)::NUMERIC AS purchase_cost
        FROM transaction_line_items tli
        JOIN transactions t ON t.id = tli.transaction_id
        ${costBasisLateralJoin('tli.book_id')}
@@ -171,6 +180,26 @@ export async function computeNetProfit(opts: {
       `SELECT COALESCE(SUM(rli.unit_price * rli.quantity), 0)::NUMERIC AS returns_value
        FROM return_line_items rli
        JOIN returns r ON r.id = rli.return_id
+       WHERE ${returnConds.join(' AND ')}`,
+      returnParams,
+    ),
+    // Q3b: Returns cost credit-back. Return Posting Rule: "COGS decreases"
+    // and "gross profit decreases by the original margin" — not by the
+    // full revenue amount. purchaseCost (Q2b) still includes the original
+    // sale's cost even after it's returned (there's no return-awareness in
+    // that query), so this credits it back at the SAME original cost the
+    // return itself was restocked at (transaction_line_items.unit_cost, via
+    // the same transaction_line_item_id link returns.service.ts uses to
+    // restore inventory) — not the current average, which could have moved
+    // since. NULL for sales that predate cost persistence, matching Q2b's
+    // own fallback boundary (no historical fallback here — the return
+    // itself couldn't have used one either, so crediting one back now that
+    // Q2b never charged in the first place would be a phantom credit).
+    db.query(
+      `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, 0) * rli.quantity), 0)::NUMERIC AS returns_cost
+       FROM return_line_items rli
+       JOIN returns r ON r.id = rli.return_id
+       JOIN transaction_line_items tli ON tli.id = rli.transaction_line_item_id
        WHERE ${returnConds.join(' AND ')}`,
       returnParams,
     ),
@@ -219,6 +248,7 @@ export async function computeNetProfit(opts: {
   const purchaseCost       = parseFloat(orderCostRes.rows[0].purchase_cost as string)
                            + parseFloat(posCostRes.rows[0].purchase_cost   as string);
   const returnsValue       = parseFloat(returnsRes.rows[0].returns_value               as string);
+  const returnsCost        = parseFloat(returnsCostRes.rows[0].returns_cost             as string);
   const exchangeAdjustment = parseFloat(exchangeRes.rows[0].exchange_adjustment        as string);
   const collectedCreditRevenue = parseFloat(collectedRes.rows[0].collected_credit_revenue as string);
   const outstandingReceivables = parseFloat(outstandingRes.rows[0].outstanding_receivables as string);
@@ -237,9 +267,15 @@ export async function computeNetProfit(opts: {
   // Net profit formula:
   // Revenue (grand_total / o.total) is ALREADY post-discount — the customer
   // paid the discounted price. Subtracting discounts again would double-count.
-  // Correct formula: Revenue − Cost − Returns ± Exchange Adjustments
+  // Correct formula: Revenue − Cost − Returns + Returns Cost ± Exchange Adjustments
   // totalDiscounts is kept as a reporting field (shown in KPI card) but NOT subtracted.
-  const netProfit = fulfilledRevenue - purchaseCost - returnsValue + exchangeAdjustment;
+  // Return Posting Rule: a return should reduce gross profit by the ORIGINAL
+  // margin, not by the full revenue amount — returnsValue alone (revenue-only
+  // reversal) would double-penalize profit, since purchaseCost above still
+  // includes the returned units' original cost. +returnsCost credits that
+  // back, leaving the net effect of a return on profit equal to exactly the
+  // margin that sale contributed in the first place.
+  const netProfit = fulfilledRevenue - purchaseCost - returnsValue + returnsCost + exchangeAdjustment;
 
   return {
     netProfit,
@@ -247,6 +283,7 @@ export async function computeNetProfit(opts: {
     purchaseCost,
     totalDiscounts,
     returnsValue,
+    returnsCost,
     exchangeAdjustment,
     cashSalesRevenue,
     creditSalesRevenue,
