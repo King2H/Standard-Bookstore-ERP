@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, getCurrentBranchId } from '../lib/api.js';
+import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
@@ -17,6 +17,7 @@ interface POLineItem {
 interface POReceiptItem { id: string; receiptId: string; poLineItemId: string; bookTitle: string; quantityReceived: number; }
 interface POReceipt { id: string; poId: string; locationId: number; locationName: string; receivedBy: number; receivedAt: string; notes: string | null; items: POReceiptItem[]; }
 interface SupplierPayment { id: string; poId: string; amount: number; paymentMethod: string; source: 'manual' | 'auto_on_receipt'; notes: string | null; createdBy: number; createdAt: string; }
+interface CreditNote { id: string; poId: string; supplierId: number; amount: number; reason: string; createdBy: number; createdAt: string; }
 interface PO {
   id: string; branchId: number; supplierId: number; supplierName: string;
   status: string; totalAmount: number; currency: string;
@@ -26,6 +27,26 @@ interface PO {
   paymentTerms: 'cash' | 'credit';
   createdBy: number; approvedBy: number | null; createdAt: string; updatedAt: string;
   lineItems?: POLineItem[]; receipts?: POReceipt[]; payments?: SupplierPayment[];
+  creditNotes?: CreditNote[];
+  // Prompt 2 — standardized procurement financial fields (computed on-read
+  // by the backend; see procurement.service.ts's PO_FINANCIALS_SELECT).
+  // receivedValue is the AP payable basis (value actually received), not
+  // totalAmount (the full ordered value) — the two intentionally diverge
+  // until a PO is fully received.
+  receivedValue: number;
+  amountPaid: number;
+  creditNotesTotal: number;
+  outstandingAmount: number;
+  orderedQuantityTotal: number;
+  receivedQuantityTotal: number;
+}
+interface SupplierLedgerEntry {
+  date: string;
+  type: 'PO' | 'GOODS_RECEIPT' | 'PAYMENT' | 'CREDIT_NOTE';
+  reference: string;
+  description: string;
+  amount: number;
+  balance: number;
 }
 interface POListResponse { items: PO[]; total: number; page: number; totalPages: number; }
 interface Supplier { id: number; name: string; isActive: boolean; isBlacklisted: boolean; }
@@ -60,6 +81,29 @@ function StatusBadge({ status }: { status: string }) {
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[status] ?? 'bg-gray-100 text-gray-700'}`}>
       {status.replace(/_/g, ' ')}
     </span>
+  );
+}
+
+// ── Progress bar (Prompt 2 — receiving % / payment %) ─────────────────────────
+
+/** Clamp a fraction to [0, 1]; guards against divide-by-zero (empty PO). */
+function safePct(numerator: number, denominator: number): number {
+  if (!denominator || denominator <= 0) return 0;
+  return Math.min(1, Math.max(0, numerator / denominator));
+}
+
+function ProgressBar({ label, pct, tone, caption }: { label: string; pct: number; tone: 'blue' | 'green'; caption: string }) {
+  const barColor = tone === 'green' ? 'bg-green-500' : 'bg-blue-500';
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs mb-1">
+        <span className="font-medium text-gray-600 dark:text-gray-400">{label}</span>
+        <span className="text-gray-500 dark:text-gray-400">{caption}</span>
+      </div>
+      <div className="w-full h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.round(pct * 100)}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -519,14 +563,16 @@ function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated:
 
 // ── View 2: PO Detail ─────────────────────────────────────────────────────────
 
-function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }: {
+function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, onViewLedger }: {
   poId: string; userRole?: Role; userPermissions?: string[]; onBack: () => void;
-  onEdit: (po: PO) => void; onReceive: (po: PO) => void;
+  onEdit: (po: PO) => void; onReceive: (po: PO) => void; onViewLedger: (supplierId: number, supplierName: string) => void;
 }) {
   const { showToast } = useToast();
   const qc = useQueryClient();
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditReason, setCreditReason] = useState('');
 
   const { data: po, isLoading } = useQuery<PO>({
     queryKey: ['po', poId],
@@ -545,11 +591,27 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
     onSuccess: () => { inv(); showToast('Payment recorded', 'success'); setPaymentAmount(''); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
+  const creditNoteMut = useMutation({
+    mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/credit-notes`, { amount: parseFloat(creditAmount), reason: creditReason }),
+    onSuccess: () => { inv(); showToast('Credit note recorded', 'success'); setCreditAmount(''); setCreditReason(''); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
   if (!po) return <div className="p-8 text-center text-gray-400">PO not found.</div>;
 
   const status = po.status;
+  // Nullish-guarded: these are always populated by the live API (see
+  // procurement.service.ts's PO_FINANCIALS_SELECT), but older cached
+  // responses / test fixtures may omit them.
+  const receivedValue = po.receivedValue ?? 0;
+  const amountPaid = po.amountPaid ?? 0;
+  const creditNotesTotal = po.creditNotesTotal ?? 0;
+  const outstandingAmount = po.outstandingAmount ?? 0;
+  const orderedQuantityTotal = po.orderedQuantityTotal ?? 0;
+  const receivedQuantityTotal = po.receivedQuantityTotal ?? 0;
+  const receivingPct = safePct(receivedQuantityTotal, orderedQuantityTotal);
+  const paymentPct = safePct(amountPaid + creditNotesTotal, receivedValue);
 
   return (
     <div className="p-6 space-y-5 max-w-4xl mx-auto">
@@ -557,6 +619,9 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
         <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back to List</button>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">PO #{po.id}</h2>
         <StatusBadge status={status} />
+        <button onClick={() => onViewLedger(po.supplierId, po.supplierName)} className="ml-auto text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+          View Supplier Ledger →
+        </button>
       </div>
 
       {/* Header info */}
@@ -581,32 +646,91 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
         {po.notes && <div className="col-span-2"><span className="text-gray-500 dark:text-gray-400">Notes:</span> <span className="text-gray-900 dark:text-white ml-1">{po.notes}</span></div>}
       </div>
 
-      {/* Record payment (credit POs, or cash POs not yet fully auto-settled) */}
+      {/* Prompt 2 — receiving & payment progress, plus the received-value AP basis */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ProgressBar
+            label="Receiving Progress"
+            pct={receivingPct}
+            tone="blue"
+            caption={`${receivedQuantityTotal} / ${orderedQuantityTotal} units`}
+          />
+          <ProgressBar
+            label="Payment Progress"
+            pct={paymentPct}
+            tone="green"
+            caption={`${po.currency} ${(amountPaid + creditNotesTotal).toFixed(2)} / ${receivedValue.toFixed(2)}`}
+          />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-gray-100 dark:border-gray-800">
+          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Received Value</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {receivedValue.toFixed(2)}</div></div>
+          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Amount Paid</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {amountPaid.toFixed(2)}</div></div>
+          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Credit Notes</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {creditNotesTotal.toFixed(2)}</div></div>
+          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Outstanding</div><div className={`font-semibold ${outstandingAmount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>{po.currency} {outstandingAmount.toFixed(2)}</div></div>
+        </div>
+      </div>
+
+      {/* Record payment / credit note (credit POs, or cash POs not yet fully auto-settled) */}
       {po.financialStatus !== 'paid' && !['draft', 'pending_approval', 'cancelled'].includes(status) && canRecordPayment(userRole, userPermissions) && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Record Supplier Payment</h3>
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount ({po.currency})</label>
-              <input type="number" min={0.01} step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-5">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Record Supplier Payment</h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount ({po.currency})</label>
+                <input type="number" min={0.01} step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Method</label>
+                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="cash">Cash</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                </select>
+              </div>
+              <button
+                onClick={() => { const amt = parseFloat(paymentAmount); if (!amt || amt <= 0) { showToast('Enter a positive amount', 'error'); return; } paymentMut.mutate(); }}
+                disabled={paymentMut.isPending}
+                className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                Record Payment
+              </button>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Method</label>
-              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="cash">Cash</option>
-                <option value="bank_transfer">Bank Transfer</option>
-                <option value="cheque">Cheque</option>
-              </select>
+          </div>
+
+          {/* Prompt 2 — the supported mechanism for correcting a PO's
+              economics after receipt (damaged goods, overcharge, negotiated
+              adjustment), since editing line items is only allowed while
+              status === 'draft'. */}
+          <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Issue Credit Note</h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount ({po.currency})</label>
+                <input type="number" min={0.01} step="0.01" value={creditAmount} onChange={e => setCreditAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="flex-1 min-w-[12rem]">
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Reason</label>
+                <input type="text" value={creditReason} onChange={e => setCreditReason(e.target.value)}
+                  placeholder="e.g. damaged goods, price adjustment"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <button
+                onClick={() => {
+                  const amt = parseFloat(creditAmount);
+                  if (!amt || amt <= 0) { showToast('Enter a positive amount', 'error'); return; }
+                  if (!creditReason.trim()) { showToast('A reason is required', 'error'); return; }
+                  creditNoteMut.mutate();
+                }}
+                disabled={creditNoteMut.isPending}
+                className="px-4 py-2 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
+                Issue Credit Note
+              </button>
             </div>
-            <button
-              onClick={() => { const amt = parseFloat(paymentAmount); if (!amt || amt <= 0) { showToast('Enter a positive amount', 'error'); return; } paymentMut.mutate(); }}
-              disabled={paymentMut.isPending}
-              className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-              Record Payment
-            </button>
           </div>
         </div>
       )}
@@ -715,13 +839,129 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive }
           </div>
         </div>
       )}
+
+      {/* Credit notes (Prompt 2) */}
+      {(po.creditNotes ?? []).length > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Credit Notes</h3>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {(po.creditNotes ?? []).map(cn => (
+              <div key={cn.id} className="p-4 flex items-center gap-4 text-sm">
+                <span className="font-medium text-gray-900 dark:text-white">{po.currency} {Number(cn.amount).toFixed(2)}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">credit note</span>
+                <span className="text-gray-500 dark:text-gray-400 italic">{cn.reason}</span>
+                <span className="text-gray-500 dark:text-gray-400 ml-auto">{new Date(cn.createdAt).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── View 5: Supplier Ledger ──────────────────────────────────────────────────
+
+const LEDGER_TYPE_COLORS: Record<string, string> = {
+  PO: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  GOODS_RECEIPT: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+  PAYMENT: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+  CREDIT_NOTE: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+};
+
+function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: number; supplierName: string; onBack: () => void }) {
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const params = new URLSearchParams();
+  if (dateFrom) params.set('dateFrom', dateFrom);
+  if (dateTo) params.set('dateTo', dateTo);
+  const qs = params.toString() ? `?${params}` : '';
+
+  const { data, isLoading } = useQuery<{ entries: SupplierLedgerEntry[]; currentBalance: number }>({
+    queryKey: ['supplier-ledger', supplierId, dateFrom, dateTo],
+    queryFn: () => api.get(`/suppliers/${supplierId}/ledger${qs}`),
+  });
+
+  const entries = data?.entries ?? [];
+
+  async function exportCsv() {
+    const token = getAccessToken();
+    const res = await fetch(`/api/suppliers/${supplierId}/ledger/export${qs}`, { headers: { Authorization: `Bearer ${token ?? ''}` } });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `supplier-ledger-${supplierId}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  return (
+    <div className="p-6 space-y-4 max-w-4xl mx-auto">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back</button>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Supplier Ledger — {supplierName}</h2>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">From</label>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">To</label>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <button onClick={exportCsv} className="px-3 py-2 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          Export CSV
+        </button>
+        <div className="ml-auto text-right">
+          <div className="text-xs text-gray-500 dark:text-gray-400">Current Balance Owed</div>
+          <div className="text-lg font-semibold text-gray-900 dark:text-white">{(data?.currentBalance ?? 0).toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+        {isLoading ? (
+          <div className="p-8 text-center text-gray-400">Loading...</div>
+        ) : entries.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">No ledger activity for this supplier.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <tr>{['Date', 'Type', 'Reference', 'Description', 'Amount', 'Balance'].map(h => (
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {entries.map((e, i) => (
+                <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{new Date(e.date).toLocaleDateString()}</td>
+                  <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${LEDGER_TYPE_COLORS[e.type] ?? 'bg-gray-100 text-gray-700'}`}>{e.type.replace(/_/g, ' ')}</span></td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">{e.reference}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{e.description}</td>
+                  <td className={`px-4 py-3 font-medium ${e.amount > 0 ? 'text-green-600 dark:text-green-400' : e.amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {e.amount > 0 ? '+' : ''}{e.amount.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{e.balance.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
 
 // ── View 1: PO List ───────────────────────────────────────────────────────────
 
-type View = 'list' | 'detail' | 'receive' | 'form';
+type View = 'list' | 'detail' | 'receive' | 'form' | 'ledger';
 
 export default function ProcurementPage({ userRole, userPermissions, initialContext = {} }: ProcurementPageProps) {
   const qc = useQueryClient();
@@ -737,6 +977,7 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
   const [dateFromFilter, setDateFromFilter] = useState(initialContext.dateFrom ?? '');
   const [dateToFilter, setDateToFilter] = useState(initialContext.dateTo ?? '');
   const [branchFilter] = useState(initialContext.branchId ?? '');
+  const [ledgerSupplier, setLedgerSupplier] = useState<{ id: number; name: string } | null>(null);
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (filterStatus) params.set('status', filterStatus);
@@ -757,6 +998,7 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
   function openReceive(po: PO) { setSelectedPO(po); setView('receive'); }
   function openCreate() { setEditingPO(undefined); setView('form'); }
   function openEdit(po: PO) { setEditingPO(po); setView('form'); }
+  function openLedger(supplierId: number, supplierName: string) { setLedgerSupplier({ id: supplierId, name: supplierName }); setView('ledger'); }
   function backToList() { setView('list'); setSelectedPO(null); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); }
 
   if (view === 'form') {
@@ -772,6 +1014,7 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
         onBack={backToList}
         onEdit={openEdit}
         onReceive={openReceive}
+        onViewLedger={openLedger}
       />
     );
   }
@@ -782,6 +1025,16 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
         po={selectedPO}
         onDone={(updated) => { setSelectedPO(updated); setView('detail'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); }}
         onBack={() => setView('detail')}
+      />
+    );
+  }
+
+  if (view === 'ledger' && ledgerSupplier) {
+    return (
+      <SupplierLedgerView
+        supplierId={ledgerSupplier.id}
+        supplierName={ledgerSupplier.name}
+        onBack={() => setView(selectedPO ? 'detail' : 'list')}
       />
     );
   }
@@ -837,18 +1090,29 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <tr>
-                {['ID', 'Supplier', 'Status', 'Total', 'Expected Date', 'Actions'].map(h => (
+                {['ID', 'Supplier', 'Status', 'Total', 'Received', 'Paid / Outstanding', 'Expected Date', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {pos.map(po => (
+              {pos.map(po => {
+                const receivingPct = safePct(po.receivedQuantityTotal, po.orderedQuantityTotal);
+                return (
                 <tr key={po.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">#{po.id}</td>
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{po.supplierName}</td>
                   <td className="px-4 py-3"><StatusBadge status={po.status} /></td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{po.currency} {Number(po.totalAmount).toFixed(2)}</td>
+                  <td className="px-4 py-3 w-28">
+                    <ProgressBar label="" pct={receivingPct} tone="blue" caption={`${Math.round(receivingPct * 100)}%`} />
+                  </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    <span className="font-medium text-gray-900 dark:text-white">{po.currency} {Number(po.amountPaid ?? 0).toFixed(2)} paid</span>
+                    {po.outstandingAmount > 0 && (
+                      <span className="block text-amber-600 dark:text-amber-400">{po.currency} {Number(po.outstandingAmount).toFixed(2)} outstanding</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{po.expectedDeliveryDate ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 text-xs">
@@ -859,10 +1123,12 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
                       {['approved', 'ordered', 'partially_received'].includes(po.status) && canReceive(userRole, userPermissions) && (
                         <button onClick={() => openReceive(po)} className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">Receive</button>
                       )}
+                      <button onClick={() => openLedger(po.supplierId, po.supplierName)} className="px-2 py-1 rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors">Ledger</button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}

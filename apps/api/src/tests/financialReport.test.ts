@@ -277,32 +277,32 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
 
     expect(res.status).toBe(200);
     const rows = parseCsv(res.text);
-    const byRef = new Map(rows.map(r => [r.reference_number, r]));
+    const byRef = new Map(rows.map(r => [r['Invoice No'], r]));
 
     const orderRow = byRef.get(`${REF_PREFIX}ORD-A`);
     expect(orderRow).toBeDefined();
-    expect(orderRow!.transaction_type).toBe('ORDER');
-    expect(parseFloat(orderRow!.gross_amount)).toBeCloseTo(ORDER_SUBTOTAL, 2);
-    expect(parseFloat(orderRow!.discount_amount)).toBeCloseTo(ORDER_DISCOUNT, 2);
-    expect(parseFloat(orderRow!.net_amount)).toBeCloseTo(ORDER_TOTAL, 2);
+    expect(orderRow!.Source).toBe('ORDER');
+    expect(parseFloat(orderRow!['Gross Amount'])).toBeCloseTo(ORDER_SUBTOTAL, 2);
+    expect(parseFloat(orderRow!.Discount)).toBeCloseTo(ORDER_DISCOUNT, 2);
+    expect(parseFloat(orderRow!['Net Sales Amount'])).toBeCloseTo(ORDER_TOTAL, 2);
 
     const posRow = byRef.get(`${REF_PREFIX}POS-A`);
     expect(posRow).toBeDefined();
-    expect(posRow!.transaction_type).toBe('POS');
-    expect(parseFloat(posRow!.gross_amount)).toBeCloseTo(POS_UNIT_PRICE, 2);
-    expect(parseFloat(posRow!.discount_amount)).toBeCloseTo(POS_DISCOUNT, 2);
-    expect(parseFloat(posRow!.net_amount)).toBeCloseTo(POS_LINE_TOTAL, 2);
+    expect(posRow!.Source).toBe('POS');
+    expect(parseFloat(posRow!['Gross Amount'])).toBeCloseTo(POS_UNIT_PRICE, 2);
+    expect(parseFloat(posRow!.Discount)).toBeCloseTo(POS_DISCOUNT, 2);
+    expect(parseFloat(posRow!['Net Sales Amount'])).toBeCloseTo(POS_LINE_TOTAL, 2);
 
     const returnRow = byRef.get(`${REF_PREFIX}RET-A`);
     expect(returnRow).toBeDefined();
-    expect(returnRow!.transaction_type).toBe('RETURN');
-    expect(parseInt(returnRow!.quantity, 10)).toBe(-1);
-    expect(parseFloat(returnRow!.net_amount)).toBeCloseTo(-RETURN_REFUND, 2);
+    expect(returnRow!.Source).toBe('RETURN');
+    expect(parseInt(returnRow!.Qty, 10)).toBe(-1);
+    expect(parseFloat(returnRow!['Net Sales Amount'])).toBeCloseTo(-RETURN_REFUND, 2);
 
-    const exchangeRows = rows.filter(r => r.reference_number === `${REF_PREFIX}EXC-A`);
+    const exchangeRows = rows.filter(r => r['Invoice No'] === `${REF_PREFIX}EXC-A`);
     expect(exchangeRows.length).toBe(2); // one incoming, one outgoing
-    expect(exchangeRows.every(r => r.transaction_type === 'EXCHANGE')).toBe(true);
-    const exchangeNetSum = exchangeRows.reduce((sum, r) => sum + parseFloat(r.net_amount), 0);
+    expect(exchangeRows.every(r => r.Source === 'EXCHANGE')).toBe(true);
+    const exchangeNetSum = exchangeRows.reduce((sum, r) => sum + parseFloat(r['Net Sales Amount']), 0);
     expect(exchangeNetSum).toBeCloseTo(EXCHANGE_OUTGOING - EXCHANGE_INCOMING, 2);
   });
 
@@ -316,7 +316,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
 
     expect(res.status).toBe(200);
     const rows = parseCsv(res.text);
-    const refs = new Set(rows.map(r => r.reference_number));
+    const refs = new Set(rows.map(r => r['Invoice No']));
 
     expect(refs.has(`${REF_PREFIX}ORD-CANCEL`)).toBe(false);
     expect(refs.has(`${REF_PREFIX}POS-VOID`)).toBe(false);
@@ -326,18 +326,27 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
 
   // ── 3. Dashboard vs CSV reconciliation ─────────────────────────────────────
 
-  it('3. Dashboard KPI dailyNetSalesRevenue reconciles 1:1 with the summed net_amount of the CSV export', async () => {
+  it('3. Dashboard KPI dailyNetSalesRevenue reconciles 1:1 with the summed Net Sales Amount of the CSV export', async () => {
     const exportRes = await request(getTestApp())
       .get(`/api/reports/sales/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(exportRes.status).toBe(200);
     const rows = parseCsv(exportRes.text);
-    const csvNetSum = rows.reduce((sum, r) => sum + parseFloat(r.net_amount), 0);
+    // Exclude the appended TOTAL row (Prompt 2) — it already IS the sum, so
+    // including it would double-count.
+    const lineRows = rows.filter(r => r.Customer !== 'TOTAL');
+    const csvNetSum = lineRows.reduce((sum, r) => sum + parseFloat(r['Net Sales Amount']), 0);
 
     // Sanity-check the fixture's own arithmetic before comparing against the
     // Dashboard — this is the number both surfaces are expected to produce.
     expect(csvNetSum).toBeCloseTo(EXPECTED_NET_SALES_REVENUE, 2);
+
+    // The appended TOTAL row's own Net Sales Amount must match the summed
+    // line rows too — proves the totals row itself is internally consistent.
+    const totalRow = rows.find(r => r.Customer === 'TOTAL');
+    expect(totalRow).toBeDefined();
+    expect(parseFloat(totalRow!['Net Sales Amount'])).toBeCloseTo(csvNetSum, 2);
 
     const kpiRes = await request(getTestApp())
       .get(`/api/reports/kpis?branchId=${branchId}`)
@@ -350,5 +359,51 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     // is driven entirely by these fixtures — no other data can leak in.
     expect(kpiRes.body.dailyNetSalesRevenue).toBeCloseTo(csvNetSum, 2);
     expect(kpiRes.body.monthlyNetSalesRevenue).toBeCloseTo(csvNetSum, 2);
+  });
+
+  // ── 4. Prompt 2 — Gross Profit (the single "Net Profit" KPI) reconciles
+  //      across all three surfaces that must never disagree: the Sales
+  //      Report export, /reports/kpis (legacy daily/monthly fields), and
+  //      /reports/kpis/period?period=today (what the redesigned dashboard's
+  //      Sales Performance cards actually render). All three are backed by
+  //      the same per-line accrual+cost engine (financialReport.service.ts),
+  //      so this doesn't hardcode an expected cost basis — it only proves
+  //      the three surfaces can't drift apart from each other.
+
+  it('4. Gross Profit (single Net Profit KPI) reconciles across the Sales export, /kpis, and /kpis/period', async () => {
+    const exportRes = await request(getTestApp())
+      .get(`/api/reports/sales/export?branchId=${branchId}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(exportRes.status).toBe(200);
+    const rows = parseCsv(exportRes.text);
+    const lineRows = rows.filter(r => r.Customer !== 'TOTAL');
+    const csvNetSum = lineRows.reduce((sum, r) => sum + parseFloat(r['Net Sales Amount']), 0);
+    const csvGrossProfitSum = lineRows.reduce((sum, r) => sum + parseFloat(r['Gross Profit']), 0);
+
+    const totalRow = rows.find(r => r.Customer === 'TOTAL');
+    expect(totalRow).toBeDefined();
+    expect(parseFloat(totalRow!['Gross Profit'])).toBeCloseTo(csvGrossProfitSum, 2);
+
+    const kpiRes = await request(getTestApp())
+      .get(`/api/reports/kpis?branchId=${branchId}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(kpiRes.status).toBe(200);
+    expect(kpiRes.body.dailyNetProfitUnified).toBeCloseTo(csvGrossProfitSum, 2);
+    expect(kpiRes.body.monthlyNetProfitUnified).toBeCloseTo(csvGrossProfitSum, 2);
+    // procurementExpense was a Prompt 1-era field folded into the old
+    // (rejected) cash-basis KPI — it must not resurface on the response.
+    expect(kpiRes.body.procurementExpense).toBeUndefined();
+
+    const periodRes = await request(getTestApp())
+      .get(`/api/reports/kpis/period?branchId=${branchId}&period=today`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(periodRes.status).toBe(200);
+    // All fixture rows are dated "now()" — the "today" period window covers
+    // exactly this fixture set for this dedicated test branch.
+    expect(periodRes.body.netSales).toBeCloseTo(csvNetSum, 2);
+    expect(periodRes.body.grossProfit).toBeCloseTo(csvGrossProfitSum, 2);
   });
 });

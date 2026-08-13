@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { computeNetProfit } from '../../lib/profit.service.js';
 import { costBasisLateralJoin } from '../../lib/costBasis.js';
-import { getUnifiedFinancialSummary } from './financialReport.service.js';
+import { getUnifiedFinancialSummary, getUnifiedTransactionRows, type UnifiedTransactionRow, type TransactionType } from './financialReport.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +27,9 @@ export interface SalesReport {
     totalPosSales: number;
     totalPosTransactions: number;
     // Net profit breakdown fields (Bug 2 fix — computeNetProfit integration)
+    // — collected-cash revenue recognition, kept for the Cash & Receivables
+    // dashboard cards / financial-integrity tests. NOT the source for the
+    // Sales Performance cards below (see Prompt 2 decision #1).
     netProfit?: number;
     purchaseCost?: number;
     totalDiscounts?: number;
@@ -34,9 +37,66 @@ export interface SalesReport {
     outstandingReceivables?: number;
     cashSalesRevenue?: number;
     creditSalesRevenue?: number;
+    // Prompt 2 — Sales Performance: accrual/invoiced figures, computed from
+    // the SAME per-line rows (financialReport.service.ts) the Sales Report
+    // detail rows and CSV export use, so these numbers reconcile 1:1 with
+    // the export by construction. `grossProfit` here IS the dashboard's
+    // single, unambiguous "Net Profit" KPI — actual economic profit after
+    // COGS, discounts, returns, and exchange/settlement adjustments (see
+    // KpiReport's dailyNetProfitUnified/monthlyNetProfitUnified for the
+    // full rationale). Never confuse this with the cash-basis `netProfit`
+    // field above — only this one is ever labeled "Net Profit" in the UI.
+    netSales: number;
+    grossProfit: number;
+    grossMarginPct: number;
+    costAmount: number;
+    grossSales: number;
+    discounts: number;
+    returnsValue: number;
   };
   byPeriod: SalesReportRow[];
   byBranch: Array<{ branchId: number; branchName: string; totalSales: number; totalOrders: number }>;
+}
+
+// ── Sales Report — flat per-line detail (Prompt 2 field list) ──────────────
+// One row per line item across all four channels (ORDER/POS/RETURN/
+// EXCHANGE), sourced directly from financialReport.service.ts's unified
+// engine — the exact same rows the dashboard's Sales Performance cards sum
+// over, and the exact same rows the CSV export streams. "Dashboard totals
+// exactly match exports" holds by construction rather than by after-the-
+// fact reconciliation.
+export interface SalesReportLineRow {
+  date: string;
+  invoiceNo: string;
+  source: TransactionType;
+  customer: string;
+  book: string;
+  qty: number;
+  unitPrice: number;
+  discount: number;
+  grossAmount: number;
+  returnAmount: number;     // magnitude of this row's return impact (0 for non-RETURN rows)
+  netSalesAmount: number;
+  costAmount: number;
+  grossProfit: number;
+  paymentStatus: string;
+  cashCollected: number;
+  receivableBalance: number;
+  branch: string;
+  location: string;
+  user: string;
+}
+
+export interface SalesReportTotals {
+  qty: number;
+  grossAmount: number;
+  returnAmount: number;
+  netSalesAmount: number;
+  costAmount: number;
+  grossProfit: number;
+  grossMarginPct: number;
+  cashCollected: number;
+  receivableBalance: number;
 }
 
 export interface PaymentReport {
@@ -107,23 +167,43 @@ export interface KpiReport {
   purchaseCost: number;
   totalDiscounts: number;
   // Executive financial KPIs
-  procurementExpense: number;   // SUM of received/closed PO total_amount (current month)
+  // Prompt 2: the Procurement Expense KPI card is removed from the
+  // dashboard, and this field along with its (previously dead-weight once
+  // unread) backing query is removed here too rather than left as unused
+  // shadow logic.
   grossProfit: number;          // fulfilledRevenue - purchaseCost (before returns/exchanges)
   dailyNetProfit: number;       // today's net profit
   monthlyNetProfit: number;     // current month net profit
 
   // Dashboard Standardization & Unified Reports Engine (financialReport.service.ts) —
   // gross-invoiced/accrual figures, reconciling 1:1 with the Sales CSV export
-  // for the same date range. Deliberately distinct from fulfilledRevenue/
-  // netProfit/grossProfit above (collected-cash revenue recognition for
-  // credit sales — an existing, separately-tested accounting policy this
-  // does not change). See financialReport.service.ts's module comment.
+  // for the same date range.
+  //
+  // dailyNetProfitUnified / monthlyNetProfitUnified / grossProfitUnified are
+  // THE single, unambiguous "Net Profit" KPI the dashboard shows — actual
+  // economic profit after COGS, discounts (already netted into
+  // netSalesRevenue), returns, and exchange/settlement adjustments
+  // (Prompt 2 decision #1 + follow-up clarification). There is deliberately
+  // no second "Net Profit"-labeled figure on the dashboard: the
+  // collected-cash netProfit/fulfilledRevenue fields above (from
+  // computeNetProfit()) remain in this payload only for the Cash &
+  // Receivables cards and financial-integrity tests — never render them
+  // under a "Net Profit" label alongside these, and never net Cash
+  // Collected / Outstanding / Receivable figures into these fields; cash
+  // collection is a downstream settlement event on revenue already
+  // recognized here, not a second profit adjustment.
   dailyNetSalesRevenue: number;
   monthlyNetSalesRevenue: number;
   dailyNetProfitUnified: number;
   monthlyNetProfitUnified: number;
+  dailyGrossMarginPct: number;
+  monthlyGrossMarginPct: number;
   grossProfitUnified: number;
   overdueReceivablesAmount: number;
+  // Prompt 2 — Inventory & Operations: SUM(inventory.inventory_value) —
+  // quantity × average_cost per (book, location) row, generated column
+  // added by Prompt 1's weighted-average-cost migration.
+  inventoryValue: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -217,7 +297,17 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
   const p = posRes.rows[0];
 
   // Bug 2 fix: add net profit breakdown using the shared profit module
+  // (collected-cash figures — Cash & Receivables cards / integrity tests).
   const profitResult = await computeNetProfit({
+    branchId: filters.branchId,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+  });
+
+  // Prompt 2 — accrual figures for the Sales Performance cards, computed
+  // from the same per-line rows the detail export uses (see
+  // financialReport.service.ts).
+  const unified = await getUnifiedFinancialSummary({
     branchId: filters.branchId,
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
@@ -238,6 +328,14 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
       outstandingReceivables: profitResult.outstandingReceivables,
       cashSalesRevenue:       profitResult.cashSalesRevenue,
       creditSalesRevenue:     profitResult.creditSalesRevenue,
+      // Accrual figures (canonical for Sales Performance — Prompt 2 decision #1)
+      netSales:       unified.netSalesRevenue,
+      grossProfit:    unified.grossProfit,
+      grossMarginPct: unified.grossMarginPct,
+      costAmount:     unified.costAmount,
+      grossSales:     unified.grossSales,
+      discounts:      unified.discounts,
+      returnsValue:   unified.returnsValue,
     },
     byPeriod: periodRes.rows.map(r => ({
       period:            r.period,
@@ -269,11 +367,14 @@ export async function getPaymentReport(filters: ReportFilters): Promise<PaymentR
   }
   if (filters.dateFrom) {
     params.push(filters.dateFrom);
-    conditions.push(`op.processed_at >= $${params.length}`);
+    // Cast to date — matches the ::date convention every other report uses,
+    // so a dateTo of e.g. 2026-08-12 includes the whole day regardless of
+    // timezone/time component (this previously compared raw timestamps).
+    conditions.push(`op.processed_at::date >= $${params.length}::date`);
   }
   if (filters.dateTo) {
     params.push(filters.dateTo);
-    conditions.push(`op.processed_at <= $${params.length}`);
+    conditions.push(`op.processed_at::date <= $${params.length}::date`);
   }
   const joinClause = filters.branchId ? 'JOIN orders o ON o.id = op.order_id' : '';
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -326,8 +427,8 @@ export async function getPaymentReport(filters: ReportFilters): Promise<PaymentR
   const exParams: unknown[] = [];
   const exConditions: string[] = ['ft.exchange_id IS NOT NULL', `ft.type IN ('payment','refund')`];
   if (filters.branchId) { exParams.push(filters.branchId); exConditions.push(`ft.branch_id = $${exParams.length}`); }
-  if (filters.dateFrom) { exParams.push(filters.dateFrom); exConditions.push(`ft.created_at >= $${exParams.length}`); }
-  if (filters.dateTo)   { exParams.push(filters.dateTo);   exConditions.push(`ft.created_at <= $${exParams.length}`); }
+  if (filters.dateFrom) { exParams.push(filters.dateFrom); exConditions.push(`ft.created_at::date >= $${exParams.length}::date`); }
+  if (filters.dateTo)   { exParams.push(filters.dateTo);   exConditions.push(`ft.created_at::date <= $${exParams.length}::date`); }
   const exWhere = 'WHERE ' + exConditions.join(' AND ');
   const exTruncExpr = `date_trunc('${groupBy}', ft.created_at)`;
 
@@ -1019,18 +1120,10 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
   // comes from monthlyProfitResult. Removed during the Legacy Code Audit —
   // it was an unnecessary extra DB query on every /reports/kpis request.)
   const [
-    dailyProfitResult, procurementExpenseRes, overdueRes,
+    dailyProfitResult, overdueRes, inventoryValueRes,
     dailyUnified, monthlyUnified,
   ] = await Promise.all([
     computeNetProfit({ branchId, dateFrom: today, dateTo: today }),            // today
-    db.query(
-      `SELECT COALESCE(SUM(total_amount), 0)::NUMERIC AS val
-       FROM purchase_orders
-       WHERE status IN ('received','closed')
-         AND date_trunc('month', updated_at) = date_trunc('month', now())
-         ${branchCond}`,
-      params,
-    ),
     // Overdue Receivables — status is maintained by the markOverdueReceivables()
     // scheduled job (receivables.service.ts), not derived here.
     db.query(
@@ -1040,29 +1133,43 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
          ${branchCond}`,
       params,
     ),
+    // Inventory Value — SUM of the generated inventory.inventory_value
+    // column (quantity × average_cost, Prompt 1). Not date-scoped — this is
+    // a current-standing balance-sheet figure, not a period flow.
+    db.query(
+      `SELECT COALESCE(SUM(i.inventory_value), 0)::NUMERIC AS val
+       FROM inventory i
+       JOIN locations l ON l.id = i.location_id
+       WHERE 1=1 ${branchId ? `AND l.branch_id = $1` : ''}`,
+      params,
+    ),
     getUnifiedFinancialSummary({ branchId, dateFrom: today, dateTo: today }),
     getUnifiedFinancialSummary({ branchId, dateFrom: monthStart, dateTo: today }),
   ]);
   // Re-run for month-scoped profit (separate from all-time)
   const monthlyProfitResult = await computeNetProfit({ branchId, dateFrom: monthStart, dateTo: today });
 
-  const procurementExpense = parseFloat(procurementExpenseRes.rows[0].val as string);
   const overdueReceivablesAmount = parseFloat(overdueRes.rows[0].val as string);
+  const inventoryValue = parseFloat(inventoryValueRes.rows[0].val as string);
 
   // Gross profit = monthly fulfilled revenue − purchase cost (before returns/exchanges)
   // Note: revenue is already post-discount, so no discount subtraction needed here.
   const grossProfit = monthlyProfitResult.fulfilledRevenue - monthlyProfitResult.purchaseCost;
 
-  // Unified (gross-invoiced) equivalents — reuse the SAME date-scoped
-  // purchaseCost computeNetProfit() already computed above (also
-  // costBasis.ts-aware), so this doesn't duplicate COGS logic, just applies
-  // it against the unified engine's Net Sales Revenue instead of
-  // computeNetProfit's collected-cash fulfilledRevenue.
-  const dailyNetProfitUnified = parseFloat((dailyUnified.netSalesRevenue - dailyProfitResult.purchaseCost).toFixed(2));
-  const monthlyNetProfitUnified = parseFloat((monthlyUnified.netSalesRevenue - monthlyProfitResult.purchaseCost).toFixed(2));
-  const grossProfitUnified = parseFloat(
-    ((monthlyUnified.grossSales - monthlyUnified.discounts) - monthlyProfitResult.purchaseCost).toFixed(2),
-  );
+  // Unified (gross-invoiced/accrual) equivalents — Prompt 2 decision #1's
+  // canonical basis for the Sales Performance dashboard cards. Cost is now
+  // computed by getUnifiedFinancialSummary() itself, over the EXACT SAME
+  // row-set as netSalesRevenue (every qualifying line for the period,
+  // regardless of fulfillment/collection status) — this replaces the
+  // earlier formula that combined this engine's revenue with
+  // computeNetProfit()'s purchaseCost (a differently-scoped figure: only
+  // "fulfilled"/cash-recognized orders), which could silently mismatch
+  // whenever a credit order was invoiced but not yet fulfilled.
+  const dailyNetProfitUnified = dailyUnified.grossProfit;
+  const monthlyNetProfitUnified = monthlyUnified.grossProfit;
+  const grossProfitUnified = monthlyUnified.grossProfit;
+  const dailyGrossMarginPct = dailyUnified.grossMarginPct;
+  const monthlyGrossMarginPct = monthlyUnified.grossMarginPct;
 
   return {
     dailySales,
@@ -1085,7 +1192,6 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
     purchaseCost:           monthlyProfitResult.purchaseCost,
     totalDiscounts:         monthlyProfitResult.totalDiscounts,
     // Executive financial KPIs
-    procurementExpense,
     grossProfit,
     dailyNetProfit:   dailyProfitResult.netProfit,
     monthlyNetProfit: monthlyProfitResult.netProfit,
@@ -1094,126 +1200,12 @@ export async function getKpis(branchId?: number): Promise<KpiReport> {
     monthlyNetSalesRevenue: monthlyUnified.netSalesRevenue,
     dailyNetProfitUnified,
     monthlyNetProfitUnified,
+    dailyGrossMarginPct,
+    monthlyGrossMarginPct,
     grossProfitUnified,
     overdueReceivablesAmount,
+    inventoryValue,
   };
-}
-
-// ── Sales Export Rows ─────────────────────────────────────────────────────────
-
-export interface SalesExportRow {
-  order_reference: string;
-  date: string;
-  customer_name: string;
-  sale_type: string;
-  fulfillment_status: string;
-  subtotal: number;
-  discount_normal: number;
-  discount_merchant: number;
-  discount_special: number;
-  total_discount: number;
-  purchase_cost: number;
-  net_profit: number;
-  payment_status: string;
-  collected_amount: number;
-  outstanding_amount: number;
-}
-
-export async function getSalesExportRows(filters: ReportFilters): Promise<SalesExportRow[]> {
-  const params: unknown[] = [];
-  const conditions: string[] = [`o.status NOT IN ('Cancelled','CANCELLED')`];
-
-  if (filters.branchId) { params.push(filters.branchId); conditions.push(`o.branch_id = $${params.length}`); }
-  if (filters.dateFrom) { params.push(filters.dateFrom); conditions.push(`o.created_at::date >= $${params.length}::date`); }
-  if (filters.dateTo)   { params.push(filters.dateTo);   conditions.push(`o.created_at::date <= $${params.length}::date`); }
-
-  const where = 'WHERE ' + conditions.join(' AND ');
-
-  // Discount breakdown per order (by type)
-  const discountRes = await db.query(
-    `SELECT
-       oli.order_id,
-       COALESCE(SUM(CASE WHEN oli.discount_type='Normal'   THEN oli.discount_amount ELSE 0 END),0)::NUMERIC AS disc_normal,
-       COALESCE(SUM(CASE WHEN oli.discount_type='Merchant' THEN oli.discount_amount ELSE 0 END),0)::NUMERIC AS disc_merchant,
-       COALESCE(SUM(CASE WHEN oli.discount_type='Special'  THEN oli.discount_amount ELSE 0 END),0)::NUMERIC AS disc_special
-     FROM order_line_items oli
-     GROUP BY oli.order_id`,
-  );
-  const discMap = new Map<string, { normal: number; merchant: number; special: number }>();
-  for (const row of discountRes.rows as Record<string, unknown>[]) {
-    discMap.set(String(row.order_id), {
-      normal:   parseFloat(row.disc_normal   as string),
-      merchant: parseFloat(row.disc_merchant as string),
-      special:  parseFloat(row.disc_special  as string),
-    });
-  }
-
-  // Purchase cost per order — prefers the cost frozen on the line item at
-  // posting time (oli.unit_cost, Sales Posting Rule); falls back to
-  // costBasis.ts's most-recent-cost lookup only for pre-migration rows.
-  const costRes = await db.query(
-    `SELECT
-       oli.order_id,
-       COALESCE(SUM(COALESCE(oli.unit_cost, lc.unit_cost, 0) * oli.quantity),0)::NUMERIC AS purchase_cost
-     FROM order_line_items oli
-     ${costBasisLateralJoin('oli.book_id')}
-     GROUP BY oli.order_id`,
-  );
-  const costMap = new Map<string, number>();
-  for (const row of costRes.rows as Record<string, unknown>[]) {
-    costMap.set(String(row.order_id), parseFloat(row.purchase_cost as string));
-  }
-
-  const res = await db.query(
-    `SELECT
-       o.id, o.order_number, o.created_at, o.status, o.sale_type,
-       o.subtotal, o.discount_total, o.total, o.payment_status,
-       COALESCE(c.full_name, 'Walk-in') AS customer_name,
-       COALESCE(r.original_amount, 0)::NUMERIC             AS original_amount,
-       COALESCE(r.outstanding_amount, 0)::NUMERIC          AS outstanding_amount
-     FROM orders o
-     LEFT JOIN customers c ON c.id = o.customer_id
-     LEFT JOIN receivables r ON r.source_type = 'order_credit_sale' AND r.source_entity_id = o.id
-     ${where}
-     ORDER BY o.created_at DESC`,
-    params,
-  );
-
-  return (res.rows as Record<string, unknown>[]).map(row => {
-    const orderId = String(row.id);
-    const disc = discMap.get(orderId) ?? { normal: 0, merchant: 0, special: 0 };
-    const totalDiscount = parseFloat(row.discount_total as string);
-    const purchaseCost = costMap.get(orderId) ?? 0;
-    const total = parseFloat(row.total as string);
-    const originalAmount = parseFloat(row.original_amount as string);
-    const outstandingAmount = parseFloat(row.outstanding_amount as string);
-    const collectedAmount = originalAmount > 0 ? originalAmount - outstandingAmount : total;
-
-    return {
-      order_reference:    row.order_number as string,
-      date:               (row.created_at as Date).toISOString().slice(0, 10),
-      customer_name:      row.customer_name as string,
-      sale_type:          row.sale_type as string,
-      fulfillment_status: row.status as string,
-      subtotal:           parseFloat(row.subtotal as string),
-      discount_normal:    disc.normal,
-      discount_merchant:  disc.merchant,
-      discount_special:   disc.special,
-      total_discount:     totalDiscount,
-      purchase_cost:      purchaseCost,
-      // Module 7 fix: `total` (o.total) is already post-discount — every
-      // line's total_price was computed as unitPrice*qty - discountAmount
-      // at order-creation time (orders.service.ts). Subtracting
-      // totalDiscount again here double-counted it, understating net
-      // profit on every discounted order by exactly the discount amount.
-      // lib/profit.service.ts computeNetProfit() already gets this right
-      // (see its comment); this export row builder had the same bug.
-      net_profit:         total - purchaseCost,
-      payment_status:     row.payment_status as string,
-      collected_amount:   collectedAmount,
-      outstanding_amount: outstandingAmount,
-    };
-  });
 }
 
 // ── Procurement Export Rows ───────────────────────────────────────────────────
@@ -1243,7 +1235,7 @@ export async function getProcurementExportRows(filters: ReportFilters): Promise<
   const res = await db.query(
     `SELECT
        po.id AS po_id,
-       po.created_at,
+       TO_CHAR(po.created_at, 'YYYY-MM-DD') AS date_str,
        s.name AS supplier_name,
        po.status,
        po.total_amount,
@@ -1264,7 +1256,9 @@ export async function getProcurementExportRows(filters: ReportFilters): Promise<
 
   return (res.rows as Record<string, unknown>[]).map(row => ({
     po_reference:      String(row.po_id),
-    date:              (row.created_at as Date).toISOString().slice(0, 10),
+    // TO_CHAR(...) SQL-side string — never a JS Date/toISOString() round-trip
+    // (that pattern drifts a day off near midnight in non-UTC timezones).
+    date:              row.date_str as string,
     supplier_name:     row.supplier_name as string,
     status:            row.status as string,
     book_code:         (row.book_code as string | null) ?? '',
@@ -1310,10 +1304,10 @@ export async function getReceivablesExportRows(filters: ReportFilters): Promise<
 
   const res = await db.query(
     `SELECT
-       r.created_at,
+       TO_CHAR(r.created_at, 'YYYY-MM-DD') AS date_str,
        r.original_amount,
        r.outstanding_amount,
-       r.due_date,
+       TO_CHAR(r.due_date, 'YYYY-MM-DD') AS due_date_str,
        r.status,
        GREATEST(0, EXTRACT(DAY FROM now() - r.due_date)::int) AS days_overdue,
        r.source_ref_id AS order_reference,
@@ -1331,12 +1325,15 @@ export async function getReceivablesExportRows(filters: ReportFilters): Promise<
     const outstanding = parseFloat(row.outstanding_amount as string);
     return {
       order_reference:    row.order_reference as string,
-      date:               (row.created_at as Date).toISOString().slice(0, 10),
+      // TO_CHAR(...) SQL-side strings — never a JS Date/toISOString()
+      // round-trip (that pattern drifts a day off near midnight in
+      // non-UTC timezones).
+      date:               row.date_str as string,
       customer_name:      row.customer_name as string,
       original_amount:    original,
       collected_amount:   original - outstanding,
       outstanding_amount: outstanding,
-      due_date:           row.due_date ? (row.due_date as Date).toISOString().slice(0, 10) : '',
+      due_date:           (row.due_date_str as string | null) ?? '',
       days_overdue:       row.days_overdue as number ?? 0,
       payment_status:     row.payment_status as string,
     };
@@ -1357,6 +1354,11 @@ export interface InventoryExportRowV2 {
   quantity_available: number;
   unit_cost: number;
   last_movement_date: string;
+  // Prompt 2 — Inventory Valuation Report field list additions.
+  average_cost: number;
+  inventory_value: number;
+  last_purchase_cost: number;
+  last_selling_price: number;
 }
 
 export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<InventoryExportRowV2[]> {
@@ -1421,19 +1423,29 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
        -- reflect blended receipts). Falls back to it only when average_cost
        -- is still 0 (never received any valued stock at this location yet).
        COALESCE(NULLIF(i.average_cost, 0), lc.unit_cost, 0)::NUMERIC       AS unit_cost,
-       (SELECT MAX(ih.created_at)
-        FROM inventory_history ih
-        WHERE ih.book_id = i.book_id AND ih.location_id = i.location_id)  AS last_movement_date
+       i.inventory_value,
+       TO_CHAR(
+         (SELECT MAX(ih.created_at)
+          FROM inventory_history ih
+          WHERE ih.book_id = i.book_id AND ih.location_id = i.location_id),
+         'YYYY-MM-DD'
+       ) AS last_movement_date_str,
+       (SELECT pli.unit_cost FROM po_line_items pli
+        WHERE pli.book_id = b.id ORDER BY pli.id DESC LIMIT 1)              AS last_purchase_cost,
+       COALESCE(bbp.price, b.default_price)                                 AS last_selling_price
      FROM inventory i
      JOIN books b ON b.id = i.book_id
      JOIN locations l ON l.id = i.location_id
      LEFT JOIN book_authors ba ON ba.book_id = b.id
      LEFT JOIN authors a ON a.id = ba.author_id
+     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = l.branch_id
+       AND bbp.format_id = 0 AND bbp.edition_id = 0
      ${reservationJoin}
      ${costBasisLateralJoin('b.id')}
      ${where}
      GROUP BY b.id, i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id,
-              i.quantity, i.average_cost${groupByReserved}, lc.unit_cost
+              i.quantity, i.average_cost, i.inventory_value${groupByReserved}, lc.unit_cost,
+              bbp.price, b.default_price
      ORDER BY b.title ASC`,
     params,
   );
@@ -1449,8 +1461,877 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
     quantity_reserved:  row.quantity_reserved as number,
     quantity_available: row.quantity_available as number,
     unit_cost:          parseFloat(row.unit_cost as string),
-    last_movement_date: row.last_movement_date
-      ? (row.last_movement_date as Date).toISOString().slice(0, 10)
-      : '',
+    // TO_CHAR(...) SQL-side string — never a JS Date/toISOString()
+    // round-trip (that pattern drifts a day off near midnight in non-UTC
+    // timezones).
+    last_movement_date: (row.last_movement_date_str as string | null) ?? '',
+    // Prompt 2 — Inventory Valuation Report additions. inventory_value is
+    // Prompt 1's generated column (quantity × average_cost); unit_cost
+    // above already IS "Average Cost" (per-location weighted average, with
+    // costBasis.ts fallback only when a location has never received valued
+    // stock) — surfaced again under its own name for the Valuation Report's
+    // exact field list.
+    average_cost:       parseFloat(row.unit_cost as string),
+    inventory_value:    parseFloat((row.inventory_value as string | number | null) as string ?? '0'),
+    last_purchase_cost: row.last_purchase_cost != null ? parseFloat(row.last_purchase_cost as string) : 0,
+    last_selling_price: row.last_selling_price != null ? parseFloat(row.last_selling_price as string) : 0,
+  }));
+}
+
+// ── Sales Report — flat per-line detail + totals (Prompt 2) ────────────────
+// Built directly from financialReport.service.ts's unified rows — the exact
+// same rows the dashboard's Sales Performance cards sum over, so the
+// export's totals row and the dashboard cards can never mathematically
+// diverge for the same filters.
+
+const round2 = (n: number): number => parseFloat(n.toFixed(2));
+
+export async function getSalesReportRows(
+  filters: ReportFilters,
+): Promise<{ rows: SalesReportLineRow[]; totals: SalesReportTotals }> {
+  const unifiedRows = await getUnifiedTransactionRows(filters);
+
+  const rows: SalesReportLineRow[] = unifiedRows.map((r: UnifiedTransactionRow) => ({
+    date: r.transactionDate,
+    invoiceNo: r.referenceNumber,
+    source: r.transactionType,
+    customer: r.customerName,
+    book: r.bookTitle,
+    qty: r.quantity,
+    unitPrice: r.unitPrice,
+    discount: r.discountAmount,
+    grossAmount: r.grossAmount,
+    returnAmount: r.transactionType === 'RETURN' ? -r.netAmount : 0,
+    netSalesAmount: r.netAmount,
+    costAmount: r.costAmount,
+    grossProfit: r.grossProfit,
+    paymentStatus: r.paymentStatus,
+    cashCollected: r.cashCollected,
+    receivableBalance: r.receivableBalance,
+    branch: r.branch,
+    location: r.locationName,
+    user: r.staffUsername,
+  }));
+
+  // qty/gross/return/net/cost/grossProfit are correctly additive per line.
+  // cashCollected/receivableBalance are invoice-level facts REPEATED on
+  // every line of that invoice (see financialReport.service.ts) — summing
+  // them per line would double-count a multi-line invoice, so the totals
+  // row sums them once per unique (source, invoiceNo) instead.
+  let qty = 0, grossAmount = 0, returnAmount = 0, netSalesAmount = 0, costAmount = 0, grossProfit = 0;
+  const seenInvoices = new Map<string, { cash: number; receivable: number }>();
+  for (const r of rows) {
+    qty += r.qty;
+    grossAmount += r.grossAmount;
+    returnAmount += r.returnAmount;
+    netSalesAmount += r.netSalesAmount;
+    costAmount += r.costAmount;
+    grossProfit += r.grossProfit;
+    const key = `${r.source}:${r.invoiceNo}`;
+    if (!seenInvoices.has(key)) {
+      seenInvoices.set(key, { cash: r.cashCollected, receivable: r.receivableBalance });
+    }
+  }
+  let cashCollected = 0, receivableBalance = 0;
+  for (const v of seenInvoices.values()) { cashCollected += v.cash; receivableBalance += v.receivable; }
+
+  const totals: SalesReportTotals = {
+    qty,
+    grossAmount: round2(grossAmount),
+    returnAmount: round2(returnAmount),
+    netSalesAmount: round2(netSalesAmount),
+    costAmount: round2(costAmount),
+    grossProfit: round2(grossProfit),
+    grossMarginPct: netSalesAmount !== 0 ? round2((grossProfit / netSalesAmount) * 100) : 0,
+    cashCollected: round2(cashCollected),
+    receivableBalance: round2(receivableBalance),
+  };
+
+  return { rows, totals };
+}
+
+// ── Return Report (Prompt 2) ────────────────────────────────────────────────
+// Genuinely new — returns previously only appeared embedded inside the
+// unified Sales rows. Enabled cleanly by Prompt 1's persisted per-line
+// unit_cost: "Original Cost" and "Profit Reversed" are computed straight
+// from the ORIGINAL sale's frozen cost (via transaction_line_item_id, the
+// same link returns.service.ts itself resolves inventory restoration
+// against), never the current average.
+
+export interface ReturnReportRow {
+  returnNo: string;
+  originalInvoiceNo: string;
+  customer: string;
+  book: string;
+  qtyReturned: number;
+  refundAmount: number;
+  originalCost: number;
+  profitReversed: number;   // positive magnitude — the original margin now given back
+  refundMethod: string;
+  returnDate: string;
+  user: string;
+}
+
+export async function getReturnReportRows(filters: ReportFilters): Promise<ReturnReportRow[]> {
+  const { conditions, params } = buildDateConditions(filters, 'r');
+  const where = 'WHERE ' + [...conditions, `r.status = 'completed'`].join(' AND ');
+
+  const res = await db.query(
+    `SELECT
+       TO_CHAR(r.created_at, 'YYYY-MM-DD') AS return_date,
+       r.return_number, t.transaction_number AS original_invoice_no,
+       COALESCE(c.full_name, 'Walk-in') AS customer_name,
+       b.title AS book_title,
+       rli.quantity, rli.unit_price, rli.line_refund_amount,
+       COALESCE(otli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
+       r.refund_method, s.username AS staff_username
+     FROM return_line_items rli
+     JOIN returns r ON r.id = rli.return_id
+     JOIN books b ON b.id = rli.book_id
+     LEFT JOIN transactions t ON t.id = r.transaction_id
+     LEFT JOIN customers c ON c.id = r.customer_id
+     LEFT JOIN staff s ON s.id = r.processed_by
+     LEFT JOIN transaction_line_items otli ON otli.id = rli.transaction_line_item_id
+     ${costBasisLateralJoin('rli.book_id')}
+     ${where}
+     ORDER BY r.created_at DESC`,
+    params,
+  );
+
+  return (res.rows as Record<string, unknown>[]).map(row => {
+    const qty = row.quantity as number;
+    const refundAmount = parseFloat(row.line_refund_amount as string);
+    const unitCost = parseFloat((row.resolved_unit_cost as string | number | null) as string ?? '0');
+    const originalCost = round2(unitCost * qty);
+    return {
+      returnNo:          row.return_number as string,
+      originalInvoiceNo: (row.original_invoice_no as string | null) ?? '',
+      customer:           row.customer_name as string,
+      book:               row.book_title as string,
+      qtyReturned:        qty,
+      refundAmount,
+      originalCost,
+      profitReversed:     round2(refundAmount - originalCost),
+      refundMethod:       row.refund_method as string,
+      returnDate:         row.return_date as string,
+      user:               (row.staff_username as string | null) ?? '',
+    };
+  });
+}
+
+// ── Exchange Report — per-exchange detail (Prompt 2) ────────────────────────
+// Rebuilt from aggregate-only to one row per exchange (previous
+// getExchangeReport() stays as the dashboard's aggregate/bySettlementType
+// summary — this is the additional detail view/export). Multi-item
+// exchanges list their books comma-joined, matching how the rest of this
+// codebase already flattens multi-line entities for a single-row CSV
+// export (e.g. Procurement's PROCUREMENT_COLUMNS is per-line instead, but
+// an exchange's incoming/outgoing legs don't map onto Prompt 2's singular
+// "Incoming Book"/"Outgoing Book" columns any other way without inventing
+// a shape the ticket didn't ask for).
+
+export interface ExchangeReportDetailRow {
+  exchangeNo: string;
+  customer: string;
+  incomingBook: string;
+  incomingValue: number;
+  outgoingBook: string;
+  outgoingValue: number;
+  difference: number;
+  differencePaymentStatus: string;
+  cashCollected: number;
+  receivableBalance: number;
+  date: string;
+  user: string;
+}
+
+export async function getExchangeReportRows(filters: ReportFilters): Promise<ExchangeReportDetailRow[]> {
+  const { conditions, params } = buildDateConditions(filters, 'e');
+  const where = 'WHERE ' + [...conditions, `e.status IN ('Completed','COMPLETED')`].join(' AND ');
+
+  const res = await db.query(
+    `SELECT
+       e.exchange_reference, TO_CHAR(e.created_at, 'YYYY-MM-DD') AS date_str,
+       COALESCE(c.full_name, 'Walk-in') AS customer_name,
+       e.total_incoming_value, e.total_outgoing_value, e.net_balance,
+       s.username AS staff_username,
+       rec.status AS receivable_status,
+       COALESCE(rec.outstanding_amount, 0) AS receivable_balance,
+       COALESCE((
+         SELECT SUM(CASE WHEN ese.entry_type = 'cash_payment' THEN ese.amount
+                          WHEN ese.entry_type = 'cash_refund'  THEN -ese.amount
+                          ELSE 0 END)
+         FROM exchange_settlement_entries ese WHERE ese.exchange_id = e.id
+       ), 0) AS cash_collected,
+       COALESCE(
+         (SELECT string_agg(DISTINCT b.title, ', ') FROM exchange_incoming_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = e.id),
+         (SELECT string_agg(DISTINCT b.title, ', ') FROM exchange_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = e.id AND ei.type = 'returned'),
+         ''
+       ) AS incoming_book,
+       COALESCE(
+         (SELECT string_agg(DISTINCT b.title, ', ') FROM exchange_outgoing_items eo JOIN books b ON b.id = eo.book_id WHERE eo.exchange_id = e.id),
+         (SELECT string_agg(DISTINCT b.title, ', ') FROM exchange_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = e.id AND ei.type = 'new'),
+         ''
+       ) AS outgoing_book
+     FROM exchanges e
+     LEFT JOIN customers c ON c.id = e.customer_id
+     LEFT JOIN staff s ON s.id = e.created_by
+     LEFT JOIN LATERAL (
+       SELECT rec2.status, rec2.outstanding_amount FROM receivables rec2
+       WHERE rec2.source_type = 'exchange_difference' AND rec2.source_entity_id = e.id
+       LIMIT 1
+     ) rec ON true
+     ${where}
+     ORDER BY e.created_at DESC`,
+    params,
+  );
+
+  return (res.rows as Record<string, unknown>[]).map(row => ({
+    exchangeNo:               row.exchange_reference as string,
+    customer:                 row.customer_name as string,
+    incomingBook:             (row.incoming_book as string | null) ?? '',
+    incomingValue:            parseFloat(row.total_incoming_value as string),
+    outgoingBook:             (row.outgoing_book as string | null) ?? '',
+    outgoingValue:            parseFloat(row.total_outgoing_value as string),
+    difference:               parseFloat(row.net_balance as string),
+    differencePaymentStatus:  mapReceivableStatusLabel((row.receivable_status as string | null) ?? null),
+    cashCollected:            parseFloat(row.cash_collected as string),
+    receivableBalance:        parseFloat(row.receivable_balance as string),
+    date:                     row.date_str as string,
+    user:                     (row.staff_username as string | null) ?? '',
+  }));
+}
+
+function mapReceivableStatusLabel(status: string | null): string {
+  if (!status) return 'Settled'; // Even settlement, or Store_Refunds — nothing owed by the customer
+  return status; // Pending | PartiallyPaid | Settled | Overdue
+}
+
+// ── Unified Payments Ledger (Prompt 2) ──────────────────────────────────────
+// One true bidirectional ledger: customer receipts (IN) and supplier
+// payments (OUT), replacing the customer-only getPaymentReport() for
+// export/detail purposes (getPaymentReport() itself is unchanged and still
+// backs the dashboard's Payment Methods chart). Six underlying sources,
+// normalised to one row shape:
+//   order_payments (IN), transaction_payments/POS (IN), refunds/POS returns
+//   (OUT), order_refunds (OUT), exchange_settlement_entries cash entries
+//   (IN or OUT), supplier_payments (OUT).
+
+export interface PaymentsLedgerRow {
+  receiptNo: string;
+  party: string;
+  referenceType: 'ORDER' | 'POS' | 'RETURN' | 'EXCHANGE' | 'PO';
+  referenceNo: string;
+  paymentMethod: string;
+  amount: number;
+  direction: 'IN' | 'OUT';
+  date: string;
+  user: string;
+}
+
+export async function getPaymentsLedgerRows(filters: ReportFilters): Promise<PaymentsLedgerRow[]> {
+  const branchId = filters.branchId;
+  const dateFrom = filters.dateFrom;
+  const dateTo = filters.dateTo;
+
+  // Each source builds its own params array (branch/date columns live on
+  // different tables/aliases per source) then all six are UNIONed.
+  function dateBranchClause(alias: string, branchExpr: string, dateCol = 'created_at'): { clause: string; params: unknown[] } {
+    const params: unknown[] = [];
+    const conds: string[] = [];
+    if (branchId)  { params.push(branchId);  conds.push(`${branchExpr} = $${params.length}`); }
+    if (dateFrom)  { params.push(dateFrom);  conds.push(`${alias}.${dateCol}::date >= $${params.length}::date`); }
+    if (dateTo)    { params.push(dateTo);    conds.push(`${alias}.${dateCol}::date <= $${params.length}::date`); }
+    return { clause: conds.length ? 'AND ' + conds.join(' AND ') : '', params };
+  }
+
+  const orderPay = dateBranchClause('op', 'o.branch_id', 'processed_at');
+  const posPay = dateBranchClause('t', 't.branch_id');
+  const posRefund = dateBranchClause('rf', 'r.branch_id');
+  const orderRefund = dateBranchClause('ore', 'o2.branch_id');
+  const exchSettle = dateBranchClause('ese', 'e.branch_id');
+  const supPay = dateBranchClause('sp', 'sp.branch_id');
+
+  const [orderRes, posRes, posRefundRes, orderRefundRes, exchRes, supRes] = await Promise.all([
+    db.query(
+      `SELECT op.payment_reference AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
+              o.order_number AS reference_no, op.payment_method,
+              op.amount, TO_CHAR(op.processed_at, 'YYYY-MM-DD') AS date_str,
+              s.username AS staff_username
+       FROM order_payments op
+       JOIN orders o ON o.id = op.order_id
+       LEFT JOIN customers c ON c.id = o.customer_id
+       LEFT JOIN staff s ON s.id = op.processed_by
+       WHERE op.status IN ('success', 'partially_refunded') ${orderPay.clause}`,
+      orderPay.params,
+    ),
+    db.query(
+      `SELECT ('TXN-PAY-' || tp.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
+              t.transaction_number AS reference_no, tp.method AS payment_method,
+              tp.amount, TO_CHAR(tp.created_at, 'YYYY-MM-DD') AS date_str,
+              s.username AS staff_username
+       FROM transaction_payments tp
+       JOIN transactions t ON t.id = tp.transaction_id
+       LEFT JOIN customers c ON c.id = t.customer_id
+       LEFT JOIN staff s ON s.id = t.staff_id
+       WHERE t.status != 'voided' ${posPay.clause}`,
+      posPay.params,
+    ),
+    db.query(
+      `SELECT ('REF-' || rf.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
+              r.return_number AS reference_no, rf.method AS payment_method,
+              rf.amount, TO_CHAR(rf.created_at, 'YYYY-MM-DD') AS date_str,
+              s.username AS staff_username
+       FROM refunds rf
+       JOIN returns r ON r.id = rf.return_id
+       LEFT JOIN customers c ON c.id = r.customer_id
+       LEFT JOIN staff s ON s.id = r.processed_by
+       WHERE r.status = 'completed' ${posRefund.clause}`,
+      posRefund.params,
+    ),
+    db.query(
+      `SELECT ('OREF-' || ore.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
+              o2.order_number AS reference_no, COALESCE(op2.payment_method, 'cash') AS payment_method,
+              ore.refund_amount AS amount, TO_CHAR(ore.created_at, 'YYYY-MM-DD') AS date_str,
+              s.username AS staff_username
+       FROM order_refunds ore
+       JOIN orders o2 ON o2.id = ore.order_id
+       LEFT JOIN order_payments op2 ON op2.id = ore.payment_id
+       LEFT JOIN customers c ON c.id = o2.customer_id
+       LEFT JOIN staff s ON s.id = ore.processed_by
+       WHERE 1=1 ${orderRefund.clause}`,
+      orderRefund.params,
+    ),
+    db.query(
+      `SELECT ('EXST-' || ese.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
+              e.exchange_reference AS reference_no, COALESCE(ese.method, 'cash') AS payment_method,
+              ese.amount, ese.entry_type, TO_CHAR(ese.created_at, 'YYYY-MM-DD') AS date_str,
+              s.username AS staff_username
+       FROM exchange_settlement_entries ese
+       JOIN exchanges e ON e.id = ese.exchange_id
+       LEFT JOIN customers c ON c.id = e.customer_id
+       LEFT JOIN staff s ON s.id = ese.authorised_by
+       WHERE ese.entry_type IN ('cash_payment', 'cash_refund') ${exchSettle.clause}`,
+      exchSettle.params,
+    ),
+    db.query(
+      `SELECT ('SUP-' || sp.id) AS receipt_no, s2.name AS party,
+              ('PO-' || LPAD(sp.po_id::text, 6, '0')) AS reference_no, sp.payment_method,
+              sp.amount, TO_CHAR(sp.created_at, 'YYYY-MM-DD') AS date_str,
+              s.username AS staff_username
+       FROM supplier_payments sp
+       JOIN suppliers s2 ON s2.id = sp.supplier_id
+       LEFT JOIN staff s ON s.id = sp.created_by
+       WHERE 1=1 ${supPay.clause}`,
+      supPay.params,
+    ),
+  ]);
+
+  const rows: PaymentsLedgerRow[] = [];
+  const mapRow = (row: Record<string, unknown>, referenceType: PaymentsLedgerRow['referenceType'], direction: 'IN' | 'OUT'): PaymentsLedgerRow => ({
+    receiptNo: row.receipt_no as string,
+    party: row.party as string,
+    referenceType,
+    referenceNo: row.reference_no as string,
+    paymentMethod: (row.payment_method as string | null) ?? '',
+    amount: parseFloat(row.amount as string),
+    direction,
+    date: row.date_str as string,
+    user: (row.staff_username as string | null) ?? '',
+  });
+
+  rows.push(...orderRes.rows.map(r => mapRow(r, 'ORDER', 'IN')));
+  rows.push(...posRes.rows.map(r => mapRow(r, 'POS', 'IN')));
+  rows.push(...posRefundRes.rows.map(r => mapRow(r, 'RETURN', 'OUT')));
+  rows.push(...orderRefundRes.rows.map(r => mapRow(r, 'ORDER', 'OUT')));
+  rows.push(...exchRes.rows.map(r => mapRow(r, 'EXCHANGE', (r.entry_type as string) === 'cash_payment' ? 'IN' : 'OUT')));
+  rows.push(...supRes.rows.map(r => mapRow(r, 'PO', 'OUT')));
+
+  return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// ── Receivables Aging Report (Prompt 2) ─────────────────────────────────────
+// Genuinely new — no aging-bucket concept existed anywhere previously. The
+// same bucket boundaries and query back both the dashboard's Receivables
+// Aging Summary widget and this export, so they can't drift apart.
+
+export type AgingBucket = 'Current' | '1-30' | '31-60' | '61-90' | '90+';
+
+export interface ReceivablesAgingRow {
+  customer: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  dueDate: string;
+  outstandingAmount: number;
+  agingBucket: AgingBucket;
+  lastPaymentDate: string;
+}
+
+function bucketForDaysOverdue(days: number): AgingBucket {
+  if (days <= 0) return 'Current';
+  if (days <= 30) return '1-30';
+  if (days <= 60) return '31-60';
+  if (days <= 90) return '61-90';
+  return '90+';
+}
+
+export async function getReceivablesAgingReport(filters: ReportFilters): Promise<{
+  rows: ReceivablesAgingRow[];
+  byBucket: Array<{ bucket: AgingBucket; count: number; totalOutstanding: number }>;
+}> {
+  const params: unknown[] = [];
+  const conditions: string[] = [`r.status IN ('Pending', 'PartiallyPaid', 'Overdue')`];
+  if (filters.branchId) { params.push(filters.branchId); conditions.push(`r.branch_id = $${params.length}`); }
+  const where = 'WHERE ' + conditions.join(' AND ');
+
+  const res = await db.query(
+    `SELECT
+       COALESCE(c.full_name, 'Unknown') AS customer_name,
+       r.source_ref_id AS invoice_no,
+       TO_CHAR(r.created_at, 'YYYY-MM-DD') AS invoice_date,
+       TO_CHAR(r.due_date, 'YYYY-MM-DD') AS due_date_str,
+       r.outstanding_amount, r.original_amount,
+       GREATEST(0, EXTRACT(DAY FROM CURRENT_DATE - r.due_date)::int) AS days_overdue,
+       -- Best-effort: this row is only ever updated when a payment is
+       -- applied (updateReceivableOnPayment()) — no dedicated payment-
+       -- history table exists per receivable, so updated_at is the closest
+       -- available signal, and only shown once a payment has actually
+       -- reduced the balance below the original amount.
+       CASE WHEN r.outstanding_amount < r.original_amount
+            THEN TO_CHAR(r.updated_at, 'YYYY-MM-DD') ELSE NULL END AS last_payment_date_str
+     FROM receivables r
+     LEFT JOIN customers c ON c.id = r.customer_id
+     ${where}
+     ORDER BY days_overdue DESC, r.due_date ASC NULLS LAST`,
+    params,
+  );
+
+  const rows: ReceivablesAgingRow[] = (res.rows as Record<string, unknown>[]).map(row => ({
+    customer:           row.customer_name as string,
+    invoiceNo:          row.invoice_no as string,
+    invoiceDate:        row.invoice_date as string,
+    dueDate:            (row.due_date_str as string | null) ?? '',
+    outstandingAmount:  parseFloat(row.outstanding_amount as string),
+    agingBucket:        bucketForDaysOverdue(row.days_overdue as number),
+    lastPaymentDate:    (row.last_payment_date_str as string | null) ?? '',
+  }));
+
+  const bucketOrder: AgingBucket[] = ['Current', '1-30', '31-60', '61-90', '90+'];
+  const byBucket = bucketOrder.map(bucket => {
+    const inBucket = rows.filter(r => r.agingBucket === bucket);
+    return {
+      bucket,
+      count: inBucket.length,
+      totalOutstanding: round2(inBucket.reduce((s, r) => s + r.outstandingAmount, 0)),
+    };
+  });
+
+  return { rows, byBucket };
+}
+
+// ── Top Returned Books (Prompt 2 — dashboard widget) ────────────────────────
+
+export async function getTopReturnedBooks(filters: ReportFilters, limit = 10): Promise<Array<{
+  bookId: number; title: string; unitsReturned: number; refundValue: number;
+}>> {
+  const { conditions, params } = buildDateConditions(filters, 'r');
+  const where = 'WHERE ' + [...conditions, `r.status = 'completed'`].join(' AND ');
+  const res = await db.query(
+    `SELECT rli.book_id, b.title,
+            SUM(rli.quantity)::INTEGER AS units_returned,
+            COALESCE(SUM(rli.line_refund_amount), 0)::NUMERIC AS refund_value
+     FROM return_line_items rli
+     JOIN returns r ON r.id = rli.return_id
+     JOIN books b ON b.id = rli.book_id
+     ${where}
+     GROUP BY rli.book_id, b.title
+     ORDER BY units_returned DESC
+     LIMIT ${Math.max(1, Math.min(50, limit))}`,
+    params,
+  );
+  return res.rows.map((row: Record<string, unknown>) => ({
+    bookId: row.book_id as number,
+    title: row.title as string,
+    unitsReturned: row.units_returned as number,
+    refundValue: parseFloat(row.refund_value as string),
+  }));
+}
+
+// ── Gross Profit Trend (Prompt 2 — dashboard chart) ─────────────────────────
+// Per-period Net Sales / Net Profit ("Gross Profit" card) / Margin %,
+// grouped over the SAME unified per-line rows as everything else in this
+// file — so the chart's totals across the whole range always foot to the
+// same Sales Performance card totals for that range.
+
+export async function getGrossProfitTrend(filters: ReportFilters): Promise<Array<{
+  period: string; netSales: number; grossProfit: number; grossMarginPct: number;
+}>> {
+  const rows = await getUnifiedTransactionRows(filters);
+  const byPeriod = new Map<string, { netSales: number; cost: number }>();
+  for (const r of rows) {
+    const existing = byPeriod.get(r.transactionDate) ?? { netSales: 0, cost: 0 };
+    existing.netSales += r.netAmount;
+    existing.cost += r.costAmount;
+    byPeriod.set(r.transactionDate, existing);
+  }
+  return Array.from(byPeriod.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([period, v]) => {
+      const netSales = round2(v.netSales);
+      const grossProfit = round2(v.netSales - v.cost);
+      return {
+        period,
+        netSales,
+        grossProfit,
+        grossMarginPct: netSales !== 0 ? round2((grossProfit / netSales) * 100) : 0,
+      };
+    });
+}
+
+// ── Period-parameterized KPIs (Prompt 2 — Today/Week/Month/Year selector) ──
+// Supersedes the fixed daily/monthly-only KPI fields in getKpis() for the
+// redesigned dashboard's Sales Performance section. Previous-period
+// comparison uses the equivalent prior period (yesterday / last week /
+// last month / last year), computed entirely DB-side (CURRENT_DATE-based)
+// to stay timezone-safe, matching every other "today" boundary in this
+// codebase.
+
+export type KpiPeriod = 'today' | 'week' | 'month' | 'year';
+
+export interface PeriodSalesKpis {
+  period: KpiPeriod;
+  dateFrom: string;
+  dateTo: string;
+  netSales: number;
+  grossProfit: number;      // THE dashboard's single "Net Profit" KPI (see KpiReport comment)
+  grossMarginPct: number;
+  previous: {
+    dateFrom: string;
+    dateTo: string;
+    netSales: number;
+    grossProfit: number;
+    grossMarginPct: number;
+  };
+  /** Percent change vs. the previous equivalent period (null when the previous period's base is 0). */
+  netSalesChangePct: number | null;
+  grossProfitChangePct: number | null;
+}
+
+function pctChange(current: number, previous: number): number | null {
+  if (previous === 0) return null;
+  return round2(((current - previous) / Math.abs(previous)) * 100);
+}
+
+export async function getPeriodSalesKpis(branchId: number | undefined, period: KpiPeriod): Promise<PeriodSalesKpis> {
+  const boundsRes = await db.query(
+    `SELECT
+       TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS today,
+       TO_CHAR(date_trunc('week', CURRENT_DATE), 'YYYY-MM-DD') AS week_start,
+       TO_CHAR(date_trunc('month', CURRENT_DATE), 'YYYY-MM-DD') AS month_start,
+       TO_CHAR(date_trunc('year', CURRENT_DATE), 'YYYY-MM-DD') AS year_start,
+       TO_CHAR(CURRENT_DATE - INTERVAL '1 day', 'YYYY-MM-DD') AS yesterday,
+       TO_CHAR(date_trunc('week', CURRENT_DATE) - INTERVAL '1 week', 'YYYY-MM-DD') AS prev_week_start,
+       TO_CHAR(date_trunc('week', CURRENT_DATE) - INTERVAL '1 day', 'YYYY-MM-DD') AS prev_week_end,
+       TO_CHAR(date_trunc('month', CURRENT_DATE) - INTERVAL '1 month', 'YYYY-MM-DD') AS prev_month_start,
+       TO_CHAR(date_trunc('month', CURRENT_DATE) - INTERVAL '1 day', 'YYYY-MM-DD') AS prev_month_end,
+       TO_CHAR(date_trunc('year', CURRENT_DATE) - INTERVAL '1 year', 'YYYY-MM-DD') AS prev_year_start,
+       TO_CHAR(date_trunc('year', CURRENT_DATE) - INTERVAL '1 day', 'YYYY-MM-DD') AS prev_year_end`,
+  );
+  const b = boundsRes.rows[0] as Record<string, string>;
+
+  let dateFrom: string, dateTo: string, prevFrom: string, prevTo: string;
+  switch (period) {
+    case 'today':
+      dateFrom = dateTo = b.today; prevFrom = prevTo = b.yesterday; break;
+    case 'week':
+      dateFrom = b.week_start; dateTo = b.today; prevFrom = b.prev_week_start; prevTo = b.prev_week_end; break;
+    case 'month':
+      dateFrom = b.month_start; dateTo = b.today; prevFrom = b.prev_month_start; prevTo = b.prev_month_end; break;
+    case 'year':
+      dateFrom = b.year_start; dateTo = b.today; prevFrom = b.prev_year_start; prevTo = b.prev_year_end; break;
+  }
+
+  const [current, previous] = await Promise.all([
+    getUnifiedFinancialSummary({ branchId, dateFrom, dateTo }),
+    getUnifiedFinancialSummary({ branchId, dateFrom: prevFrom, dateTo: prevTo }),
+  ]);
+
+  return {
+    period, dateFrom, dateTo,
+    netSales: current.netSalesRevenue,
+    grossProfit: current.grossProfit,
+    grossMarginPct: current.grossMarginPct,
+    previous: {
+      dateFrom: prevFrom, dateTo: prevTo,
+      netSales: previous.netSalesRevenue,
+      grossProfit: previous.grossProfit,
+      grossMarginPct: previous.grossMarginPct,
+    },
+    netSalesChangePct: pctChange(current.netSalesRevenue, previous.netSalesRevenue),
+    grossProfitChangePct: pctChange(current.grossProfit, previous.grossProfit),
+  };
+}
+
+// ── Period-parameterized Cash Collected (Prompt 2 — Cash & Receivables) ────
+// Independent from Sales Performance by construction — sourced from actual
+// payment/settlement rows for the period, never from netSalesRevenue/
+// grossProfit above. Outstanding/Overdue Receivables are deliberately NOT
+// period-scoped (see getKpis()) — they're a current standing balance, not a
+// period flow, so the period selector doesn't affect them.
+
+export async function getPeriodCashCollected(branchId: number | undefined, dateFrom: string, dateTo: string): Promise<number> {
+  const params: unknown[] = [dateFrom, dateTo];
+  const branchCondT = branchId ? `AND t.branch_id = $3` : '';
+  const branchCondO = branchId ? `AND o.branch_id = $3` : '';
+  const branchCondE = branchId ? `AND e.branch_id = $3` : '';
+  if (branchId) params.push(branchId);
+
+  const [posRes, orderRes, exchRes] = await Promise.all([
+    db.query(
+      `SELECT COALESCE(SUM(tp.amount), 0)::NUMERIC AS val
+       FROM transaction_payments tp JOIN transactions t ON t.id = tp.transaction_id
+       WHERE t.status = 'completed' AND tp.created_at::date >= $1::date AND tp.created_at::date <= $2::date ${branchCondT}`,
+      params,
+    ),
+    db.query(
+      `SELECT COALESCE(SUM(op.amount), 0)::NUMERIC AS val
+       FROM order_payments op JOIN orders o ON o.id = op.order_id
+       WHERE op.status IN ('success','partially_refunded') AND o.status NOT IN ('Cancelled','CANCELLED')
+         AND op.processed_at::date >= $1::date AND op.processed_at::date <= $2::date ${branchCondO}`,
+      params,
+    ),
+    db.query(
+      `SELECT COALESCE(SUM(CASE WHEN ese.entry_type = 'cash_payment' THEN ese.amount WHEN ese.entry_type = 'cash_refund' THEN -ese.amount ELSE 0 END), 0)::NUMERIC AS val
+       FROM exchange_settlement_entries ese JOIN exchanges e ON e.id = ese.exchange_id
+       WHERE e.status IN ('Completed','COMPLETED') AND ese.created_at::date >= $1::date AND ese.created_at::date <= $2::date ${branchCondE}`,
+      params,
+    ),
+  ]);
+
+  return round2(
+    parseFloat(posRes.rows[0].val as string) +
+    parseFloat(orderRes.rows[0].val as string) +
+    parseFloat(exchRes.rows[0].val as string),
+  );
+}
+
+// ── Procurement reports (Prompt 2) ──────────────────────────────────────────
+// All six share the same received-value payable basis as
+// procurement.service.ts's recomputeFinancialStatus() (Prompt 2 decision
+// #5) — SUM(received_quantity × unit_cost) per line, not the PO's full
+// total_amount — so these reports reconcile with the supplier ledger and
+// the PO detail view's own outstanding-balance figure.
+
+const PO_BALANCE_SUBQUERY = `
+  COALESCE((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id), 0)
+  - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id), 0)
+  - COALESCE((SELECT SUM(cn.amount) FROM supplier_credit_notes cn WHERE cn.po_id = po.id), 0)`;
+
+// ── Open POs ─────────────────────────────────────────────────────────────────
+
+export interface OpenPoRow {
+  poReference: string; supplier: string; orderDate: string; expectedDate: string;
+  orderedQty: number; receivedQty: number; totalAmount: number; outstandingAmount: number;
+  receiptStatus: string; paymentStatus: string;
+}
+
+export async function getOpenPOs(filters: ReportFilters): Promise<OpenPoRow[]> {
+  const params: unknown[] = [];
+  const conditions: string[] = [`po.status NOT IN ('closed','cancelled')`];
+  if (filters.branchId) { params.push(filters.branchId); conditions.push(`po.branch_id = $${params.length}`); }
+  const where = 'WHERE ' + conditions.join(' AND ');
+  const res = await db.query(
+    `SELECT po.id, s.name AS supplier_name, TO_CHAR(po.created_at,'YYYY-MM-DD') AS order_date,
+            TO_CHAR(po.expected_delivery_date,'YYYY-MM-DD') AS expected_date, po.status, po.total_amount,
+            COALESCE((SELECT SUM(quantity) FROM po_line_items WHERE po_id = po.id), 0) AS ordered_qty,
+            COALESCE((SELECT SUM(received_quantity) FROM po_line_items WHERE po_id = po.id), 0) AS received_qty,
+            (${PO_BALANCE_SUBQUERY}) AS outstanding_amount,
+            po.financial_status
+     FROM purchase_orders po
+     JOIN suppliers s ON s.id = po.supplier_id
+     ${where}
+     ORDER BY po.created_at DESC`,
+    params,
+  );
+  return (res.rows as Record<string, unknown>[]).map(row => ({
+    poReference: `PO-${String(row.id).padStart(6, '0')}`,
+    supplier: row.supplier_name as string,
+    orderDate: row.order_date as string,
+    expectedDate: (row.expected_date as string | null) ?? '',
+    orderedQty: Number(row.ordered_qty), receivedQty: Number(row.received_qty),
+    totalAmount: parseFloat(row.total_amount as string),
+    outstandingAmount: parseFloat(row.outstanding_amount as string),
+    receiptStatus: row.status as string,
+    paymentStatus: row.financial_status as string,
+  }));
+}
+
+// ── Supplier Balances ────────────────────────────────────────────────────────
+
+export interface SupplierBalanceRow {
+  supplierId: number; supplier: string; openPoCount: number;
+  receivedValue: number; paid: number; credited: number; outstandingBalance: number;
+}
+
+export async function getSupplierBalances(filters: ReportFilters): Promise<SupplierBalanceRow[]> {
+  const params: unknown[] = [];
+  const conditions: string[] = [`po.status NOT IN ('draft','cancelled')`];
+  if (filters.branchId) { params.push(filters.branchId); conditions.push(`po.branch_id = $${params.length}`); }
+  const where = 'WHERE ' + conditions.join(' AND ');
+  const res = await db.query(
+    `SELECT s.id AS supplier_id, s.name AS supplier_name,
+            COUNT(DISTINCT po.id) FILTER (WHERE po.status NOT IN ('closed','cancelled')) AS open_po_count,
+            COALESCE(SUM((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id)), 0) AS received_value,
+            COALESCE(SUM((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id)), 0) AS paid,
+            COALESCE(SUM((SELECT SUM(cn.amount) FROM supplier_credit_notes cn WHERE cn.po_id = po.id)), 0) AS credited
+     FROM purchase_orders po
+     JOIN suppliers s ON s.id = po.supplier_id
+     ${where}
+     GROUP BY s.id, s.name
+     ORDER BY s.name ASC`,
+    params,
+  );
+  return (res.rows as Record<string, unknown>[]).map(row => {
+    const receivedValue = parseFloat(row.received_value as string);
+    const paid = parseFloat(row.paid as string);
+    const credited = parseFloat(row.credited as string);
+    return {
+      supplierId: row.supplier_id as number,
+      supplier: row.supplier_name as string,
+      openPoCount: parseInt(row.open_po_count as string, 10),
+      receivedValue, paid, credited,
+      outstandingBalance: round2(receivedValue - paid - credited),
+    };
+  });
+}
+
+// ── AP Aging ─────────────────────────────────────────────────────────────────
+// No formal PO due-date column exists — buckets by days since the PO's most
+// recent goods receipt (the event that created the payable), mirroring how
+// the Receivables Aging Report buckets by days past due.
+
+export async function getApAgingReport(filters: ReportFilters): Promise<{
+  rows: Array<{ supplier: string; poReference: string; outstandingAmount: number; agingBucket: AgingBucket; lastReceiptDate: string }>;
+  byBucket: Array<{ bucket: AgingBucket; count: number; totalOutstanding: number }>;
+}> {
+  const params: unknown[] = [];
+  const conditions: string[] = [`po.status NOT IN ('draft','cancelled')`];
+  if (filters.branchId) { params.push(filters.branchId); conditions.push(`po.branch_id = $${params.length}`); }
+  const where = 'WHERE ' + conditions.join(' AND ');
+  const res = await db.query(
+    `SELECT po.id, s.name AS supplier_name,
+            (${PO_BALANCE_SUBQUERY}) AS outstanding_amount,
+            (SELECT MAX(r.received_at) FROM po_receipts r WHERE r.po_id = po.id) AS last_receipt_at
+     FROM purchase_orders po
+     JOIN suppliers s ON s.id = po.supplier_id
+     ${where}`,
+    params,
+  );
+  const rows: Array<{ supplier: string; poReference: string; outstandingAmount: number; agingBucket: AgingBucket; lastReceiptDate: string }> = [];
+  for (const row of res.rows as Record<string, unknown>[]) {
+    const outstanding = parseFloat(row.outstanding_amount as string);
+    if (outstanding <= 0.01) continue; // fully settled or nothing received yet
+    const lastReceiptAt = row.last_receipt_at as Date | null;
+    const daysSince = lastReceiptAt ? Math.floor((Date.now() - lastReceiptAt.getTime()) / 86_400_000) : 0;
+    rows.push({
+      supplier: row.supplier_name as string,
+      poReference: `PO-${String(row.id).padStart(6, '0')}`,
+      outstandingAmount: outstanding,
+      agingBucket: bucketForDaysOverdue(daysSince),
+      lastReceiptDate: lastReceiptAt ? lastReceiptAt.toISOString().slice(0, 10) : '',
+    });
+  }
+  const bucketOrder: AgingBucket[] = ['Current', '1-30', '31-60', '61-90', '90+'];
+  const byBucket = bucketOrder.map(bucket => {
+    const inBucket = rows.filter(r => r.agingBucket === bucket);
+    return { bucket, count: inBucket.length, totalOutstanding: round2(inBucket.reduce((s, r) => s + r.outstandingAmount, 0)) };
+  });
+  return { rows, byBucket };
+}
+
+// ── Purchases by Supplier ─────────────────────────────────────────────────────
+
+export async function getPurchasesBySupplier(filters: ReportFilters): Promise<Array<{
+  supplierId: number; supplier: string; poCount: number; orderedValue: number; receivedValue: number;
+}>> {
+  const { conditions, params } = buildDateConditions(filters, 'po');
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+  const res = await db.query(
+    `SELECT s.id AS supplier_id, s.name AS supplier_name,
+            COUNT(DISTINCT po.id) AS po_count,
+            COALESCE(SUM(po.total_amount), 0) AS ordered_value,
+            COALESCE(SUM((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id)), 0) AS received_value
+     FROM purchase_orders po
+     JOIN suppliers s ON s.id = po.supplier_id
+     ${where}${where ? ' AND' : 'WHERE'} po.status != 'cancelled'
+     GROUP BY s.id, s.name
+     ORDER BY ordered_value DESC`,
+    params,
+  );
+  return (res.rows as Record<string, unknown>[]).map(row => ({
+    supplierId: row.supplier_id as number,
+    supplier: row.supplier_name as string,
+    poCount: parseInt(row.po_count as string, 10),
+    orderedValue: parseFloat(row.ordered_value as string),
+    receivedValue: parseFloat(row.received_value as string),
+  }));
+}
+
+// ── Purchases by Book ─────────────────────────────────────────────────────────
+
+export async function getPurchasesByBook(filters: ReportFilters): Promise<Array<{
+  bookId: number; title: string; isbn: string; orderedQty: number; receivedQty: number; totalValue: number;
+}>> {
+  const { conditions, params } = buildDateConditions(filters, 'po');
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+  const res = await db.query(
+    `SELECT pli.book_id, b.title, b.isbn,
+            SUM(pli.quantity) AS ordered_qty,
+            SUM(pli.received_quantity) AS received_qty,
+            SUM(pli.quantity * pli.unit_cost) AS total_value
+     FROM po_line_items pli
+     JOIN purchase_orders po ON po.id = pli.po_id
+     JOIN books b ON b.id = pli.book_id
+     ${where}${where ? ' AND' : 'WHERE'} po.status != 'cancelled'
+     GROUP BY pli.book_id, b.title, b.isbn
+     ORDER BY total_value DESC`,
+    params,
+  );
+  return (res.rows as Record<string, unknown>[]).map(row => ({
+    bookId: row.book_id as number,
+    title: row.title as string,
+    isbn: (row.isbn as string | null) ?? '',
+    orderedQty: parseInt(row.ordered_qty as string, 10),
+    receivedQty: parseInt(row.received_qty as string, 10),
+    totalValue: parseFloat(row.total_value as string),
+  }));
+}
+
+// ── Supplier Payment History ──────────────────────────────────────────────────
+
+export async function getSupplierPaymentHistory(filters: ReportFilters): Promise<Array<{
+  date: string; supplier: string; poReference: string; amount: number;
+  paymentMethod: string; source: string; user: string;
+}>> {
+  const { conditions, params } = buildDateConditions(filters, 'sp');
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+  const res = await db.query(
+    `SELECT TO_CHAR(sp.created_at,'YYYY-MM-DD') AS date_str, s.name AS supplier_name, sp.po_id,
+            sp.amount, sp.payment_method, sp.source, st.username AS staff_username
+     FROM supplier_payments sp
+     JOIN suppliers s ON s.id = sp.supplier_id
+     LEFT JOIN staff st ON st.id = sp.created_by
+     ${where}
+     ORDER BY sp.created_at DESC`,
+    params,
+  );
+  return (res.rows as Record<string, unknown>[]).map(row => ({
+    date: row.date_str as string,
+    supplier: row.supplier_name as string,
+    poReference: `PO-${String(row.po_id).padStart(6, '0')}`,
+    amount: parseFloat(row.amount as string),
+    paymentMethod: row.payment_method as string,
+    source: row.source as string,
+    user: (row.staff_username as string | null) ?? '',
   }));
 }

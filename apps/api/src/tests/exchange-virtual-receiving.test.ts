@@ -18,7 +18,7 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
 import { db } from '../db/index.js';
-import { getInventoryExportRowsV2, getSalesExportRows } from '../modules/reports/reports.service.js';
+import { getInventoryExportRowsV2, getSalesReportRows } from '../modules/reports/reports.service.js';
 import * as invTxSvc from '../modules/inventory/inventoryTransaction.service.js';
 
 const STAFF_PREFIX = 'exc_vr_test_';
@@ -249,12 +249,13 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
-    const exportRows = await getSalesExportRows({ branchId });
-    const orderRow = exportRows.find(r => r.order_reference === orderNumber);
+    const { rows: exportRows } = await getSalesReportRows({ branchId });
+    const orderRow = exportRows.find(r => r.source === 'ORDER' && r.invoiceNo === orderNumber);
     expect(orderRow).toBeDefined();
     // costBasis.ts fallback — a never-procured book's cost basis is the
-    // Customer Allowance Value it was exchanged in for, not $0.
-    expect(orderRow!.purchase_cost).toBeCloseTo(ALLOWANCE, 2);
+    // Customer Allowance Value it was exchanged in for, not $0. (qty is 1,
+    // so costAmount === unit cost here.)
+    expect(orderRow!.costAmount).toBeCloseTo(ALLOWANCE, 2);
   });
 
   // ── invTxSvc.stockIn() unitCost — Valuation Integrity at the shared layer ──

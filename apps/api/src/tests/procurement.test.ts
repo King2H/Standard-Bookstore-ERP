@@ -747,7 +747,16 @@ describe('Procurement — Purchase Orders', () => {
     expect(Number(receiveRes.body.payments[0].amount)).toBeCloseTo(100, 2); // 5 * 20
   });
 
-  it('19. Cash-terms PO partial receipt → financialStatus=partial, auto-pay only for value received so far', async () => {
+  it('19. Cash-terms PO partial receipt → auto-pay settles exactly the received value (financialStatus=paid, receipt still partially_received)', async () => {
+    // Prompt 2 decision #5: financial_status is computed against the
+    // RECEIVED-VALUE payable basis (SUM(received_quantity × unit_cost)),
+    // not the PO's full total_amount — standard AP practice recognizes the
+    // liability as goods are received, not merely ordered. For a
+    // cash-terms PO, the auto-pay-on-receipt branch always settles exactly
+    // the value of what arrived in that event, so financialStatus reads
+    // 'paid' relative to what's been received so far — even though the PO
+    // as a whole is still only partially_received (5 more units still
+    // outstanding on the *order*, not the payable).
     const createRes = await request(getTestApp())
       .post('/api/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -765,8 +774,11 @@ describe('Procurement — Purchase Orders', () => {
 
     expect(receiveRes.status).toBe(200);
     expect(receiveRes.body.status).toBe('partially_received');
-    expect(receiveRes.body.financialStatus).toBe('partial');
+    expect(receiveRes.body.financialStatus).toBe('paid');
     expect(Number(receiveRes.body.payments[0].amount)).toBeCloseTo(60, 2); // 4 * 15, not the full 150
+    expect(Number(receiveRes.body.receivedValue)).toBeCloseTo(60, 2);
+    expect(Number(receiveRes.body.outstandingAmount)).toBeCloseTo(0, 2);
+    expect(Number(receiveRes.body.totalAmount)).toBeCloseTo(150, 2); // full ordered value, unaffected
   });
 
   it('20. Manual supplier payment on a credit PO moves financialStatus unpaid → partial → paid', async () => {

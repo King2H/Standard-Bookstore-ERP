@@ -21,9 +21,10 @@ const EMPTY_KPIS = {
   totalActiveCustomers: 0, lowStockAlerts: 0, pendingOrders: 0, totalExchangesToday: 0,
   outstandingBalance: 0, netProfit: 0, fulfilledRevenue: 0, outstandingReceivables: 0,
   cashSalesRevenue: 0, creditSalesRevenue: 0, collectedCreditRevenue: 0, purchaseCost: 0,
-  totalDiscounts: 0, procurementExpense: 0, grossProfit: 0, dailyNetProfit: 0, monthlyNetProfit: 0,
+  totalDiscounts: 0, grossProfit: 0, dailyNetProfit: 0, monthlyNetProfit: 0,
   dailyNetSalesRevenue: 0, monthlyNetSalesRevenue: 0, dailyNetProfitUnified: 0,
-  monthlyNetProfitUnified: 0, grossProfitUnified: 0, overdueReceivablesAmount: 0,
+  monthlyNetProfitUnified: 0, dailyGrossMarginPct: 0, monthlyGrossMarginPct: 0,
+  grossProfitUnified: 0, overdueReceivablesAmount: 0, inventoryValue: 0,
 };
 const EMPTY_SALES = { summary: { totalSales: 0, totalOrders: 0, averageOrderValue: 0, totalPosSales: 0, totalPosTransactions: 0, totalDiscountAmount: 0, discountByType: { Normal: 0, Merchant: 0, Special: 0 } }, byPeriod: [], byBranch: [] };
 const EMPTY_PAYMENTS = { summary: { totalCollected: 0, totalRefunded: 0, netCollected: 0, pendingPayments: 0 }, byMethod: [], byPeriod: [] };
@@ -47,6 +48,16 @@ function renderDashboard() {
 beforeEach(() => {
   getMock.mockReset();
   getMock.mockImplementation((path: string) => {
+    // Order matters — check the more specific paths before their prefixes.
+    if (path.startsWith('/reports/kpis/period')) {
+      return Promise.resolve({
+        period: 'today', dateFrom: '', dateTo: '',
+        netSales: 0, grossProfit: 0, grossMarginPct: 0,
+        previous: { dateFrom: '', dateTo: '', netSales: 0, grossProfit: 0, grossMarginPct: 0 },
+        netSalesChangePct: null, grossProfitChangePct: null,
+        cashCollected: 0, previousCashCollected: 0,
+      });
+    }
     if (path.startsWith('/reports/kpis'))      return Promise.resolve(EMPTY_KPIS);
     if (path.startsWith('/reports/sales'))     return Promise.resolve(EMPTY_SALES);
     if (path.startsWith('/reports/payments'))  return Promise.resolve(EMPTY_PAYMENTS);

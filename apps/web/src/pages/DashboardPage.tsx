@@ -33,22 +33,45 @@ interface KpiReport {
   purchaseCost: number;
   totalDiscounts: number;
   // Executive financial KPIs
-  procurementExpense: number;
   grossProfit: number;
   dailyNetProfit: number;
   monthlyNetProfit: number;
   // Dashboard Standardization & Unified Reports Engine — gross-invoiced/accrual
   // figures sourced from FinancialReportService, reconciling 1:1 with the
-  // Sales CSV export for the same date range. Deliberately distinct from
-  // dailyNetProfit/monthlyNetProfit/grossProfit above (collected-cash revenue
-  // recognition for credit sales — a separate, unchanged accounting policy).
+  // Sales CSV export for the same date range. dailyNetProfitUnified /
+  // monthlyNetProfitUnified / grossProfitUnified are THE dashboard's single
+  // "Net Profit" KPI (Prompt 2) — never render dailyNetProfit/monthlyNetProfit
+  // above under that same label (collected-cash revenue recognition for
+  // credit sales — a separate accounting policy, used only for Cash &
+  // Receivables cards / integrity tests).
   dailyNetSalesRevenue: number;
   monthlyNetSalesRevenue: number;
   dailyNetProfitUnified: number;
   monthlyNetProfitUnified: number;
+  dailyGrossMarginPct: number;
+  monthlyGrossMarginPct: number;
   grossProfitUnified: number;
   overdueReceivablesAmount: number;
+  inventoryValue: number;
 }
+
+// Prompt 2 — Today/Week/Month/Year selector for the Sales Performance
+// section, with previous-period comparison. Independent of the KpiReport
+// query above (which stays fixed Today/This-Month for the other sections).
+type KpiPeriod = 'today' | 'week' | 'month' | 'year';
+interface PeriodSalesKpis {
+  period: KpiPeriod;
+  dateFrom: string; dateTo: string;
+  netSales: number; grossProfit: number; grossMarginPct: number;
+  previous: { dateFrom: string; dateTo: string; netSales: number; grossProfit: number; grossMarginPct: number };
+  netSalesChangePct: number | null;
+  grossProfitChangePct: number | null;
+  cashCollected: number;
+  previousCashCollected: number;
+}
+interface GrossProfitTrendPoint { period: string; netSales: number; grossProfit: number; grossMarginPct: number; }
+interface TopReturnedBook { bookId: number; title: string; unitsReturned: number; refundValue: number; }
+interface ReceivablesAgingBucket { bucket: string; count: number; totalOutstanding: number; }
 interface DiscountByType { Normal: number; Merchant: number; Special: number; }
 interface SalesSummary {
   totalSales: number; totalOrders: number; averageOrderValue: number;
@@ -129,9 +152,11 @@ const HIGHLIGHT_ACCENTS: Record<'emerald' | 'teal' | 'blue' | 'rose', { card: st
   rose:    { card: 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800',             badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' },
 };
 
-function HighlightKpiCard({ label, value, todayValue, monthlyValue, sub, icon, accent, negative, onClick }: {
+function HighlightKpiCard({ label, value, todayValue, monthlyValue, sub, icon, accent, negative, onClick, children }: {
   label: string; value?: string; todayValue?: string; monthlyValue?: string; sub?: string;
   icon: React.ReactNode; accent: 'emerald' | 'teal' | 'blue' | 'rose'; negative?: boolean; onClick?: () => void;
+  /** Optional trailing content next to the value — e.g. a <TrendBadge> previous-period indicator. */
+  children?: React.ReactNode;
 }) {
   const resolvedAccent = negative ? 'rose' : accent;
   const colors = HIGHLIGHT_ACCENTS[resolvedAccent];
@@ -157,9 +182,83 @@ function HighlightKpiCard({ label, value, todayValue, monthlyValue, sub, icon, a
           </div>
         </div>
       ) : (
-        <p className={`text-2xl font-extrabold leading-none pl-1 ${valueClass}`}>{value}</p>
+        <div className="flex items-center gap-2 pl-1">
+          <p className={`text-2xl font-extrabold leading-none ${valueClass}`}>{value}</p>
+          {children}
+        </div>
       )}
       {sub && <p className="text-xs text-gray-500 dark:text-gray-400 pl-1">{sub}</p>}
+    </div>
+  );
+}
+
+// ── KPI color rule (Prompt 2) ─────────────────────────────────────────────────
+// Single shared rule, applied consistently instead of ad-hoc per-card
+// booleans: green = positive profitability, blue/gray = informational,
+// amber = warning, red = critical negative only. A profitability KPI only
+// ever turns red when the KPI ITSELF is negative for the period — never as
+// a reaction to a single contributing event (e.g. one return) unless that
+// event alone was enough to push the whole period negative. Thresholds are
+// intentionally on the metric's own sign/magnitude, never on an individual
+// transaction.
+type KpiTone = 'positive' | 'informational' | 'warning' | 'critical';
+const KPI_TONE_CLASSES: Record<KpiTone, string> = {
+  positive:      'bg-emerald-100 dark:bg-emerald-900/30',
+  informational: 'bg-blue-100 dark:bg-blue-900/30',
+  warning:       'bg-amber-100 dark:bg-amber-900/30',
+  critical:      'bg-red-100 dark:bg-red-900/30',
+};
+// Profitability metrics (Net Sales, Net Profit, Gross Margin %) apply this
+// same rule directly via HighlightKpiCard's `negative` prop: red only when
+// the KPI itself is negative for the period, never in reaction to a single
+// contributing event.
+/** Count/queue metrics (Low Stock, Pending Orders): amber once non-zero, never red on their own. */
+function warningCountTone(value: number): KpiTone { return value > 0 ? 'warning' : 'informational'; }
+function kpiToneClass(tone: KpiTone): string { return KPI_TONE_CLASSES[tone]; }
+
+// ── Trend badge — previous-period % change indicator ───────────────────────
+
+function TrendBadge({ changePct }: { changePct: number | null }) {
+  if (changePct === null) return null;
+  const isUp = changePct > 0;
+  const isFlat = changePct === 0;
+  const color = isFlat
+    ? 'text-gray-500 dark:text-gray-400'
+    : isUp
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : 'text-red-600 dark:text-red-400';
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${color}`}>
+      {!isFlat && (
+        <svg className={`w-3 h-3 ${isUp ? '' : 'rotate-180'}`} fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z" clipRule="evenodd" />
+        </svg>
+      )}
+      {Math.abs(changePct).toFixed(1)}%
+    </span>
+  );
+}
+
+// ── Period selector — Today / Week / Month / Year ───────────────────────────
+
+const PERIOD_LABELS: Record<KpiPeriod, string> = { today: 'Today', week: 'Week', month: 'Month', year: 'Year' };
+
+function PeriodSelector({ value, onChange }: { value: KpiPeriod; onChange: (p: KpiPeriod) => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+      {(Object.keys(PERIOD_LABELS) as KpiPeriod[]).map(p => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+            value === p
+              ? 'bg-blue-600 text-white'
+              : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+          }`}
+        >
+          {PERIOD_LABELS[p]}
+        </button>
+      ))}
     </div>
   );
 }
@@ -241,6 +340,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
 
   const [filters, setFilters] = useState<Filters>({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [salesPeriod, setSalesPeriod] = useState<KpiPeriod>('today');
   const qs = buildQs(filters);
 
   // Global refresh — invalidates and refetches all dashboard queries at once
@@ -249,11 +349,15 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
     try {
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ['report-kpis'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-kpis-period'], exact: false }),
         queryClient.refetchQueries({ queryKey: ['report-sales'], exact: false }),
         queryClient.refetchQueries({ queryKey: ['report-payments'], exact: false }),
         queryClient.refetchQueries({ queryKey: ['report-exchanges'], exact: false }),
         queryClient.refetchQueries({ queryKey: ['report-inventory'], exact: false }),
         queryClient.refetchQueries({ queryKey: ['report-customers'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-gp-trend'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-top-returned'], exact: false }),
+        queryClient.refetchQueries({ queryKey: ['report-receivables-aging'], exact: false }),
       ]);
     } finally {
       setIsRefreshing(false);
@@ -331,6 +435,42 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
   const { data: customers, isLoading: custLoading, isError: custError, dataUpdatedAt: custUpdatedAt, refetch: refetchCustomers } = useQuery<CustomerReport>({
     queryKey: ['report-customers', qs],
     queryFn: () => api.get(`/reports/customers${qs}`),
+    enabled: canView,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // ── Prompt 2 — Sales Performance period selector ──────────────────────────
+  const { data: periodKpis, isLoading: periodLoading } = useQuery<PeriodSalesKpis>({
+    queryKey: ['report-kpis-period', salesPeriod, filters.branchId],
+    queryFn: () => api.get(`/reports/kpis/period?period=${salesPeriod}${filters.branchId ? `&branchId=${filters.branchId}` : ''}`),
+    enabled: canView,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // ── Prompt 2 — Gross Profit Trend chart ───────────────────────────────────
+  const { data: gpTrend, isLoading: gpLoading, isError: gpError, dataUpdatedAt: gpUpdatedAt, refetch: refetchGp } = useQuery<GrossProfitTrendPoint[]>({
+    queryKey: ['report-gp-trend', qs],
+    queryFn: () => api.get(`/reports/sales/gross-profit-trend${qs}`),
+    enabled: canView,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // ── Prompt 2 — Top Returned Books ─────────────────────────────────────────
+  const { data: topReturned, isLoading: topReturnedLoading, isError: topReturnedError, dataUpdatedAt: topReturnedUpdatedAt, refetch: refetchTopReturned } = useQuery<TopReturnedBook[]>({
+    queryKey: ['report-top-returned', qs],
+    queryFn: () => api.get(`/reports/returns/top${qs}`),
+    enabled: canView,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // ── Prompt 2 — Receivables Aging Summary ──────────────────────────────────
+  const { data: aging, isLoading: agingLoading, isError: agingError, dataUpdatedAt: agingUpdatedAt, refetch: refetchAging } = useQuery<{ byBucket: ReceivablesAgingBucket[] }>({
+    queryKey: ['report-receivables-aging', filters.branchId],
+    queryFn: () => api.get(`/reports/receivables-aging${filters.branchId ? `?branchId=${filters.branchId}` : ''}`),
     enabled: canView,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
@@ -436,12 +576,16 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         <div className="w-px h-4 bg-gray-200 dark:bg-gray-700" />
         {[
           { type: 'sales', label: 'Sales' },
+          { type: 'returns', label: 'Returns' },
           { type: 'payments', label: 'Payments' },
+          { type: 'payments-ledger', label: 'Payments Ledger' },
           { type: 'inventory', label: 'Inventory' },
+          { type: 'inventory-valuation', label: 'Inventory Valuation' },
           { type: 'customers', label: 'Customers' },
           { type: 'exchanges', label: 'Exchanges' },
           { type: 'procurement', label: 'Procurement' },
           { type: 'receivables', label: 'Receivables' },
+          { type: 'receivables-aging', label: 'Receivables Aging' },
         ].map(({ type, label }) => (
           <button key={type} onClick={() => exportReport(type)}
             className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
@@ -482,65 +626,70 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         ) : kpis ? (
           <div className="space-y-5">
 
-            {/* ── Primary Row — Financial Performance & Profitability ── */}
+            {/* ── Sales Performance ── */}
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Financial Performance &amp; Profitability</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Sales Performance</p>
+                <PeriodSelector value={salesPeriod} onChange={setSalesPeriod} />
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <HighlightKpiCard
-                  label="Net Profit"
-                  todayValue={fmtShort(kpis.dailyNetProfitUnified)}
-                  monthlyValue={fmtShort(kpis.monthlyNetProfitUnified)}
-                  sub="Net Sales − COGS"
-                  accent="emerald"
-                  negative={kpis.dailyNetProfitUnified < 0 || kpis.monthlyNetProfitUnified < 0}
-                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                />
-                <HighlightKpiCard
-                  label="Gross Profit"
-                  value={fmtShort(kpis.grossProfitUnified)}
-                  sub="Fulfilling revenue − COGS · this month"
-                  accent="teal"
-                  negative={kpis.grossProfitUnified < 0}
-                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
-                />
-                <HighlightKpiCard
-                  label="Net Sales Revenue"
-                  value={fmtShort(kpis.monthlyNetSalesRevenue)}
-                  sub={`Today: ${fmtShort(kpis.dailyNetSalesRevenue)} · Orders + POS + Exchanges`}
+                  label="Net Sales"
+                  value={fmtShort(periodKpis?.netSales ?? 0)}
+                  sub={periodLoading ? 'Loading…' : `${PERIOD_LABELS[salesPeriod]} · vs. prior period`}
                   accent="blue"
-                  negative={kpis.monthlyNetSalesRevenue < 0}
+                  negative={(periodKpis?.netSales ?? 0) < 0}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
-                  onClick={() => {
-                    const now = new Date();
-                    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-                    const today = now.toISOString().slice(0, 10);
-                    onNavigate?.('orders', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
-                  }}
+                  onClick={() => onNavigate?.('orders', { dateFrom: periodKpis?.dateFrom ?? '', dateTo: periodKpis?.dateTo ?? '', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
+                >
+                  <TrendBadge changePct={periodKpis?.netSalesChangePct ?? null} />
+                </HighlightKpiCard>
+                {/* "Net Profit" — the dashboard's single unambiguous profit KPI:
+                    actual economic profit after COGS, discounts, returns, and
+                    exchange/settlement adjustments (Prompt 2). Cash collection
+                    is never netted into this figure — see Cash & Receivables
+                    below for the independent cash-flow view. */}
+                <HighlightKpiCard
+                  label="Net Profit"
+                  value={fmtShort(periodKpis?.grossProfit ?? 0)}
+                  sub={periodLoading ? 'Loading…' : `${PERIOD_LABELS[salesPeriod]} · Net Sales − COGS − Returns`}
+                  accent="emerald"
+                  negative={(periodKpis?.grossProfit ?? 0) < 0}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                >
+                  <TrendBadge changePct={periodKpis?.grossProfitChangePct ?? null} />
+                </HighlightKpiCard>
+                <HighlightKpiCard
+                  label="Gross Margin %"
+                  value={`${(periodKpis?.grossMarginPct ?? 0).toFixed(1)}%`}
+                  sub={periodLoading ? 'Loading…' : `Prior period: ${(periodKpis?.previous?.grossMarginPct ?? 0).toFixed(1)}%`}
+                  accent="teal"
+                  negative={(periodKpis?.grossMarginPct ?? 0) < 0}
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
                 />
               </div>
             </div>
 
-            {/* ── Secondary Row — Cash Flow & Liquidity ── */}
+            {/* ── Cash & Receivables — independent of Sales Performance above:
+                cash collection is a downstream settlement event on revenue
+                already recognized, never a second profit adjustment. ── */}
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Cash Flow &amp; Liquidity</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Cash &amp; Receivables</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <KpiCard
-                  label="Cash Collected Today"
-                  value={fmtShort(kpis.dailyRevenue)}
+                  label={`Cash Collected · ${PERIOD_LABELS[salesPeriod]}`}
+                  value={fmtShort(periodKpis?.cashCollected ?? kpis.dailyRevenue)}
                   sub="Settled payments · Payments module"
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a4 4 0 00-8 0v2M5 9h14l1 12H4L5 9z" /></svg>}
-                  color="bg-green-100 dark:bg-green-900/30"
-                  onClick={() => {
-                    const today = new Date().toISOString().slice(0, 10);
-                    onNavigate?.('payments', { dateFrom: today, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
-                  }}
+                  color={kpiToneClass('positive')}
+                  onClick={() => onNavigate?.('payments', { dateFrom: periodKpis?.dateFrom ?? '', dateTo: periodKpis?.dateTo ?? '', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
                 />
                 <KpiCard
                   label="Outstanding Receivables"
                   value={fmtShort(kpis.outstandingBalance)}
                   sub="Unpaid credit + exchange differences"
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
-                  color={kpis.outstandingBalance > 0 ? 'bg-rose-100 dark:bg-rose-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  color={kpiToneClass(warningCountTone(kpis.outstandingBalance))}
                   onClick={() => onNavigate?.('receivables', { status: 'Pending,PartiallyPaid,Overdue', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
                 />
                 <KpiCard
@@ -548,43 +697,38 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   value={fmtShort(kpis.overdueReceivablesAmount)}
                   sub="Past due date"
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                  color={kpis.overdueReceivablesAmount > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  color={kpiToneClass(kpis.overdueReceivablesAmount > 0 ? 'critical' : 'informational')}
                   onClick={() => onNavigate?.('receivables', { status: 'Overdue', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
                 />
               </div>
             </div>
 
-            {/* ── Tertiary Row — Operational & Inventory Controls ── */}
+            {/* ── Inventory & Operations ── */}
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Operational &amp; Inventory Controls</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Inventory &amp; Operations</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <KpiCard
-                  label="Low Stock Alerts"
+                  label="Low Stock Items"
                   value={kpis.lowStockAlerts.toString()}
                   sub={kpis.lowStockAlerts > 0 ? 'At or below reorder threshold' : 'All good'}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
-                  color={kpis.lowStockAlerts > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  color={kpiToneClass(warningCountTone(kpis.lowStockAlerts))}
                   onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
                 />
                 <KpiCard
-                  label="Procurement Expense"
-                  value={fmtShort(kpis.procurementExpense)}
-                  sub="Received POs · this month"
-                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
-                  color="bg-violet-100 dark:bg-violet-900/30"
-                  onClick={() => {
-                    const now = new Date();
-                    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-                    const today = now.toISOString().slice(0, 10);
-                    onNavigate?.('procurement', { dateFrom: monthStart, dateTo: today, ...(filters.branchId ? { branchId: filters.branchId } : {}) });
-                  }}
+                  label="Inventory Value"
+                  value={fmtShort(kpis.inventoryValue)}
+                  sub="Qty on hand × average cost"
+                  icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>}
+                  color={kpiToneClass('informational')}
+                  onClick={() => onNavigate?.('inventory', { ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
                 />
                 <KpiCard
-                  label="Pending Orders"
+                  label="Pending Customer Orders"
                   value={kpis.pendingOrders.toString()}
                   sub={kpis.pendingOrders > 0 ? 'Awaiting fulfillment' : 'All clear'}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
-                  color={kpis.pendingOrders > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-gray-100 dark:bg-gray-800'}
+                  color={kpiToneClass(warningCountTone(kpis.pendingOrders))}
                   onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
                 />
               </div>
@@ -792,6 +936,69 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           ) : <Empty />}
         </Section>
       </div>
+
+      {/* ── Prompt 2 — Gross Profit Trend + Top Returned Books ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Gross Profit Trend (2/3 width) */}
+        <div className="lg:col-span-2">
+          <Section title="Gross Profit Trend" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} loading={gpLoading} error={gpError} updatedAt={gpUpdatedAt} onRefresh={() => refetchGp()}>
+            {gpTrend && gpTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={gpTrend.map(r => ({ ...r, period: fmtPeriod(r.period) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
+                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="netSales" name="Net Sales" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="grossProfit" name="Net Profit" stroke="#10b981" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <Empty />}
+          </Section>
+        </div>
+
+        {/* Top Returned Books (1/3 width) */}
+        <Section title="Top Returned Books" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v0M3 10l6-6M3 10l6 6" /></svg>} loading={topReturnedLoading} error={topReturnedError} updatedAt={topReturnedUpdatedAt} onRefresh={() => refetchTopReturned()}>
+          {topReturned && topReturned.length > 0 ? (
+            <div className="space-y-1 max-h-56 overflow-y-auto">
+              {topReturned.slice(0, 8).map((b, i) => (
+                <div key={b.bookId} className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-400 w-4">{i + 1}.</span>
+                  <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{b.title}</span>
+                  <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">{b.unitsReturned} returned</span>
+                  <span className="text-red-600 dark:text-red-400 whitespace-nowrap">{fmtShort(b.refundValue)}</span>
+                </div>
+              ))}
+            </div>
+          ) : <Empty />}
+        </Section>
+      </div>
+
+      {/* ── Prompt 2 — Receivables Aging Summary ── */}
+      <Section title="Receivables Aging Summary" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} loading={agingLoading} error={agingError} updatedAt={agingUpdatedAt} onRefresh={() => refetchAging()}>
+        {aging?.byBucket && aging.byBucket.some(b => b.count > 0) ? (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 cursor-pointer" onClick={() => onNavigate?.('receivables', { ...(filters.branchId ? { branchId: filters.branchId } : {}) })}>
+            {aging.byBucket.map(b => {
+              const bucketColor: Record<string, string> = {
+                Current: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300',
+                '1-30':  'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300',
+                '31-60': 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300',
+                '61-90': 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300',
+                '90+':   'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300',
+              };
+              return (
+                <div key={b.bucket} className={`rounded-lg p-3 text-center ${bucketColor[b.bucket] ?? 'bg-gray-50 dark:bg-gray-800'}`}>
+                  <p className="text-xs font-medium">{b.bucket === 'Current' ? 'Current' : `${b.bucket} days`}</p>
+                  <p className="text-base font-bold">{fmtShort(b.totalOutstanding)}</p>
+                  <p className="text-[10px] opacity-75">{b.count} invoice{b.count !== 1 ? 's' : ''}</p>
+                </div>
+              );
+            })}
+          </div>
+        ) : <Empty />}
+      </Section>
 
       {/* ── Row 3: Inventory + Customer insights ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

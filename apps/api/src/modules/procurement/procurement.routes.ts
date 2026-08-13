@@ -3,6 +3,7 @@ import * as procurementService from './procurement.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
+import { buildCsv, sendCsv, SUPPLIER_LEDGER_COLUMNS } from '../../lib/csvBuilder.js';
 
 const router = Router();
 
@@ -169,6 +170,67 @@ router.post(
         req.staff!,
       );
       res.status(201).json(po);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── POST /api/purchase-orders/:id/credit-notes ─────────────────────────────────
+// Prompt 2 — the supported mechanism for correcting a PO's economics after
+// receipt (damaged goods, an overcharge, a negotiated adjustment), since
+// updatePO() only allows line-item edits while status === 'draft'.
+
+router.post(
+  '/purchase-orders/:id/credit-notes',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Finance_Officer'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { amount, reason } = req.body as { amount: number; reason: string };
+      const po = await procurementService.createSupplierCreditNote(
+        pi(req.params.id),
+        { amount, reason },
+        req.staff!,
+      );
+      res.status(201).json(po);
+    } catch (err) { next(err); }
+  },
+);
+
+// ── GET /api/suppliers/:id/ledger ───────────────────────────────────────────
+// Prompt 2 — running-balance ledger (PO / Goods Receipt / Payment / Credit
+// Note / Balance).
+
+router.get(
+  '/suppliers/:id/ledger',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Finance_Officer', 'Purchasor'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await procurementService.getSupplierLedger(pi(req.params.id), {
+        dateFrom: qs(req.query.dateFrom),
+        dateTo: qs(req.query.dateTo),
+      });
+      res.json(result);
+    } catch (err) { next(err); }
+  },
+);
+
+router.get(
+  '/suppliers/:id/ledger/export',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Finance_Officer', 'Purchasor'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { entries } = await procurementService.getSupplierLedger(pi(req.params.id), {
+        dateFrom: qs(req.query.dateFrom),
+        dateTo: qs(req.query.dateTo),
+      });
+      const csvRows = entries.map(e => ({
+        date: e.date, type: e.type, reference: e.reference, description: e.description,
+        amount: e.amount, balance: e.balance,
+      }));
+      const today = new Date().toISOString().slice(0, 10);
+      sendCsv(res, `supplier-ledger-${today}.csv`, buildCsv(csvRows, SUPPLIER_LEDGER_COLUMNS));
     } catch (err) { next(err); }
   },
 );

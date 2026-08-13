@@ -16,7 +16,11 @@ export interface CsvColumnDef {
 // transaction_date is sourced as an already-local YYYY-MM-DD string (SQL
 // TO_CHAR(..., 'YYYY-MM-DD'), never a JS Date/toISOString() round-trip) —
 // kept as 'string' here so formatValue() doesn't re-parse it through Date().
-export const SALES_COLUMNS: CsvColumnDef[] = [
+// Legacy 14-column schema — no longer wired to any route as of Prompt 2
+// (see SALES_COLUMNS below, which replaces it per that ticket's explicit
+// Sales Report field list). Kept only in case another caller still expects
+// this exact shape.
+export const LEGACY_SALES_COLUMNS: CsvColumnDef[] = [
   { key: 'transaction_date',   header: 'transaction_date',   type: 'string'  },
   { key: 'transaction_type',   header: 'transaction_type',   type: 'string'  },
   { key: 'reference_number',   header: 'reference_number',   type: 'string'  },
@@ -31,6 +35,98 @@ export const SALES_COLUMNS: CsvColumnDef[] = [
   { key: 'net_amount',         header: 'net_amount',         type: 'number'  },
   { key: 'payment_status',     header: 'payment_status',     type: 'string'  },
   { key: 'payment_method',     header: 'payment_method',     type: 'string'  },
+];
+
+// Prompt 2 Sales Report field list — one row per line item, sourced from
+// getSalesReportRows() (reports.service.ts), which wraps
+// financialReport.service.ts's unified engine.
+export const SALES_COLUMNS: CsvColumnDef[] = [
+  { key: 'date',                header: 'Date',                type: 'string'  },
+  { key: 'invoice_no',          header: 'Invoice No',          type: 'string'  },
+  { key: 'source',              header: 'Source',              type: 'string'  },
+  { key: 'customer',            header: 'Customer',            type: 'string'  },
+  { key: 'book',                header: 'Book',                type: 'string'  },
+  { key: 'qty',                 header: 'Qty',                 type: 'integer' },
+  { key: 'unit_price',          header: 'Unit Price',          type: 'number'  },
+  { key: 'discount',            header: 'Discount',            type: 'number'  },
+  { key: 'gross_amount',        header: 'Gross Amount',        type: 'number'  },
+  { key: 'return_amount',       header: 'Return Amount',       type: 'number'  },
+  { key: 'net_sales_amount',    header: 'Net Sales Amount',    type: 'number'  },
+  { key: 'cost_amount',         header: 'Cost Amount',         type: 'number'  },
+  { key: 'gross_profit',        header: 'Gross Profit',        type: 'number'  },
+  { key: 'payment_status',      header: 'Payment Status',      type: 'string'  },
+  { key: 'cash_collected',      header: 'Cash Collected',      type: 'number'  },
+  { key: 'receivable_balance',  header: 'Receivable Balance',  type: 'number'  },
+  { key: 'branch',              header: 'Branch',              type: 'string'  },
+  { key: 'location',            header: 'Location',            type: 'string'  },
+  { key: 'user',                header: 'User',                type: 'string'  },
+];
+
+export const RETURN_COLUMNS: CsvColumnDef[] = [
+  { key: 'return_no',            header: 'Return No',            type: 'string'  },
+  { key: 'original_invoice_no',  header: 'Original Invoice No',  type: 'string'  },
+  { key: 'customer',             header: 'Customer',             type: 'string'  },
+  { key: 'book',                 header: 'Book',                 type: 'string'  },
+  { key: 'qty_returned',         header: 'Qty Returned',         type: 'integer' },
+  { key: 'refund_amount',        header: 'Refund Amount',        type: 'number'  },
+  { key: 'original_cost',        header: 'Original Cost',        type: 'number'  },
+  { key: 'profit_reversed',      header: 'Profit Reversed',      type: 'number'  },
+  { key: 'refund_method',        header: 'Refund Method',        type: 'string'  },
+  { key: 'return_date',          header: 'Return Date',          type: 'string'  },
+  { key: 'user',                 header: 'User',                 type: 'string'  },
+];
+
+export const EXCHANGE_DETAIL_COLUMNS: CsvColumnDef[] = [
+  { key: 'exchange_no',                header: 'Exchange No',                type: 'string' },
+  { key: 'customer',                   header: 'Customer',                   type: 'string' },
+  { key: 'incoming_book',              header: 'Incoming Book',              type: 'string' },
+  { key: 'incoming_value',             header: 'Incoming Value',             type: 'number' },
+  { key: 'outgoing_book',              header: 'Outgoing Book',              type: 'string' },
+  { key: 'outgoing_value',             header: 'Outgoing Value',             type: 'number' },
+  { key: 'difference',                 header: 'Difference',                 type: 'number' },
+  { key: 'difference_payment_status',  header: 'Difference Payment Status',  type: 'string' },
+  { key: 'cash_collected',             header: 'Cash Collected',             type: 'number' },
+  { key: 'receivable_balance',         header: 'Receivable Balance',         type: 'number' },
+  { key: 'date',                       header: 'Date',                       type: 'string' },
+  { key: 'user',                       header: 'User',                       type: 'string' },
+];
+
+export const PAYMENTS_LEDGER_COLUMNS: CsvColumnDef[] = [
+  { key: 'receipt_no',       header: 'Receipt No',       type: 'string' },
+  { key: 'party',            header: 'Party',            type: 'string' },
+  { key: 'reference_type',   header: 'Reference Type',   type: 'string' },
+  { key: 'reference_no',     header: 'Reference No',     type: 'string' },
+  { key: 'payment_method',   header: 'Payment Method',   type: 'string' },
+  { key: 'amount',           header: 'Amount',           type: 'number' },
+  { key: 'direction',        header: 'Direction',        type: 'string' },
+  { key: 'date',             header: 'Date',             type: 'string' },
+  { key: 'user',             header: 'User',             type: 'string' },
+];
+
+export const RECEIVABLES_AGING_COLUMNS: CsvColumnDef[] = [
+  { key: 'customer',            header: 'Customer',            type: 'string' },
+  { key: 'invoice_no',          header: 'Invoice No',          type: 'string' },
+  { key: 'invoice_date',        header: 'Invoice Date',        type: 'string' },
+  { key: 'due_date',            header: 'Due Date',            type: 'string' },
+  { key: 'outstanding_amount',  header: 'Outstanding Amount',  type: 'number' },
+  { key: 'aging_bucket',        header: 'Aging Bucket',        type: 'string' },
+  { key: 'last_payment_date',   header: 'Last Payment Date',   type: 'string' },
+];
+
+// Inventory Valuation Report (Prompt 2) — Book/ISBN/Qty On Hand/Average
+// Cost/Inventory Value/Last Movement Date/Last Purchase Cost/Last Selling
+// Price. The general-purpose inventory export (with author/category/
+// publisher/reserved/available) stays available as INVENTORY_COLUMNS below
+// for the existing Inventory page export button.
+export const INVENTORY_VALUATION_COLUMNS: CsvColumnDef[] = [
+  { key: 'title',               header: 'Book',                type: 'string'  },
+  { key: 'isbn',                header: 'ISBN',                 type: 'string'  },
+  { key: 'quantity_on_hand',    header: 'Qty On Hand',          type: 'integer' },
+  { key: 'average_cost',        header: 'Average Cost',         type: 'number'  },
+  { key: 'inventory_value',     header: 'Inventory Value',      type: 'number'  },
+  { key: 'last_movement_date',  header: 'Last Movement Date',   type: 'date'    },
+  { key: 'last_purchase_cost',  header: 'Last Purchase Cost',   type: 'number'  },
+  { key: 'last_selling_price',  header: 'Last Selling Price',   type: 'number'  },
 ];
 
 export const INVENTORY_COLUMNS: CsvColumnDef[] = [
@@ -71,6 +167,72 @@ export const RECEIVABLES_COLUMNS: CsvColumnDef[] = [
   { key: 'due_date',           header: 'due_date',           type: 'date'    },
   { key: 'days_overdue',       header: 'days_overdue',       type: 'integer' },
   { key: 'payment_status',     header: 'payment_status',     type: 'string'  },
+];
+
+// ── Procurement reports (Prompt 2) ──────────────────────────────────────────
+
+export const OPEN_POS_COLUMNS: CsvColumnDef[] = [
+  { key: 'po_reference',       header: 'PO Reference',       type: 'string' },
+  { key: 'supplier',           header: 'Supplier',           type: 'string' },
+  { key: 'order_date',         header: 'Order Date',         type: 'string' },
+  { key: 'expected_date',      header: 'Expected Date',      type: 'string' },
+  { key: 'ordered_qty',        header: 'Ordered Qty',        type: 'integer' },
+  { key: 'received_qty',       header: 'Received Qty',       type: 'integer' },
+  { key: 'total_amount',       header: 'Total Amount',       type: 'number' },
+  { key: 'outstanding_amount', header: 'Outstanding Amount', type: 'number' },
+  { key: 'receipt_status',     header: 'Receipt Status',     type: 'string' },
+  { key: 'payment_status',     header: 'Payment Status',     type: 'string' },
+];
+
+export const SUPPLIER_BALANCES_COLUMNS: CsvColumnDef[] = [
+  { key: 'supplier',            header: 'Supplier',            type: 'string' },
+  { key: 'open_po_count',       header: 'Open POs',            type: 'integer' },
+  { key: 'received_value',      header: 'Received Value',      type: 'number' },
+  { key: 'paid',                header: 'Paid',                type: 'number' },
+  { key: 'credited',            header: 'Credited',            type: 'number' },
+  { key: 'outstanding_balance', header: 'Outstanding Balance', type: 'number' },
+];
+
+export const AP_AGING_COLUMNS: CsvColumnDef[] = [
+  { key: 'supplier',            header: 'Supplier',            type: 'string' },
+  { key: 'po_reference',        header: 'PO Reference',        type: 'string' },
+  { key: 'outstanding_amount',  header: 'Outstanding Amount',  type: 'number' },
+  { key: 'aging_bucket',        header: 'Aging Bucket',        type: 'string' },
+  { key: 'last_receipt_date',   header: 'Last Receipt Date',   type: 'string' },
+];
+
+export const PURCHASES_BY_SUPPLIER_COLUMNS: CsvColumnDef[] = [
+  { key: 'supplier',        header: 'Supplier',        type: 'string' },
+  { key: 'po_count',        header: 'PO Count',        type: 'integer' },
+  { key: 'ordered_value',   header: 'Ordered Value',   type: 'number' },
+  { key: 'received_value',  header: 'Received Value',  type: 'number' },
+];
+
+export const PURCHASES_BY_BOOK_COLUMNS: CsvColumnDef[] = [
+  { key: 'title',         header: 'Book',          type: 'string'  },
+  { key: 'isbn',          header: 'ISBN',          type: 'string'  },
+  { key: 'ordered_qty',   header: 'Ordered Qty',   type: 'integer' },
+  { key: 'received_qty',  header: 'Received Qty',  type: 'integer' },
+  { key: 'total_value',   header: 'Total Value',   type: 'number'  },
+];
+
+export const SUPPLIER_PAYMENT_HISTORY_COLUMNS: CsvColumnDef[] = [
+  { key: 'date',            header: 'Date',            type: 'string' },
+  { key: 'supplier',        header: 'Supplier',        type: 'string' },
+  { key: 'po_reference',    header: 'PO Reference',    type: 'string' },
+  { key: 'amount',          header: 'Amount',          type: 'number' },
+  { key: 'payment_method',  header: 'Payment Method',  type: 'string' },
+  { key: 'source',          header: 'Source',          type: 'string' },
+  { key: 'user',            header: 'User',            type: 'string' },
+];
+
+export const SUPPLIER_LEDGER_COLUMNS: CsvColumnDef[] = [
+  { key: 'date',         header: 'Date',         type: 'string' },
+  { key: 'type',         header: 'Type',         type: 'string' },
+  { key: 'reference',    header: 'Reference',    type: 'string' },
+  { key: 'description',  header: 'Description',  type: 'string' },
+  { key: 'amount',       header: 'Amount',       type: 'number' },
+  { key: 'balance',      header: 'Balance',      type: 'number' },
 ];
 
 // ── Core builder ──────────────────────────────────────────────────────────────

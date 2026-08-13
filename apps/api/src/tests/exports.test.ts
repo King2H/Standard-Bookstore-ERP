@@ -4,8 +4,10 @@
  * Covers the two money-accuracy bugs found in the CSV export layer, plus
  * the CSV/formula-injection guard added alongside them:
  *
- *   1. Sales export (getSalesExportRows) double-subtracted discount_total
- *      from net_profit even though `orders.total` is already post-discount.
+ *   1. Sales export (formerly getSalesExportRows, now the Prompt 2
+ *      getSalesReportRows() unified per-line export) double-subtracted
+ *      discount_total from net_profit even though `orders.total` is
+ *      already post-discount.
  *   2. Receivables export (getReceivablesExportRows) was hardcoded to
  *      source_type = 'order_credit_sale', silently excluding
  *      pos_credit_sale and exchange_difference receivables.
@@ -103,9 +105,9 @@ describe('Export Integrity (Module 7)', () => {
     bookId = await getTestBook();
     const supplierId = await getTestSupplier();
 
-    // A PO line item gives getSalesExportRows a deterministic unit_cost to
-    // look up (most-recent po_line_items row for the book) — the PO itself
-    // doesn't need to be received for this lookup.
+    // A PO line item gives the cost-basis fallback a deterministic unit_cost
+    // to look up (most-recent po_line_items row for the book) — the PO
+    // itself doesn't need to be received for this lookup.
     const poRes = await db.query(
       `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, created_by, notes)
        VALUES ($1, $2, 'draft', $3, $4, 'exp_test cost basis PO')
@@ -176,17 +178,17 @@ describe('Export Integrity (Module 7)', () => {
 
     expect(res.status).toBe(200);
     const rows = parseCsv(res.text);
-    const row = rows.find(r => r.reference_number === `${ORDER_PREFIX}A`);
+    const row = rows.find(r => r['Invoice No'] === `${ORDER_PREFIX}A`);
     expect(row).toBeDefined();
 
-    expect(row!.transaction_type).toBe('ORDER');
-    expect(row!.customer_name).toBe('Export Test Customer');
-    expect(parseInt(row!.quantity, 10)).toBe(QTY);
-    expect(parseFloat(row!.discount_amount)).toBeCloseTo(ORDER_DISCOUNT, 2);
-    expect(parseFloat(row!.gross_amount)).toBeCloseTo(ORDER_SUBTOTAL, 2);
-    // net_amount = order_line_items.total_price, already gross − discount.
-    expect(parseFloat(row!.net_amount)).toBeCloseTo(ORDER_TOTAL, 2);
-    expect(row!.payment_status).toBe('PAID');
+    expect(row!.Source).toBe('ORDER');
+    expect(row!.Customer).toBe('Export Test Customer');
+    expect(parseInt(row!.Qty, 10)).toBe(QTY);
+    expect(parseFloat(row!.Discount)).toBeCloseTo(ORDER_DISCOUNT, 2);
+    expect(parseFloat(row!['Gross Amount'])).toBeCloseTo(ORDER_SUBTOTAL, 2);
+    // Net Sales Amount = order_line_items.total_price, already gross − discount.
+    expect(parseFloat(row!['Net Sales Amount'])).toBeCloseTo(ORDER_TOTAL, 2);
+    expect(row!['Payment Status']).toBe('PAID');
   });
 
   // ── 2. Receivables export includes all source types ───────────────────────
