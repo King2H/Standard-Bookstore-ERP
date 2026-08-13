@@ -577,11 +577,13 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         {[
           { type: 'sales', label: 'Sales' },
           { type: 'returns', label: 'Returns' },
-          { type: 'payments', label: 'Payments' },
+          // 'Payments' (a thin totals-only summary) and 'Customers' (a
+          // legacy top-customers export unrelated to any Prompt 2 report/
+          // KPI) were dropped from this row — Payments Ledger below is the
+          // canonical, transaction-level payments export.
           { type: 'payments-ledger', label: 'Payments Ledger' },
           { type: 'inventory', label: 'Inventory' },
           { type: 'inventory-valuation', label: 'Inventory Valuation' },
-          { type: 'customers', label: 'Customers' },
           { type: 'exchanges', label: 'Exchanges' },
           { type: 'procurement', label: 'Procurement' },
           { type: 'receivables', label: 'Receivables' },
@@ -633,6 +635,9 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <PeriodSelector value={salesPeriod} onChange={setSalesPeriod} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Not clickable: Net Sales aggregates ORDER + POS + RETURN +
+                    EXCHANGE rows (the Unified engine), so a single "view
+                    orders" drill-down would misrepresent it as order-only. */}
                 <HighlightKpiCard
                   label="Net Sales"
                   value={fmtShort(periodKpis?.netSales ?? 0)}
@@ -640,7 +645,6 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   accent="blue"
                   negative={(periodKpis?.netSales ?? 0) < 0}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
-                  onClick={() => onNavigate?.('orders', { dateFrom: periodKpis?.dateFrom ?? '', dateTo: periodKpis?.dateTo ?? '', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
                 >
                   <TrendBadge changePct={periodKpis?.netSalesChangePct ?? null} />
                 </HighlightKpiCard>

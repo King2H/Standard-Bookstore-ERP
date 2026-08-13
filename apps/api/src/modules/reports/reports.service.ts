@@ -1891,7 +1891,13 @@ export async function getReceivablesAgingReport(filters: ReportFilters): Promise
        TO_CHAR(r.created_at, 'YYYY-MM-DD') AS invoice_date,
        TO_CHAR(r.due_date, 'YYYY-MM-DD') AS due_date_str,
        r.outstanding_amount, r.original_amount,
-       GREATEST(0, EXTRACT(DAY FROM CURRENT_DATE - r.due_date)::int) AS days_overdue,
+       -- Bug fix: due_date is a DATE column, so date - date already yields
+       -- an integer day-count in Postgres — wrapping it in EXTRACT(DAY FROM
+       -- ...) throws "function extract(unknown, integer) does not exist"
+       -- (EXTRACT expects a timestamp/interval, not an integer), which was
+       -- crashing this endpoint with a 500 on every call. GREATEST ignores
+       -- NULL args, so a NULL due_date still correctly reads as 0 (Current).
+       GREATEST(0, (CURRENT_DATE - r.due_date))::int AS days_overdue,
        -- Best-effort: this row is only ever updated when a payment is
        -- applied (updateReceivableOnPayment()) — no dedicated payment-
        -- history table exists per receivable, so updated_at is the closest

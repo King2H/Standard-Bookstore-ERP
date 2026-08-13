@@ -127,6 +127,15 @@ describe('DashboardPage — KPI hierarchy (Prompt 2)', () => {
     expect(screen.getAllByText('Net Profit').length).toBe(1);
   });
 
+  it('Net Sales card is not clickable (it aggregates ORDER + POS + RETURN + EXCHANGE, not orders alone)', async () => {
+    renderDashboard();
+
+    await waitFor(() => expect(screen.getByText('Net Sales')).toBeInTheDocument());
+    const card = screen.getByText('Net Sales').closest('div.rounded-xl');
+    expect(card).not.toBeNull();
+    expect(card).not.toHaveClass('cursor-pointer');
+  });
+
   it('Cash & Receivables shows a period-labeled Cash Collected card, Outstanding Receivables, and Overdue Receivables', async () => {
     renderDashboard();
 

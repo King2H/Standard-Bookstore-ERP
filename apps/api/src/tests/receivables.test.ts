@@ -303,4 +303,56 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     expect(secondRes.status).toBe(422);
     expect(secondRes.body.error).toBe('RECEIVABLE_ALREADY_SETTLED');
   });
+
+  // ── 12. GET /api/reports/receivables-aging (Prompt 2) ─────────────────────
+  // Bug fix regression: due_date is a DATE column, so CURRENT_DATE - due_date
+  // is already an integer day-count in Postgres — wrapping it in
+  // EXTRACT(DAY FROM ...) crashed the endpoint with a 500 on every call
+  // (see reports.service.ts's getReceivablesAgingReport). This is the first
+  // test to actually hit the route end-to-end.
+
+  it("12. Receivables aging report buckets a 45-day-overdue receivable into '31-60' and reconciles byBucket totals", async () => {
+    await ensureInventory(book.id, locationId, 20);
+    const createRes = await request(getTestApp())
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId: book.id, quantity: 1 }] });
+    expect(createRes.status).toBe(201);
+    const orderId = createRes.body.id;
+    const orderNumber = createRes.body.orderNumber as string;
+
+    // confirm() rejects a past dueDate by design (orders.service.ts) — so
+    // confirm with a valid future date, then backdate the resulting
+    // receivable directly, simulating one that's since gone overdue.
+    const confirmRes = await request(getTestApp())
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ dueDate: '2099-12-31' });
+    expect(confirmRes.status).toBe(200);
+
+    const overdueDate = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
+    await db.query(
+      `UPDATE receivables SET due_date = $1 WHERE source_type = 'order_credit_sale' AND source_entity_id = $2`,
+      [overdueDate, orderId],
+    );
+
+    const agingRes = await request(getTestApp())
+      .get(`/api/reports/receivables-aging?branchId=${branchId}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(agingRes.status).toBe(200);
+
+    const row = (agingRes.body.rows as Array<{ invoiceNo: string; agingBucket: string; outstandingAmount: number }>)
+      .find(r => r.invoiceNo === orderNumber);
+    expect(row).toBeDefined();
+    expect(row!.agingBucket).toBe('31-60');
+
+    const bucket3160 = (agingRes.body.byBucket as Array<{ bucket: string; count: number; totalOutstanding: number }>)
+      .find(b => b.bucket === '31-60');
+    expect(bucket3160).toBeDefined();
+    expect(bucket3160!.count).toBeGreaterThan(0);
+    expect(bucket3160!.totalOutstanding).toBeGreaterThanOrEqual(row!.outstandingAmount);
+  });
 });
