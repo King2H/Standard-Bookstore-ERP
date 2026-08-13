@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
+import { StatusFilter, StatusBadge, type StatusFilterValue, type LifecycleStatus } from '../components/StatusFilter.js';
+import { DependencyDialog } from '../components/DependencyDialog.js';
 
 type Role = string;
 type Tab = 'books' | 'authors' | 'categories' | 'publishers';
@@ -16,14 +18,15 @@ interface Book {
   editionId: number | null; editionCode: string | null; editionLabel: string | null;
   edition: string | null; language: string | null; format: string | null;
   description: string | null; defaultPrice: number | null; tradeValue: number | null;
-  isActive: boolean; createdAt: string; categories: string[]; categoryIds: number[]; tags: string[];
+  isActive: boolean; status: LifecycleStatus; archivedAt: string | null;
+  createdAt: string; categories: string[]; categoryIds: number[]; tags: string[];
 }
 interface BookList { items: Book[]; total: number; page: number; totalPages: number; }
-interface Author { id: number; name: string; bookCount?: number; createdAt: string; }
+interface Author { id: number; name: string; status: LifecycleStatus; archivedAt: string | null; bookCount?: number; createdAt: string; }
 interface AuthorList { items: Author[]; total: number; }
-interface Category { id: number; name: string; parentId: number | null; parentName?: string | null; bookCount?: number; createdAt: string; }
+interface Category { id: number; name: string; parentId: number | null; parentName?: string | null; status: LifecycleStatus; archivedAt: string | null; bookCount?: number; createdAt: string; }
 interface CategoryList { items: Category[]; total: number; }
-interface Publisher { id: number; name: string; bookCount?: number; createdAt: string; }
+interface Publisher { id: number; name: string; status: LifecycleStatus; archivedAt: string | null; bookCount?: number; createdAt: string; }
 interface PublisherList { items: Publisher[]; total: number; }
 interface BookFormat { id: number; code: string; label: string; sortOrder: number; }
 interface BookEdition { id: number; code: string; label: string; sortOrder: number; }
@@ -92,7 +95,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
   const [searchRaw, setSearchRaw] = useState(() => getParam('q'));
   const search = useDebounce(searchRaw, 300);
   const [genre, setGenre] = useState(() => getParam('genre'));
-  const [status, setStatus] = useState<'active' | 'inactive' | 'all'>(() => (getParam('status') as 'active' | 'inactive' | 'all') || 'active');
+  const [status, setStatus] = useState<StatusFilterValue>(() => (getParam('status') as StatusFilterValue) || 'active');
   const [catId, setCatId] = useState<string>(() => getParam('cat'));
   const [authorId, setAuthorId] = useState<string>(() => getParam('author'));
   const [page, setPage] = useState(1);
@@ -103,6 +106,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
   const [editBook, setEditBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [detailBook, setDetailBook] = useState<Book | null>(null);
+  const [depDialog, setDepDialog] = useState<{ book: Book; usage: Record<string, number> } | null>(null);
 
   // Sync filters to URL
   useEffect(() => { setParam({ q: search, genre, status: status === 'active' ? '' : status, cat: catId, author: authorId }); }, [search, genre, status, catId, authorId]);
@@ -132,12 +136,10 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
     if (genre) p.set('genre', genre);
     if (catId) p.set('category', catId);
     if (authorId) p.set('author', authorId);
-    if (status === 'active') p.set('is_active', 'true');
-    else if (status === 'inactive') p.set('is_active', 'false');
-    // Bug fix: "All" used to send no is_active param at all, which the
-    // backend then defaulted to active-only (same default an omitted param
-    // gets everywhere else) — "All" never actually included inactive books.
-    else if (status === 'all') p.set('is_active', 'all');
+    // Prompt 3 — status supersedes the legacy is_active tri-state, letting
+    // the filter distinguish ARCHIVED from INACTIVE (both used to collapse
+    // to is_active=false).
+    p.set('status', status);
     p.set('sortBy', sortBy); p.set('sortDir', sortDir);
     p.set('page', String(page)); p.set('pageSize', '25');
     return p.toString();
@@ -173,6 +175,25 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
     mutationFn: (id: number) => api.post(`/books/${id}/reactivate`),
     onSuccess: () => { invalidate(); showToast('Reactivated', 'success'); },
     onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  const archive = useMutation({
+    mutationFn: (id: number) => api.post(`/books/${id}/archive`),
+    onSuccess: () => { invalidate(); showToast('Book archived', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  const restore = useMutation({
+    mutationFn: (id: number) => api.post(`/books/${id}/restore`),
+    onSuccess: () => { invalidate(); showToast('Book restored', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  const deleteBook = useMutation({
+    mutationFn: (book: Book) => api.delete(`/books/${book.id}`),
+    onSuccess: () => { invalidate(); showToast('Book deleted', 'success'); },
+    onError: (e: Error, book) => {
+      const details = (e as Error & { details?: Record<string, number> }).details;
+      if (details) setDepDialog({ book, usage: details });
+      else showToast(e.message, 'error');
+    },
   });
 
   const allIds = data?.items.map(b => b.id) ?? [];
@@ -234,13 +255,8 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
           {['Fiction','Non-Fiction','Science Fiction','Fantasy','Mystery','Biography','History','Self-Help','Children'].map(g => <option key={g} value={g}>{g}</option>)}
         </select>
 
-        {/* Status */}
-        <select value={status} onChange={e => { setStatus(e.target.value as typeof status); setPage(1); }}
-          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="all">All</option>
-        </select>
+        {/* Status (Prompt 3 — Active/Inactive/Archived/All) */}
+        <StatusFilter value={status} onChange={v => { setStatus(v); setPage(1); }} />
 
         {/* More filters */}
         <button onClick={() => setAdvOpen(true)}
@@ -313,9 +329,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
                 </td>
                 <td className="px-4 py-3 text-right text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt(book.defaultPrice)}</td>
                 <td className="px-4 py-3 text-center">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${book.isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
-                    {book.isActive ? 'Active' : 'Inactive'}
-                  </span>
+                  <StatusBadge status={book.status} />
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fmtDate(book.createdAt)}</td>
                 <td className="px-4 py-3 text-right">
@@ -323,9 +337,13 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
                     { label: 'View details', icon: '👁', onClick: () => setDetailBook(book) },
                     ...(canWrite(userRole, userPermissions) ? [
                       { label: 'Edit', icon: '✏️', onClick: () => { setEditBook(book); setShowForm(true); } },
-                      book.isActive
-                        ? { label: 'Deactivate', icon: '🚫', onClick: () => deactivate.mutate(book.id), danger: true as const }
-                        : { label: 'Reactivate', icon: '✅', onClick: () => reactivate.mutate(book.id) },
+                      book.status === 'ACTIVE'
+                        ? { label: 'Set Inactive', icon: '🚫', onClick: () => deactivate.mutate(book.id), danger: true as const }
+                        : { label: 'Activate', icon: '✅', onClick: () => reactivate.mutate(book.id) },
+                      book.status === 'ARCHIVED'
+                        ? { label: 'Restore', icon: '📤', onClick: () => restore.mutate(book.id) }
+                        : { label: 'Archive', icon: '🗄️', onClick: () => archive.mutate(book.id) },
+                      { label: 'Delete', icon: '🗑️', onClick: () => deleteBook.mutate(book), danger: true as const },
                     ] : []),
                   ]} />
                 </td>
@@ -400,6 +418,15 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
           onClose={() => { setShowForm(false); setEditBook(null); }}
           onSaved={() => { invalidate(); setShowForm(false); setEditBook(null); }}
           showToast={showToast} />
+      )}
+      {depDialog && (
+        <DependencyDialog
+          entityName={depDialog.book.title}
+          usage={depDialog.usage}
+          onClose={() => setDepDialog(null)}
+          onArchive={() => { archive.mutate(depDialog.book.id); setDepDialog(null); }}
+          archiving={archive.isPending}
+        />
       )}
     </div>
   );
@@ -587,31 +614,73 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
 }
 
 
+// ── Shared lifecycle mutations (Prompt 3) ───────────────────────────────────
+// Archive/Restore/Delete follow the identical pattern for authors,
+// categories, and publishers — one hook instead of tripling the boilerplate.
+function useLifecycleMutations<T extends { id: number; name: string }>(
+  basePath: string,
+  invalidateKey: string,
+  showToast: (m: string, t: 'success' | 'error') => void,
+) {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: [invalidateKey] });
+  const [depDialog, setDepDialog] = useState<{ item: T; usage: Record<string, number> } | null>(null);
+
+  const archive = useMutation({
+    mutationFn: (id: number) => api.post(`${basePath}/${id}/archive`),
+    onSuccess: () => { invalidate(); showToast('Archived', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  const restore = useMutation({
+    mutationFn: (id: number) => api.post(`${basePath}/${id}/restore`),
+    onSuccess: () => { invalidate(); showToast('Restored', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  const deactivate = useMutation({
+    mutationFn: (id: number) => api.post(`${basePath}/${id}/deactivate`),
+    onSuccess: () => { invalidate(); showToast('Set Inactive', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  const activate = useMutation({
+    mutationFn: (id: number) => api.post(`${basePath}/${id}/activate`),
+    onSuccess: () => { invalidate(); showToast('Activated', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (item: T) => api.delete(`${basePath}/${item.id}`),
+    onSuccess: () => { invalidate(); showToast('Deleted', 'success'); },
+    onError: (e: Error, item) => {
+      const details = (e as Error & { details?: Record<string, number> }).details;
+      if (details) setDepDialog({ item, usage: details });
+      else showToast(e.message, 'error');
+    },
+  });
+
+  return { archive, restore, deactivate, activate, deleteMut, depDialog, setDepDialog };
+}
+
 // ── AuthorsTab ────────────────────────────────────────────────────────────────
 function AuthorsTab({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
   const qc = useQueryClient();
   const { showToast } = useToast();
   const [searchRaw, setSearchRaw] = useState('');
   const search = useDebounce(searchRaw, 300);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('active');
   const [page, setPage] = useState(1);
   const [editItem, setEditItem] = useState<Author | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  useEffect(() => setPage(1), [search]);
+  useEffect(() => setPage(1), [search, statusFilter]);
 
   const { data, isLoading } = useQuery<AuthorList>({
-    queryKey: ['authors', search, page],
-    queryFn: () => api.get<AuthorList>(`/authors?q=${encodeURIComponent(search)}&page=${page}&pageSize=25`),
+    queryKey: ['authors', search, statusFilter, page],
+    queryFn: () => api.get<AuthorList>(`/authors?q=${encodeURIComponent(search)}&status=${statusFilter}&page=${page}&pageSize=25`),
     placeholderData: prev => prev,
   });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['authors'] });
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => api.delete(`/authors/${id}`),
-    onSuccess: () => { invalidate(); showToast('Author deleted', 'success'); },
-    onError: (e: Error) => showToast(e.message, 'error'),
-  });
+  const { archive, restore, deactivate, activate, deleteMut, depDialog, setDepDialog } = useLifecycleMutations<Author>('/authors', 'authors', showToast);
 
   async function save() {
     if (!name.trim()) { setFormError('Name is required'); return; }
@@ -628,15 +697,23 @@ function AuthorsTab({ userRole, userPermissions }: { userRole?: Role; userPermis
     <SimpleListTab title="Authors" icon="✍️" total={data?.total} searchRaw={searchRaw} onSearch={setSearchRaw}
       canWrite={canWrite(userRole, userPermissions)} onAdd={() => { setEditItem(null); setName(''); setFormError(''); setShowForm(true); }}
       isLoading={isLoading} page={page} totalPages={Math.ceil((data?.total ?? 0) / 25)} onPage={setPage}
-      columns={['Name', 'Books', 'Added', '']}
+      statusFilter={statusFilter} onStatusFilterChange={setStatusFilter}
+      columns={['Name', 'Status', 'Books', 'Added', '']}
       rows={(data?.items ?? []).map(a => [
         <span key="n" className="font-medium text-gray-900 dark:text-white text-sm">{a.name}</span>,
+        <StatusBadge key="s" status={a.status} />,
         <span key="b" className="text-gray-500 text-sm">{a.bookCount ?? 0}</span>,
         <span key="d" className="text-gray-400 text-xs">{fmtDate(a.createdAt)}</span>,
         canWrite(userRole, userPermissions) ? (
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(a); setName(a.name); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
-            <button onClick={() => { if (confirm(`Delete "${a.name}"?`)) deleteMut.mutate(a.id); }} className="text-xs text-red-500 hover:underline">Delete</button>
+            {a.status === 'ACTIVE'
+              ? <button onClick={() => deactivate.mutate(a.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Set Inactive</button>
+              : a.status === 'INACTIVE' && <button onClick={() => activate.mutate(a.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
+            {a.status === 'ARCHIVED'
+              ? <button onClick={() => restore.mutate(a.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
+              : <button onClick={() => archive.mutate(a.id)} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
+            <button onClick={() => { if (confirm(`Delete "${a.name}"?`)) deleteMut.mutate(a); }} className="text-xs text-red-500 hover:underline">Delete</button>
           </div>
         ) : null,
       ])}>
@@ -649,6 +726,15 @@ function AuthorsTab({ userRole, userPermissions }: { userRole?: Role; userPermis
           </div>
         </Drawer>
       )}
+      {depDialog && (
+        <DependencyDialog
+          entityName={depDialog.item.name}
+          usage={depDialog.usage}
+          onClose={() => setDepDialog(null)}
+          onArchive={() => { archive.mutate(depDialog.item.id); setDepDialog(null); }}
+          archiving={archive.isPending}
+        />
+      )}
     </SimpleListTab>
   );
 }
@@ -659,6 +745,7 @@ function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPer
   const { showToast } = useToast();
   const [searchRaw, setSearchRaw] = useState('');
   const search = useDebounce(searchRaw, 300);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('active');
   const [page, setPage] = useState(1);
   const [editItem, setEditItem] = useState<Category | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -666,21 +753,17 @@ function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPer
   const [parentId, setParentId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  useEffect(() => setPage(1), [search]);
+  useEffect(() => setPage(1), [search, statusFilter]);
 
   const { data, isLoading } = useQuery<CategoryList>({
-    queryKey: ['categories', search, page],
-    queryFn: () => api.get<CategoryList>(`/categories?q=${encodeURIComponent(search)}&page=${page}&pageSize=25`),
+    queryKey: ['categories', search, statusFilter, page],
+    queryFn: () => api.get<CategoryList>(`/categories?q=${encodeURIComponent(search)}&status=${statusFilter}&page=${page}&pageSize=25`),
     placeholderData: prev => prev,
   });
   const { data: allCatsData } = useQuery<CategoryList>({ queryKey: ['categories', ''], queryFn: () => api.get<CategoryList>('/categories?pageSize=200'), staleTime: 60_000 });
   const allCats = allCatsData?.items ?? [];
   const invalidate = () => qc.invalidateQueries({ queryKey: ['categories'] });
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => api.delete(`/categories/${id}`),
-    onSuccess: () => { invalidate(); showToast('Category deleted', 'success'); },
-    onError: (e: Error) => showToast(e.message, 'error'),
-  });
+  const { archive, restore, deactivate, activate, deleteMut, depDialog, setDepDialog } = useLifecycleMutations<Category>('/categories', 'categories', showToast);
 
   async function save() {
     if (!catName.trim()) { setFormError('Name is required'); return; }
@@ -697,16 +780,24 @@ function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPer
     <SimpleListTab title="Categories" icon="🏷️" total={data?.total} searchRaw={searchRaw} onSearch={setSearchRaw}
       canWrite={canWrite(userRole, userPermissions)} onAdd={() => { setEditItem(null); setCatName(''); setParentId(null); setFormError(''); setShowForm(true); }}
       isLoading={isLoading} page={page} totalPages={Math.ceil((data?.total ?? 0) / 25)} onPage={setPage}
-      columns={['Name', 'Parent', 'Books', 'Added', '']}
+      statusFilter={statusFilter} onStatusFilterChange={setStatusFilter}
+      columns={['Name', 'Parent', 'Status', 'Books', 'Added', '']}
       rows={(data?.items ?? []).map(c => [
         <span key="n" className="font-medium text-gray-900 dark:text-white text-sm">{c.name}</span>,
         <span key="p" className="text-gray-500 text-xs">{c.parentName ?? '—'}</span>,
+        <StatusBadge key="s" status={c.status} />,
         <span key="b" className="text-gray-500 text-sm">{c.bookCount ?? 0}</span>,
         <span key="d" className="text-gray-400 text-xs">{fmtDate(c.createdAt)}</span>,
         canWrite(userRole, userPermissions) ? (
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(c); setCatName(c.name); setParentId(c.parentId); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
-            <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) deleteMut.mutate(c.id); }} className="text-xs text-red-500 hover:underline">Delete</button>
+            {c.status === 'ACTIVE'
+              ? <button onClick={() => deactivate.mutate(c.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Set Inactive</button>
+              : c.status === 'INACTIVE' && <button onClick={() => activate.mutate(c.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
+            {c.status === 'ARCHIVED'
+              ? <button onClick={() => restore.mutate(c.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
+              : <button onClick={() => archive.mutate(c.id)} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
+            <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) deleteMut.mutate(c); }} className="text-xs text-red-500 hover:underline">Delete</button>
           </div>
         ) : null,
       ])}>
@@ -727,6 +818,15 @@ function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPer
           </div>
         </Drawer>
       )}
+      {depDialog && (
+        <DependencyDialog
+          entityName={depDialog.item.name}
+          usage={depDialog.usage}
+          onClose={() => setDepDialog(null)}
+          onArchive={() => { archive.mutate(depDialog.item.id); setDepDialog(null); }}
+          archiving={archive.isPending}
+        />
+      )}
     </SimpleListTab>
   );
 }
@@ -737,25 +837,22 @@ function PublishersTab({ userRole, userPermissions }: { userRole?: Role; userPer
   const { showToast } = useToast();
   const [searchRaw, setSearchRaw] = useState('');
   const search = useDebounce(searchRaw, 300);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('active');
   const [page, setPage] = useState(1);
   const [editItem, setEditItem] = useState<Publisher | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [pubName, setPubName] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  useEffect(() => setPage(1), [search]);
+  useEffect(() => setPage(1), [search, statusFilter]);
 
   const { data, isLoading } = useQuery<PublisherList>({
-    queryKey: ['publishers', search, page],
-    queryFn: () => api.get<PublisherList>(`/publishers?q=${encodeURIComponent(search)}&page=${page}&pageSize=25`),
+    queryKey: ['publishers', search, statusFilter, page],
+    queryFn: () => api.get<PublisherList>(`/publishers?q=${encodeURIComponent(search)}&status=${statusFilter}&page=${page}&pageSize=25`),
     placeholderData: prev => prev,
   });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['publishers'] });
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => api.delete(`/publishers/${id}`),
-    onSuccess: () => { invalidate(); showToast('Publisher deleted', 'success'); },
-    onError: (e: Error) => showToast(e.message, 'error'),
-  });
+  const { archive, restore, deactivate, activate, deleteMut, depDialog, setDepDialog } = useLifecycleMutations<Publisher>('/publishers', 'publishers', showToast);
 
   async function save() {
     if (!pubName.trim()) { setFormError('Name is required'); return; }
@@ -772,15 +869,23 @@ function PublishersTab({ userRole, userPermissions }: { userRole?: Role; userPer
     <SimpleListTab title="Publishers" icon="🏢" total={data?.total} searchRaw={searchRaw} onSearch={setSearchRaw}
       canWrite={canWrite(userRole, userPermissions)} onAdd={() => { setEditItem(null); setPubName(''); setFormError(''); setShowForm(true); }}
       isLoading={isLoading} page={page} totalPages={Math.ceil((data?.total ?? 0) / 25)} onPage={setPage}
-      columns={['Name', 'Books', 'Added', '']}
+      statusFilter={statusFilter} onStatusFilterChange={setStatusFilter}
+      columns={['Name', 'Status', 'Books', 'Added', '']}
       rows={(data?.items ?? []).map(p => [
         <span key="n" className="font-medium text-gray-900 dark:text-white text-sm">{p.name}</span>,
+        <StatusBadge key="s" status={p.status} />,
         <span key="b" className="text-gray-500 text-sm">{p.bookCount ?? 0}</span>,
         <span key="d" className="text-gray-400 text-xs">{fmtDate(p.createdAt)}</span>,
         canWrite(userRole, userPermissions) ? (
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(p); setPubName(p.name); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
-            <button onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteMut.mutate(p.id); }} className="text-xs text-red-500 hover:underline">Delete</button>
+            {p.status === 'ACTIVE'
+              ? <button onClick={() => deactivate.mutate(p.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Set Inactive</button>
+              : p.status === 'INACTIVE' && <button onClick={() => activate.mutate(p.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
+            {p.status === 'ARCHIVED'
+              ? <button onClick={() => restore.mutate(p.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
+              : <button onClick={() => archive.mutate(p.id)} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
+            <button onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteMut.mutate(p); }} className="text-xs text-red-500 hover:underline">Delete</button>
           </div>
         ) : null,
       ])}>
@@ -793,6 +898,15 @@ function PublishersTab({ userRole, userPermissions }: { userRole?: Role; userPer
           </div>
         </Drawer>
       )}
+      {depDialog && (
+        <DependencyDialog
+          entityName={depDialog.item.name}
+          usage={depDialog.usage}
+          onClose={() => setDepDialog(null)}
+          onArchive={() => { archive.mutate(depDialog.item.id); setDepDialog(null); }}
+          archiving={archive.isPending}
+        />
+      )}
     </SimpleListTab>
   );
 }
@@ -800,11 +914,13 @@ function PublishersTab({ userRole, userPermissions }: { userRole?: Role; userPer
 
 // ── Shared UI components ──────────────────────────────────────────────────────
 
-function SimpleListTab({ title, icon, total, searchRaw, onSearch, canWrite, onAdd, isLoading, columns, rows, page, totalPages, onPage, children }: {
+function SimpleListTab({ title, icon, total, searchRaw, onSearch, canWrite, onAdd, isLoading, columns, rows, page, totalPages, onPage, statusFilter, onStatusFilterChange, children }: {
   title: string; icon: string; total?: number; searchRaw: string; onSearch: (v: string) => void;
   canWrite: boolean; onAdd: () => void; isLoading: boolean;
   columns: string[]; rows: (React.ReactNode | null)[][];
   page: number; totalPages: number; onPage: (p: number) => void;
+  /** Prompt 3 — Active/Inactive/Archived/All filter, rendered in the toolbar when provided. */
+  statusFilter?: StatusFilterValue; onStatusFilterChange?: (v: StatusFilterValue) => void;
   children?: React.ReactNode;
 }) {
   return (
@@ -819,6 +935,7 @@ function SimpleListTab({ title, icon, total, searchRaw, onSearch, canWrite, onAd
           <input value={searchRaw} onChange={e => onSearch(e.target.value)} placeholder={`Search ${title.toLowerCase()}…`}
             className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
+        {statusFilter && onStatusFilterChange && <StatusFilter value={statusFilter} onChange={onStatusFilterChange} />}
         <div className="flex-1" />
         {canWrite && (
           <button onClick={onAdd} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">

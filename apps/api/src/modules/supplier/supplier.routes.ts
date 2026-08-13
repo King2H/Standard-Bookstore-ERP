@@ -3,6 +3,7 @@ import * as supplierService from './supplier.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
+import type { LifecycleStatus } from '../../lib/lifecycle.js';
 
 const router = Router();
 
@@ -11,6 +12,16 @@ const qi = (v: unknown, fallback: number): number => { const s = qs(v); return s
 const qb = (v: unknown): boolean | undefined => { const s = qs(v); return s === undefined ? undefined : s === 'true'; };
 // Bug Sweep: was a bare parseInt() with no NaN guard — see customer.routes.ts's comment.
 const pi = paramInt;
+
+// Prompt 3 — Master Data Lifecycle: same resolver as catalog.routes.ts's
+// resolveStatusFilter (default ACTIVE-only, 'all' = no filter).
+function resolveStatusFilter(raw: string | undefined): LifecycleStatus[] | undefined {
+  const v = (raw ?? 'active').toLowerCase();
+  if (v === 'all') return undefined;
+  if (v === 'inactive') return ['INACTIVE'];
+  if (v === 'archived') return ['ARCHIVED'];
+  return ['ACTIVE'];
+}
 
 // ── GET /api/suppliers ────────────────────────────────────────────────────────
 
@@ -24,6 +35,11 @@ router.get(
         supplierType: qs(req.query.supplierType),
         isActive:     qb(req.query.isActive),
         isBlacklisted: qb(req.query.isBlacklisted),
+        // Prompt 3 — only set when the caller sends ?status= explicitly
+        // (the Suppliers admin page's new StatusFilter); every other
+        // existing caller (e.g. Procurement's ?isActive=true&isBlacklisted=false
+        // dropdown fetch) keeps its current behavior unchanged.
+        status:       qs(req.query.status) !== undefined ? resolveStatusFilter(qs(req.query.status)) : undefined,
         q:            qs(req.query.q),
         page:         qi(req.query.page, 1),
         pageSize:     qi(req.query.pageSize, 25),
@@ -89,6 +105,20 @@ router.post(
   },
 );
 
+// ── POST /api/suppliers/:id/activate (Prompt 3 — no reactivate existed before) ─
+
+router.post(
+  '/suppliers/:id/activate',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await supplierService.activate(pi(req.params.id), req.staff!);
+      res.json({ message: 'Supplier activated' });
+    } catch (err) { next(err); }
+  },
+);
+
 // ── POST /api/suppliers/:id/blacklist ─────────────────────────────────────────
 
 router.post(
@@ -99,6 +129,44 @@ router.post(
     try {
       await supplierService.blacklist(pi(req.params.id), req.staff!);
       res.json({ message: 'Supplier blacklisted' });
+    } catch (err) { next(err); }
+  },
+);
+
+// ── Prompt 3 — archive/restore/usage ────────────────────────────────────────
+
+router.post(
+  '/suppliers/:id/archive',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await supplierService.archiveSupplier(pi(req.params.id), req.staff!);
+      res.json({ message: 'Supplier archived' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post(
+  '/suppliers/:id/restore',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await supplierService.restoreSupplier(pi(req.params.id), req.staff!);
+      res.json({ message: 'Supplier restored' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.get(
+  '/suppliers/:id/usage',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const usage = await supplierService.getSupplierUsage(pi(req.params.id));
+      res.json(usage);
     } catch (err) { next(err); }
   },
 );

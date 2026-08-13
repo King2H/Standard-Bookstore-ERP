@@ -5,12 +5,22 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { paramStr } from '../../lib/http.js';
+import type { LifecycleStatus } from '../../lib/lifecycle.js';
 
 const router = Router();
 
 const qs = (v: unknown): string | undefined => (typeof v === 'string' ? v : Array.isArray(v) ? (v[0] as string | undefined) : undefined);
 const qi = (v: unknown, fallback: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fallback : fallback; };
 const qb = (v: unknown): boolean | undefined => { const s = qs(v); return s === undefined ? undefined : s === 'true'; };
+
+// Prompt 3 — same resolver as catalog.routes.ts's resolveStatusFilter.
+function resolveStatusFilter(raw: string | undefined): LifecycleStatus[] | undefined {
+  const v = (raw ?? 'active').toLowerCase();
+  if (v === 'all') return undefined;
+  if (v === 'inactive') return ['INACTIVE'];
+  if (v === 'archived') return ['ARCHIVED'];
+  return ['ACTIVE'];
+}
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
@@ -102,6 +112,10 @@ router.get(
           : qs(req.query.is_active) === 'all'
             ? undefined
             : qs(req.query.is_active) === 'true',
+        // Prompt 3 — only set when the caller sends ?status= explicitly
+        // (the Inventory admin page's new StatusFilter); every existing
+        // caller keeps using is_active above, unchanged.
+        status: qs(req.query.status) !== undefined ? resolveStatusFilter(qs(req.query.status)) : undefined,
         sortBy:  qs(req.query.sortBy) as 'title' | 'updatedAt' | undefined,
         sortDir: qs(req.query.sortDir) as 'asc' | 'desc' | undefined,
       }));

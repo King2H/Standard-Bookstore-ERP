@@ -1,5 +1,6 @@
 import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError } from '../../lib/errors.js';
+import { transitionEntityStatus, computeUsage, type LifecycleStatus, type UsageQuery } from '../../lib/lifecycle.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,9 @@ export interface SupplierRow {
   publisherName: string | null;
   isActive: boolean;
   isBlacklisted: boolean;
+  /** Prompt 3 — kept in lockstep with isActive (see transitionEntityStatus's syncIsActive option). is_blacklisted stays a separate, orthogonal flag — a misconduct ban, not a lifecycle stage. */
+  status: LifecycleStatus;
+  archivedAt: string | null;
   createdAt: string;
 }
 
@@ -41,6 +45,8 @@ function mapSupplierRow(row: Record<string, unknown>): SupplierRow {
     publisherName: (row.publisher_name as string | null) ?? null,
     isActive: row.is_active as boolean,
     isBlacklisted: row.is_blacklisted as boolean,
+    status: (row.status as LifecycleStatus | undefined) ?? (row.is_active ? 'ACTIVE' : 'INACTIVE'),
+    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
     createdAt: (row.created_at as Date).toISOString(),
   };
 }
@@ -50,7 +56,7 @@ function mapSupplierRow(row: Record<string, unknown>): SupplierRow {
 const SUPPLIER_SELECT = `
   SELECT s.id, s.name, s.contact_info, s.lead_time_days, s.pricing_terms,
          s.supplier_type, s.publisher_id, p.name AS publisher_name,
-         s.is_active, s.is_blacklisted, s.created_at
+         s.is_active, s.is_blacklisted, s.status, s.archived_at, s.created_at
   FROM suppliers s
   LEFT JOIN publishers p ON p.id = s.publisher_id
 `;
@@ -183,20 +189,40 @@ export async function update(
   return getById(id);
 }
 
-// ── Deactivate ────────────────────────────────────────────────────────────────
+// ── Deactivate / Activate (Prompt 3 — reuses the shared lifecycle helper) ───
+// No reactivate route existed before this — deactivate was a one-way action.
 
 export async function deactivate(id: number, staffCtx: StaffCtx): Promise<void> {
-  const result = await db.query(
-    `UPDATE suppliers SET is_active = false WHERE id = $1 RETURNING id`,
-    [id],
-  );
-  if (!result.rows.length) throw new NotFoundError('Supplier');
+  await transitionEntityStatus('suppliers', 'supplier', id, 'INACTIVATE', staffCtx, { syncIsActive: true });
+}
 
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1, $2, 'UPDATE', 'supplier', $3, $4, $5)`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'deactivate' })],
-  );
+export async function activate(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('suppliers', 'supplier', id, 'ACTIVATE', staffCtx, { syncIsActive: true });
+}
+
+// ── Archive / Restore (Prompt 3) ────────────────────────────────────────────
+// ARCHIVED additionally hides the supplier from procurement selection lists
+// by default (INACTIVE already blocks new POs via validateSupplierForProcurement
+// below — both states behave identically there since is_active stays synced).
+
+export async function archiveSupplier(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('suppliers', 'supplier', id, 'ARCHIVE', staffCtx, { syncIsActive: true });
+}
+
+export async function restoreSupplier(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('suppliers', 'supplier', id, 'RESTORE', staffCtx, { syncIsActive: true });
+}
+
+// ── Usage / dependency check (Prompt 3) ─────────────────────────────────────
+
+const SUPPLIER_USAGE_QUERIES: UsageQuery[] = [
+  { key: 'purchaseOrders', sql: `SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = $1` },
+];
+
+export async function getSupplierUsage(id: number): Promise<Record<string, number>> {
+  const supplier = await db.query(`SELECT id FROM suppliers WHERE id = $1`, [id]);
+  if (!supplier.rows.length) throw new NotFoundError('Supplier');
+  return computeUsage(id, SUPPLIER_USAGE_QUERIES);
 }
 
 // ── Blacklist ─────────────────────────────────────────────────────────────────
@@ -249,6 +275,7 @@ export async function list(opts: {
   supplierType?: string;
   isActive?: boolean;
   isBlacklisted?: boolean;
+  status?: LifecycleStatus[];
   q?: string;
   page?: number;
   pageSize?: number;
@@ -262,7 +289,8 @@ export async function list(opts: {
   let p = 1;
 
   if (opts.supplierType) { conditions.push(`s.supplier_type = $${p++}`); params.push(opts.supplierType); }
-  if (opts.isActive !== undefined) { conditions.push(`s.is_active = $${p++}`); params.push(opts.isActive); }
+  if (opts.status) { conditions.push(`s.status = ANY($${p++})`); params.push(opts.status); }
+  else if (opts.isActive !== undefined) { conditions.push(`s.is_active = $${p++}`); params.push(opts.isActive); }
   if (opts.isBlacklisted !== undefined) { conditions.push(`s.is_blacklisted = $${p++}`); params.push(opts.isBlacklisted); }
   if (opts.q) {
     conditions.push(`lower(s.name) LIKE lower($${p++})`);

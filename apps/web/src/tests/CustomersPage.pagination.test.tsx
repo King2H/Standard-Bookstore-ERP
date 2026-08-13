@@ -26,6 +26,8 @@ function makeCustomersPage(total: number, page = 1, pageSize = 10) {
       address: null,
       city: null,
       isActive: true,
+      status: 'ACTIVE',
+      archivedAt: null,
       createdAt: new Date().toISOString(),
       loyaltyBalance: 0,
       lifetimePoints: 0,
@@ -116,11 +118,12 @@ describe('CustomersPage — pagination', () => {
       return Promise.resolve({ items: [] });
     });
 
-    await user.selectOptions(screen.getByDisplayValue('All Status'), 'true');
+    // Default status filter is 'Active' (Prompt 3's shared StatusFilter component).
+    await user.selectOptions(screen.getByDisplayValue('Active'), 'all');
 
     await waitFor(() => {
       const call = getMock.mock.calls.map(c => c[0] as string).find(p => p.startsWith('/customers?'));
-      expect(call).toContain('isActive=true');
+      expect(call).toContain('status=all');
       expect(call).toContain('page=1');
     });
   });

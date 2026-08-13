@@ -1,5 +1,6 @@
 ﻿import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import type { LifecycleStatus } from '../../lib/lifecycle.js';
 
 export type ReferenceType = 'purchase_order' | 'return' | 'adjustment' | 'manual' | 'initial_stock';
 import { isNegativeStockAllowed } from '../config/config.service.js';
@@ -99,6 +100,12 @@ export async function listInventory(opts: {
    *  inside a caller and then also default it here, or "all" becomes
    *  unreachable (that was the Catalog "All" bug this mirrors the fix for). */
   isActive?: boolean;
+  /** Prompt 3 — takes precedence over isActive when provided. Lets the
+   *  Inventory admin view distinguish INACTIVE (visible by default, with a
+   *  status badge — existing stock stays visible) from ARCHIVED (hidden
+   *  from the default view), which a plain is_active boolean can't do
+   *  since both collapse to is_active=false. */
+  status?: LifecycleStatus[];
   sortBy?: 'title' | 'updatedAt';
   sortDir?: 'asc' | 'desc';
 }): Promise<{ items: InventoryRow[]; total: number; page: number; totalPages: number }> {
@@ -113,7 +120,8 @@ export async function listInventory(opts: {
   if (opts.locationId) { conditions.push(`i.location_id = $${p++}`); params.push(opts.locationId); }
   if (opts.bookId) { conditions.push(`i.book_id = $${p++}`); params.push(opts.bookId); }
   if (opts.lowStockOnly) { conditions.push(`i.quantity <= i.reorder_point`); }
-  if (opts.isActive !== undefined) { conditions.push(`b.is_active = $${p++}`); params.push(opts.isActive); }
+  if (opts.status) { conditions.push(`b.status = ANY($${p++})`); params.push(opts.status); }
+  else if (opts.isActive !== undefined) { conditions.push(`b.is_active = $${p++}`); params.push(opts.isActive); }
   if (opts.q) {
     conditions.push(`(lower(b.title) LIKE lower($${p}) OR b.isbn LIKE $${p})`);
     params.push(`%${opts.q.trim()}%`); p++;

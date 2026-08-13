@@ -80,6 +80,8 @@ export async function search(
        b.default_price,
        b.trade_value,
        b.is_active,
+       b.status,
+       b.archived_at,
        b.created_at,
        b.format_id,
        bf.code  AS format_code,
@@ -121,7 +123,12 @@ export async function search(
                                      AND bbp.branch_id = $2
                                      AND bbp.format_id = 0
                                      AND bbp.edition_id = 0
-     WHERE b.is_active = true
+     -- Prompt 3 — explicit status='ACTIVE' alongside the legacy is_active
+     -- check: both are kept in lockstep by transitionEntityStatus, but
+     -- spelling out status here matches the spec's "operational search
+     -- endpoints must default to WHERE status = 'ACTIVE'" requirement
+     -- directly rather than relying solely on the derived boolean.
+     WHERE b.is_active = true AND b.status = 'ACTIVE'
        AND (
          lower(b.title)                       LIKE lower($1)
          OR b.isbn                            LIKE $1
@@ -176,6 +183,8 @@ function mapBookRow(row: Record<string, unknown>): BookRecord {
     defaultPrice:  row.default_price != null ? parseFloat(row.default_price as string) : null,
     tradeValue:    row.trade_value    != null ? parseFloat(row.trade_value   as string) : null,
     isActive:      row.is_active as boolean,
+    status:        (row.status as 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | undefined) ?? (row.is_active ? 'ACTIVE' : 'INACTIVE'),
+    archivedAt:    row.archived_at ? (row.archived_at as Date).toISOString() : null,
     createdAt:     (row.created_at as Date).toISOString(),
     categories:    (row.categories    as string[] | null) ?? [],
     categoryIds:   (row.category_ids  as number[] | null) ?? [],

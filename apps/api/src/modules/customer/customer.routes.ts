@@ -3,6 +3,7 @@ import * as customerService from './customer.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
+import type { LifecycleStatus } from '../../lib/lifecycle.js';
 
 const router = Router();
 
@@ -15,6 +16,17 @@ const qs = (v: unknown): string | undefined => (typeof v === 'string' ? v : Arra
 const qi = (v: unknown, fallback: number): number => { const s = qs(v); return s ? parseInt(s, 10) || fallback : fallback; };
 const qb = (v: unknown): boolean | undefined => { const s = qs(v); return s === undefined ? undefined : s === 'true'; };
 
+// Prompt 3 — same resolver as catalog/supplier routes; customers are
+// read-only for lifecycle in this pass (no archive/restore/delete), but
+// the list view still gets the same Active/Inactive/Archived/All filter.
+function resolveStatusFilter(raw: string | undefined): LifecycleStatus[] | undefined {
+  const v = (raw ?? 'active').toLowerCase();
+  if (v === 'all') return undefined;
+  if (v === 'inactive') return ['INACTIVE'];
+  if (v === 'archived') return ['ARCHIVED'];
+  return ['ACTIVE'];
+}
+
 // ── GET /api/customers ────────────────────────────────────────────────────────
 
 router.get(
@@ -26,6 +38,7 @@ router.get(
         q:        qs(req.query.q),
         branchId: req.query.branchId ? qi(req.query.branchId, 0) : undefined,
         isActive: qb(req.query.isActive),
+        status:   qs(req.query.status) !== undefined ? resolveStatusFilter(qs(req.query.status)) : undefined,
         groupId:  req.query.groupId ? qi(req.query.groupId, 0) : undefined,
         page:     qi(req.query.page, 1),
         pageSize: qi(req.query.pageSize, 25),

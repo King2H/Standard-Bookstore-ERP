@@ -6,6 +6,7 @@ import {
 } from '../config/config.service.js';
 import { encryptPii, decryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertOutbox } from '../../lib/outbox.js';
+import { transitionEntityStatus, type LifecycleStatus } from '../../lib/lifecycle.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,12 @@ export interface CustomerRow {
   address: string | null;
   city: string | null;
   isActive: boolean;
+  /** Prompt 3 — read-only for customers in this pass (no archive/restore/
+   *  delete endpoints yet): kept in lockstep with isActive by deactivateCustomer
+   *  below so the field is accurate, but the only way to change it today is
+   *  still that one existing (one-way) deactivate action. */
+  status: LifecycleStatus;
+  archivedAt: string | null;
   createdAt: string;
   loyaltyBalance: number;
   lifetimePoints: number;
@@ -75,6 +82,8 @@ function mapCustomerRow(
     address: (row.address as string | null) ?? null,
     city: (row.city as string | null) ?? null,
     isActive: row.is_active as boolean,
+    status: (row.status as LifecycleStatus | undefined) ?? (row.is_active ? 'ACTIVE' : 'INACTIVE'),
+    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
     createdAt: (row.created_at as Date).toISOString(),
     loyaltyBalance: Number(row.points_balance ?? 0),
     lifetimePoints: Number(row.lifetime_points ?? 0),
@@ -303,17 +312,15 @@ export async function updateCustomer(
 // ── Deactivate ────────────────────────────────────────────────────────────────
 
 export async function deactivateCustomer(id: number, staffCtx: StaffCtx): Promise<void> {
-  const result = await db.query(
-    `UPDATE customers SET is_active = false WHERE id = $1 RETURNING id, full_name, customer_code, branch_id`,
-    [id],
-  );
+  const result = await db.query(`SELECT id, full_name, customer_code, branch_id FROM customers WHERE id = $1`, [id]);
   if (!result.rows.length) throw new NotFoundError('Customer');
 
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1, $2, 'UPDATE', 'customer', $3, $4, $5)`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'deactivate' })],
-  );
+  // Prompt 3 — reuses the shared lifecycle helper (syncIsActive keeps
+  // is_active in lockstep with the new status column) so this remains the
+  // one existing customer lifecycle action, now correctly reflected in
+  // both fields; still no reactivate/archive/delete endpoints (read-only
+  // per the confirmed Prompt 3 scope for customers).
+  await transitionEntityStatus('customers', 'customer', id, 'INACTIVATE', staffCtx, { syncIsActive: true });
 
   // Emit notification (non-blocking)
   try {
@@ -336,6 +343,7 @@ export async function searchCustomers(opts: {
   q?: string;
   branchId?: number;
   isActive?: boolean;
+  status?: LifecycleStatus[];
   groupId?: number;
   page?: number;
   pageSize?: number;
@@ -360,7 +368,8 @@ export async function searchCustomers(opts: {
     p += 2;
   }
   if (opts.branchId !== undefined) { conditions.push(`c.branch_id = $${p++}`); params.push(opts.branchId); }
-  if (opts.isActive !== undefined) { conditions.push(`c.is_active = $${p++}`); params.push(opts.isActive); }
+  if (opts.status) { conditions.push(`c.status = ANY($${p++})`); params.push(opts.status); }
+  else if (opts.isActive !== undefined) { conditions.push(`c.is_active = $${p++}`); params.push(opts.isActive); }
   if (opts.groupId !== undefined) {
     conditions.push(`EXISTS (SELECT 1 FROM customer_group_membership cgm WHERE cgm.customer_id = c.id AND cgm.group_id = $${p++})`);
     params.push(opts.groupId);

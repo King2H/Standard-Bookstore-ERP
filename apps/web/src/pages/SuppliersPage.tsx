@@ -3,9 +3,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
+import { StatusFilter, StatusBadge, type StatusFilterValue, type LifecycleStatus } from '../components/StatusFilter.js';
+import { DependencyDialog } from '../components/DependencyDialog.js';
 
 type Role = string;
-interface Supplier { id: number; name: string; contactInfo: Record<string, string>; leadTimeDays: number; pricingTerms: string | null; supplierType: 'external' | 'publisher'; publisherId: number | null; publisherName: string | null; isActive: boolean; isBlacklisted: boolean; createdAt: string; }
+interface Supplier {
+  id: number; name: string; contactInfo: Record<string, string>; leadTimeDays: number;
+  pricingTerms: string | null; supplierType: 'external' | 'publisher'; publisherId: number | null;
+  publisherName: string | null; isActive: boolean; isBlacklisted: boolean;
+  status: LifecycleStatus; archivedAt: string | null; createdAt: string;
+}
 interface Publisher { id: number; name: string; }
 interface SupplierListResponse { items: Supplier[]; total: number; page: number; totalPages: number; }
 interface SupplierPayload { name: string; contactInfo: { phone: string; email: string }; leadTimeDays: number; pricingTerms: string | null; supplierType: 'external' | 'publisher'; publisherId: number | null; }
@@ -22,27 +29,42 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [filterActive, setFilterActive] = useState('');
+  // Prompt 3 — Master Data Lifecycle: Active/Inactive/Archived/All, default Active.
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('active');
   const [filterBlacklisted, setFilterBlacklisted] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [form, setForm] = useState({ ...EMPTY });
+  const [depDialog, setDepDialog] = useState<{ supplier: Supplier; usage: Record<string, number> } | null>(null);
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (q) params.set('q', q);
   if (filterType) params.set('supplierType', filterType);
-  if (filterActive) params.set('isActive', filterActive);
+  params.set('status', statusFilter);
   if (filterBlacklisted) params.set('isBlacklisted', filterBlacklisted);
 
-  const { data, isLoading } = useQuery<SupplierListResponse>({ queryKey: ['suppliers', page, pageSize, q, filterType, filterActive, filterBlacklisted], queryFn: () => api.get(`/suppliers?${params}`) });
+  const { data, isLoading } = useQuery<SupplierListResponse>({ queryKey: ['suppliers', page, pageSize, q, filterType, statusFilter, filterBlacklisted], queryFn: () => api.get(`/suppliers?${params}`) });
   const { data: pubData } = useQuery<{ items: Publisher[] }>({ queryKey: ['publishers-list'], queryFn: () => api.get('/publishers?pageSize=200'), enabled: drawerOpen });
 
   const inv = () => qc.invalidateQueries({ queryKey: ['suppliers'] });
   const createMut = useMutation({ mutationFn: (b: SupplierPayload) => api.post<Supplier>('/suppliers', b), onSuccess: () => { inv(); closeDrawer(); showToast('Supplier created', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const updateMut = useMutation({ mutationFn: ({ id, b }: { id: number; b: SupplierPayload }) => api.put<Supplier>(`/suppliers/${id}`, b), onSuccess: () => { inv(); closeDrawer(); showToast('Supplier updated', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const deactivateMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/deactivate`), onSuccess: () => { inv(); showToast('Deactivated', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const deactivateMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/deactivate`), onSuccess: () => { inv(); showToast('Set Inactive', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const activateMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/activate`), onSuccess: () => { inv(); showToast('Activated', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const archiveMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/archive`), onSuccess: () => { inv(); showToast('Archived', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const restoreMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/restore`), onSuccess: () => { inv(); showToast('Restored', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const blacklistMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/blacklist`), onSuccess: () => { inv(); showToast('Blacklisted', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const deleteMut = useMutation({ mutationFn: (id: number) => api.delete(`/suppliers/${id}`), onSuccess: () => { inv(); showToast('Deleted', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const deleteMut = useMutation({
+    mutationFn: (supplier: Supplier) => api.delete(`/suppliers/${supplier.id}`),
+    onSuccess: () => { inv(); showToast('Deleted', 'success'); },
+    onError: (e: Error, supplier) => {
+      const details = (e as Error & { details?: Record<string, unknown> }).details;
+      // supplier.service.ts's DEPENDENCY_CONFLICT error shape is { poCount } — not the
+      // uniform usage-map shape the catalog usage endpoints return, so normalize it here.
+      if (details && 'poCount' in details) setDepDialog({ supplier, usage: { purchaseOrders: details.poCount as number } });
+      else showToast(e.message, 'error');
+    },
+  });
 
   function closeDrawer() { setDrawerOpen(false); setEditing(null); }
   function openCreate() { setEditing(null); setForm({ ...EMPTY }); setDrawerOpen(true); }
@@ -59,7 +81,7 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
       <div className="flex flex-wrap items-center gap-3">
         <input type="text" placeholder="Search suppliers..." value={q} onChange={e => { setQ(e.target.value); setPage(1); }} className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-56 focus:outline-none focus:ring-2 focus:ring-blue-500" />
         <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"><option value="">All Types</option><option value="external">External</option><option value="publisher">Publisher</option></select>
-        <select value={filterActive} onChange={e => { setFilterActive(e.target.value); setPage(1); }} className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"><option value="">All Status</option><option value="true">Active</option><option value="false">Inactive</option></select>
+        <StatusFilter value={statusFilter} onChange={v => { setStatusFilter(v); setPage(1); }} />
         <select value={filterBlacklisted} onChange={e => { setFilterBlacklisted(e.target.value); setPage(1); }} className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"><option value="">All</option><option value="false">Not Blacklisted</option><option value="true">Blacklisted</option></select>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} suppliers</span>
@@ -77,12 +99,21 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
                   <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.supplierType === 'publisher' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'}`}>{s.supplierType === 'publisher' ? `Publisher${s.publisherName ? ` - ${s.publisherName}` : ''}` : 'External'}</span></td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{s.leadTimeDays}d</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{s.contactInfo.email && <div>{s.contactInfo.email}</div>}{s.contactInfo.phone && <div>{s.contactInfo.phone}</div>}</td>
-                  <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>{s.isActive ? 'Active' : 'Inactive'}</span></td>
-                  <td className="px-4 py-3"><div className="flex items-center gap-1 text-xs">
+                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                  <td className="px-4 py-3"><div className="flex items-center gap-1 text-xs flex-wrap">
                     {canWrite(userRole, userPermissions) && <button onClick={() => openEdit(s)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">Edit</button>}
-                    {canWrite(userRole, userPermissions) && s.isActive && <button onClick={() => { if (confirm(`Deactivate "${s.name}"?`)) deactivateMut.mutate(s.id); }} className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Deactivate</button>}
+                    {canWrite(userRole, userPermissions) && (
+                      s.status === 'ACTIVE'
+                        ? <button onClick={() => { if (confirm(`Set "${s.name}" Inactive?`)) deactivateMut.mutate(s.id); }} className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Set Inactive</button>
+                        : <button onClick={() => activateMut.mutate(s.id)} className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">Activate</button>
+                    )}
+                    {canWrite(userRole, userPermissions) && (
+                      s.status === 'ARCHIVED'
+                        ? <button onClick={() => restoreMut.mutate(s.id)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">Restore</button>
+                        : <button onClick={() => archiveMut.mutate(s.id)} className="px-2 py-1 rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors">Archive</button>
+                    )}
                     {canBlacklist(userRole, userPermissions) && !s.isBlacklisted && <button onClick={() => { if (confirm(`Blacklist "${s.name}"?`)) blacklistMut.mutate(s.id); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Blacklist</button>}
-                    {canBlacklist(userRole, userPermissions) && <button onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteMut.mutate(s.id); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Delete</button>}
+                    {canBlacklist(userRole, userPermissions) && <button onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteMut.mutate(s); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Delete</button>}
                   </div></td>
                 </tr>
               ))}
@@ -122,6 +153,15 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
             </form>
           </div>
         </div>
+      )}
+      {depDialog && (
+        <DependencyDialog
+          entityName={depDialog.supplier.name}
+          usage={depDialog.usage}
+          onClose={() => setDepDialog(null)}
+          onArchive={() => { archiveMut.mutate(depDialog.supplier.id); setDepDialog(null); }}
+          archiving={archiveMut.isPending}
+        />
       )}
     </div>
   );

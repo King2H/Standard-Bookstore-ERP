@@ -22,6 +22,11 @@ const ACTION_COLORS: Record<string, string> = {
   DELETE:     'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-400',
   LOGIN:      'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400',
   LOGOUT:     'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400',
+  // Prompt 3 — Master Data Lifecycle actions (lib/auditLog.ts's LifecycleAction).
+  ACTIVATE:   'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400',
+  INACTIVATE: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400',
+  ARCHIVE:    'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+  RESTORE:    'bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-400',
 };
 
 function MetaCell({ meta }: { meta: Record<string, unknown> | null }) {

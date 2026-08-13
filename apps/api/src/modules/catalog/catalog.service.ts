@@ -1,6 +1,8 @@
 ﻿import pg from 'pg';
 import { db } from '../../db/index.js';
-import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { transitionEntityStatus, computeUsage, totalUsage, type LifecycleStatus, type UsageQuery } from '../../lib/lifecycle.js';
+import { insertAuditLog } from '../../lib/auditLog.js';
 
 type PoolClient = pg.PoolClient;
 
@@ -60,6 +62,13 @@ export interface BookRecord {
   defaultPrice: number | null;
   tradeValue: number | null;
   isActive: boolean;
+  /** Prompt 3 — Master Data Lifecycle. Kept in lockstep with isActive
+   *  (status==='ACTIVE' <=> isActive===true) via transitionEntityStatus's
+   *  syncIsActive option, so `status` distinguishes INACTIVE from ARCHIVED
+   *  for admin-visibility purposes while isActive keeps every existing
+   *  consumer-guard (POS/Orders/Exchange/Procurement) working unchanged. */
+  status: LifecycleStatus;
+  archivedAt: string | null;
   createdAt: string;
   categories: string[];
   categoryIds: number[];
@@ -77,6 +86,8 @@ export interface SearchFilters {
   category?: string;
   tag?: string;
   isActive?: boolean;
+  /** Prompt 3 — takes precedence over isActive when provided. undefined = no status filter (caller relies on isActive or wants everything). */
+  status?: LifecycleStatus[];
   branchId?: number;
   locationId?: number;
   sortBy?: 'title' | 'isbn' | 'created_at' | 'default_price';
@@ -168,6 +179,8 @@ function mapBook(row: Record<string, unknown>): BookRecord {
     defaultPrice: row.default_price != null ? parseFloat(row.default_price as string) : null,
     tradeValue: row.trade_value != null ? parseFloat(row.trade_value as string) : null,
     isActive: row.is_active as boolean,
+    status: (row.status as LifecycleStatus | undefined) ?? (row.is_active ? 'ACTIVE' : 'INACTIVE'),
+    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
     createdAt: (row.created_at as Date).toISOString(),
     categories: (row.categories as string[] | null) ?? [],
     categoryIds: (row.category_ids as number[] | null) ?? [],
@@ -187,7 +200,7 @@ async function fetchBookById(
     `SELECT
        b.id, b.isbn, b.sku, b.title, b.genre, b.publisher, b.publisher_id,
        b.edition, b.language, b.format, b.description, b.cover_image_url,
-       b.default_price, b.trade_value, b.is_active, b.created_at,
+       b.default_price, b.trade_value, b.is_active, b.status, b.archived_at, b.created_at,
        b.format_id, bf.code AS format_code, bf.label AS format_label,
        b.edition_id, be.code AS edition_code, be.label AS edition_label,
        COALESCE(
@@ -230,6 +243,42 @@ async function fetchBookById(
   return mapBook(result.rows[0]);
 }
 
+// ── Prompt 3 — master-data selectability guard ──────────────────────────────
+// "INACTIVE: Cannot be selected when creating/editing books. ARCHIVED:
+// Hidden from Catalog dropdowns and searches" — the frontend's dropdowns
+// already default to ACTIVE-only (GET /authors etc. omit ?status=), but
+// that's not enforcement: a direct API call with a stale or hand-crafted
+// non-ACTIVE id must still be rejected here, not just hidden in the UI.
+async function assertSelectableMasterData(
+  data: { authorIds?: number[]; categoryIds?: number[]; publisherId?: number | null },
+  existing?: { authorIds: number[]; categoryIds: number[]; publisherId: number | null },
+): Promise<void> {
+  // The book form always resends the book's *entire current* author/category
+  // selection on every edit (even an unrelated field change) — so only the
+  // newly-added ids (not already linked) get validated here. This is what
+  // makes "cannot be selected when creating/editing" and "existing books
+  // remain linked" both true at once: you can't add a new INACTIVE/ARCHIVED
+  // link, but an edit that doesn't touch an already-linked one never
+  // re-validates it.
+  const newAuthorIds = (data.authorIds ?? []).filter(id => !existing?.authorIds.includes(id));
+  const newCategoryIds = (data.categoryIds ?? []).filter(id => !existing?.categoryIds.includes(id));
+  const newPublisherId = data.publisherId && data.publisherId !== existing?.publisherId ? data.publisherId : null;
+
+  const checks: Array<{ table: string; ids: number[]; label: string }> = [];
+  if (newAuthorIds.length) checks.push({ table: 'authors', ids: newAuthorIds, label: 'Author' });
+  if (newCategoryIds.length) checks.push({ table: 'categories', ids: newCategoryIds, label: 'Category' });
+  if (newPublisherId) checks.push({ table: 'publishers', ids: [newPublisherId], label: 'Publisher' });
+
+  for (const { table, ids, label } of checks) {
+    const res = await db.query(`SELECT id, name, status FROM ${table} WHERE id = ANY($1)`, [ids]);
+    const nonActive = res.rows.filter(r => r.status !== 'ACTIVE');
+    if (nonActive.length > 0) {
+      const names = nonActive.map(r => `${r.name as string} (${r.status as string})`).join(', ');
+      throw new BusinessError(`${label.toUpperCase()}_NOT_SELECTABLE`, `${label} not selectable while INACTIVE or ARCHIVED: ${names}`);
+    }
+  }
+}
+
 // ── Create ────────────────────────────────────────────────────────────────────
 
 export async function createBook(data: BookInput, staffCtx: StaffCtx): Promise<BookRecord> {
@@ -238,6 +287,7 @@ export async function createBook(data: BookInput, staffCtx: StaffCtx): Promise<B
   if (rawIsbn && !validateIsbn13(rawIsbn)) {
     throw new ValidationError('Invalid ISBN-13 check digit');
   }
+  await assertSelectableMasterData(data);
 
   const client = await db.connect();
   try {
@@ -347,6 +397,7 @@ export async function updateBook(
 ): Promise<BookRecord> {
   const existing = await fetchBookById(id);
   if (!existing) throw new NotFoundError('Book');
+  await assertSelectableMasterData(data, { authorIds: existing.authorIds, categoryIds: existing.categoryIds, publisherId: existing.publisherId });
 
   const client = await db.connect();
   try {
@@ -472,36 +523,86 @@ export async function updateBook(
 
 // ── Deactivate ────────────────────────────────────────────────────────────────
 
+// Prompt 3 — reuses the shared lifecycle transition + audit log helper
+// (syncIsActive keeps books.is_active in lockstep so every existing
+// POS/Orders/Exchange/Procurement is_active guard keeps working
+// unchanged). This is INACTIVE, not ARCHIVED — still visible in Catalog
+// admin/Inventory admin with a status badge; see archiveBook for the
+// ARCHIVED transition (hidden from admin defaults too).
 export async function deactivateBook(id: number, staffCtx: StaffCtx): Promise<void> {
-  const result = await db.query(
-    `UPDATE books SET is_active = false WHERE id = $1 RETURNING id`,
-    [id],
-  );
-  if (result.rows.length === 0) throw new NotFoundError('Book');
-
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1,$2,'UPDATE','book',$3,$4,$5)`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId,
-     JSON.stringify({ action: 'deactivated' })],
-  );
+  await transitionEntityStatus('books', 'book', id, 'INACTIVATE', staffCtx, { syncIsActive: true });
 }
 
 // ── Reactivate ────────────────────────────────────────────────────────────────
 
 export async function reactivateBook(id: number, staffCtx: StaffCtx): Promise<void> {
-  const result = await db.query(
-    `UPDATE books SET is_active = true WHERE id = $1 RETURNING id`,
-    [id],
-  );
-  if (result.rows.length === 0) throw new NotFoundError('Book');
+  await transitionEntityStatus('books', 'book', id, 'ACTIVATE', staffCtx, { syncIsActive: true });
+}
 
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1,$2,'UPDATE','book',$3,$4,$5)`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId,
-     JSON.stringify({ action: 'reactivated' })],
-  );
+// ── Archive / Restore (Prompt 3) ────────────────────────────────────────────
+// ARCHIVED differs from INACTIVE: hidden from Catalog/Inventory admin
+// default views too (not just operational modules), per the lifecycle
+// spec. Historical transactions keep displaying the book's title/name —
+// archiving never deletes or hides the row itself, only default-view
+// visibility.
+
+export async function archiveBook(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('books', 'book', id, 'ARCHIVE', staffCtx, { syncIsActive: true });
+}
+
+export async function restoreBook(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('books', 'book', id, 'RESTORE', staffCtx, { syncIsActive: true });
+}
+
+// ── Usage / dependency check (Prompt 3) ─────────────────────────────────────
+// Powers both GET /catalog/:id/usage and the delete dependency-guard below.
+// Field names match the spec's usage-endpoint contract exactly
+// (inventory/sales/orders/returns/exchanges/purchaseOrders); inventory
+// transactions (inventory_history) are folded into the delete-guard as an
+// additional check but not surfaced as their own field, since the spec's
+// example response doesn't list one.
+
+const BOOK_USAGE_QUERIES: UsageQuery[] = [
+  { key: 'inventory',      sql: `SELECT COUNT(*) FROM inventory WHERE book_id = $1 AND quantity > 0` },
+  { key: 'sales',          sql: `SELECT COUNT(*) FROM transaction_line_items WHERE book_id = $1` },
+  { key: 'orders',         sql: `SELECT COUNT(DISTINCT order_id) FROM order_line_items WHERE book_id = $1` },
+  { key: 'returns',        sql: `SELECT COUNT(*) FROM return_line_items WHERE book_id = $1` },
+  { key: 'exchanges',      sql: `SELECT COUNT(DISTINCT exchange_id) FROM (
+                                    SELECT exchange_id, book_id FROM exchange_incoming_items
+                                    UNION ALL
+                                    SELECT exchange_id, book_id FROM exchange_outgoing_items
+                                  ) x WHERE book_id = $1` },
+  { key: 'purchaseOrders', sql: `SELECT COUNT(DISTINCT po_id) FROM po_line_items WHERE book_id = $1` },
+];
+
+export async function getBookUsage(id: number): Promise<Record<string, number>> {
+  const book = await db.query(`SELECT id FROM books WHERE id = $1`, [id]);
+  if (!book.rows.length) throw new NotFoundError('Book');
+  return computeUsage(id, BOOK_USAGE_QUERIES);
+}
+
+// ── Delete (Prompt 3 — dependency-guarded hard delete; did not exist before) ─
+// Books could previously only be deactivated, never deleted. Blocked if any
+// inventory, sales, order, return, exchange, or purchase-order reference
+// exists — plus inventory_history (transaction) rows, which the usage-count
+// contract above doesn't surface as a field but must still block deletion
+// per the spec's deletion policy.
+
+export async function deleteBook(id: number, staffCtx: StaffCtx): Promise<void> {
+  const usage = await getBookUsage(id);
+  const historyCheck = await db.query(`SELECT COUNT(*) FROM inventory_history WHERE book_id = $1`, [id]);
+  const inventoryTransactions = parseInt(historyCheck.rows[0].count as string, 10);
+
+  if (totalUsage(usage) > 0 || inventoryTransactions > 0) {
+    throw new ConflictError('BOOK_IN_USE', 'Book has historical references and cannot be deleted — archive it instead', {
+      ...usage,
+      inventoryTransactions,
+    });
+  }
+
+  const result = await db.query(`DELETE FROM books WHERE id = $1 RETURNING id`, [id]);
+  if (!result.rows.length) throw new NotFoundError('Book');
+  await insertAuditLog(staffCtx, 'DELETE', 'book', id, {});
 }
 
 // ── Get by ID ─────────────────────────────────────────────────────────────────
@@ -667,8 +768,12 @@ export async function searchBooks(filters: SearchFilters): Promise<{
     params.push(filters.tag);
   }
 
-  // Active filter — only applied when explicitly set
-  if (filters.isActive !== undefined) {
+  // Prompt 3 — status filter takes precedence over the legacy isActive
+  // boolean when provided; both are "only applied when explicitly set".
+  if (filters.status !== undefined) {
+    conditions.push(`b.status = ANY($${p++})`);
+    params.push(filters.status);
+  } else if (filters.isActive !== undefined) {
     conditions.push(`b.is_active = $${p++}`);
     params.push(filters.isActive);
   }
@@ -703,7 +808,7 @@ export async function searchBooks(filters: SearchFilters): Promise<{
     `SELECT
        b.id, b.isbn, b.sku, b.title, b.genre, b.publisher, b.publisher_id,
        b.edition, b.language, b.format, b.description, b.cover_image_url,
-       b.default_price, b.trade_value, b.is_active, b.created_at,
+       b.default_price, b.trade_value, b.is_active, b.status, b.archived_at, b.created_at,
        b.format_id, bf.code AS format_code, bf.label AS format_label,
        b.edition_id, be.code AS edition_code, be.label AS edition_label,
        COALESCE(
@@ -813,6 +918,8 @@ export interface AuthorRecord {
   id: number;
   name: string;
   normalizedName: string;
+  status: LifecycleStatus;
+  archivedAt: string | null;
   createdAt: string;
   bookCount?: number;
 }
@@ -823,6 +930,8 @@ export interface CategoryRecord {
   normalizedName: string;
   parentId: number | null;
   parentName?: string | null;
+  status: LifecycleStatus;
+  archivedAt: string | null;
   createdAt: string;
   bookCount?: number;
 }
@@ -830,28 +939,45 @@ export interface CategoryRecord {
 export interface PublisherRecord {
   id: number;
   name: string;
+  status: LifecycleStatus;
+  archivedAt: string | null;
   createdAt: string;
   bookCount?: number;
+}
+
+function mapAuthor(row: Record<string, unknown>): AuthorRecord {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    normalizedName: row.normalized_name as string,
+    status: (row.status as LifecycleStatus | undefined) ?? 'ACTIVE',
+    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
+    createdAt: (row.created_at as Date).toISOString(),
+  };
 }
 
 // ── Authors CRUD ──────────────────────────────────────────────────────────────
 
 export async function listAuthors(opts: {
-  q?: string; page?: number; pageSize?: number;
+  q?: string; page?: number; pageSize?: number; status?: LifecycleStatus[];
 }): Promise<{ items: AuthorRecord[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, opts.pageSize ?? 50);
   const offset = (page - 1) * pageSize;
   const params: unknown[] = [];
-  let where = '';
-  if (opts.q) {
-    where = `WHERE normalized_name LIKE lower($1) || '%'`;
-    params.push(opts.q.trim());
-  }
+  const conditions: string[] = [];
+  if (opts.q) { params.push(opts.q.trim()); conditions.push(`normalized_name LIKE lower($${params.length}) || '%'`); }
+  // Prompt 3 — default (status omitted entirely) is ACTIVE-only, matching
+  // the spec's "Default filter = Active." undefined here means "no filter
+  // at all" (used by createBook/updateBook's own author lookups, which
+  // must be able to see every status), not "use the default" — the route
+  // layer is what actually applies the ACTIVE default for list requests.
+  if (opts.status) { params.push(opts.status); conditions.push(`status = ANY($${params.length})`); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) FROM authors ${where}`, params),
     db.query(
-      `SELECT a.id, a.name, a.normalized_name, a.created_at,
+      `SELECT a.id, a.name, a.normalized_name, a.status, a.archived_at, a.created_at,
               COUNT(ba.book_id)::int AS book_count
        FROM authors a
        LEFT JOIN book_authors ba ON ba.author_id = a.id
@@ -868,6 +994,8 @@ export async function listAuthors(opts: {
       id: r.id as number,
       name: r.name as string,
       normalizedName: r.normalized_name as string,
+      status: r.status as LifecycleStatus,
+      archivedAt: r.archived_at ? (r.archived_at as Date).toISOString() : null,
       createdAt: (r.created_at as Date).toISOString(),
       bookCount: r.book_count as number,
     })),
@@ -887,7 +1015,7 @@ export async function createAuthor(name: string, staffCtx: StaffCtx): Promise<Au
        VALUES ($1,$2,'CREATE','author',$3,$4,$5)`,
       [staffCtx.staffId, staffCtx.role, String(result.rows[0].id), staffCtx.branchId, JSON.stringify({ name })],
     );
-    return { id: result.rows[0].id, name: result.rows[0].name, normalizedName: result.rows[0].normalized_name, createdAt: result.rows[0].created_at.toISOString() };
+    return mapAuthor(result.rows[0]);
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') throw new ConflictError('DUPLICATE_AUTHOR', `Author '${name}' already exists`);
     throw err;
@@ -898,8 +1026,8 @@ export async function updateAuthor(id: number, name: string, staffCtx: StaffCtx)
   const normalized = name.trim().toLowerCase();
   try {
     const result = await db.query(
-      `UPDATE authors SET name=$1, normalized_name=$2 WHERE id=$3 RETURNING *`,
-      [name.trim(), normalized, id],
+      `UPDATE authors SET name=$1, normalized_name=$2, updated_at=now(), updated_by=$4 WHERE id=$3 RETURNING *`,
+      [name.trim(), normalized, id, staffCtx.staffId],
     );
     if (!result.rows.length) throw new NotFoundError('Author');
     await db.query(
@@ -907,45 +1035,78 @@ export async function updateAuthor(id: number, name: string, staffCtx: StaffCtx)
        VALUES ($1,$2,'UPDATE','author',$3,$4,$5)`,
       [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ name })],
     );
-    return { id: result.rows[0].id, name: result.rows[0].name, normalizedName: result.rows[0].normalized_name, createdAt: result.rows[0].created_at.toISOString() };
+    return mapAuthor(result.rows[0]);
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') throw new ConflictError('DUPLICATE_AUTHOR', `Author '${name}' already exists`);
     throw err;
   }
 }
 
+const AUTHOR_USAGE_QUERIES: UsageQuery[] = [
+  { key: 'books', sql: `SELECT COUNT(*) FROM book_authors WHERE author_id = $1` },
+];
+
+export async function getAuthorUsage(id: number): Promise<Record<string, number>> {
+  const author = await db.query(`SELECT id FROM authors WHERE id = $1`, [id]);
+  if (!author.rows.length) throw new NotFoundError('Author');
+  return computeUsage(id, AUTHOR_USAGE_QUERIES);
+}
+
 export async function deleteAuthor(id: number, staffCtx: StaffCtx): Promise<void> {
-  const check = await db.query(`SELECT COUNT(*) FROM book_authors WHERE author_id=$1`, [id]);
-  if (parseInt(check.rows[0].count as string, 10) > 0) {
-    throw new ConflictError('AUTHOR_IN_USE', 'Author is linked to one or more books');
+  const usage = await getAuthorUsage(id);
+  if (totalUsage(usage) > 0) {
+    throw new ConflictError('AUTHOR_IN_USE', 'Author is linked to one or more books', usage);
   }
   const result = await db.query(`DELETE FROM authors WHERE id=$1 RETURNING id`, [id]);
   if (!result.rows.length) throw new NotFoundError('Author');
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1,$2,'DELETE','author',$3,$4,'{}')`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId],
-  );
+  await insertAuditLog(staffCtx, 'DELETE', 'author', id, {});
+}
+
+export async function archiveAuthor(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('authors', 'author', id, 'ARCHIVE', staffCtx);
+}
+
+export async function restoreAuthor(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('authors', 'author', id, 'RESTORE', staffCtx);
+}
+
+export async function deactivateAuthor(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('authors', 'author', id, 'INACTIVATE', staffCtx);
+}
+
+export async function activateAuthor(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('authors', 'author', id, 'ACTIVATE', staffCtx);
 }
 
 // ── Categories CRUD ───────────────────────────────────────────────────────────
 
+function mapCategory(row: Record<string, unknown>): CategoryRecord {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    normalizedName: row.normalized_name as string,
+    parentId: (row.parent_id as number | null) ?? null,
+    status: (row.status as LifecycleStatus | undefined) ?? 'ACTIVE',
+    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
+    createdAt: (row.created_at as Date).toISOString(),
+  };
+}
+
 export async function listCategories(opts: {
-  q?: string; page?: number; pageSize?: number;
+  q?: string; page?: number; pageSize?: number; status?: LifecycleStatus[];
 }): Promise<{ items: CategoryRecord[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(200, opts.pageSize ?? 100);
   const offset = (page - 1) * pageSize;
   const params: unknown[] = [];
-  let where = '';
-  if (opts.q) {
-    where = `WHERE c.normalized_name LIKE lower($1) || '%'`;
-    params.push(opts.q.trim());
-  }
+  const conditions: string[] = [];
+  if (opts.q) { params.push(opts.q.trim()); conditions.push(`c.normalized_name LIKE lower($${params.length}) || '%'`); }
+  if (opts.status) { params.push(opts.status); conditions.push(`c.status = ANY($${params.length})`); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) FROM categories c ${where}`, params),
     db.query(
-      `SELECT c.id, c.name, c.normalized_name, c.parent_id, c.created_at,
+      `SELECT c.id, c.name, c.normalized_name, c.parent_id, c.status, c.archived_at, c.created_at,
               p.name AS parent_name,
               COUNT(bc.book_id)::int AS book_count
        FROM categories c
@@ -960,15 +1121,7 @@ export async function listCategories(opts: {
   ]);
   return {
     total: parseInt(countRes.rows[0].count as string, 10),
-    items: dataRes.rows.map(r => ({
-      id: r.id as number,
-      name: r.name as string,
-      normalizedName: r.normalized_name as string,
-      parentId: (r.parent_id as number | null) ?? null,
-      parentName: (r.parent_name as string | null) ?? null,
-      createdAt: (r.created_at as Date).toISOString(),
-      bookCount: r.book_count as number,
-    })),
+    items: dataRes.rows.map(r => ({ ...mapCategory(r), parentName: (r.parent_name as string | null) ?? null, bookCount: r.book_count as number })),
   };
 }
 
@@ -985,7 +1138,7 @@ export async function createCategory(data: { name: string; parentId?: number | n
        VALUES ($1,$2,'CREATE','category',$3,$4,$5)`,
       [staffCtx.staffId, staffCtx.role, String(result.rows[0].id), staffCtx.branchId, JSON.stringify(data)],
     );
-    return { id: result.rows[0].id, name: result.rows[0].name, normalizedName: result.rows[0].normalized_name, parentId: result.rows[0].parent_id, createdAt: result.rows[0].created_at.toISOString() };
+    return mapCategory(result.rows[0]);
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') throw new ConflictError('DUPLICATE_CATEGORY', `Category '${data.name}' already exists`);
     throw err;
@@ -999,51 +1152,86 @@ export async function createCategory(data: { name: string; parentId?: number | n
 // functions; flagged during the Legacy Code Audit as a possible audit-log
 // coverage gap rather than changed, since adding logging is a behavior
 // change outside this audit's scope.
-export async function updateCategory(id: number, data: { name?: string; parentId?: number | null }, _staffCtx: StaffCtx): Promise<CategoryRecord> {
-  const setClauses: string[] = [];
+export async function updateCategory(id: number, data: { name?: string; parentId?: number | null }, staffCtx: StaffCtx): Promise<CategoryRecord> {
+  const setClauses: string[] = ['updated_at=now()'];
   const params: unknown[] = [];
   let p = 1;
   if (data.name !== undefined) { setClauses.push(`name=$${p++}`, `normalized_name=$${p++}`); params.push(data.name.trim(), data.name.trim().toLowerCase()); }
   if ('parentId' in data) { setClauses.push(`parent_id=$${p++}`); params.push(data.parentId ?? null); }
-  if (!setClauses.length) throw new ValidationError('Nothing to update');
+  setClauses.push(`updated_by=$${p++}`); params.push(staffCtx.staffId);
+  if (setClauses.length === 2) throw new ValidationError('Nothing to update');
   params.push(id);
   try {
     const result = await db.query(`UPDATE categories SET ${setClauses.join(',')} WHERE id=$${p} RETURNING *`, params);
     if (!result.rows.length) throw new NotFoundError('Category');
-    return { id: result.rows[0].id, name: result.rows[0].name, normalizedName: result.rows[0].normalized_name, parentId: result.rows[0].parent_id, createdAt: result.rows[0].created_at.toISOString() };
+    return mapCategory(result.rows[0]);
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') throw new ConflictError('DUPLICATE_CATEGORY', `Category '${data.name}' already exists`);
     throw err;
   }
 }
 
+const CATEGORY_USAGE_QUERIES: UsageQuery[] = [
+  { key: 'books', sql: `SELECT COUNT(*) FROM book_categories WHERE category_id = $1` },
+];
+
+export async function getCategoryUsage(id: number): Promise<Record<string, number>> {
+  const category = await db.query(`SELECT id FROM categories WHERE id = $1`, [id]);
+  if (!category.rows.length) throw new NotFoundError('Category');
+  return computeUsage(id, CATEGORY_USAGE_QUERIES);
+}
+
 export async function deleteCategory(id: number, staffCtx: StaffCtx): Promise<void> {
-  const check = await db.query(`SELECT COUNT(*) FROM book_categories WHERE category_id=$1`, [id]);
-  if (parseInt(check.rows[0].count as string, 10) > 0) throw new ConflictError('CATEGORY_IN_USE', 'Category is linked to one or more books');
+  const usage = await getCategoryUsage(id);
+  if (totalUsage(usage) > 0) throw new ConflictError('CATEGORY_IN_USE', 'Category is linked to one or more books', usage);
   const result = await db.query(`DELETE FROM categories WHERE id=$1 RETURNING id`, [id]);
   if (!result.rows.length) throw new NotFoundError('Category');
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1,$2,'DELETE','category',$3,$4,'{}')`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId],
-  );
+  await insertAuditLog(staffCtx, 'DELETE', 'category', id, {});
+}
+
+export async function archiveCategory(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('categories', 'category', id, 'ARCHIVE', staffCtx);
+}
+
+export async function restoreCategory(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('categories', 'category', id, 'RESTORE', staffCtx);
+}
+
+export async function deactivateCategory(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('categories', 'category', id, 'INACTIVATE', staffCtx);
+}
+
+export async function activateCategory(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('categories', 'category', id, 'ACTIVATE', staffCtx);
 }
 
 // ── Publishers CRUD ───────────────────────────────────────────────────────────
 
+function mapPublisher(row: Record<string, unknown>): PublisherRecord {
+  return {
+    id: row.id as number,
+    name: row.name as string,
+    status: (row.status as LifecycleStatus | undefined) ?? 'ACTIVE',
+    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
+    createdAt: (row.created_at as Date).toISOString(),
+  };
+}
+
 export async function listPublishers(opts: {
-  q?: string; page?: number; pageSize?: number;
+  q?: string; page?: number; pageSize?: number; status?: LifecycleStatus[];
 }): Promise<{ items: PublisherRecord[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, opts.pageSize ?? 50);
   const offset = (page - 1) * pageSize;
   const params: unknown[] = [];
-  let where = '';
-  if (opts.q) { where = `WHERE lower(p.name) LIKE lower($1) || '%'`; params.push(opts.q.trim()); }
+  const conditions: string[] = [];
+  if (opts.q) { params.push(opts.q.trim()); conditions.push(`lower(p.name) LIKE lower($${params.length}) || '%'`); }
+  if (opts.status) { params.push(opts.status); conditions.push(`p.status = ANY($${params.length})`); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [countRes, dataRes] = await Promise.all([
     db.query(`SELECT COUNT(*) FROM publishers p ${where}`, params),
     db.query(
-      `SELECT p.id, p.name, p.created_at, COUNT(b.id)::int AS book_count
+      `SELECT p.id, p.name, p.status, p.archived_at, p.created_at, COUNT(b.id)::int AS book_count
        FROM publishers p
        LEFT JOIN books b ON b.publisher_id = p.id
        ${where}
@@ -1055,12 +1243,7 @@ export async function listPublishers(opts: {
   ]);
   return {
     total: parseInt(countRes.rows[0].count as string, 10),
-    items: dataRes.rows.map(r => ({
-      id: r.id as number,
-      name: r.name as string,
-      createdAt: (r.created_at as Date).toISOString(),
-      bookCount: r.book_count as number,
-    })),
+    items: dataRes.rows.map(r => ({ ...mapPublisher(r), bookCount: r.book_count as number })),
   };
 }
 
@@ -1073,35 +1256,56 @@ export async function createPublisher(name: string, staffCtx: StaffCtx): Promise
        VALUES ($1,$2,'CREATE','publisher',$3,$4,$5)`,
       [staffCtx.staffId, staffCtx.role, String(result.rows[0].id), staffCtx.branchId, JSON.stringify({ name })],
     );
-    return { id: result.rows[0].id, name: result.rows[0].name, createdAt: result.rows[0].created_at.toISOString() };
+    return mapPublisher(result.rows[0]);
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') throw new ConflictError('DUPLICATE_PUBLISHER', `Publisher '${name}' already exists`);
     throw err;
   }
 }
 
-// NOTE: staffCtx currently unused here — see updateCategory's comment above.
-export async function updatePublisher(id: number, name: string, _staffCtx: StaffCtx): Promise<PublisherRecord> {
+export async function updatePublisher(id: number, name: string, staffCtx: StaffCtx): Promise<PublisherRecord> {
   try {
-    const result = await db.query(`UPDATE publishers SET name=$1 WHERE id=$2 RETURNING *`, [name.trim(), id]);
+    const result = await db.query(`UPDATE publishers SET name=$1, updated_at=now(), updated_by=$3 WHERE id=$2 RETURNING *`, [name.trim(), id, staffCtx.staffId]);
     if (!result.rows.length) throw new NotFoundError('Publisher');
-    return { id: result.rows[0].id, name: result.rows[0].name, createdAt: result.rows[0].created_at.toISOString() };
+    return mapPublisher(result.rows[0]);
   } catch (err: unknown) {
     if ((err as { code?: string }).code === '23505') throw new ConflictError('DUPLICATE_PUBLISHER', `Publisher '${name}' already exists`);
     throw err;
   }
+}
+
+const PUBLISHER_USAGE_QUERIES: UsageQuery[] = [
+  { key: 'books', sql: `SELECT COUNT(*) FROM books WHERE publisher_id = $1` },
+];
+
+export async function getPublisherUsage(id: number): Promise<Record<string, number>> {
+  const publisher = await db.query(`SELECT id FROM publishers WHERE id = $1`, [id]);
+  if (!publisher.rows.length) throw new NotFoundError('Publisher');
+  return computeUsage(id, PUBLISHER_USAGE_QUERIES);
 }
 
 export async function deletePublisher(id: number, staffCtx: StaffCtx): Promise<void> {
-  const check = await db.query(`SELECT COUNT(*) FROM books WHERE publisher_id=$1`, [id]);
-  if (parseInt(check.rows[0].count as string, 10) > 0) throw new ConflictError('PUBLISHER_IN_USE', 'Publisher is linked to one or more books');
+  const usage = await getPublisherUsage(id);
+  if (totalUsage(usage) > 0) throw new ConflictError('PUBLISHER_IN_USE', 'Publisher is linked to one or more books', usage);
   const result = await db.query(`DELETE FROM publishers WHERE id=$1 RETURNING id`, [id]);
   if (!result.rows.length) throw new NotFoundError('Publisher');
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1,$2,'DELETE','publisher',$3,$4,'{}')`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId],
-  );
+  await insertAuditLog(staffCtx, 'DELETE', 'publisher', id, {});
+}
+
+export async function archivePublisher(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('publishers', 'publisher', id, 'ARCHIVE', staffCtx);
+}
+
+export async function restorePublisher(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('publishers', 'publisher', id, 'RESTORE', staffCtx);
+}
+
+export async function deactivatePublisher(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('publishers', 'publisher', id, 'INACTIVATE', staffCtx);
+}
+
+export async function activatePublisher(id: number, staffCtx: StaffCtx): Promise<void> {
+  await transitionEntityStatus('publishers', 'publisher', id, 'ACTIVATE', staffCtx);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

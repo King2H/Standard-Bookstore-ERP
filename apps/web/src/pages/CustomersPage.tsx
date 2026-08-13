@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
+import { StatusFilter, StatusBadge, type StatusFilterValue, type LifecycleStatus } from '../components/StatusFilter.js';
 
 type Role = string;
 
@@ -11,7 +12,11 @@ interface Customer {
   id: number; branchId: number | null; customerCode: string; fullName: string;
   phone: string | null; email: string | null; gender: string | null;
   dateOfBirth: string | null; address: string | null; city: string | null;
-  isActive: boolean; createdAt: string;
+  // Prompt 3 — read-only lifecycle support: status/archivedAt are populated
+  // by the backend but there's no archive/restore/delete UI for customers
+  // in this pass, only the existing one-way Deactivate action and a
+  // status filter/badge for visibility.
+  isActive: boolean; status: LifecycleStatus; archivedAt: string | null; createdAt: string;
   loyaltyBalance: number; lifetimePoints: number; storeCreditBalance: number;
   /** SUM of outstanding_amount across all non-Settled receivables, regardless
    *  of source (order/POS/exchange) -- the authoritative "owes the store"
@@ -74,7 +79,8 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState('');
-  const [filterActive, setFilterActive] = useState('');
+  // Prompt 3 — Active/Inactive/Archived/All, default Active.
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('active');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
@@ -93,10 +99,10 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (q) params.set('q', q);
-  if (filterActive) params.set('isActive', filterActive);
+  params.set('status', statusFilter);
 
   const { data, isLoading } = useQuery<CustomerListResponse>({
-    queryKey: ['customers', page, pageSize, q, filterActive],
+    queryKey: ['customers', page, pageSize, q, statusFilter],
     queryFn: () => api.get(`/customers?${params}`),
   });
 
@@ -208,12 +214,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
           <input type="text" placeholder="Search by name, phone, code..." value={q}
             onChange={e => { setQ(e.target.value); setPage(1); }}
             className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <select value={filterActive} onChange={e => { setFilterActive(e.target.value); setPage(1); }}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-            <option value="">All Status</option>
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
+          <StatusFilter value={statusFilter} onChange={v => { setStatusFilter(v); setPage(1); }} />
           <div className="ml-auto flex items-center gap-2">
             <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} customers</span>
             {canWrite(userRole, userPermissions) && (
@@ -246,9 +247,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{c.loyaltyBalance.toFixed(0)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{currency} {c.storeCreditBalance.toFixed(2)}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
-                        {c.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                      <StatusBadge status={c.status} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 text-xs">
@@ -324,9 +323,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
         <button onClick={() => setView('list')} className="text-sm text-blue-600 hover:underline">← Back to List</button>
         <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded">{c.customerCode}</span>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{c.fullName}</h2>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
-          {c.isActive ? 'Active' : 'Inactive'}
-        </span>
+        <StatusBadge status={c.status} />
         {canDeactivate(userRole, userPermissions) && c.isActive && (
           <button onClick={() => { if (confirm(`Deactivate "${c.fullName}"?`)) deactivateMut.mutate(c.id); }}
             className="ml-auto text-sm text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 px-3 py-1.5 rounded-lg border border-yellow-300 dark:border-yellow-700 transition-colors">

@@ -8,6 +8,7 @@ import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { getBookAvailability } from '../inventory/inventoryTransaction.service.js';
 import { paramInt } from '../../lib/http.js';
+import type { LifecycleStatus } from '../../lib/lifecycle.js';
 
 const router = Router();
 
@@ -34,6 +35,20 @@ function resolveIsActiveFilter(raw: string | undefined): boolean | undefined {
   if (raw === undefined) return true;
   if (raw === 'all') return undefined;
   return raw === 'true';
+}
+
+// Prompt 3 — Master Data Lifecycle: the shared status-filter resolver behind
+// every master-data list endpoint's `?status=` query param (the frontend's
+// StatusFilter component sends exactly these four values). Default (param
+// omitted) is ACTIVE-only, per the spec's "Default filter = Active."
+// 'all' returns undefined (no filter) so callers who want every status can
+// still tell that apart from "unrecognized value, fall back to safe default".
+function resolveStatusFilter(raw: string | undefined): LifecycleStatus[] | undefined {
+  const v = (raw ?? 'active').toLowerCase();
+  if (v === 'all') return undefined;
+  if (v === 'inactive') return ['INACTIVE'];
+  if (v === 'archived') return ['ARCHIVED'];
+  return ['ACTIVE'];
 }
 
 // ── Validation schemas ────────────────────────────────────────────────────────
@@ -100,6 +115,11 @@ router.get(
         // matching /books/with-availability below; ?is_active=false shows
         // only inactive books; ?is_active=all shows both.
         isActive:   resolveIsActiveFilter(qs(req.query.is_active)),
+        // Prompt 3 — only set when the caller actually sends ?status=
+        // (the Catalog admin page's new StatusFilter). Left undefined for
+        // every other existing caller so the isActive fallback above keeps
+        // behaving exactly as before.
+        status:     qs(req.query.status) !== undefined ? resolveStatusFilter(qs(req.query.status)) : undefined,
         // Use explicit query param if provided, otherwise fall back to the JWT branch
         // so stock quantities are always scoped to the user's active branch.
         branchId:   qi(req.query.branchId) ?? req.staff?.branchId,
@@ -319,6 +339,60 @@ router.post(
   },
 );
 
+// ── Prompt 3 — Master Data Lifecycle: archive/restore/usage/delete ───────────
+
+router.post(
+  '/books/:id/archive',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = paramInt(req.params.id);
+      await catalogService.archiveBook(id, req.staff!);
+      res.json({ message: 'Book archived' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post(
+  '/books/:id/restore',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = paramInt(req.params.id);
+      await catalogService.restoreBook(id, req.staff!);
+      res.json({ message: 'Book restored' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.get(
+  '/catalog/:id/usage',
+  authenticate,
+  requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = paramInt(req.params.id);
+      const usage = await catalogService.getBookUsage(id);
+      res.json(usage);
+    } catch (err) { next(err); }
+  },
+);
+
+router.delete(
+  '/books/:id',
+  authenticate,
+  requireRole('Admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = paramInt(req.params.id);
+      await catalogService.deleteBook(id, req.staff!);
+      res.json({ message: 'Book deleted' });
+    } catch (err) { next(err); }
+  },
+);
+
 // ── GET /api/books/:id/history ────────────────────────────────────────────────
 
 router.get(
@@ -469,6 +543,7 @@ router.get('/authors', authenticate, async (req: Request, res: Response, next: N
       q: qs(req.query.q),
       page: qi(req.query.page, 1),
       pageSize: qi(req.query.pageSize, 50),
+      status: resolveStatusFilter(qs(req.query.status)),
     });
     res.json(result);
   } catch (err) { next(err); }
@@ -506,6 +581,51 @@ router.delete('/authors/:id', authenticate, requireRole('Admin'),
   },
 );
 
+router.get('/authors/:id/usage', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const usage = await catalogService.getAuthorUsage(parseInt(req.params['id'] as string, 10));
+      res.json(usage);
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/authors/:id/archive', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.archiveAuthor(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Author archived' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/authors/:id/restore', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.restoreAuthor(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Author restored' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/authors/:id/deactivate', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.deactivateAuthor(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Author set inactive' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/authors/:id/activate', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.activateAuthor(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Author activated' });
+    } catch (err) { next(err); }
+  },
+);
+
 // ── Categories ────────────────────────────────────────────────────────────────
 
 router.get('/categories', authenticate, async (req: Request, res: Response, next: NextFunction) => {
@@ -514,6 +634,7 @@ router.get('/categories', authenticate, async (req: Request, res: Response, next
       q: qs(req.query.q),
       page: qi(req.query.page, 1),
       pageSize: qi(req.query.pageSize, 100),
+      status: resolveStatusFilter(qs(req.query.status)),
     });
     res.json(result);
   } catch (err) { next(err); }
@@ -551,6 +672,51 @@ router.delete('/categories/:id', authenticate, requireRole('Admin'),
   },
 );
 
+router.get('/categories/:id/usage', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const usage = await catalogService.getCategoryUsage(parseInt(req.params['id'] as string, 10));
+      res.json(usage);
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/categories/:id/archive', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.archiveCategory(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Category archived' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/categories/:id/restore', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.restoreCategory(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Category restored' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/categories/:id/deactivate', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.deactivateCategory(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Category set inactive' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/categories/:id/activate', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.activateCategory(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Category activated' });
+    } catch (err) { next(err); }
+  },
+);
+
 // ── Publishers ────────────────────────────────────────────────────────────────
 
 router.get('/publishers', authenticate, async (req: Request, res: Response, next: NextFunction) => {
@@ -559,6 +725,7 @@ router.get('/publishers', authenticate, async (req: Request, res: Response, next
       q: qs(req.query.q),
       page: qi(req.query.page, 1),
       pageSize: qi(req.query.pageSize, 50),
+      status: resolveStatusFilter(qs(req.query.status)),
     });
     res.json(result);
   } catch (err) { next(err); }
@@ -592,6 +759,51 @@ router.delete('/publishers/:id', authenticate, requireRole('Admin'),
     try {
       await catalogService.deletePublisher(parseInt(req.params['id'] as string, 10), req.staff!);
       res.json({ message: 'Publisher deleted' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.get('/publishers/:id/usage', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const usage = await catalogService.getPublisherUsage(parseInt(req.params['id'] as string, 10));
+      res.json(usage);
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/publishers/:id/archive', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.archivePublisher(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Publisher archived' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/publishers/:id/restore', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.restorePublisher(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Publisher restored' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/publishers/:id/deactivate', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.deactivatePublisher(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Publisher set inactive' });
+    } catch (err) { next(err); }
+  },
+);
+
+router.post('/publishers/:id/activate', authenticate, requireRole('Admin', 'Manager', 'Stock_Clerk'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await catalogService.activatePublisher(parseInt(req.params['id'] as string, 10), req.staff!);
+      res.json({ message: 'Publisher activated' });
     } catch (err) { next(err); }
   },
 );
