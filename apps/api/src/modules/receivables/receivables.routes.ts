@@ -89,7 +89,7 @@ router.post(
       const id = paramStr(req.params.id);
       const { amount, paymentMethod, bankAccountId, notes } = req.body as {
         amount: number;
-        paymentMethod: 'cash' | 'bank' | 'store_credit';
+        paymentMethod: 'cash' | 'bank' | 'mobile' | 'store_credit';
         bankAccountId?: number | null;
         notes?: string;
       };

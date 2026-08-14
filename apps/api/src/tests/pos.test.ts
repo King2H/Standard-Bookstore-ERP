@@ -269,6 +269,36 @@ describe('POS — Transactions', () => {
     expect(Number(creditAfter.rows[0].balance)).toBeCloseTo(balBefore - creditAmount, 2);
   });
 
+  // ── 5b. Telebirr (mobile) payment → accepted, distinct from store credit ──
+  // (1700000050_pos_payment_mobile.cjs — transaction_payments.method
+  // previously had no 'mobile' value, unlike order_payments/
+  // financial_transactions, so POS had no real Telebirr channel at all.)
+
+  it('5b. Telebirr (mobile) payment is accepted and recorded distinctly from store credit', async () => {
+    await ensureInventory(bookId, locationId, 50);
+    const qty = 1;
+    const expectedGrand = parseFloat((bookPrice * qty).toFixed(2));
+
+    const res = await request(getTestApp())
+      .post('/api/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        branchId,
+        locationId,
+        items: [{ bookId, quantity: qty }],
+        payments: [{ method: 'mobile', amount: expectedGrand }],
+      });
+
+    expect(res.status).toBe(201);
+
+    const payRes = await db.query(
+      `SELECT method FROM transaction_payments WHERE transaction_id = $1`,
+      [res.body.id],
+    );
+    expect(payRes.rows.map((r: { method: string }) => r.method)).toEqual(['mobile']);
+  });
+
   // ── 6. Loyalty points payment → balance deducted ───────────────────────────
 
   it('6. Loyalty points payment → balance deducted', async () => {

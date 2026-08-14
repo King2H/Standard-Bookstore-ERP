@@ -5,6 +5,7 @@ import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import { useCurrency } from '../lib/useCurrency.js';
+import { paymentMethodLabel, type PaymentMethodCode } from '../lib/paymentMethods.js';
 
 type Role = string;
 interface OrdersPageProps {
@@ -73,12 +74,13 @@ const canCreate = (r?: Role, perms?: string[]) =>
   (perms && perms.includes('CREATE_SALE')) ||
   ['Sales', 'Manager', 'Admin', 'Super_Admin'].includes(r ?? '');
 
-// Payment Mode Capture: the 4 methods this ticket asks for, captured at cash-sale
-// confirmation. Vocabulary matches order_payments.payment_method's existing CHECK
-// constraint ('mobile' = Telebirr, 'store_credit' = Store Credit) — no new values.
-const CASH_PAYMENT_METHOD_LABELS: Record<string, string> = {
-  cash: '💵 Cash', bank: '🏦 Bank Transfer', mobile: '📱 Telebirr', store_credit: '🎁 Store Credit',
-};
+// Payment Mode Capture: methods offered at cash-sale confirmation. Labels
+// come from lib/paymentMethods.ts (shared with POS/Exchange settlement/
+// Payment Collection) — this stays a <select> rather than the shared
+// PaymentMethodTabs button grid since it's an inline table-row action, not
+// a dedicated payment form; there's no room for a multi-button grid next
+// to the row's other action buttons.
+const CASH_PAYMENT_METHODS: PaymentMethodCode[] = ['cash', 'bank', 'mobile', 'store_credit'];
 
 type Tab = 'list' | 'new';
 
@@ -351,7 +353,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                                     <select value={confirmPaymentMethod} onChange={e => setConfirmPaymentMethod(e.target.value)}
                                       className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
                                       <option value="">Payment method…</option>
-                                      {Object.entries(CASH_PAYMENT_METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                      {CASH_PAYMENT_METHODS.map(code => <option key={code} value={code}>{paymentMethodLabel(code)}</option>)}
                                     </select>
                                     <button
                                       disabled={!confirmPaymentMethod}
@@ -638,7 +640,7 @@ function OrderDetailLoader({ orderId }: { orderId: string }) {
       {(data.paymentMethod || data.dueDate) && (
         <div className="flex gap-4 mb-2 text-xs text-gray-600 dark:text-gray-400">
           {data.paymentMethod && (
-            <span>💳 Payment method: <span className="font-medium text-gray-900 dark:text-white">{CASH_PAYMENT_METHOD_LABELS[data.paymentMethod] ?? data.paymentMethod}</span></span>
+            <span>💳 Payment method: <span className="font-medium text-gray-900 dark:text-white">{paymentMethodLabel(data.paymentMethod)}</span></span>
           )}
           {data.dueDate && (
             <span>📅 Due date: <span className="font-medium text-gray-900 dark:text-white">{data.dueDate}</span></span>

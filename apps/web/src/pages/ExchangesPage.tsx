@@ -5,6 +5,14 @@ import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
+import { PAYMENT_METHOD_META, type PaymentMethodCode } from '../lib/paymentMethods.js';
+
+// Settlement method options — was missing Telebirr (only cash/bank/store
+// credit were offered); this settles the exchange difference against the
+// customer's real store_credit_accounts balance for 'store_credit' (see
+// exchanges.service.ts's applyExchangeSettlementEffects()), same as
+// OrdersPage.tsx's/PaymentsPage.tsx's Store Credit option.
+const SETTLEMENT_METHODS: PaymentMethodCode[] = ['cash', 'bank', 'mobile', 'store_credit'];
 
 type Role = string;
 interface ExchangesPageProps { userRole?: Role; userPermissions?: string[]; }
@@ -861,17 +869,16 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">Method</label>
+                      {/* Same method set/labels as POS/Orders/Payment Collection
+                          (lib/paymentMethods.ts) — kept as a <select> rather
+                          than the shared PaymentMethodTabs button grid since
+                          this column is ~1/3 of a max-w-lg modal, too narrow
+                          for a multi-button row per settlement entry. */}
                       <select value={entry.method} onChange={e => setSettlementEntries(prev => prev.map((en, i) => i === idx ? { ...en, method: e.target.value } : en))}
                         className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500">
-                        <option value="cash">Cash</option>
-                        <option value="bank">Bank</option>
-                        {/* Bug fix: was mislabeled "Telebirr" — this settles
-                            the exchange difference against the customer's
-                            real store_credit_accounts balance (see
-                            exchanges.service.ts's applyExchangeSettlementEffects()),
-                            same as OrdersPage.tsx's/PaymentsPage.tsx's
-                            correctly-labeled Store Credit option. */}
-                        <option value="store_credit">Store Credit</option>
+                        {SETTLEMENT_METHODS.map(code => (
+                          <option key={code} value={code}>{PAYMENT_METHOD_META[code].label}</option>
+                        ))}
                       </select>
                     </div>
                   </div>

@@ -295,7 +295,7 @@ export async function collectPayment(
   id: string | number,
   data: {
     amount: number;
-    paymentMethod: 'cash' | 'bank' | 'store_credit';
+    paymentMethod: 'cash' | 'bank' | 'mobile' | 'store_credit';
     bankAccountId?: number | null;
     notes?: string;
   },

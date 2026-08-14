@@ -5,6 +5,8 @@ import { api, getCurrentBranchId } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
+import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
+import { paymentMethodLabel, type PaymentMethodCode } from '../lib/paymentMethods.js';
 
 type Role = string;
 interface PaymentsPageProps {
@@ -55,15 +57,12 @@ const PAY_STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
   refunded: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
-// Bug fix: store_credit was mislabeled '📱 Telebirr' — duplicating the
-// genuinely-distinct 'mobile' entry right above it — instead of its own
-// '🎁 Store Credit' label. Matches OrdersPage.tsx's METHOD_LABELS, which
-// already gets this right ("constraint ('mobile' = Telebirr, 'store_credit'
-// = Store Credit) — no new values").
-const METHOD_LABELS: Record<string, string> = {
-  cash: '💵 Cash', bank: '🏦 Bank Transfer', mobile: '📱 Telebirr', card: '💳 Card',
-  store_credit: '🎁 Store Credit', loyalty_points: '⭐ Loyalty', other: 'Other',
-};
+// Payment method picker + labels — shared with POS/Exchange settlement via
+// components/PaymentMethodTabs.js + lib/paymentMethods.js. Kept as the
+// full method set already offered here (cash/bank/mobile/card/store
+// credit/loyalty) — nothing added or removed, just unified with the other
+// payment forms' presentation.
+const COLLECT_METHODS: PaymentMethodCode[] = ['cash', 'bank', 'mobile', 'card', 'store_credit', 'loyalty_points'];
 
 const canRefund = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin', 'Finance_Officer'].includes(r ?? '');
 
@@ -313,7 +312,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
     if (selectedOrder.sourceType === 'pos') {
       posPayMut.mutate({
         txId: selectedOrder.id,
-        payments: [{ method: paymentMethod as 'cash' | 'bank' | 'store_credit' | 'loyalty_points', amount: parseFloat(amount), reference: txRef || undefined }],
+        payments: [{ method: paymentMethod as 'cash' | 'bank' | 'mobile' | 'store_credit' | 'loyalty_points', amount: parseFloat(amount), reference: txRef || undefined }],
       });
       return;
     }
@@ -486,17 +485,15 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
             )}
           </div>
 
-          {/* Payment form */}
+          {/* Payment form — shared picker, same as POS/Exchange settlement */}
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Payment Method</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(METHOD_LABELS).map(([k, v]) => (
-                <button key={k} onClick={() => { setPaymentMethod(k); setSelectedBankAccountId(null); }}
-                  className={`py-2 text-xs rounded-lg transition-colors ${paymentMethod === k ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
-                  {v}
-                </button>
-              ))}
-            </div>
+            <PaymentMethodTabs
+              methods={COLLECT_METHODS}
+              value={paymentMethod}
+              onChange={m => { setPaymentMethod(m); setSelectedBankAccountId(null); }}
+              columns={3}
+            />
 
             {/* Bank account selector — shown only when Bank Transfer is selected */}
             {paymentMethod === 'bank' && (
@@ -652,7 +649,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{pay.entityNumber ?? `#${pay.orderId}`}</td>
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(pay.amount).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">{METHOD_LABELS[pay.paymentMethod] ?? pay.paymentMethod}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">{paymentMethodLabel(pay.paymentMethod)}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[pay.status] ?? ''}`}>{pay.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(pay.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">

@@ -150,6 +150,35 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     expect(parseFloat(payRes.rows[0].amount as string)).toBeCloseTo(grandTotal, 2);
   });
 
+  // ── 2b. pos_credit_sale + Telebirr — the pipeline that was actually broken ──
+  // Before 1700000050_pos_payment_mobile.cjs, transaction_payments.method had
+  // no 'mobile' value, so collecting a POS-sourced receivable via this same
+  // /collect dispatcher with paymentMethod: 'mobile' would fail a DB CHECK
+  // constraint even though the UI offered Telebirr as an option.
+
+  it('2b. Collecting against a pos_credit_sale receivable via Telebirr (mobile) succeeds', async () => {
+    await ensureInventory(book.id, locationId, 20);
+    const txRes = await request(getTestApp())
+      .post('/api/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ branchId, locationId, customerId, items: [{ bookId: book.id, quantity: 1 }], payments: [], allowCredit: true });
+    expect(txRes.status).toBe(201);
+    const txId = txRes.body.id;
+    const grandTotal = Number(txRes.body.grandTotal);
+
+    const recRes = await db.query(`SELECT id FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId]);
+    const receivableId = recRes.rows[0].id as string;
+
+    const collectRes = await collect(receivableId, { amount: grandTotal, paymentMethod: 'mobile' });
+    expect(collectRes.status).toBe(200);
+    expect(collectRes.body.status).toBe('Settled');
+
+    const payRes = await db.query(`SELECT * FROM transaction_payments WHERE transaction_id = $1 AND method = 'mobile'`, [txId]);
+    expect(payRes.rows.length).toBe(1);
+    expect(parseFloat(payRes.rows[0].amount as string)).toBeCloseTo(grandTotal, 2);
+  });
+
   // ── 3-7: exchange_difference — the previously-missing pipeline ────────────
 
   async function createCustomerPaysExchange(): Promise<{ receivableId: string; netBalance: number }> {

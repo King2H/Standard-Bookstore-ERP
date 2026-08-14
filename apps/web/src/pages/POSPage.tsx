@@ -5,6 +5,8 @@ import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import QuickAddCustomer, { type QuickCustomerPayload } from '../components/QuickAddCustomer.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
+import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
+import { paymentMethodPlainLabel, PAYMENT_METHOD_META, type PaymentMethodCode } from '../lib/paymentMethods.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -101,23 +103,15 @@ const canVoid = (r?: Role, perms?: string[]) =>
 
 // ── Payment ───────────────────────────────────────────────────────────────────
 
-type PaymentMethod = 'cash' | 'bank' | 'store_credit' | 'loyalty_points';
-// Bug fix: 'store_credit' was mislabeled "Telebirr" here — transactions'
-// payment method CHECK constraint has no separate 'mobile' value (unlike
-// orders/payments, which do), so this tab was quietly standing in as a
-// mobile-money button while actually debiting the customer's real store
-// credit balance underneath (see the "Available: {storeCreditBalance}"
-// panel below, which was always showing the correct — just mislabeled —
-// balance). OrdersPage.tsx already treats these as two distinct, correctly
-// labeled concepts ('mobile' = Telebirr, 'store_credit' = Store Credit);
-// matching that here, since POS has no genuine Telebirr/mobile channel to
-// conflate it with.
-const PAYMENT_TABS: { method: PaymentMethod; label: string; icon: string }[] = [
-  { method: 'cash',           label: 'Cash',         icon: '💵' },
-  { method: 'bank',           label: 'Bank',         icon: '🏦' },
-  { method: 'store_credit',   label: 'Store Credit', icon: '🎁' },
-  { method: 'loyalty_points', label: 'Loyalty',      icon: '⭐' },
-];
+type PaymentMethod = PaymentMethodCode;
+// 'store_credit' was previously mislabeled "Telebirr" here — transactions'
+// payment method CHECK constraint had no separate 'mobile' value (unlike
+// orders/payments, which did), so this tab quietly stood in as a mobile-
+// money button while actually debiting the customer's real store credit
+// balance underneath. Fixed: 'mobile' (Telebirr) is now its own real
+// payment channel (see 1700000050_pos_payment_mobile.cjs), correctly
+// distinct from 'store_credit', matching every other payment surface.
+const PAYMENT_TABS: PaymentMethod[] = ['cash', 'bank', 'mobile', 'store_credit', 'loyalty_points'];
 
 // ── Cart maths (no tax) ───────────────────────────────────────────────────────
 
@@ -584,7 +578,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 space-y-1.5">
                   {(receipt.payments ?? []).map((p, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500 capitalize">{p.method === 'store_credit' ? 'Store Credit' : p.method.replace(/_/g, ' ')}</span>
+                      <span className="text-gray-500">{paymentMethodPlainLabel(p.method)}</span>
                       <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {Number(p.amount).toFixed(2)}</span>
                     </div>
                   ))}
@@ -1069,24 +1063,8 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
             <div className="flex-1 overflow-y-auto px-3 py-2.5 space-y-2.5 min-h-0">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Method</p>
 
-              {/* Method tabs — compact 4-col grid */}
-              <div className="grid grid-cols-4 gap-1">
-                {PAYMENT_TABS.map(({ method, label, icon }) => (
-                  <button
-                    key={method}
-                    id={`pos-pay-${method}`}
-                    onClick={() => setPayMethod(method)}
-                    className={`flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg text-xs font-semibold transition-all ${
-                      payMethod === method
-                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <span className="text-sm leading-none">{icon}</span>
-                    <span className="leading-tight">{label}</span>
-                  </button>
-                ))}
-              </div>
+              {/* Method tabs — shared across POS/Payment Collection/Exchange settlement */}
+              <PaymentMethodTabs methods={PAYMENT_TABS} value={payMethod} onChange={setPayMethod} columns={3} />
 
               {/* Bank account selector */}
               {payMethod === 'bank' && (
@@ -1148,9 +1126,9 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                 <div className="space-y-1 bg-gray-50 dark:bg-gray-800/40 rounded-lg p-2">
                   {paymentLines.map((p, i) => (
                     <div key={i} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600 dark:text-gray-400 capitalize flex items-center gap-1">
-                        <span>{PAYMENT_TABS.find(t => t.method === p.method)?.icon}</span>
-                        {p.method === 'store_credit' ? 'Store Credit' : p.method.replace(/_/g, ' ')}
+                      <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <span>{PAYMENT_METHOD_META[p.method]?.icon}</span>
+                        {paymentMethodPlainLabel(p.method)}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{currency} {parseFloat(p.amount).toFixed(2)}</span>

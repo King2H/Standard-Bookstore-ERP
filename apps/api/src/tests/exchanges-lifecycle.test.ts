@@ -241,6 +241,34 @@ describe('Exchanges — draft -> confirmed -> settled/cancelled lifecycle', () =
     expect(parseFloat(balAfter.rows[0].balance as string)).toBeCloseTo(before + 100, 2);
   });
 
+  // ── 3b. Telebirr (mobile) settlement — newly offered in the settle UI ──────
+  // exchange_settlement_entries.method has always been unconstrained TEXT
+  // (no CHECK), so this was already backend-safe; the gap was the settle
+  // form's <select> not offering it. This locks in the value round-trips
+  // correctly now that it does.
+
+  it('3b. Customer_Pays settlement via Telebirr (mobile) is accepted and recorded', async () => {
+    await ensureInventory(book2.id, locationId, 10);
+
+    const initRes = await initiate([
+      { bookId: book1.id, quantity: 1, unitPrice: 50, type: 'returned' },
+      { bookId: book2.id, quantity: 1, unitPrice: 150, type: 'new' },
+    ]);
+    const id = initRes.body.id as string;
+    expect(initRes.body.settlementType).toBe('Customer_Pays');
+
+    await review(id);
+    await approve(id);
+    const settleRes = await settle(id, [{ entryType: 'cash_payment', amount: 100, method: 'mobile' }]);
+    expect(settleRes.status).toBe(200);
+
+    const entryRes = await db.query(
+      `SELECT method FROM exchange_settlement_entries WHERE exchange_id = $1`,
+      [id],
+    );
+    expect(entryRes.rows.map((r: { method: string }) => r.method)).toEqual(['mobile']);
+  });
+
   // ── 4. Validate available stock before confirmation (approve) ─────────────
 
   it('4. Insufficient stock at approve time → 422 INSUFFICIENT_STOCK, exchange stays REVIEWED', async () => {

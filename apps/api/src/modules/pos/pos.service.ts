@@ -22,7 +22,7 @@ export interface LineItemInput {
 }
 
 export interface PaymentInput {
-  method: 'cash' | 'bank' | 'store_credit' | 'loyalty_points';
+  method: 'cash' | 'bank' | 'mobile' | 'store_credit' | 'loyalty_points';
   amount: number;
   reference?: string;
 }
