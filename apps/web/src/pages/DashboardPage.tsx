@@ -117,6 +117,16 @@ const fmtPeriod = (p: string) => { try { return new Date(p).toLocaleDateString('
 
 const PIE_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
 
+// Shared themed tooltip for all Recharts <Tooltip> instances — a dark,
+// glassy card (readable in both light/dark page themes since it doesn't
+// rely on Tailwind's dark: variant, which can't reach inline chart styles)
+// instead of Recharts' default plain white box.
+const CHART_TOOLTIP_PROPS = {
+  contentStyle: { backgroundColor: 'rgba(17,24,39,0.96)', border: 'none', borderRadius: 10, boxShadow: '0 8px 24px -4px rgba(0,0,0,0.35)', padding: '8px 12px' },
+  labelStyle: { color: '#e5e7eb', fontWeight: 600, marginBottom: 4, fontSize: 11 },
+  itemStyle: { color: '#f3f4f6', fontSize: 12 },
+} as const;
+
 type GroupBy = 'day' | 'week' | 'month';
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
@@ -125,10 +135,10 @@ function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; v
   return (
     <div
       onClick={onClick}
-      className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2 min-w-0 ${onClick ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all duration-150' : ''}`}
+      className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-3 flex flex-col gap-2 min-w-0 ${onClick ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150' : ''}`}
     >
       <div className="flex items-center gap-2">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${color}`}>{icon}</div>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${color}`}>{icon}</div>
         <p className="text-xs text-gray-500 dark:text-gray-400 font-medium leading-tight">{label}</p>
       </div>
       <p className="text-xl font-bold text-gray-900 dark:text-white leading-none pl-1">{value}</p>
@@ -164,10 +174,10 @@ function HighlightKpiCard({ label, value, todayValue, monthlyValue, sub, icon, a
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl border-2 p-4 flex flex-col gap-2 min-w-0 ${colors.card} ${onClick ? 'cursor-pointer hover:shadow-md transition-all duration-150' : ''}`}
+      className={`rounded-xl border-2 shadow-sm p-4 flex flex-col gap-2 min-w-0 ${colors.card} ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-150' : 'transition-shadow duration-150'}`}
     >
       <div className="flex items-center gap-2">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${colors.badge}`}>{icon}</div>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${colors.badge}`}>{icon}</div>
         <p className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 leading-tight">{label}</p>
       </div>
       {todayValue !== undefined && monthlyValue !== undefined ? (
@@ -271,10 +281,10 @@ function Section({ title, icon, children, loading, error, updatedAt, onRefresh }
   updatedAt?: number; onRefresh?: () => void;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
-        <span className="text-base">{icon}</span>
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h2>
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2.5">
+        <span className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">{icon}</span>
+        <h2 className="text-sm font-bold text-gray-900 dark:text-white">{title}</h2>
         {updatedAt && updatedAt > 0 && (
           <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">
             · {new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -341,6 +351,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
   const [filters, setFilters] = useState<Filters>({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [salesPeriod, setSalesPeriod] = useState<KpiPeriod>('today');
+  const [exportOpen, setExportOpen] = useState(false);
   const qs = buildQs(filters);
 
   // Global refresh — invalidates and refetches all dashboard queries at once
@@ -494,7 +505,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       <WelcomeBanner />
 
     <div className="flex-1 overflow-y-auto">
-    <div className="p-4 space-y-4 max-w-7xl mx-auto pb-8">
+    <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto pb-10">
 
       {/* ── Quick Actions ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -517,83 +528,99 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         ))}
       </div>
 
-      {/* ── Filters + Refresh row ── */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3 flex flex-wrap gap-3 items-center">
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
-        <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-          className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
-        <span className="text-xs text-gray-400">to</span>
-        <input type="date" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-          className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
-        <select value={filters.groupBy} onChange={e => setFilters(f => ({ ...f, groupBy: e.target.value as GroupBy }))}
-          className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
-          <option value="day">Daily</option>
-          <option value="week">Weekly</option>
-          <option value="month">Monthly</option>
-        </select>
-        {/* Branch selector — visible to Admin/Super_Admin who can see all branches */}
-        {isAllBranches && (
-          <select
-            value={filters.branchId}
-            onChange={e => setFilters(f => ({ ...f, branchId: e.target.value }))}
-            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">All Branches</option>
-            {(branchesData?.items ?? []).map(b => (
-              <option key={b.id} value={String(b.id)}>{b.name}</option>
-            ))}
+      {/* ── Toolbar: Filters + Refresh, with a collapsible Export panel ── */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 flex flex-wrap gap-2.5 items-center">
+          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
+          <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+            className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
+          <span className="text-xs text-gray-400">to</span>
+          <input type="date" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+            className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
+          <select value={filters.groupBy} onChange={e => setFilters(f => ({ ...f, groupBy: e.target.value as GroupBy }))}
+            className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow">
+            <option value="day">Daily</option>
+            <option value="week">Weekly</option>
+            <option value="month">Monthly</option>
           </select>
-        )}
-        <button onClick={() => setFilters({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() })}
-          className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-          Clear
-        </button>
-
-        {/* ── Refresh button — always visible ── */}
-        <div className="ml-auto flex items-center gap-2">
-          {kpiUpdatedAt > 0 && (
-            <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
-              Updated {new Date(kpiUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </span>
+          {/* Branch selector — visible to Admin/Super_Admin who can see all branches */}
+          {isAllBranches && (
+            <select
+              value={filters.branchId}
+              onChange={e => setFilters(f => ({ ...f, branchId: e.target.value }))}
+              className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow"
+            >
+              <option value="">All Branches</option>
+              {(branchesData?.items ?? []).map(b => (
+                <option key={b.id} value={String(b.id)}>{b.name}</option>
+              ))}
+            </select>
           )}
-          <button
-            onClick={handleRefreshAll}
-            disabled={isRefreshing}
-            title="Refresh all dashboard data"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          <button onClick={() => setFilters({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() })}
+            className="px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            Clear
           </button>
-        </div>
-      </div>
 
-      {/* ── Export row ── */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3 flex flex-wrap gap-3 items-center">
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Export CSV</span>
-        <div className="w-px h-4 bg-gray-200 dark:bg-gray-700" />
-        {[
-          { type: 'sales', label: 'Sales' },
-          { type: 'returns', label: 'Returns' },
-          // 'Payments' (a thin totals-only summary) and 'Customers' (a
-          // legacy top-customers export unrelated to any Prompt 2 report/
-          // KPI) were dropped from this row — Payments Ledger below is the
-          // canonical, transaction-level payments export.
-          { type: 'payments-ledger', label: 'Payments Ledger' },
-          { type: 'inventory', label: 'Inventory' },
-          { type: 'inventory-valuation', label: 'Inventory Valuation' },
-          { type: 'exchanges', label: 'Exchanges' },
-          { type: 'procurement', label: 'Procurement' },
-          { type: 'receivables', label: 'Receivables' },
-          { type: 'receivables-aging', label: 'Receivables Aging' },
-        ].map(({ type, label }) => (
-          <button key={type} onClick={() => exportReport(type)}
-            className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
-            {label}
-          </button>
-        ))}
+          {/* ── Export toggle + Refresh — always visible ── */}
+          <div className="ml-auto flex items-center gap-2">
+            {kpiUpdatedAt > 0 && (
+              <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
+                Updated {new Date(kpiUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+            <button
+              onClick={() => setExportOpen(o => !o)}
+              aria-expanded={exportOpen}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                exportOpen
+                  ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
+                  : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>
+              Export
+              <svg className={`w-3 h-3 transition-transform ${exportOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            <button
+              onClick={handleRefreshAll}
+              disabled={isRefreshing}
+              title="Refresh all dashboard data"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Export panel — collapsed by default to keep the toolbar compact ── */}
+        {exportOpen && (
+          <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/30 flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mr-1">Export CSV</span>
+            {[
+              { type: 'sales', label: 'Sales' },
+              { type: 'returns', label: 'Returns' },
+              // 'Payments' (a thin totals-only summary) and 'Customers' (a
+              // legacy top-customers export unrelated to any Prompt 2 report/
+              // KPI) were dropped from this row — Payments Ledger below is the
+              // canonical, transaction-level payments export.
+              { type: 'payments-ledger', label: 'Payments Ledger' },
+              { type: 'inventory', label: 'Inventory' },
+              { type: 'inventory-valuation', label: 'Inventory Valuation' },
+              { type: 'exchanges', label: 'Exchanges' },
+              { type: 'procurement', label: 'Procurement' },
+              { type: 'receivables', label: 'Receivables' },
+              { type: 'receivables-aging', label: 'Receivables Aging' },
+            ].map(({ type, label }) => (
+              <button key={type} onClick={() => exportReport(type)}
+                className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-700 hover:text-blue-700 dark:hover:text-blue-300 transition-colors whitespace-nowrap">
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────────
@@ -605,9 +632,9 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           FinancialReportService for the Primary row's *Unified fields) — the
           same engine and rows that back the Sales CSV export, so these
           totals reconcile 1:1 with it for the same date range. ── */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">Live Overview</span>
+          <span className="text-sm font-bold text-gray-900 dark:text-white">Live Overview</span>
           <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
             Live · 30s
@@ -620,7 +647,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </div>
 
         {kpiLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {Array.from({ length: 9 }).map((_, i) => (
               <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 h-24 animate-pulse" />
             ))}
@@ -634,7 +661,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Sales Performance</p>
                 <PeriodSelector value={salesPeriod} onChange={setSalesPeriod} />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 {/* Not clickable: Net Sales aggregates ORDER + POS + RETURN +
                     EXCHANGE rows (the Unified engine), so a single "view
                     orders" drill-down would misrepresent it as order-only. */}
@@ -679,7 +706,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 already recognized, never a second profit adjustment. ── */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Cash &amp; Receivables</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 <KpiCard
                   label={`Cash Collected · ${PERIOD_LABELS[salesPeriod]}`}
                   value={fmtShort(periodKpis?.cashCollected ?? kpis.dailyRevenue)}
@@ -710,7 +737,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             {/* ── Inventory & Operations ── */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Inventory &amp; Operations</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 <KpiCard
                   label="Low Stock Items"
                   value={kpis.lowStockAlerts.toString()}
@@ -796,7 +823,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       )}
 
       {/* ── Row 1: Sales trend + Payment methods ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
         {/* Sales trend (2/3 width) */}
         <div className="lg:col-span-2">
@@ -825,7 +852,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="period" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
-                    <Tooltip formatter={(v: number) => fmt(v)} />
+                    <Tooltip formatter={(v: number) => fmt(v)} {...CHART_TOOLTIP_PROPS} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Line type="monotone" dataKey="totalSales" name="Order Sales (ETB)" stroke="#3b82f6" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="totalOrders" name="Orders" stroke="#10b981" strokeWidth={2} dot={false} yAxisId={0} />
@@ -857,7 +884,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   >
                     {payments.byMethod.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Tooltip formatter={(v: number) => fmt(v)} {...CHART_TOOLTIP_PROPS} />
                   <Legend
                     iconType="circle"
                     iconSize={8}
@@ -883,7 +910,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       </div>
 
       {/* ── Row 2: Sales by branch + Exchange summary ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* Sales by branch */}
         <Section title="Order Sales by Branch" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>} loading={salesLoading} error={salesError} updatedAt={salesUpdatedAt} onRefresh={() => refetchSales()}>
@@ -893,7 +920,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
                 <YAxis type="category" dataKey="branchName" tick={{ fontSize: 10 }} width={80} />
-                <Tooltip formatter={(v: number) => fmt(v)} />
+                <Tooltip formatter={(v: number) => fmt(v)} {...CHART_TOOLTIP_PROPS} />
                 <Bar dataKey="totalSales" name="Order Sales (ETB)" fill="#3b82f6" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -942,7 +969,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       </div>
 
       {/* ── Prompt 2 — Gross Profit Trend + Top Returned Books ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
         {/* Gross Profit Trend (2/3 width) */}
         <div className="lg:col-span-2">
@@ -953,7 +980,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="period" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
-                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Tooltip formatter={(v: number) => fmt(v)} {...CHART_TOOLTIP_PROPS} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="netSales" name="Net Sales" stroke="#3b82f6" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="grossProfit" name="Net Profit" stroke="#10b981" strokeWidth={2} dot={false} />
@@ -983,7 +1010,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       {/* ── Prompt 2 — Receivables Aging Summary ── */}
       <Section title="Receivables Aging Summary" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} loading={agingLoading} error={agingError} updatedAt={agingUpdatedAt} onRefresh={() => refetchAging()}>
         {aging?.byBucket && aging.byBucket.some(b => b.count > 0) ? (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 cursor-pointer" onClick={() => onNavigate?.('receivables', { ...(filters.branchId ? { branchId: filters.branchId } : {}) })}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 cursor-pointer" onClick={() => onNavigate?.('receivables', { ...(filters.branchId ? { branchId: filters.branchId } : {}) })}>
             {aging.byBucket.map(b => {
               const bucketColor: Record<string, string> = {
                 Current: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300',
@@ -1005,13 +1032,13 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       </Section>
 
       {/* ── Row 3: Inventory + Customer insights ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* Inventory panel */}
         <Section title="Inventory Insights" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
           {inventory ? (
             <>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
                 {[
                   { label: 'Books', value: inventory.summary.totalBooks, color: 'text-gray-900 dark:text-white' },
                   { label: 'Units', value: inventory.summary.totalStockUnits, color: 'text-gray-900 dark:text-white' },
@@ -1097,7 +1124,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
       </div>
 
       {/* ── Row 4: Stock movement + Payment trend ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* Stock movement */}
         <Section title="Stock Movement" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>} loading={invLoading} error={invError} updatedAt={invUpdatedAt} onRefresh={() => refetchInventory()}>
@@ -1107,7 +1134,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="period" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
+                <Tooltip {...CHART_TOOLTIP_PROPS} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="stockIn"  name="Stock In"  fill="#10b981" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="stockOut" name="Stock Out" fill="#ef4444" radius={[4, 4, 0, 0]} />
@@ -1124,7 +1151,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="period" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${(v/1000).toFixed(0)}K`} />
-                <Tooltip formatter={(v: number) => fmt(v)} />
+                <Tooltip formatter={(v: number) => fmt(v)} {...CHART_TOOLTIP_PROPS} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="collected" name="Collected" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="refunded"  name="Refunded"  fill="#f59e0b" radius={[4, 4, 0, 0]} />
