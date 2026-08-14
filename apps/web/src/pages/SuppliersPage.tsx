@@ -49,7 +49,7 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
   const inv = () => qc.invalidateQueries({ queryKey: ['suppliers'] });
   const createMut = useMutation({ mutationFn: (b: SupplierPayload) => api.post<Supplier>('/suppliers', b), onSuccess: () => { inv(); closeDrawer(); showToast('Supplier created', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const updateMut = useMutation({ mutationFn: ({ id, b }: { id: number; b: SupplierPayload }) => api.put<Supplier>(`/suppliers/${id}`, b), onSuccess: () => { inv(); closeDrawer(); showToast('Supplier updated', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const deactivateMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/deactivate`), onSuccess: () => { inv(); showToast('Set Inactive', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const deactivateMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/deactivate`), onSuccess: () => { inv(); showToast('Deactivated', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const activateMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/activate`), onSuccess: () => { inv(); showToast('Activated', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const archiveMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/archive`), onSuccess: () => { inv(); showToast('Archived', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const restoreMut = useMutation({ mutationFn: (id: number) => api.post(`/suppliers/${id}/restore`), onSuccess: () => { inv(); showToast('Restored', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
@@ -104,7 +104,7 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
                     {canWrite(userRole, userPermissions) && <button onClick={() => openEdit(s)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">Edit</button>}
                     {canWrite(userRole, userPermissions) && (
                       s.status === 'ACTIVE'
-                        ? <button onClick={() => { if (confirm(`Set "${s.name}" Inactive?`)) deactivateMut.mutate(s.id); }} className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Set Inactive</button>
+                        ? <button onClick={() => { if (confirm(`Deactivate "${s.name}"?`)) deactivateMut.mutate(s.id); }} className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Deactivate</button>
                         : <button onClick={() => activateMut.mutate(s.id)} className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">Activate</button>
                     )}
                     {canWrite(userRole, userPermissions) && (

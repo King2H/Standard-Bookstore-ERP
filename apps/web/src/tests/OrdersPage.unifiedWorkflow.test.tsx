@@ -204,6 +204,94 @@ describe('OrdersPage — Payment Mode Capture (cash_sale confirm)', () => {
   });
 });
 
+describe('OrdersPage — Payment Method at Creation (cash_sale create+confirm)', () => {
+  it('clicking Create Order on a cash sale creates AND confirms in one action, with the chosen payment method', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.startsWith('/orders?')) return Promise.resolve({ items: [], total: 0, page: 1, totalPages: 1 });
+      if (path.startsWith('/order-books') || path.startsWith('/books/with-availability')) {
+        return Promise.resolve({
+          items: [{
+            id: 9, title: 'Cash Sale Book', isbn: '999', defaultPrice: 30, branchPrice: 30,
+            availability: { locationId: 1, locationName: 'Main', onHand: 10, reserved: 0, available: 10 },
+          }],
+        });
+      }
+      return Promise.resolve({ items: [] });
+    });
+    postMock.mockImplementation((path: string) => {
+      if (path === '/orders') return Promise.resolve({ id: '20', orderNumber: 'ORD-20', saleType: 'cash_sale' });
+      if (path === '/orders/20/confirm') return Promise.resolve({ id: '20', orderNumber: 'ORD-20', saleType: 'cash_sale', status: 'CONFIRMED' });
+      return Promise.resolve({});
+    });
+
+    const user = userEvent.setup();
+    renderOrdersPage();
+
+    await user.click(screen.getByRole('button', { name: /New Order/i }));
+    await user.type(screen.getByPlaceholderText('Search books to add...'), 'Cash Sale');
+    await waitFor(() => expect(screen.getByText('Cash Sale Book')).toBeInTheDocument());
+    await user.click(screen.getByText('Cash Sale Book'));
+
+    // Default sale type is cash_sale, default payment method is Cash — the
+    // form offers Telebirr as an alternative right there, no separate step.
+    await waitFor(() => expect(screen.getByText('Telebirr')).toBeInTheDocument());
+    await user.click(screen.getByText('Telebirr'));
+
+    await user.click(screen.getByRole('button', { name: /Create Order/i }));
+
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith('/orders', expect.objectContaining({ saleType: 'cash_sale' }));
+    });
+    // The /orders call must NOT carry a paymentMethod field — that's the
+    // confirm call's job; POST /orders itself has no such field.
+    const ordersCallBody = postMock.mock.calls.find(c => c[0] === '/orders')?.[1] as Record<string, unknown>;
+    expect(ordersCallBody.paymentMethod).toBeUndefined();
+    expect(postMock).toHaveBeenCalledWith('/orders/20/confirm', { paymentMethod: 'mobile' });
+  });
+
+  it('a credit sale is NOT auto-confirmed at creation — still lands in DRAFT for the separate due-date confirm step', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.startsWith('/orders?')) return Promise.resolve({ items: [], total: 0, page: 1, totalPages: 1 });
+      if (path.startsWith('/customers')) return Promise.resolve({ items: [{ id: 5, customerCode: 'CUST-5', fullName: 'Credit Customer' }] });
+      if (path.startsWith('/order-books') || path.startsWith('/books/with-availability')) {
+        return Promise.resolve({
+          items: [{
+            id: 8, title: 'Credit Sale Book', isbn: '888', defaultPrice: 40, branchPrice: 40,
+            availability: { locationId: 1, locationName: 'Main', onHand: 10, reserved: 0, available: 10 },
+          }],
+        });
+      }
+      return Promise.resolve({ items: [] });
+    });
+    postMock.mockImplementation((path: string) => {
+      if (path === '/orders') return Promise.resolve({ id: '21', orderNumber: 'ORD-21', saleType: 'credit_sale' });
+      return Promise.resolve({});
+    });
+
+    const user = userEvent.setup();
+    renderOrdersPage();
+
+    await user.click(screen.getByRole('button', { name: /New Order/i }));
+    await user.type(screen.getByPlaceholderText('Search customer...'), 'Credit');
+    await waitFor(() => expect(screen.getByText('Credit Customer')).toBeInTheDocument());
+    await user.click(screen.getByText('Credit Customer'));
+
+    await user.click(screen.getByRole('button', { name: /Credit Sale/i }));
+    await user.type(screen.getByPlaceholderText('Search books to add...'), 'Credit Sale');
+    await waitFor(() => expect(screen.getByText('Credit Sale Book')).toBeInTheDocument());
+    await user.click(screen.getByText('Credit Sale Book'));
+
+    // No payment method picker for a credit sale — it isn't a cash form field.
+    expect(screen.queryByText('Telebirr')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Create Order/i }));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledWith('/orders', expect.objectContaining({ saleType: 'credit_sale' })));
+    // Exactly one POST call — no auto-confirm chained for credit sales.
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('OrdersPage — order detail surfaces payment method and due date', () => {
   it('shows payment method and due date once the API returns them', async () => {
     getMock.mockImplementation((path: string) => {

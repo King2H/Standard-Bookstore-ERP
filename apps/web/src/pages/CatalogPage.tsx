@@ -338,7 +338,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
                     ...(canWrite(userRole, userPermissions) ? [
                       { label: 'Edit', icon: '✏️', onClick: () => { setEditBook(book); setShowForm(true); } },
                       book.status === 'ACTIVE'
-                        ? { label: 'Set Inactive', icon: '🚫', onClick: () => deactivate.mutate(book.id), danger: true as const }
+                        ? { label: 'Deactivate', icon: '🚫', onClick: () => deactivate.mutate(book.id), danger: true as const }
                         : { label: 'Activate', icon: '✅', onClick: () => reactivate.mutate(book.id) },
                       book.status === 'ARCHIVED'
                         ? { label: 'Restore', icon: '📤', onClick: () => restore.mutate(book.id) }
@@ -638,7 +638,7 @@ function useLifecycleMutations<T extends { id: number; name: string }>(
   });
   const deactivate = useMutation({
     mutationFn: (id: number) => api.post(`${basePath}/${id}/deactivate`),
-    onSuccess: () => { invalidate(); showToast('Set Inactive', 'success'); },
+    onSuccess: () => { invalidate(); showToast('Deactivated', 'success'); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
   const activate = useMutation({
@@ -708,7 +708,7 @@ function AuthorsTab({ userRole, userPermissions }: { userRole?: Role; userPermis
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(a); setName(a.name); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
             {a.status === 'ACTIVE'
-              ? <button onClick={() => deactivate.mutate(a.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Set Inactive</button>
+              ? <button onClick={() => deactivate.mutate(a.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Deactivate</button>
               : a.status === 'INACTIVE' && <button onClick={() => activate.mutate(a.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
             {a.status === 'ARCHIVED'
               ? <button onClick={() => restore.mutate(a.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
@@ -792,7 +792,7 @@ function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPer
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(c); setCatName(c.name); setParentId(c.parentId); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
             {c.status === 'ACTIVE'
-              ? <button onClick={() => deactivate.mutate(c.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Set Inactive</button>
+              ? <button onClick={() => deactivate.mutate(c.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Deactivate</button>
               : c.status === 'INACTIVE' && <button onClick={() => activate.mutate(c.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
             {c.status === 'ARCHIVED'
               ? <button onClick={() => restore.mutate(c.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
@@ -880,7 +880,7 @@ function PublishersTab({ userRole, userPermissions }: { userRole?: Role; userPer
           <div key="a" className="flex gap-3 justify-end">
             <button onClick={() => { setEditItem(p); setPubName(p.name); setFormError(''); setShowForm(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit</button>
             {p.status === 'ACTIVE'
-              ? <button onClick={() => deactivate.mutate(p.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Set Inactive</button>
+              ? <button onClick={() => deactivate.mutate(p.id)} className="text-xs text-yellow-600 dark:text-yellow-400 hover:underline">Deactivate</button>
               : p.status === 'INACTIVE' && <button onClick={() => activate.mutate(p.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
             {p.status === 'ARCHIVED'
               ? <button onClick={() => restore.mutate(p.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>

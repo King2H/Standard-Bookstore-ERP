@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import { paymentMethodLabel, type PaymentMethodCode } from '../lib/paymentMethods.js';
+import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
 
 type Role = string;
 interface OrdersPageProps {
@@ -110,6 +111,12 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [saleType, setSaleType] = useState<'cash_sale' | 'credit_sale'>('cash_sale');
+  // Payment Method at Creation: for a cash sale, captured right here instead
+  // of a separate post-creation "Confirm (set payment method)" step — Create
+  // Order now creates AND confirms (see createMut) in one action. Credit
+  // sales still confirm separately (due date, not a payment method, is what
+  // that step needs) — unchanged.
+  const [orderPaymentMethod, setOrderPaymentMethod] = useState<PaymentMethodCode>('cash');
   const [channel, setChannel] = useState<'in_store' | 'phone' | 'online'>('in_store');
   const [bookSearch, setBookSearch] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
@@ -152,9 +159,32 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   });
 
   // Mutations
+  // Payment Method at Creation: for a cash sale, Create Order now creates
+  // AND confirms in one action — chaining the same two API calls the old
+  // "Create Order" → find it in the list → "Confirm (set payment method)"
+  // flow already made, just without the extra round trip. Credit sales are
+  // unchanged (still land in DRAFT; confirming them needs a due date, a
+  // separate decision this form doesn't collect). If confirm fails after
+  // create succeeds (e.g. a stock shortfall discovered only at confirm
+  // time), the order is left in DRAFT exactly as it would have been under
+  // the old two-step flow — the existing list-row "Confirm" action still
+  // works as a manual fallback.
   const createMut = useMutation({
-    mutationFn: (body: unknown) => api.post<Order>('/orders', body),
-    onSuccess: (o) => { showToast(`Order ${o.orderNumber} created`, 'success'); setTab('list'); setOrderItems([]); setSelectedCustomer(null); qc.invalidateQueries({ queryKey: ['orders-list'] }); },
+    mutationFn: async (body: { saleType: 'cash_sale' | 'credit_sale'; paymentMethod?: string; [key: string]: unknown }) => {
+      const { paymentMethod, ...orderBody } = body;
+      const order = await api.post<Order>('/orders', orderBody);
+      if (body.saleType === 'cash_sale') {
+        return api.post<Order>(`/orders/${order.id}/confirm`, { paymentMethod });
+      }
+      return order;
+    },
+    onSuccess: (o) => {
+      showToast(o.saleType === 'cash_sale' ? `Order ${o.orderNumber} created & paid` : `Order ${o.orderNumber} created`, 'success');
+      setTab('list'); setOrderItems([]); setSelectedCustomer(null); setOrderPaymentMethod('cash');
+      qc.invalidateQueries({ queryKey: ['orders-list'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['order-books'] });
+    },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
@@ -217,10 +247,15 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       showToast('Credit sales require a customer', 'error');
       return;
     }
+    if (saleType === 'cash_sale' && orderPaymentMethod === 'store_credit' && !selectedCustomer) {
+      showToast('Store credit payment requires a customer — please select one above', 'error');
+      return;
+    }
     createMut.mutate({
       customerId: selectedCustomer?.id ?? null,
       channel,
       saleType,
+      paymentMethod: saleType === 'cash_sale' ? orderPaymentMethod : undefined,
       locationId: effectiveLocationId ?? undefined,
       items: orderItems.map(i => ({
         bookId: i.bookId,
@@ -489,6 +524,23 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
             </div>
             {saleType === 'credit_sale' && !selectedCustomer && (
               <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Credit sales require a customer — please select one above.</p>
+            )}
+            {/* Payment Method at Creation — cash sales only; captured here
+                instead of a separate post-creation confirm step. Method set
+                matches orders.service.ts's confirm() CASH_PAYMENT_METHODS. */}
+            {saleType === 'cash_sale' && (
+              <div className="pt-1 space-y-1">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Payment Method</p>
+                <PaymentMethodTabs
+                  methods={['cash', 'bank', 'mobile', 'store_credit']}
+                  value={orderPaymentMethod}
+                  onChange={setOrderPaymentMethod}
+                  columns={4}
+                />
+                {orderPaymentMethod === 'store_credit' && !selectedCustomer && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Store credit requires a customer — please select one above.</p>
+                )}
+              </div>
             )}
           </div>
 
