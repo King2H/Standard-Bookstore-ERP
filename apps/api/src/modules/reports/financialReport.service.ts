@@ -48,15 +48,33 @@
 //                             a return's grossProfit contribution exactly
 //                             -(original margin on the returned units), never
 //                             the full refund amount.
-//   EXCHANGE incoming       — costAmount = 0. A trade-in receipt isn't a
-//   (trade-in)                sale — there's no COGS to net against the
-//                             allowance paid out; the allowance's full cash
-//                             impact already flows through as netAmount, and
-//                             it simply reduces gross profit by that same
-//                             amount (consistent with how it already reduces
-//                             net sales revenue). The item's evaluated price
-//                             becomes its cost basis in inventory instead
-//                             (see exchanges.service.ts / Prompt 1).
+//   EXCHANGE incoming        — costAmount = netAmount (i.e. grossProfit = 0
+//   (trade-in, resellable)     for this leg), NOT 0. A trade-in receipt is
+//                             an inventory purchase, not a sale or a refund:
+//                             the allowance becomes the item's real cost
+//                             basis in inventory (average_cost, via
+//                             stockIn()'s unitCost — see exchanges.service.ts
+//                             and migration 46's Virtual Receiving), the
+//                             same way a PO receipt capitalizes its cost
+//                             instead of expensing it immediately. Profit
+//                             is correctly recognized only later, when the
+//                             item is actually resold, via its normal COGS.
+//                             netAmount still reduces net sales revenue
+//                             (the transaction's net cash-equivalent value
+//                             is genuinely lower), but zeroing costAmount
+//                             against it stops that allowance from ALSO
+//                             being subtracted from gross profit a second
+//                             time as COGS on the eventual resale — the
+//                             item's full economic profit (resale price −
+//                             allowance) then lands entirely in the period
+//                             it's resold, exactly like a normal purchase.
+//   EXCHANGE incoming        — costAmount = 0 (the full allowance hits
+//   (trade-in, damaged)        profit immediately). A damaged trade-in never
+//                             becomes sellable inventory — it bypasses
+//                             stockIn()/average_cost entirely (see
+//                             exchanges.service.ts) — so there is no future
+//                             resale to recover the allowance from; it's a
+//                             real, permanent loss the moment it's accepted.
 //   EXCHANGE outgoing        — costAmount = +(persisted unit_cost × qty),
 //   (resale)                  same treatment as ORDER/POS — this leg IS a
 //                             sale.
@@ -501,7 +519,7 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
          e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
          COALESCE(c.full_name, 'Walk-in') AS customer_name,
          b.title AS book_title, b.isbn AS book_isbn,
-         ei.quantity, ei.unit_price, ei.total_price, ei.type,
+         ei.quantity, ei.unit_price, ei.total_price, ei.type, ei.condition,
          COALESCE(ei.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
          pay.method AS payment_method, rec.status AS receivable_status,
          ecash.net_cash AS cash_collected, erec.outstanding_amount AS receivable_balance,
@@ -522,11 +540,30 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
     const unitPrice = parseFloat(row.unit_price as string);
     const totalPrice = parseFloat(row.total_price as string);
     const netAmount = direction === 'incoming' ? -totalPrice : totalPrice;
-    // Incoming (trade-in) legs carry no COGS — see header comment. Outgoing
-    // (resale) legs use the persisted/fallback unit cost like ORDER/POS.
-    const costAmount = direction === 'incoming'
-      ? 0
-      : parseFloat((parseFloat((row.resolved_unit_cost as string | number | null) as string ?? '0') * quantity).toFixed(2));
+    // Incoming (trade-in) legs — see header comment for the full rationale.
+    // Outgoing (resale) legs use the persisted/fallback unit cost like ORDER/POS.
+    let costAmount: number;
+    if (direction === 'outgoing') {
+      costAmount = parseFloat((parseFloat((row.resolved_unit_cost as string | number | null) as string ?? '0') * quantity).toFixed(2));
+    } else if (row.condition === 'damaged') {
+      // Damaged trade-in: it never becomes sellable inventory (exchanges.service.ts
+      // updates damaged_quantity directly, bypassing stockIn()/average_cost
+      // entirely), so there's no future resale to recover the allowance —
+      // the full allowance is a real, permanent loss and must hit profit now.
+      costAmount = 0;
+    } else {
+      // Resellable trade-in (or a legacy Quick Exchange incoming row, which
+      // has no damaged concept at all — always resellable): the allowance
+      // becomes the item's real cost basis in inventory (average_cost, via
+      // stockIn()'s unitCost) instead of an expense. costAmount = netAmount
+      // makes this leg's grossProfit exactly 0 — matching the RETURN leg's
+      // pattern above of crediting back the cost so only the real margin
+      // moves profit — deferring ALL profit recognition to the eventual
+      // resale's normal COGS. Without this, the allowance was being
+      // subtracted from profit twice over the item's lifecycle: once here
+      // in full, and again as COGS when the item is eventually resold.
+      costAmount = netAmount;
+    }
     return {
       transactionDate: row.transaction_date as string,
       transactionType: 'EXCHANGE',

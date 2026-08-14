@@ -32,6 +32,9 @@ async function getOrCreateLocation(branchId: number): Promise<number> {
 }
 
 async function cleanExchanges(branchId: number) {
+  await db.query(`DELETE FROM financial_transactions WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id = $1)`, [branchId]).catch(() => {});
+  await db.query(`DELETE FROM exchange_settlement_entries WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id = $1)`, [branchId]).catch(() => {});
+  await db.query(`DELETE FROM exchange_items WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM exchange_outgoing_items WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM exchange_incoming_items WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM exchanges WHERE branch_id = $1`, [branchId]);
@@ -40,6 +43,7 @@ async function cleanExchanges(branchId: number) {
 describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchanges', () => {
   let salesToken: string;
   let stockClerkToken: string;
+  let managerToken: string;
   let branchId: number;
   let locationId: number;
   let customerId: number;
@@ -57,6 +61,10 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     salesToken = sales.token;
     const clerk = await createTestStaff({ username: `${STAFF_PREFIX}clerk`, role: 'Stock_Clerk', branchId });
     stockClerkToken = clerk.token;
+    // Manager — the initiate/review/approve/settle lifecycle (test 7c, the
+    // 'damaged' condition path) requires APPROVE_EXCHANGE, which Sales lacks.
+    const mgr = await createTestStaff({ username: `${STAFF_PREFIX}mgr`, role: 'Manager', branchId });
+    managerToken = mgr.token;
 
     locationId = await getOrCreateLocation(branchId);
 
@@ -256,6 +264,125 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     // Customer Allowance Value it was exchanged in for, not $0. (qty is 1,
     // so costAmount === unit cost here.)
     expect(orderRow!.costAmount).toBeCloseTo(ALLOWANCE, 2);
+  });
+
+  it('7b. A trade-in book is not double-counted as a loss: the exchange leg nets to $0 profit, and the ENTIRE margin lands on the eventual resale (financialReport.service.ts / Unified engine, mapExchangeRow)', async () => {
+    const regRes = await request(getTestApp())
+      .post('/api/books/quick-register')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ title: 'Full-Lifecycle Trade-In Novel', defaultPrice: 25 });
+    quickRegisteredBookIds.push(regRes.body.id);
+    const bookId = regRes.body.id as number;
+
+    const ALLOWANCE = 8;
+    const RESALE_PRICE = 25;
+
+    // Leg 1: pure buy-back — customer trades in the book for an $8 allowance,
+    // takes nothing in return (no outgoingItems).
+    const excRes = await request(getTestApp())
+      .post('/api/exchanges')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ locationId, customerId, incomingItems: [{ bookId, quantity: 1, unitPrice: ALLOWANCE }], outgoingItems: [] });
+    expect(excRes.status).toBe(201);
+
+    // The trade-in leg alone must be profit-neutral: the allowance is a real
+    // inventory purchase (capitalized as average_cost, asserted in test 6),
+    // not an expense — so it must not also drag down reported profit here.
+    const { rows: afterTradeIn } = await getSalesReportRows({ branchId });
+    const exchangeRow = afterTradeIn.find(r => r.source === 'EXCHANGE' && r.book === 'Full-Lifecycle Trade-In Novel');
+    expect(exchangeRow).toBeDefined();
+    expect(exchangeRow!.netSalesAmount).toBeCloseTo(-ALLOWANCE, 2);
+    expect(exchangeRow!.costAmount).toBeCloseTo(-ALLOWANCE, 2);   // signed to match netSalesAmount — see header comment
+    expect(exchangeRow!.grossProfit).toBeCloseTo(0, 2);
+
+    // Leg 2: the book is later resold at full price.
+    const orderRes = await request(getTestApp())
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 1, unitPrice: RESALE_PRICE }] });
+    expect(orderRes.status).toBe(201);
+    const orderId = orderRes.body.id as string;
+    const orderNumber = orderRes.body.orderNumber as string;
+    await request(getTestApp())
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ paymentMethod: 'cash' });
+    await request(getTestApp())
+      .post(`/api/orders/${orderId}/fulfill`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId));
+
+    const { rows: afterResale } = await getSalesReportRows({ branchId });
+    const orderRow = afterResale.find(r => r.source === 'ORDER' && r.invoiceNo === orderNumber);
+    expect(orderRow).toBeDefined();
+    expect(orderRow!.costAmount).toBeCloseTo(ALLOWANCE, 2);
+    expect(orderRow!.grossProfit).toBeCloseTo(RESALE_PRICE - ALLOWANCE, 2);
+
+    // Full lifecycle reconciliation — the ONLY assertion that would have
+    // caught the double-counting bug: summing both legs' grossProfit must
+    // equal the item's true economic profit (resale price − acquisition
+    // cost), not that minus ALLOWANCE a second time.
+    const exchangeRowAfter = afterResale.find(r => r.source === 'EXCHANGE' && r.book === 'Full-Lifecycle Trade-In Novel')!;
+    const lifecycleProfit = exchangeRowAfter.grossProfit + orderRow!.grossProfit;
+    expect(lifecycleProfit).toBeCloseTo(RESALE_PRICE - ALLOWANCE, 2);
+  });
+
+  it('7c. A DAMAGED trade-in has no future resale to defer to — its full allowance is a real loss recognized immediately', async () => {
+    const regRes = await request(getTestApp())
+      .post('/api/books/quick-register')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ title: 'Damaged Trade-In Novel' });
+    quickRegisteredBookIds.push(regRes.body.id);
+    const bookId = regRes.body.id as number;
+
+    const ALLOWANCE = 6;
+    // The initiate → review → approve → settle exchange_items lifecycle is
+    // what supports a 'damaged' condition — Quick Exchange (used by tests
+    // 6-7b) has no damaged concept, always resellable. Manager holds
+    // APPROVE_EXCHANGE for the review/approve/settle steps.
+    const initRes = await request(getTestApp())
+      .post('/api/exchanges/initiate')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ locationId, customerId, items: [{ bookId, quantity: 1, unitPrice: ALLOWANCE, type: 'returned', condition: 'damaged' }] });
+    expect(initRes.status).toBe(201);
+    const exchangeId = initRes.body.id as string;
+
+    const reviewRes = await request(getTestApp())
+      .post(`/api/exchanges/${exchangeId}/review`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(reviewRes.status).toBe(200);
+
+    const approveRes = await request(getTestApp())
+      .post(`/api/exchanges/${exchangeId}/approve`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(approveRes.status).toBe(200);
+
+    const settleRes = await request(getTestApp())
+      .post(`/api/exchanges/${exchangeId}/settle`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ entries: [{ entryType: 'cash_refund', amount: ALLOWANCE, method: 'cash' }], idempotencyKey: `test-7c-${exchangeId}` });
+    expect(settleRes.status).toBe(200);
+
+    // Damaged stock never enters sellable inventory / average_cost.
+    const invRes = await db.query(`SELECT quantity, damaged_quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
+    expect(invRes.rows[0]?.quantity ?? 0).toBe(0);
+    expect(invRes.rows[0]?.damaged_quantity ?? 0).toBe(1);
+
+    const { rows } = await getSalesReportRows({ branchId });
+    const exchangeRow = rows.find(r => r.source === 'EXCHANGE' && r.book === 'Damaged Trade-In Novel');
+    expect(exchangeRow).toBeDefined();
+    expect(exchangeRow!.netSalesAmount).toBeCloseTo(-ALLOWANCE, 2);
+    expect(exchangeRow!.costAmount).toBeCloseTo(0, 2);            // no future resale — costAmount stays 0
+    expect(exchangeRow!.grossProfit).toBeCloseTo(-ALLOWANCE, 2);  // the full allowance is a real loss, recognized now
   });
 
   // ── invTxSvc.stockIn() unitCost — Valuation Integrity at the shared layer ──
