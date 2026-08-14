@@ -528,17 +528,20 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         ))}
       </div>
 
-      {/* ── Toolbar: Filters + Refresh, with a collapsible Export panel ── */}
+      {/* ── Toolbar: Filters + Export + Refresh, all on one line ──
+          flex-nowrap keeps Export/Refresh/"Updated" pinned in line with
+          the Filters controls instead of dropping to a second row —
+          the row scrolls horizontally on overflow rather than wrapping. */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 flex flex-wrap gap-2.5 items-center">
-          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
+        <div className="px-4 py-3 flex flex-nowrap items-center gap-2 overflow-x-auto">
+          <span className="flex-shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
           <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-            className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
-          <span className="text-xs text-gray-400">to</span>
+            className="flex-shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
+          <span className="flex-shrink-0 text-xs text-gray-400">to</span>
           <input type="date" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-            className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
+            className="flex-shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
           <select value={filters.groupBy} onChange={e => setFilters(f => ({ ...f, groupBy: e.target.value as GroupBy }))}
-            className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow">
+            className="flex-shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow">
             <option value="day">Daily</option>
             <option value="week">Weekly</option>
             <option value="month">Monthly</option>
@@ -548,7 +551,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             <select
               value={filters.branchId}
               onChange={e => setFilters(f => ({ ...f, branchId: e.target.value }))}
-              className="px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow"
+              className="flex-shrink-0 w-28 sm:w-36 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow truncate"
             >
               <option value="">All Branches</option>
               {(branchesData?.items ?? []).map(b => (
@@ -557,21 +560,21 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             </select>
           )}
           <button onClick={() => setFilters({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() })}
-            className="px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            className="flex-shrink-0 px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             Clear
           </button>
 
-          {/* ── Export toggle + Refresh — always visible ── */}
-          <div className="ml-auto flex items-center gap-2">
+          {/* ── Export toggle + Refresh — pinned in line with Filters, never wraps ── */}
+          <div className="ml-auto flex-shrink-0 flex items-center gap-2">
             {kpiUpdatedAt > 0 && (
-              <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
+              <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap hidden 2xl:inline">
                 Updated {new Date(kpiUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
             <button
               onClick={() => setExportOpen(o => !o)}
               aria-expanded={exportOpen}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+              className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border whitespace-nowrap transition-colors ${
                 exportOpen
                   ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
                   : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -585,7 +588,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               onClick={handleRefreshAll}
               disabled={isRefreshing}
               title="Refresh all dashboard data"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm whitespace-nowrap transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -647,7 +650,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
         </div>
 
         {kpiLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {Array.from({ length: 9 }).map((_, i) => (
               <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 h-24 animate-pulse" />
             ))}
@@ -661,7 +664,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Sales Performance</p>
                 <PeriodSelector value={salesPeriod} onChange={setSalesPeriod} />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Not clickable: Net Sales aggregates ORDER + POS + RETURN +
                     EXCHANGE rows (the Unified engine), so a single "view
                     orders" drill-down would misrepresent it as order-only. */}
@@ -706,7 +709,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                 already recognized, never a second profit adjustment. ── */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Cash &amp; Receivables</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <KpiCard
                   label={`Cash Collected · ${PERIOD_LABELS[salesPeriod]}`}
                   value={fmtShort(periodKpis?.cashCollected ?? kpis.dailyRevenue)}
@@ -737,7 +740,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             {/* ── Inventory & Operations ── */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Inventory &amp; Operations</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <KpiCard
                   label="Low Stock Items"
                   value={kpis.lowStockAlerts.toString()}

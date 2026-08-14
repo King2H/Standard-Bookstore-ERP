@@ -5,7 +5,9 @@
  *   Dashboard (standalone)
  *   Sales      → POS, Orders, Returns, Exchanges, Customers
  *   Stock      → Inventory, Procurement, Suppliers, Catalog
- *   Finance    → Payments, Installments, Bank Accounts
+ *   Finance    → Payments, Receivables
+ *     (Installments and Bank Accounts are not active modules for this
+ *      version — hidden from the nav, routes/pages left intact.)
  *   Organization → Branches, Locations, Staff
  *   System     → Settings, Audit Log
  *
@@ -79,9 +81,10 @@ const NAV_SECTIONS: NavSection[] = [
     permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'],
     items: [
       { id: 'payments',      label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND'] },
-      { id: 'installments',  label: 'Installments',  icon: '📅', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT'] },
       { id: 'receivables',   label: 'Receivables',   icon: '🧾', roles: ['Admin', 'Manager', 'Finance_Officer'],             permissions: ['PROCESS_PAYMENT'] },
-      { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'],           permissions: ['PROCESS_PAYMENT', 'VIEW_REPORTS'] },
+      // 'installments' and 'bank-accounts' intentionally omitted — not
+      // active modules for this version. Pages/routes still exist; only
+      // the nav entries are hidden.
     ],
   },
   {
