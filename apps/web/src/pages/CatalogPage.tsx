@@ -342,8 +342,8 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
                         : { label: 'Activate', icon: '✅', onClick: () => reactivate.mutate(book.id) },
                       book.status === 'ARCHIVED'
                         ? { label: 'Restore', icon: '📤', onClick: () => restore.mutate(book.id) }
-                        : { label: 'Archive', icon: '🗄️', onClick: () => archive.mutate(book.id) },
-                      { label: 'Delete', icon: '🗑️', onClick: () => deleteBook.mutate(book), danger: true as const },
+                        : { label: 'Archive', icon: '🗄️', onClick: () => { if (confirm(`Archive "${book.title}"?`)) archive.mutate(book.id); } },
+                      { label: 'Delete', icon: '🗑️', onClick: () => { if (confirm(`Delete "${book.title}"? This cannot be undone.`)) deleteBook.mutate(book); }, danger: true as const },
                     ] : []),
                   ]} />
                 </td>
@@ -712,7 +712,7 @@ function AuthorsTab({ userRole, userPermissions }: { userRole?: Role; userPermis
               : a.status === 'INACTIVE' && <button onClick={() => activate.mutate(a.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
             {a.status === 'ARCHIVED'
               ? <button onClick={() => restore.mutate(a.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
-              : <button onClick={() => archive.mutate(a.id)} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
+              : <button onClick={() => { if (confirm(`Archive "${a.name}"?`)) archive.mutate(a.id); }} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
             <button onClick={() => { if (confirm(`Delete "${a.name}"?`)) deleteMut.mutate(a); }} className="text-xs text-red-500 hover:underline">Delete</button>
           </div>
         ) : null,
@@ -796,7 +796,7 @@ function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPer
               : c.status === 'INACTIVE' && <button onClick={() => activate.mutate(c.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
             {c.status === 'ARCHIVED'
               ? <button onClick={() => restore.mutate(c.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
-              : <button onClick={() => archive.mutate(c.id)} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
+              : <button onClick={() => { if (confirm(`Archive "${c.name}"?`)) archive.mutate(c.id); }} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
             <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) deleteMut.mutate(c); }} className="text-xs text-red-500 hover:underline">Delete</button>
           </div>
         ) : null,
@@ -884,7 +884,7 @@ function PublishersTab({ userRole, userPermissions }: { userRole?: Role; userPer
               : p.status === 'INACTIVE' && <button onClick={() => activate.mutate(p.id)} className="text-xs text-green-600 dark:text-green-400 hover:underline">Activate</button>}
             {p.status === 'ARCHIVED'
               ? <button onClick={() => restore.mutate(p.id)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Restore</button>
-              : <button onClick={() => archive.mutate(p.id)} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
+              : <button onClick={() => { if (confirm(`Archive "${p.name}"?`)) archive.mutate(p.id); }} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">Archive</button>}
             <button onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteMut.mutate(p); }} className="text-xs text-red-500 hover:underline">Delete</button>
           </div>
         ) : null,

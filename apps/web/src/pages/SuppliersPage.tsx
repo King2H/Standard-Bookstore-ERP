@@ -110,7 +110,7 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
                     {canWrite(userRole, userPermissions) && (
                       s.status === 'ARCHIVED'
                         ? <button onClick={() => restoreMut.mutate(s.id)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">Restore</button>
-                        : <button onClick={() => archiveMut.mutate(s.id)} className="px-2 py-1 rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors">Archive</button>
+                        : <button onClick={() => { if (confirm(`Archive "${s.name}"?`)) archiveMut.mutate(s.id); }} className="px-2 py-1 rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors">Archive</button>
                     )}
                     {canBlacklist(userRole, userPermissions) && !s.isBlacklisted && <button onClick={() => { if (confirm(`Blacklist "${s.name}"?`)) blacklistMut.mutate(s.id); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Blacklist</button>}
                     {canBlacklist(userRole, userPermissions) && <button onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteMut.mutate(s); }} className="px-2 py-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">Delete</button>}
