@@ -319,7 +319,7 @@ export async function importReconciliation(
   try {
     await client.query('BEGIN');
 
-    let matched = 0;
+    const matched = 0;
     let unmatched = 0;
 
     for (const row of csvRows) {
@@ -328,7 +328,7 @@ export async function importReconciliation(
       // 'uncleared' on a match, incrementing `matched` below. Until that
       // table/logic exists, every imported row is 'unmatched' — this is the
       // documented behavior per Req 4.7, not a placeholder bug.
-      const status: 'unmatched' = 'unmatched';
+      const status = 'unmatched' as const;
 
       await client.query(
         `INSERT INTO bank_reconciliation

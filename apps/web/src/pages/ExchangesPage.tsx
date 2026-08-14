@@ -131,7 +131,6 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
     if (locationId !== '' || !locData?.items?.length) return;
     const def = locData.items.find(l => l.isDefaultFulfillment) ?? locData.items[0];
     if (def) setLocationId(def.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locData]);
 
   const { data: bookResults } = useQuery<{ items: BookResult[] }>({

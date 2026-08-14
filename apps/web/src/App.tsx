@@ -96,7 +96,6 @@ export default function App() {
       }
       setSessionRestoring(false);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Inactivity timer — start when authenticated, stop on logout ────────────

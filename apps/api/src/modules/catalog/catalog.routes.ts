@@ -174,7 +174,7 @@ router.get(
       });
 
       // Step 2: Enrich with availability data from inventory (only if locationId given)
-      let availabilityMap: Map<number, { locationId: number; locationName: string; onHand: number; reserved: number; available: number }> = new Map();
+      const availabilityMap: Map<number, { locationId: number; locationName: string; onHand: number; reserved: number; available: number }> = new Map();
 
       if (locationId && catalogResult.items.length > 0) {
         const bookIds = catalogResult.items.map(b => b.id);

@@ -15,6 +15,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import http from 'http';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
@@ -248,7 +249,6 @@ describe('Notification System', () => {
         const addr = server.address() as { port: number };
         const port = addr.port;
 
-        const http = require('http') as typeof import('http');
         const req = http.request(
           {
             hostname: '127.0.0.1',

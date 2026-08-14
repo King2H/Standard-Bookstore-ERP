@@ -189,7 +189,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
         let eventName = '';
         let dataLine  = '';
 
-        while (true) {
+        for (;;) {
           const { done, value } = await reader.read();
           if (done) { scheduleReconnect(); return; }
 

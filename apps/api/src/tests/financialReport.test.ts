@@ -24,7 +24,7 @@ const BRANCH_PREFIX = 'FinReport Test ';
 const REF_PREFIX = 'FRTEST-';
 
 function parseCsv(csv: string): Record<string, string>[] {
-  const body = csv.replace(/^﻿/, '');
+  const body = csv.replace(/^\uFEFF/, '');
   const lines = body.split('\r\n').filter(l => l.length > 0);
   const headers = lines[0].split(',');
   return lines.slice(1).map(line => {

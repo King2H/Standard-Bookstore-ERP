@@ -148,7 +148,6 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialContext.orderId, initialContext.sourceType]);
 
   // Fetch active bank accounts for this branch — only when Bank method is selected

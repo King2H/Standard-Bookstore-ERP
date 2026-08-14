@@ -14,13 +14,10 @@
   "dependencies": {
     "@hookform/resolvers": "^3.6.0",
     "@tanstack/react-query": "^5.40.0",
-    "@tanstack/react-table": "^8.17.3",
-    "clsx": "^2.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.51.5",
     "recharts": "^2.12.7",
-    "tailwind-merge": "^2.3.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

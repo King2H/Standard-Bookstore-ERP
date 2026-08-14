@@ -422,7 +422,7 @@ router.get(
       );
 
       // Fetch is_all_branches separately — resilient to missing column on older DBs
-      let allBranchesMap: Record<number, boolean> = {};
+      const allBranchesMap: Record<number, boolean> = {};
       try {
         const abRes = await db.query(`SELECT id, is_all_branches FROM staff`);
         for (const row of abRes.rows) {

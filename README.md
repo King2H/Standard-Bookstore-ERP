@@ -6,18 +6,13 @@ A multi-user, multi-role, multi-branch ERP platform for managing physical bookst
 
 ## Project Status
 
-**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). ERP Production Hardening Complete. Multi-Role/Multi-Branch Auth Refactor Applied (May 2026). MVP Pre-Demo Fixes Applied (May 2026): Currency Consistency, SQL Parameterization, Dashboard Icon Fix, Inventory 500 Fix. Unified Order Creation Workflow, Single Authoritative Payment Collection Workflow, Non-Destructive Exchange Virtual Receiving, and Dashboard Standardization & Unified Reports Engine Applied. Legacy Code Audit (dead code elimination + build hardening + documentation sync) Complete.**
+**Phase 3 Complete (Slices 12–15). Phase 4 Complete (Slices 16–17). Phase 5 Complete (Real-Time Notification System). UI/UX Improvements Applied (Sidebar Refactor, Dashboard Enhancement, Notification Fixes). Post-MVP Hardening + Immediate + Mid-Range Improvements Applied. Post-Evaluation Bug Fixes Applied (V1 + V2). ERP Production Hardening Complete. Multi-Role/Multi-Branch Auth Refactor Applied (May 2026). MVP Pre-Demo Fixes Applied (May 2026): Currency Consistency, SQL Parameterization, Dashboard Icon Fix, Inventory 500 Fix. Unified Order Creation Workflow, Single Authoritative Payment Collection Workflow, Non-Destructive Exchange Virtual Receiving, and Dashboard Standardization & Unified Reports Engine Applied. Legacy Code Audit (dead code elimination + build hardening + documentation sync) Complete. Weighted-Average Inventory Costing, Unified Reports Engine v2 (period KPIs), Master Data Lifecycle (Active/Inactive/Archived), Payment Method Unification (Telebirr added, Store Credit preserved), and a full Repository Cleanup & Documentation Sync Applied (August 2026) — see "What's New — August 2026" below.**
+
+This README is the living source of truth for the shipped system. The historical requirements/design/task-tracking documents that guided early development lived under `.kiro/specs/` (a spec-driven planning tool used pre-implementation); those planning artifacts are now superseded by the actual code and this document, and were removed in the August 2026 cleanup pass rather than left to drift out of sync. One reference survives because nothing else documents it as completely:
 
 | Document | Status | Location |
 |----------|--------|----------|
-| Requirements | Complete | `.kiro/specs/bookstore-management-system/requirements.md` |
-| Design | Complete | `.kiro/specs/bookstore-management-system/design.md` |
-| Tasks | In Progress | `.kiro/specs/bookstore-management-system/tasks.md` |
-| Fix Tracker | Active | `.kiro/specs/bookstore-management-system/fix-tracker.md` |
-| MVP Evaluation | v1.2 | `.kiro/specs/bookstore-management-system/mvp-evaluation.md` |
-| Industry-Grade Roadmap | Active | `.kiro/specs/bookstore-management-system/roadmap.md` |
-| Notification System Spec | Implemented | `.kiro/specs/bookstore-management-system/notification-spec.md` |
-| ERP Hardening Spec | Complete | `.kiro/specs/erp-production-hardening/` |
+| Notification Event Catalog | Implemented (40+ event types) | `.kiro/specs/bookstore-management-system/notification-spec.md` |
 
 ---
 
@@ -531,6 +526,14 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 - `workers/outboxPoller.ts` was importing `handleInstallmentOverdue` (from `installmentChecker.ts`) but never registering it against the `'InstallmentOverdue'` outbox event type it's meant to handle — every overdue-installment event was silently falling through with no effect since the checker was added. Wired in (log-only handler — no user-facing behavior change beyond a server log line). A related, separate gap was found and left as-is: the newer Phase 5 `'installment.overdue'` notification event is fully wired (type, template, handler) but is never actually emitted anywhere via `insertOutbox()` — flagged for a future pass rather than fixed here, since resolving it means deciding *where* installment-overdue notifications should originate, a product decision outside this audit's scope.
 - **Known, pre-existing, intentional**: the Bank Accounts module (`modules/bankAccount/`) has full backend routes/service, a full `BankAccountsPage.tsx` UI, and its own test suite, but `app.ts` currently has `bankAccountRouter`'s import and mount commented out ("disabled for this deployment phase"). The sidebar nav item and page are still reachable — every API call the page makes will 404 until the module is re-enabled. This audit intentionally left the disablement as-is (it reads as a deliberate, temporary deployment decision, not orphaned code) rather than silently re-enabling or deleting a working module; flagged here so it isn't mistaken for a regression.
 
+### What's New — August 2026
+
+- **Weighted-Average Inventory Costing** — `inventoryTransaction.service.ts` now maintains a moving-average `average_cost`/`inventory_value` per book/location, so a new PO landing at a different price no longer silently changes the COGS already recognized on past sales. Every sale-time line item (POS, Orders, Exchanges, Returns) persists its own `unit_cost` at the moment of sale; `profit.service.ts`/`reports.service.ts` prefer that persisted cost over a live recompute. Extended to Exchange trade-ins that were never procured via a PO: a resellable trade-in nets to $0 profit at intake (margin deferred to eventual resale) while a damaged trade-in's allowance is recognized as a real loss immediately — the same signed-cost convention already used for Returns.
+- **Unified Reports Engine v2** — `FinancialReportService` gained period-scoped KPIs (Today/Month/Custom range) and new metrics (Cash Collected, Outstanding/Overdue Receivables, Procurement Expense) surfaced identically on the Dashboard and in CSV exports. Procurement gained a query-time **Supplier Ledger** (PO → Goods Receipt → Payment → Credit Note → running balance, backed by the new `supplier_credit_notes` table) with a live "Live · 30s" auto-refresh badge and newest-first ordering — it previously read as inert because cache invalidation was missing on procurement mutations and entries rendered oldest-first (today's activity scrolled off-screen).
+- **Master Data Lifecycle** — Authors, Categories, Publishers, Books, Suppliers, and Customers all now carry a unified `ACTIVE` / `INACTIVE` / `ARCHIVED` status (`1700000049_master_data_lifecycle`), with consistent Deactivate/Archive/Restore/Delete actions, a dependency-aware "Cannot delete — Archive instead" dialog when a record is still referenced, and archived/inactive badges preserved on historical documents. Every Archive and Delete action across the app now confirms before firing (Cancel already did); Cancel/Delete/Archive wording is consistent with "Deactivate" everywhere a record is being set inactive.
+- **Payment Method Unification** — POS, Orders, Exchange settlement, and Payment Collection all share one `PaymentMethodTabs` picker and one label source (`lib/paymentMethods.ts`). Telebirr (`mobile`) was added everywhere it was missing, including a migration widening POS's `transaction_payments` CHECK constraint; Store Credit is preserved as its own distinct method throughout. Order creation now captures the payment method (cash sales) or due date (credit sales) directly on the New Order form — clicking **Create Order** creates and confirms the order in one action instead of a separate post-creation confirm step.
+- **Repository Cleanup & Documentation Sync** — removed unused dependencies (`uuid`, `@tanstack/react-table`, `clsx`, `tailwind-merge`), a one-off historical maintenance script, and the superseded `.kiro/specs/` planning documents (requirements/design/task-tracking docs from before implementation — now superseded by this README and the shipped code; the notification event catalog was kept as the one reference nothing else fully documents). Fixed all outstanding `eslint` findings (stray disable-comments referencing an uninstalled rule, a raw BOM character, a mid-file `require()`, literal-type / `prefer-const` nits). Applied non-breaking `npm audit` fixes.
+
 ---
 
 | Layer | Technology |
@@ -542,7 +545,7 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 | Database | PostgreSQL 16 (raw pg driver, no ORM) |
 | Auth | JWT (15 min) + httpOnly refresh cookie (8 hours) |
 | Encryption | AES-256-GCM (column-level, bank account data) |
-| Migrations | node-pg-migrate (.cjs format, 45 migrations) |
+| Migrations | node-pg-migrate (.cjs format, 49 migrations) |
 | Testing | Vitest + Supertest (integration tests, real DB) |
 | Container | Docker + Docker Compose |
 
@@ -758,7 +761,7 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 
 ---
 
-## Migrations (45 total)
+## Migrations (49 total)
 
 | Migration | Purpose |
 |-----------|---------|
@@ -807,6 +810,10 @@ Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page af
 | 1700000044_transfer_reference_type | `transfer` inventory_history reference_type |
 | 1700000045_supplier_payments | Supplier payment tracking |
 | 1700000046_exchange_virtual_receiving_cost_basis | cost_basis support for exchange-acquired books that were never procured via a PO (see "Non-Destructive Catalog Search & Virtual Receiving" above) |
+| 1700000047_inventory_valuation_weighted_average | Weighted-average (moving-average) inventory costing: `average_cost`/`inventory_value` on inventory, persisted per-line sale-time `unit_cost` on order/POS/exchange/return line items |
+| 1700000048_supplier_credit_notes | Supplier credit notes (damaged goods, overcharge, post-receipt price corrections) feeding the query-time supplier ledger |
+| 1700000049_master_data_lifecycle | Unified ACTIVE / INACTIVE / ARCHIVED status model for authors, categories, publishers, books, suppliers, and customers |
+| 1700000050_pos_payment_mobile | Adds Telebirr (`mobile`) to POS's `transaction_payments.method` CHECK constraint, matching every other payment surface |
 
 *(Migration 1700000041 does not exist — number intentionally skipped, not a gap to fill.)*
 
