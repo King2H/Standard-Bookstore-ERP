@@ -579,7 +579,18 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
     queryFn: () => api.get(`/purchase-orders/${poId}`),
   });
 
-  const inv = () => { qc.invalidateQueries({ queryKey: ['po', poId] }); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); };
+  // Supplier Ledger is a live-derived view of PO/receipt/payment/credit-note
+  // activity (no cached/materialized table — see procurement.service.ts's
+  // getSupplierLedger()), so it's only ever as fresh as the last time this
+  // query was invalidated or the view was freshly mounted. Every mutation
+  // that changes what's owed to a supplier (submit/approve/order/close/
+  // cancel/payment/credit-note) must invalidate it too, or a ledger view
+  // left open elsewhere in the app silently goes stale.
+  const inv = () => {
+    qc.invalidateQueries({ queryKey: ['po', poId] });
+    qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+    qc.invalidateQueries({ queryKey: ['supplier-ledger'] });
+  };
 
   const submitMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/submit`), onSuccess: () => { inv(); showToast('Submitted for approval', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const approveMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/approve`), onSuccess: () => { inv(); showToast('PO approved', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
@@ -880,9 +891,18 @@ function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: 
   if (dateTo) params.set('dateTo', dateTo);
   const qs = params.toString() ? `?${params}` : '';
 
-  const { data, isLoading } = useQuery<{ entries: SupplierLedgerEntry[]; currentBalance: number }>({
+  // Live-derived, not cached/materialized (see procurement.service.ts's
+  // getSupplierLedger()) — but React Query still only refetches this on
+  // mount/invalidation, not continuously. staleTime: 0 (the default) plus
+  // a short poll gives it the same "Live" feel as the Dashboard's KPI
+  // cards, so activity recorded elsewhere in the app (receiving, payments,
+  // credit notes) while this view is open shows up without a manual reload.
+  const { data, isLoading, dataUpdatedAt, refetch, isFetching } = useQuery<{ entries: SupplierLedgerEntry[]; currentBalance: number }>({
     queryKey: ['supplier-ledger', supplierId, dateFrom, dateTo],
     queryFn: () => api.get(`/suppliers/${supplierId}/ledger${qs}`),
+    staleTime: 0,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const entries = data?.entries ?? [];
@@ -904,6 +924,26 @@ function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: 
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back</button>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Supplier Ledger — {supplierName}</h2>
+        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+          Live · 30s
+        </span>
+        {dataUpdatedAt > 0 && (
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            · Updated {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        )}
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          title="Refresh now"
+          className="ml-auto flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-40 transition-colors"
+        >
+          <svg className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {isFetching ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -1002,7 +1042,7 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
   function backToList() { setView('list'); setSelectedPO(null); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); }
 
   if (view === 'form') {
-    return <POForm editing={editingPO} onSaved={(po) => { openDetail(po); }} onCancel={backToList} />;
+    return <POForm editing={editingPO} onSaved={(po) => { qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['supplier-ledger'] }); openDetail(po); }} onCancel={backToList} />;
   }
 
   if (view === 'detail' && selectedPO) {
@@ -1023,7 +1063,7 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
     return (
       <ReceiveForm
         po={selectedPO}
-        onDone={(updated) => { setSelectedPO(updated); setView('detail'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); }}
+        onDone={(updated) => { setSelectedPO(updated); setView('detail'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['supplier-ledger'] }); }}
         onBack={() => setView('detail')}
       />
     );
