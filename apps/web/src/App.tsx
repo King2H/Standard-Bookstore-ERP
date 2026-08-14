@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import LoginPage from './pages/LoginPage.js';
 import BranchesPage from './pages/BranchesPage.js';
@@ -74,7 +74,16 @@ export default function App() {
   // This is the standard industry pattern. The session cookie being a
   // "session cookie" (no maxAge) means it is automatically cleared when the
   // browser window closes, so a fresh browser launch always requires login.
+  //
+  // hasAttemptedRestore guards against React StrictMode's dev-only double
+  // effect invocation (mount → cleanup → mount), which would otherwise fire
+  // /auth/refresh twice on every load and log a duplicate 401 in the console
+  // when there's no session cookie yet. Without the guard the behavior is
+  // still correct (a second identical request is idempotent), just noisy.
+  const hasAttemptedRestore = useRef(false);
   useEffect(() => {
+    if (hasAttemptedRestore.current) return;
+    hasAttemptedRestore.current = true;
     restoreSession().then(({ restored, permissions }) => {
       if (restored) {
         const { role, roles, branchId } = parseTokenPayload();
