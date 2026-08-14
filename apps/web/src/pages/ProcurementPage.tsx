@@ -905,7 +905,15 @@ function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: 
     refetchOnWindowFocus: true,
   });
 
-  const entries = data?.entries ?? [];
+  // The API returns entries oldest→newest (required for the running-balance
+  // math). Display newest-first instead — the standard convention for an
+  // on-screen bank/AP statement — so today's activity is what you see first
+  // without scrolling, instead of landing below however much older history
+  // exists. (Root cause of "today's procurement not updated": the balance
+  // total doesn't change when a PO is received AND fully paid in the same
+  // day — receipt +value, payment −value nets to zero — so there was no
+  // visible cue that rows existed further down an oldest-first list.)
+  const entries = [...(data?.entries ?? [])].reverse();
 
   async function exportCsv() {
     const token = getAccessToken();
@@ -966,6 +974,11 @@ function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: 
         </div>
       </div>
 
+      {entries.length > 0 && (
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          {entries.length} {entries.length === 1 ? 'entry' : 'entries'} · newest first
+        </p>
+      )}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-gray-400">Loading...</div>
