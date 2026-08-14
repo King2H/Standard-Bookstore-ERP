@@ -113,10 +113,12 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   const [saleType, setSaleType] = useState<'cash_sale' | 'credit_sale'>('cash_sale');
   // Payment Method at Creation: for a cash sale, captured right here instead
   // of a separate post-creation "Confirm (set payment method)" step — Create
-  // Order now creates AND confirms (see createMut) in one action. Credit
-  // sales still confirm separately (due date, not a payment method, is what
-  // that step needs) — unchanged.
+  // Order now creates AND confirms (see createMut) in one action.
   const [orderPaymentMethod, setOrderPaymentMethod] = useState<PaymentMethodCode>('cash');
+  // Due Date at Creation: same treatment for credit sales — captured here
+  // instead of a separate post-creation "Confirm (set due date)" step, so
+  // Create Order creates AND confirms in one action for credit sales too.
+  const [orderDueDate, setOrderDueDate] = useState('');
   const [channel, setChannel] = useState<'in_store' | 'phone' | 'online'>('in_store');
   const [bookSearch, setBookSearch] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
@@ -159,28 +161,33 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   });
 
   // Mutations
-  // Payment Method at Creation: for a cash sale, Create Order now creates
-  // AND confirms in one action — chaining the same two API calls the old
-  // "Create Order" → find it in the list → "Confirm (set payment method)"
-  // flow already made, just without the extra round trip. Credit sales are
-  // unchanged (still land in DRAFT; confirming them needs a due date, a
-  // separate decision this form doesn't collect). If confirm fails after
-  // create succeeds (e.g. a stock shortfall discovered only at confirm
-  // time), the order is left in DRAFT exactly as it would have been under
+  // Payment Method / Due Date at Creation: Create Order now creates AND
+  // confirms in one action for both sale types — chaining the same two API
+  // calls the old "Create Order" → find it in the list → "Confirm (set
+  // payment method / due date)" flow already made, just without the extra
+  // round trip. If confirm fails after create succeeds (e.g. a stock
+  // shortfall discovered only at confirm time, or a due-date validation
+  // error), the order is left in DRAFT exactly as it would have been under
   // the old two-step flow — the existing list-row "Confirm" action still
   // works as a manual fallback.
   const createMut = useMutation({
-    mutationFn: async (body: { saleType: 'cash_sale' | 'credit_sale'; paymentMethod?: string; [key: string]: unknown }) => {
-      const { paymentMethod, ...orderBody } = body;
+    mutationFn: async (body: { saleType: 'cash_sale' | 'credit_sale'; paymentMethod?: string; dueDate?: string; [key: string]: unknown }) => {
+      const { paymentMethod, dueDate, ...orderBody } = body;
       const order = await api.post<Order>('/orders', orderBody);
       if (body.saleType === 'cash_sale') {
         return api.post<Order>(`/orders/${order.id}/confirm`, { paymentMethod });
       }
+      if (body.saleType === 'credit_sale') {
+        return api.post<Order>(`/orders/${order.id}/confirm`, { dueDate });
+      }
       return order;
     },
     onSuccess: (o) => {
-      showToast(o.saleType === 'cash_sale' ? `Order ${o.orderNumber} created & paid` : `Order ${o.orderNumber} created`, 'success');
-      setTab('list'); setOrderItems([]); setSelectedCustomer(null); setOrderPaymentMethod('cash');
+      const msg = o.saleType === 'cash_sale' ? `Order ${o.orderNumber} created & paid`
+        : o.saleType === 'credit_sale' ? `Order ${o.orderNumber} created & confirmed`
+        : `Order ${o.orderNumber} created`;
+      showToast(msg, 'success');
+      setTab('list'); setOrderItems([]); setSelectedCustomer(null); setOrderPaymentMethod('cash'); setOrderDueDate('');
       qc.invalidateQueries({ queryKey: ['orders-list'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['order-books'] });
@@ -247,6 +254,10 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       showToast('Credit sales require a customer', 'error');
       return;
     }
+    if (saleType === 'credit_sale' && !orderDueDate) {
+      showToast('Credit sales require a due date', 'error');
+      return;
+    }
     if (saleType === 'cash_sale' && orderPaymentMethod === 'store_credit' && !selectedCustomer) {
       showToast('Store credit payment requires a customer — please select one above', 'error');
       return;
@@ -256,6 +267,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       channel,
       saleType,
       paymentMethod: saleType === 'cash_sale' ? orderPaymentMethod : undefined,
+      dueDate: saleType === 'credit_sale' ? orderDueDate : undefined,
       locationId: effectiveLocationId ?? undefined,
       items: orderItems.map(i => ({
         bookId: i.bookId,
@@ -524,6 +536,16 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
             </div>
             {saleType === 'credit_sale' && !selectedCustomer && (
               <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Credit sales require a customer — please select one above.</p>
+            )}
+            {/* Due Date at Creation — credit sales only; captured here instead
+                of a separate post-creation confirm step, mirroring the cash
+                sale's Payment Method at Creation below. */}
+            {saleType === 'credit_sale' && (
+              <div className="pt-1 space-y-1">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Due Date</p>
+                <input type="date" value={orderDueDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setOrderDueDate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             )}
             {/* Payment Method at Creation — cash sales only; captured here
                 instead of a separate post-creation confirm step. Method set

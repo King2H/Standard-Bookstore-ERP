@@ -204,7 +204,7 @@ describe('OrdersPage — Payment Mode Capture (cash_sale confirm)', () => {
   });
 });
 
-describe('OrdersPage — Payment Method at Creation (cash_sale create+confirm)', () => {
+describe('OrdersPage — Payment Method / Due Date at Creation (create+confirm)', () => {
   it('clicking Create Order on a cash sale creates AND confirms in one action, with the chosen payment method', async () => {
     getMock.mockImplementation((path: string) => {
       if (path.startsWith('/orders?')) return Promise.resolve({ items: [], total: 0, page: 1, totalPages: 1 });
@@ -249,7 +249,7 @@ describe('OrdersPage — Payment Method at Creation (cash_sale create+confirm)',
     expect(postMock).toHaveBeenCalledWith('/orders/20/confirm', { paymentMethod: 'mobile' });
   });
 
-  it('a credit sale is NOT auto-confirmed at creation — still lands in DRAFT for the separate due-date confirm step', async () => {
+  it('clicking Create Order on a credit sale creates AND confirms in one action, with the chosen due date', async () => {
     getMock.mockImplementation((path: string) => {
       if (path.startsWith('/orders?')) return Promise.resolve({ items: [], total: 0, page: 1, totalPages: 1 });
       if (path.startsWith('/customers')) return Promise.resolve({ items: [{ id: 5, customerCode: 'CUST-5', fullName: 'Credit Customer' }] });
@@ -265,6 +265,7 @@ describe('OrdersPage — Payment Method at Creation (cash_sale create+confirm)',
     });
     postMock.mockImplementation((path: string) => {
       if (path === '/orders') return Promise.resolve({ id: '21', orderNumber: 'ORD-21', saleType: 'credit_sale' });
+      if (path === '/orders/21/confirm') return Promise.resolve({ id: '21', orderNumber: 'ORD-21', saleType: 'credit_sale', status: 'CONFIRMED' });
       return Promise.resolve({});
     });
 
@@ -283,12 +284,57 @@ describe('OrdersPage — Payment Method at Creation (cash_sale create+confirm)',
 
     // No payment method picker for a credit sale — it isn't a cash form field.
     expect(screen.queryByText('Telebirr')).not.toBeInTheDocument();
+    // Due Date input is offered right here instead of a separate confirm step.
+    await waitFor(() => expect(screen.getByText('Due Date')).toBeInTheDocument());
+    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
+    await user.type(dateInput, '2099-12-31');
 
     await user.click(screen.getByRole('button', { name: /Create Order/i }));
 
-    await waitFor(() => expect(postMock).toHaveBeenCalledWith('/orders', expect.objectContaining({ saleType: 'credit_sale' })));
-    // Exactly one POST call — no auto-confirm chained for credit sales.
-    expect(postMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith('/orders', expect.objectContaining({ saleType: 'credit_sale' }));
+    });
+    // The /orders call must NOT carry a dueDate field — that's the confirm
+    // call's job; POST /orders itself has no such field.
+    const ordersCallBody = postMock.mock.calls.find(c => c[0] === '/orders')?.[1] as Record<string, unknown>;
+    expect(ordersCallBody.dueDate).toBeUndefined();
+    expect(postMock).toHaveBeenCalledWith('/orders/21/confirm', { dueDate: '2099-12-31' });
+  });
+
+  it('refuses to submit a credit sale without a due date', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.startsWith('/orders?')) return Promise.resolve({ items: [], total: 0, page: 1, totalPages: 1 });
+      if (path.startsWith('/customers')) return Promise.resolve({ items: [{ id: 5, customerCode: 'CUST-5', fullName: 'Credit Customer' }] });
+      if (path.startsWith('/order-books') || path.startsWith('/books/with-availability')) {
+        return Promise.resolve({
+          items: [{
+            id: 8, title: 'Credit Sale Book', isbn: '888', defaultPrice: 40, branchPrice: 40,
+            availability: { locationId: 1, locationName: 'Main', onHand: 10, reserved: 0, available: 10 },
+          }],
+        });
+      }
+      return Promise.resolve({ items: [] });
+    });
+
+    const user = userEvent.setup();
+    renderOrdersPage();
+
+    await user.click(screen.getByRole('button', { name: /New Order/i }));
+    await user.type(screen.getByPlaceholderText('Search customer...'), 'Credit');
+    await waitFor(() => expect(screen.getByText('Credit Customer')).toBeInTheDocument());
+    await user.click(screen.getByText('Credit Customer'));
+
+    await user.click(screen.getByRole('button', { name: /Credit Sale/i }));
+    await user.type(screen.getByPlaceholderText('Search books to add...'), 'Credit Sale');
+    await waitFor(() => expect(screen.getByText('Credit Sale Book')).toBeInTheDocument());
+    await user.click(screen.getByText('Credit Sale Book'));
+
+    await user.click(screen.getByRole('button', { name: /Create Order/i }));
+
+    // Validation blocks the submit client-side — no POST is ever made
+    // (showToast has no visible sink in this test harness, so we assert the
+    // effect that matters: nothing was submitted to the API).
+    expect(postMock).not.toHaveBeenCalled();
   });
 });
 
