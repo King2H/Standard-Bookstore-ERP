@@ -567,6 +567,8 @@ Open http://localhost:5173
 - `superadmin` — all permissions, all branches
 - `admin` — all permissions, all branches
 
+These accounts are created only on a fresh install. While either one still uses the default password, it must be changed at next login. Restarting the server never resets passwords (before v1.1.1 it did).
+
 **Login flow**: Enter username + password → system shows available branches → select branch (or auto-selects if only one) → logged in.
 
 Note: superadmin and admin both have `is_all_branches = true` and land on the Dashboard after login.

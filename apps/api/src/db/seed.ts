@@ -2,13 +2,18 @@
  * ensureSeedData — runs at every server startup after migrations.
  *
  * Guarantees the minimum data required for the app to work exists in the DB.
- * All statements are fully idempotent (ON CONFLICT DO NOTHING / DO UPDATE),
- * so running this on an already-populated database is completely safe.
+ * All statements are insert-only (ON CONFLICT DO NOTHING), so running this on
+ * an already-populated database never overwrites data an operator has changed
+ * (passwords, active flags, branch names).
  *
  * This is intentionally NOT a migration — migrations can be skipped if they
  * were already recorded as run. Startup seed always executes.
  */
 import { db } from './index.js';
+
+// bcrypt hash (cost 12) of the documented default password 'Admin@1234'.
+export const DEFAULT_ADMIN_PASSWORD_HASH =
+  '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK';
 
 export async function ensureSeedData(): Promise<void> {
   const client = await db.connect();
@@ -33,25 +38,30 @@ export async function ensureSeedData(): Promise<void> {
         '{"mon":"09:00-18:00","tue":"09:00-18:00","wed":"09:00-18:00","thu":"09:00-18:00","fri":"09:00-18:00","sat":"10:00-16:00","sun":"closed"}',
         true
       )
-      ON CONFLICT (id) DO UPDATE
-        SET is_active = true,
-            name      = EXCLUDED.name
+      ON CONFLICT (id) DO NOTHING
     `);
 
     // ── 2. Staff accounts ─────────────────────────────────────────────────────
-    // bcrypt hash of 'Admin@1234' (cost 12) — generated offline and verified
-    // Note: is_all_branches is added by migration 33/34. We try to set it here
-    // but fall back gracefully if the column doesn't exist yet.
-    await client.query(`
-      INSERT INTO staff (id, username, password_hash, full_name, is_active)
-      VALUES
-        (1, 'superadmin', '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Super Admin', true),
-        (2, 'admin',      '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK', 'Admin User',  true)
-      ON CONFLICT (id) DO UPDATE
-        SET is_active     = true,
-            username      = EXCLUDED.username,
-            password_hash = EXCLUDED.password_hash
-    `);
+    // Created only on a fresh install. Existing rows are never touched: an
+    // upsert here used to reset both accounts to the default password and
+    // reactivate them on every restart.
+    await client.query(
+      `INSERT INTO staff (id, username, password_hash, full_name, is_active)
+       VALUES
+         (1, 'superadmin', $1, 'Super Admin', true),
+         (2, 'admin',      $1, 'Admin User',  true)
+       ON CONFLICT (id) DO NOTHING`,
+      [DEFAULT_ADMIN_PASSWORD_HASH],
+    );
+
+    // Any seeded account still on the published default password must change
+    // it at next login. Covers fresh installs and databases where the old
+    // upsert already reset the password.
+    await client.query(
+      `UPDATE staff SET must_change_password = true
+       WHERE id IN (1, 2) AND password_hash = $1 AND must_change_password = false`,
+      [DEFAULT_ADMIN_PASSWORD_HASH],
+    );
 
     // Set is_all_branches for superadmin and admin — best-effort (column may not
     // exist on older DBs that haven't run migration 33/34 yet).
