@@ -2,7 +2,7 @@
 
 Multi-branch bookstore ERP. Monorepo with npm workspaces:
 
-- `apps/api`: Node 20, TypeScript (strict), Express 5, PostgreSQL 18 via `pg`, migrations with `node-pg-migrate`
+- `apps/api`: Node 24 LTS (`.nvmrc`), TypeScript (strict), Express 5, PostgreSQL 18 via `pg`, migrations with `node-pg-migrate`
 - `apps/web`: React 18, Vite, TanStack Query, react-hook-form + zod, Tailwind
 - `packages/shared`: types shared by the API and the web app
 
