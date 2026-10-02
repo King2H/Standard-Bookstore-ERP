@@ -541,7 +541,7 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 | Frontend | React 18 + TypeScript + Vite |
 | Styling | Tailwind CSS (dark mode: class strategy) |
 | State / Data | TanStack Query v5 |
-| Backend | Node.js 20 + Express 5 + TypeScript |
+| Backend | Node.js 24 LTS from v2 (v1.x: Node.js 20) + Express 5 + TypeScript |
 | Database | PostgreSQL 18 from v2 (v1.x: PostgreSQL 16); raw pg driver, no ORM |
 | Auth | JWT (15 min) + httpOnly refresh cookie (8 hours) |
 | Encryption | AES-256-GCM (column-level, bank account data) |

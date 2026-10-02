@@ -6,7 +6,7 @@ for fast reloads and working debuggers.
 | Component | Version | Runs in |
 |---|---|---|
 | PostgreSQL | 18 | Docker (`docker compose`), host port **5433** |
-| Node.js | 20 (moving to 24 LTS) | natively |
+| Node.js | 24 LTS (pinned in `.nvmrc`) | natively |
 | API | Express 5 on port 3000 | natively (`npm run dev:api`) |
 | Web | Vite on port 5173 | natively (`npm run dev:web`) |
 
@@ -15,7 +15,14 @@ Commands below are for PowerShell in the VS Code terminal, run from the reposito
 ## Prerequisites
 
 - **Git**
-- **Node.js 20+** and npm (`node -v`)
+- **Node.js 24 LTS** and npm. We recommend [nvm-windows](https://github.com/coreybutler/nvm-windows),
+  which lets you switch versions per branch (`main` uses 24, `release/1.x` uses 20):
+  ```powershell
+  nvm install 24
+  nvm use 24
+  node -v   # v24.x
+  ```
+  After switching Node versions, run `npm install` again so native modules (`bcrypt`) match.
 - **Docker Desktop**, running. Start it from the Start menu and wait for "Engine running".
 
 A natively installed PostgreSQL is not needed. If you have one, it can keep port 5432;
