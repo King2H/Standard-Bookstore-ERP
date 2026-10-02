@@ -31,5 +31,8 @@ export default defineConfig({
       },
     },
     testTimeout: 30_000,
+    // Run after-hooks in reverse registration order (the Vitest 2+ default),
+    // so the pool cleanup in setup.ts runs after each file's own afterAll.
+    sequence: { hooks: 'stack' },
   },
 });

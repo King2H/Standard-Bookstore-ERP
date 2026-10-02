@@ -542,7 +542,7 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 | Styling | Tailwind CSS (dark mode: class strategy) |
 | State / Data | TanStack Query v5 |
 | Backend | Node.js 20 + Express 5 + TypeScript |
-| Database | PostgreSQL 16 (raw pg driver, no ORM) |
+| Database | PostgreSQL 18 from v2 (v1.x: PostgreSQL 16); raw pg driver, no ORM |
 | Auth | JWT (15 min) + httpOnly refresh cookie (8 hours) |
 | Encryption | AES-256-GCM (column-level, bank account data) |
 | Migrations | node-pg-migrate (.cjs format, 49 migrations) |
@@ -553,10 +553,12 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 
 ## Running Locally
 
+Step-by-step guide (Windows, including `.env` and secrets): [`docs/development.md`](docs/development.md).
+
 ```bash
 npm install
-docker compose up -d postgres
-cd apps/api && npm run migrate
+docker compose up -d postgres   # PostgreSQL 18 on localhost:5433
+npm run migrate
 npm run dev:api   # terminal 1
 npm run dev:web   # terminal 2
 ```

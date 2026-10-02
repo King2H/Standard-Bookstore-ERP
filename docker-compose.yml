@@ -31,20 +31,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./apps/api/src:/app/src
     restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: bms
       POSTGRES_USER: bms
       POSTGRES_PASSWORD: bms
+    # Host port 5433 so it never collides with a natively installed
+    # PostgreSQL on 5432. Containers still reach it as postgres:5432.
     ports:
-      - "5432:5432"
+      - "5433:5432"
+    # PostgreSQL 18+ images keep data under /var/lib/postgresql/<major>/docker,
+    # so the volume mounts /var/lib/postgresql (not .../data). One volume per
+    # major version: a new major gets a new volume and a pg_upgrade/dump-restore.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bms -d bms"]
       interval: 5s
@@ -53,4 +56,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  pgdata18:

@@ -2,7 +2,7 @@
 
 Multi-branch bookstore ERP. Monorepo with npm workspaces:
 
-- `apps/api`: Node 20, TypeScript (strict), Express 5, PostgreSQL 16 via `pg`, migrations with `node-pg-migrate`
+- `apps/api`: Node 20, TypeScript (strict), Express 5, PostgreSQL 18 via `pg`, migrations with `node-pg-migrate`
 - `apps/web`: React 18, Vite, TanStack Query, react-hook-form + zod, Tailwind
 - `packages/shared`: types shared by the API and the web app
 
@@ -31,10 +31,11 @@ Claude is the implementer.
 ## Commands
 
 Run from the repository root. The API and its tests need PostgreSQL and a `.env` (copy `.env.example`).
+Full setup guide (Windows): `docs/development.md`.
 
 ```bash
 npm install                      # install all workspaces
-docker compose up -d postgres    # start only PostgreSQL 16
+docker compose up -d postgres    # start only PostgreSQL 18 (host port 5433)
 npm run migrate                  # apply database migrations
 npm run dev:api                  # API on :3000
 npm run dev:web                  # web on :5173 (proxies /api)
@@ -47,7 +48,6 @@ npm run test:web                 # web component tests (jsdom)
 
 Known issues being fixed in v2:
 
-- `.env.example` points at port 5433, but `docker-compose.yml` exposes 5432 (issue #8).
 - The 10 tests in `bankAccount.test.ts` fail because that module is disabled in `app.ts` (issue #27).
 - Some API tests leak state on a reused database (issue #30). Run them on a fresh database when results look odd.
 
