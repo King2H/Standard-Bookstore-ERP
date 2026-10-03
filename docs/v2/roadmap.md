@@ -52,7 +52,7 @@ on each PR are what make that safe.
 | Order | Issue | Outcome |
 |---|---|---|
 | 1 | #29 CI pipeline | GitHub Actions on every PR: install, lint, typecheck, API tests on PostgreSQL 18, web tests, build. Branch protection on `main` requires green CI. |
-| 2 | #30 Test isolation | Separate test database; tests no longer depend on order or leave data behind; the 10 disabled bank-account tests are skipped explicitly until #27. |
+| 2 | #30 Test isolation | Separate test database, created and migrated by the test run; tests no longer depend on order or leave data behind. (The bank-account tests already run with the module switched on, since PR #44.) |
 | 3 | #16 Security hardening | Fail-fast on invalid or placeholder secrets; CORS fails closed; rate limiter trusts only configured proxies; security headers; remaining `npm audit` advisory resolved. |
 
 **Exit criteria:** CI green and required on `main`; the full suite passes on a fresh database

@@ -3,7 +3,7 @@ import { afterAll } from 'vitest';
 
 // Ensure test DATABASE_URL is set
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgres://bms:bms@localhost:5433/bms';
+  process.env.DATABASE_URL = 'postgres://bms:bms@localhost:5433/bms_test';
 }
 
 if (!process.env.JWT_SECRET) {

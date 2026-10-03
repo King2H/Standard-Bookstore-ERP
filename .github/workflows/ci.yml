@@ -81,8 +81,6 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Migrate database
-        working-directory: apps/api
-        run: npx node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations
+      # The tests create and migrate their own database (bms_test).
       - name: API tests
         run: npm test

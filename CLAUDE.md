@@ -53,9 +53,8 @@ PostgreSQL 18 for every PR to `main`. Run the same checks locally before asking 
 
 The Bank Accounts module is off unless `FEATURE_BANK_ACCOUNTS=true` (interim switch until feature flags, #27).
 
-Known issues being fixed in v2:
-
-- Some API tests leak state on a reused database (issue #30). Run them on a fresh database when results look odd.
+`npm test` runs against its own database (`bms_test`, derived from `DATABASE_URL`, or `TEST_DATABASE_URL`),
+which it creates and migrates automatically. Its name must end in `_test`.
 
 ## Architecture
 
