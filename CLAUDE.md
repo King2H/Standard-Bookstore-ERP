@@ -32,6 +32,8 @@ Claude is the implementer.
 
 Run from the repository root. The API and its tests need PostgreSQL and a `.env` (copy `.env.example`).
 Full setup guide (Windows): `docs/development.md`.
+In Claude Code on the web, `.claude/hooks/session-start.sh` prepares all of this automatically at session start:
+Node from `.nvmrc`, dependencies, and PostgreSQL 18 on `localhost:5433` with migrations applied (`DATABASE_URL` is exported).
 
 ```bash
 npm install                      # install all workspaces
