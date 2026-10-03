@@ -86,6 +86,11 @@ npm test            # API integration tests (needs the database)
 npm run test:web    # web component tests
 ```
 
+**The tests use their own database.** `npm test` never touches your development database
+`bms`: it runs against `bms_test` on the same server, which it creates and migrates
+automatically. To use a different test database, set `TEST_DATABASE_URL`; its name must end
+in `_test`, so the tests can never run against real data by mistake.
+
 ## Database tasks
 
 **Open a SQL shell:**
@@ -94,8 +99,14 @@ npm run test:web    # web component tests
 docker compose exec postgres psql -U bms -d bms
 ```
 
-**Reset to an empty database.** This deletes all local data. Use it when tests behave oddly
-or you want a clean start.
+**Reset the test database.** Drop it; the next `npm test` recreates it.
+
+```powershell
+docker compose exec postgres psql -U bms -d postgres -c "DROP DATABASE bms_test"
+```
+
+**Reset to an empty database.** This deletes all local data, including the test database.
+Use it when you want a clean start.
 
 ```powershell
 docker compose down -v

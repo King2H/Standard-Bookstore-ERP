@@ -553,6 +553,7 @@ describe('Bug 1 -- Catalog Search Preservation (Existing Search Fields Must Stil
     await db.query(
       `DELETE FROM staff WHERE username = 'cat_prsv_admin'`,
     );
+    await cleanTestBranches('CatPrsv ');
   });
 
   // ---- Sanity: preservation book is on page 1 --------------------------------
