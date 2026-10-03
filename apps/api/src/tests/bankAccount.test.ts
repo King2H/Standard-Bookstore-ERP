@@ -5,6 +5,9 @@ import { cleanTestStaff, cleanTestBranches, cleanBankAccounts } from './helpers/
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
 import { db } from '../db/index.js';
 
+// Bank Accounts is off by default (FEATURE_BANK_ACCOUNTS); these tests exercise it switched on.
+process.env.FEATURE_BANK_ACCOUNTS = 'true';
+
 const STAFF_PREFIX = 'ba_test_';
 const BRANCH_PREFIX = 'BA Test ';
 

@@ -48,9 +48,13 @@ npm test                         # API integration tests (real database, sequent
 npm run test:web                 # web component tests (jsdom)
 ```
 
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, a dependency audit, web tests and build, and the API tests on
+PostgreSQL 18 for every PR to `main`. Run the same checks locally before asking for a merge.
+
+The Bank Accounts module is off unless `FEATURE_BANK_ACCOUNTS=true` (interim switch until feature flags, #27).
+
 Known issues being fixed in v2:
 
-- The 10 tests in `bankAccount.test.ts` fail because that module is disabled in `app.ts` (issue #27).
 - Some API tests leak state on a reused database (issue #30). Run them on a fresh database when results look odd.
 
 ## Architecture

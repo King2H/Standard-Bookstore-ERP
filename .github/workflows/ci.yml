@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to the same PR cancels the run that is still going.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, typecheck, audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck API
+        run: npx tsc --noEmit -p apps/api
+      - name: Typecheck web
+        run: npx tsc --noEmit -p apps/web
+      - name: Dependency audit (production, high and critical)
+        run: npm audit --omit=dev --audit-level=high
+
+  web:
+    name: Web tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Web tests
+        run: npm run test:web
+      - name: Production build
+        run: npm run build --workspace=apps/web
+
+  api:
+    name: API tests (PostgreSQL 18)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: bms
+          POSTGRES_USER: bms
+          POSTGRES_PASSWORD: bms
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U bms -d bms"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://bms:bms@localhost:5433/bms
+      # Test-only values; never used outside CI.
+      JWT_SECRET: ci_test_jwt_secret_not_for_production
+      COLUMN_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Migrate database
+        working-directory: apps/api
+        run: npx node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations
+      - name: API tests
+        run: npm test
