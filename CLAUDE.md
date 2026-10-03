@@ -78,7 +78,7 @@ Contracts (request/response schemas) live in `packages/shared` as zod schemas, u
 Frontend: pages compose feature components. Data access goes through `features/<domain>/{api,queries}`.
 Pages never call `fetch` directly.
 
-The full design will live in `docs/v2/` and `docs/adr/` (issues #9, #10). Where those documents exist, they take precedence over this summary.
+The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/` (ADR-0001 to ADR-0011). They take precedence over this summary.
 
 ## Conventions
 
