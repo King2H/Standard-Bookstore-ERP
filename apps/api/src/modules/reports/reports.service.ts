@@ -1367,33 +1367,18 @@ export async function getInventoryExportRowsV2(filters: ReportFilters): Promise<
   if (filters.branchId) { params.push(filters.branchId); conditions.push(`l.branch_id = $${params.length}`); }
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-  // Check whether inventory_reservations table exists — it may be absent on older DB schemas
-  let hasReservationsTable = false;
-  try {
-    const tblCheck = await db.query(
-      `SELECT 1 FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
-    );
-    hasReservationsTable = tblCheck.rows.length > 0;
-  } catch { /* non-fatal — treat as absent */ }
-
-  // Build the reservation sub-query conditionally
-  const reservationJoin = hasReservationsTable
-    ? `LEFT JOIN (
+  const reservationJoin = `LEFT JOIN (
          SELECT book_id, location_id, SUM(quantity)::int AS reserved
          FROM inventory_reservations WHERE status = 'reserved'
          GROUP BY book_id, location_id
-       ) res ON res.book_id = i.book_id AND res.location_id = i.location_id`
-    : '';
+       ) res ON res.book_id = i.book_id AND res.location_id = i.location_id`;
 
-  // When the table is absent, use 0 for reserved. available is always
-  // i.quantity: confirm() already physically deducts stock via stockOut()
-  // (order-payment-unification spec, 3.5), so quantity_reserved is
-  // informational bookkeeping, not a second hold to subtract.
-  const reservedExpr  = hasReservationsTable ? `COALESCE(res.reserved, 0)::int` : `0::int`;
+  // available is always i.quantity: confirm() already physically deducts stock
+  // via stockOut() (order-payment-unification spec, 3.5), so quantity_reserved
+  // is informational bookkeeping, not a second hold to subtract.
+  const reservedExpr  = `COALESCE(res.reserved, 0)::int`;
   const availableExpr = `i.quantity::int`;
-  // GROUP BY clause differs — res.reserved is only selectable when the join exists
-  const groupByReserved = hasReservationsTable ? `, res.reserved` : '';
+  const groupByReserved = `, res.reserved`;
 
   const res = await db.query(
     `SELECT

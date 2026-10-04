@@ -327,21 +327,9 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     const qtyAfterConfirm = await getInventoryQty(bookId, locationId);
 
     // ── Step 2: Directly set status to FULFILLED in the DB ────────────────────
-    // We probe which status value the constraint allows: new ('FULFILLED') or
-    // legacy ('Fulfilled'). Use the same probe logic as dbStatus().
-    const constraintRes = await db.query(
-      `SELECT pg_get_constraintdef(c.oid) AS def
-       FROM pg_constraint c
-       JOIN pg_class t ON t.oid = c.conrelid
-       WHERE t.relname = 'orders' AND c.conname = 'orders_status_check'`,
-    );
-    const constraintDef: string = constraintRes.rows[0]?.def ?? '';
-    const usesNew = constraintDef.includes("'DRAFT'");
-    const fulfilledDbValue = usesNew ? 'FULFILLED' : 'Fulfilled';
-
     await db.query(
-      `UPDATE orders SET status = $1, updated_at = now() WHERE id = $2`,
-      [fulfilledDbValue, orderId],
+      `UPDATE orders SET status = 'FULFILLED', updated_at = now() WHERE id = $1`,
+      [orderId],
     );
 
     // ── Step 3: Attempt to cancel the now-FULFILLED order via API ─────────────

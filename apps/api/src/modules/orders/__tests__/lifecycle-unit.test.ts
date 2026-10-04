@@ -149,8 +149,6 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     // Ensure zero tax for this suite — other tests may have changed it
     await db.query(`UPDATE system_config SET value = '0' WHERE key = 'tax_rate'`).catch(() => {});
 
-    // Reset inventoryTransaction cache so tests see the live DB state
-    invTxSvc.resetReservationsTableCache();
   });
 
   afterAll(async () => {

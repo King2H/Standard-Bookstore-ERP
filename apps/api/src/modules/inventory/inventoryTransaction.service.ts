@@ -29,28 +29,6 @@ import { isNegativeStockAllowed } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import type { StaffCtx, ReasonCode } from './inventory.service.js';
 
-// ── Feature flag cache (shared with inventory.service.ts logic) ───────────────
-let _hasReservationsTable: boolean | null = null;
-async function hasReservationsTable(client?: PoolClient): Promise<boolean> {
-  if (_hasReservationsTable !== null) return _hasReservationsTable;
-  try {
-    const q = client ?? db;
-    const r = await q.query(
-      `SELECT 1 FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
-    );
-    _hasReservationsTable = r.rows.length > 0;
-  } catch {
-    _hasReservationsTable = false;
-  }
-  return _hasReservationsTable;
-}
-
-/** Reset the feature-flag cache — useful in tests. */
-export function resetReservationsTableCache(): void {
-  _hasReservationsTable = null;
-}
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface AvailableStock {
@@ -122,51 +100,40 @@ export async function getAvailableStock(
 ): Promise<AvailableStock> {
   const q = client ?? db;
 
-  if (await hasReservationsTable(client)) {
-    // available = quantity, NOT quantity - reserved.
-    //
-    // orders.service.ts confirm() inserts the 'reserved' row and calls
-    // stockOut() (which decrements inventory.quantity) in the same DB
-    // transaction, every time -- there is no code path where a committed
-    // 'reserved' row exists without inventory.quantity already reflecting
-    // that deduction. Subtracting `reserved` again here double-counts it:
-    // every confirmed-but-unfulfilled order would make this function
-    // under-report available stock by its own quantity, on top of the
-    // deduction that already happened, potentially rejecting legitimate
-    // sales (INSUFFICIENT_STOCK) with real stock still on hand.
-    //
-    // `reserved` is still returned as an informational field (how much is
-    // confirmed-but-not-yet-fulfilled) but is no longer subtracted.
-    const result = await q.query(
-      `SELECT i.quantity,
-              COALESCE(SUM(r.quantity), 0)::int AS reserved,
-              i.quantity::int AS available
-       FROM inventory i
-       LEFT JOIN inventory_reservations r
-         ON r.book_id = i.book_id
-        AND r.location_id = i.location_id
-        AND r.status = 'reserved'
-       WHERE i.book_id = $1 AND i.location_id = $2
-       GROUP BY i.quantity`,
-      [bookId, locationId],
-    );
-    if (!result.rows.length) return { quantity: 0, reserved: 0, available: 0 };
-    const row = result.rows[0] as { quantity: number; reserved: number; available: number };
-    return {
-      quantity: Number(row.quantity),
-      reserved: Number(row.reserved),
-      available: Math.max(0, Number(row.available)),
-    };
-  }
-
-  // Graceful degradation — no reservations table yet
+  // available = quantity, NOT quantity - reserved.
+  //
+  // orders.service.ts confirm() inserts the 'reserved' row and calls
+  // stockOut() (which decrements inventory.quantity) in the same DB
+  // transaction, every time -- there is no code path where a committed
+  // 'reserved' row exists without inventory.quantity already reflecting
+  // that deduction. Subtracting `reserved` again here double-counts it:
+  // every confirmed-but-unfulfilled order would make this function
+  // under-report available stock by its own quantity, on top of the
+  // deduction that already happened, potentially rejecting legitimate
+  // sales (INSUFFICIENT_STOCK) with real stock still on hand.
+  //
+  // `reserved` is still returned as an informational field (how much is
+  // confirmed-but-not-yet-fulfilled) but is no longer subtracted.
   const result = await q.query(
-    `SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`,
+    `SELECT i.quantity,
+            COALESCE(SUM(r.quantity), 0)::int AS reserved,
+            i.quantity::int AS available
+     FROM inventory i
+     LEFT JOIN inventory_reservations r
+       ON r.book_id = i.book_id
+      AND r.location_id = i.location_id
+      AND r.status = 'reserved'
+     WHERE i.book_id = $1 AND i.location_id = $2
+     GROUP BY i.quantity`,
     [bookId, locationId],
   );
   if (!result.rows.length) return { quantity: 0, reserved: 0, available: 0 };
-  const qty = Math.max(0, Number(result.rows[0].quantity));
-  return { quantity: qty, reserved: 0, available: qty };
+  const row = result.rows[0] as { quantity: number; reserved: number; available: number };
+  return {
+    quantity: Number(row.quantity),
+    reserved: Number(row.reserved),
+    available: Math.max(0, Number(row.available)),
+  };
 }
 
 /**
@@ -183,34 +150,9 @@ export async function getStockQuantities(
   const q = client ?? db;
   if (!bookIds || bookIds.length === 0) return {};
 
-  const useRes = await hasReservationsTable(client);
-
-  if (useRes) {
-    const result = await q.query(
-      `SELECT inv.book_id,
-              COALESCE(SUM(inv.quantity), 0) AS available
-       FROM inventory inv
-       WHERE inv.book_id = ANY($1)
-         AND (
-           ($2::integer IS NOT NULL AND inv.location_id = $2::integer) OR
-           ($2::integer IS NULL AND $3::integer IS NOT NULL AND inv.location_id IN (SELECT id FROM locations WHERE branch_id = $3::integer)) OR
-           ($2::integer IS NULL AND $3::integer IS NULL)
-         )
-       GROUP BY inv.book_id`,
-      [bookIds, locationId ?? null, branchId ?? null],
-    );
-    const map: Record<number, number> = {};
-    for (const r of result.rows) {
-      map[Number(r.book_id)] = Math.max(0, Number(r.available ?? 0));
-    }
-    // ensure all requested ids exist in map
-    for (const id of bookIds) if (map[id] == null) map[id] = 0;
-    return map;
-  }
-
-  // Fallback: no reservations table — sum raw quantities
   const result = await q.query(
-    `SELECT inv.book_id, COALESCE(SUM(inv.quantity), 0) AS available
+    `SELECT inv.book_id,
+            COALESCE(SUM(inv.quantity), 0) AS available
      FROM inventory inv
      WHERE inv.book_id = ANY($1)
        AND (
@@ -222,7 +164,10 @@ export async function getStockQuantities(
     [bookIds, locationId ?? null, branchId ?? null],
   );
   const map: Record<number, number> = {};
-  for (const r of result.rows) map[Number(r.book_id)] = Math.max(0, Number(r.available ?? 0));
+  for (const r of result.rows) {
+    map[Number(r.book_id)] = Math.max(0, Number(r.available ?? 0));
+  }
+  // ensure all requested ids exist in map
   for (const id of bookIds) if (map[id] == null) map[id] = 0;
   return map;
 }
@@ -295,44 +240,23 @@ export async function getBookAvailability(
 ): Promise<BookAvailability[]> {
   if (!bookIds || bookIds.length === 0) return [];
 
-  const useRes = await hasReservationsTable();
-
-  if (useRes) {
-    // available = on_hand (quantity), not quantity - reserved — see
-    // getAvailableStock() above for why: reservations are inserted in the
-    // same transaction as the stockOut() that already deducted quantity, so
-    // subtracting them again here double-counts every confirmed-but-
-    // unfulfilled order, understating what POS/Orders/Exchanges show staff
-    // as in-stock.
-    const result = await db.query(
-      `SELECT
-         i.book_id,
-         i.location_id,
-         l.name AS location_name,
-         i.quantity AS on_hand,
-         COALESCE((
-           SELECT SUM(r.quantity)::int FROM inventory_reservations r
-           WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'
-         ), 0) AS reserved,
-         GREATEST(0, i.quantity) AS available
-       FROM inventory i
-       JOIN locations l ON l.id = i.location_id
-       WHERE i.book_id = ANY($1) AND i.location_id = $2`,
-      [bookIds, locationId],
-    );
-    return result.rows.map((r: Record<string, unknown>) => ({
-      bookId:       Number(r.book_id),
-      locationId:   Number(r.location_id),
-      locationName: String(r.location_name),
-      onHand:       Number(r.on_hand),
-      reserved:     Number(r.reserved),
-      available:    Number(r.available),
-    }));
-  }
-
-  // Fallback: no reservations table — return raw quantity, no reservations
+  // available = on_hand (quantity), not quantity - reserved — see
+  // getAvailableStock() above for why: reservations are inserted in the
+  // same transaction as the stockOut() that already deducted quantity, so
+  // subtracting them again here double-counts every confirmed-but-
+  // unfulfilled order, understating what POS/Orders/Exchanges show staff
+  // as in-stock.
   const result = await db.query(
-    `SELECT i.book_id, i.location_id, l.name AS location_name, i.quantity AS on_hand
+    `SELECT
+       i.book_id,
+       i.location_id,
+       l.name AS location_name,
+       i.quantity AS on_hand,
+       COALESCE((
+         SELECT SUM(r.quantity)::int FROM inventory_reservations r
+         WHERE r.book_id = i.book_id AND r.location_id = i.location_id AND r.status = 'reserved'
+       ), 0) AS reserved,
+       GREATEST(0, i.quantity) AS available
      FROM inventory i
      JOIN locations l ON l.id = i.location_id
      WHERE i.book_id = ANY($1) AND i.location_id = $2`,
@@ -343,8 +267,8 @@ export async function getBookAvailability(
     locationId:   Number(r.location_id),
     locationName: String(r.location_name),
     onHand:       Number(r.on_hand),
-    reserved:     0,
-    available:    Number(r.on_hand),
+    reserved:     Number(r.reserved),
+    available:    Number(r.available),
   }));
 }
 
@@ -890,17 +814,13 @@ export async function fulfillReservation(
     }
 
     // Transition all 'reserved' reservations for this order to 'deducted'
-    // Graceful degradation: if the table doesn't exist, skip silently
-    const hasResTable = await hasReservationsTable(client);
-    if (hasResTable) {
-      await client.query(
-        `UPDATE inventory_reservations
-            SET status = 'deducted', updated_at = now()
-          WHERE order_id = $1
-            AND status = 'reserved'`,
-        [String(orderId)],
-      );
-    }
+    await client.query(
+      `UPDATE inventory_reservations
+          SET status = 'deducted', updated_at = now()
+        WHERE order_id = $1
+          AND status = 'reserved'`,
+      [String(orderId)],
+    );
 
     if (!useExternal) await client.query('COMMIT');
   } catch (err) {

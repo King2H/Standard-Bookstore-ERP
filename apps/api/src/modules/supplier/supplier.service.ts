@@ -244,19 +244,13 @@ export async function blacklist(id: number, staffCtx: StaffCtx): Promise<void> {
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 export async function deleteSupplier(id: number, staffCtx: StaffCtx): Promise<void> {
-  // Check for associated POs (table may not exist yet in early slices)
-  const poTableExists = await db.query(
-    `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'purchase_orders'`,
+  const poCheck = await db.query(
+    `SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = $1`,
+    [id],
   );
-  if (poTableExists.rows.length > 0) {
-    const poCheck = await db.query(
-      `SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = $1`,
-      [id],
-    );
-    const poCount = parseInt(poCheck.rows[0].count as string, 10);
-    if (poCount > 0) {
-      throw new ConflictError('DEPENDENCY_CONFLICT', 'Supplier has associated purchase orders', { poCount });
-    }
+  const poCount = parseInt(poCheck.rows[0].count as string, 10);
+  if (poCount > 0) {
+    throw new ConflictError('DEPENDENCY_CONFLICT', 'Supplier has associated purchase orders', { poCount });
   }
 
   const result = await db.query(`DELETE FROM suppliers WHERE id = $1 RETURNING id`, [id]);
