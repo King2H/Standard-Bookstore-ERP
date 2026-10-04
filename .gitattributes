@@ -1,0 +1,4 @@
+# Store and check out text files with LF on every platform, so generated files
+# (e.g. apps/api/src/db/types.generated.ts) and shell scripts are byte-identical
+# on Windows, Linux and CI.
+* text=auto eol=lf

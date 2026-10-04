@@ -90,6 +90,7 @@ The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/`
 - TypeScript strict; avoid `any`.
 - SQL is always parameterized. Never interpolate user input.
 - Money is stored as Postgres `numeric`. Never compare money with floating-point equality.
+  New and refactored code does money arithmetic with `Money` from `@bms/shared` (no `parseFloat`/`Math.round` on amounts).
 - Business errors throw `AppError` subclasses (`ValidationError`, `BusinessError`, `NotFoundError`, …).
 - Never trust client-supplied scope: branch and tenant come from the authenticated context.
 - Every bug fix comes with a regression test that fails before the fix.

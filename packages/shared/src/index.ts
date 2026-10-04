@@ -24,3 +24,6 @@ export interface PaginatedResponse<T> {
   pageSize: number;
   totalPages: number;
 }
+
+export { Money } from './money.js';
+export type { MoneyInput } from './money.js';
