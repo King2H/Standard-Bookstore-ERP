@@ -30,6 +30,7 @@ import { csrfMiddleware } from './middleware/csrf.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { deprecatedAlias } from './middleware/deprecatedAlias.js';
 import { readHttpConfig } from './lib/env.js';
+import { buildOpenApiDocument } from './openapi/document.js';
 
 export function createApp() {
   const app = express();
@@ -54,6 +55,9 @@ export function createApp() {
   // Every route is served under /api/v1 (ADR-0004). The unversioned /api
   // paths stay as a deprecated alias until the web app moves to /api/v1 (M6).
   const api = express.Router();
+  api.get('/openapi.json', (_req, res) => {
+    res.json(buildOpenApiDocument());
+  });
   api.use(healthRouter);
   api.use(authRouter);
   api.use(branchRouter);

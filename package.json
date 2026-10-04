@@ -18,6 +18,7 @@
     "migrate:down": "npm run migrate:down --workspace=apps/api",
     "migrate:create": "npm run migrate:create --workspace=apps/api",
     "db:types": "npm run db:types --workspace=apps/api",
+    "openapi": "npm run openapi --workspace=apps/api",
     "lint": "eslint apps/api/src apps/web/src packages/shared/src --ext .ts,.tsx",
     "format": "prettier --write \"apps/**/*.{ts,tsx}\" \"packages/**/*.ts\""
   },
