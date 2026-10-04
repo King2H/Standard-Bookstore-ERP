@@ -21,5 +21,6 @@ export interface PaginatedResponse<T> {
 }
 
 export * from './common.js';
+export * from './health.js';
 export { Money } from './money.js';
 export type { MoneyInput } from './money.js';
