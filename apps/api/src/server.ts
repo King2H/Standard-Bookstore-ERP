@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { createApp } from './app.js';
+import { assertEnvironment } from './lib/env.js';
 import { checkDbConnection } from './db/index.js';
 import { ensureSeedData } from './db/seed.js';
 import { startOutboxPoller, stopOutboxPoller } from './workers/outboxPoller.js';
@@ -9,6 +10,8 @@ import { markOverdueReceivables } from './modules/receivables/receivables.servic
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
 async function start() {
+  assertEnvironment();
+
   // Verify DB connection before accepting traffic
   const dbOk = await checkDbConnection();
   if (!dbOk) {

@@ -1,6 +1,7 @@
 /**
  * In-memory rate limiter — no Redis required.
- * Uses a sliding window counter per key.
+ * Uses a fixed window counter per key. Counters are per process, so with several
+ * API instances each enforces its own limit (shared limits: #32).
  * Login limiter keys by IP:username to avoid blocking all users from the same IP
  * (important for localhost/office environments where everyone shares one IP).
  */
@@ -21,10 +22,10 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref();
 
+// req.ip honours the app's `trust proxy` setting (TRUST_PROXY), so a client
+// cannot pick its own key by sending X-Forwarded-For.
 function getIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
-  return req.socket.remoteAddress ?? 'unknown';
+  return req.ip ?? req.socket.remoteAddress ?? 'unknown';
 }
 
 /**

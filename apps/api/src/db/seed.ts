@@ -20,13 +20,6 @@ export async function ensureSeedData(): Promise<void> {
   try {
     await client.query('BEGIN');
 
-    // ── 0. Ensure schema columns exist (idempotent guards) ────────────────────
-    // These run before any data operations to prevent 500 errors on older DBs
-    // that haven't run the latest migrations yet.
-    await client.query(`
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS is_all_branches BOOLEAN NOT NULL DEFAULT false;
-    `);
-
     // ── 1. Main Branch ────────────────────────────────────────────────────────
     await client.query(`
       INSERT INTO branches (id, name, address, contact_info, operating_hours, is_active)

@@ -1,5 +1,6 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -26,38 +27,20 @@ import installmentsRouter from './modules/payments/installments.routes.js';
 import notificationsRouter from './modules/notifications/notifications.routes.js';
 import receivablesRouter from './modules/receivables/receivables.routes.js';
 import { csrfMiddleware } from './middleware/csrf.js';
+import { corsMiddleware } from './middleware/cors.js';
+import { readHttpConfig } from './lib/env.js';
 
 export function createApp() {
   const app = express();
 
-  // ── CORS ──────────────────────────────────────────────────────────────────────
-  // Allow requests from the configured frontend origin (or any origin in dev).
-  // FRONTEND_URL can be a comma-separated list for multiple allowed origins.
-  const rawOrigins = process.env.FRONTEND_URL ?? '';
-  const allowedOrigins = rawOrigins
-    ? rawOrigins.split(',').map(o => o.trim().replace(/\/$/, '')) // strip trailing slashes
-    : [];
+  const httpConfig = readHttpConfig();
 
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    const isDev = process.env.NODE_ENV !== 'production';
+  // Client addresses (rate limiting, logs) come from X-Forwarded-For only when
+  // it was set by a proxy we trust.
+  app.set('trust proxy', httpConfig.trustProxy);
 
-    // In dev (no FRONTEND_URL set), allow all origins
-    // In prod, allow only the listed origins
-    const isAllowed = isDev || !origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin);
-
-    if (isAllowed) {
-      res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Branch-Id,X-CSRF-Token,Idempotency-Key');
-    }
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(204);
-      return;
-    }
-    next();
-  });
+  app.use(helmet());
+  app.use(corsMiddleware(httpConfig));
 
   // ── Core middleware ──────────────────────────────────────────────────
   app.use(express.json());

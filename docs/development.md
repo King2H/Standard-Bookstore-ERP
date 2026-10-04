@@ -124,6 +124,8 @@ npm run migrate
 | `Bind for 0.0.0.0:5433 failed: port is already allocated` | Another program uses 5433. Find it with `Get-NetTCPConnection -LocalPort 5433 -State Listen`. |
 | Container exits with `Error: in 18+, these Docker images are configured to store database data in a format ...` | A data volume from an older PostgreSQL version is mounted. See "Upgrading from the PostgreSQL 16 setup" below. |
 | `COLUMN_ENCRYPTION_KEY must be set to a 64-character hex string` | Generate the key as in step 2 and put it in `.env`. |
+| `Unsafe configuration, refusing to start` | The API checks its settings at startup. The message lists each problem and how to fix it, usually a missing or example secret in `.env` (step 2). |
+| Warning `... is a published example value` when starting the API | `.env` still has an example secret. It is allowed in development only; generate a real one as in step 2. |
 
 ## Upgrading from the PostgreSQL 16 setup
 
