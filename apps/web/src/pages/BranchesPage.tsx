@@ -34,7 +34,8 @@ const createSchema = z.object({
   }),
 });
 
-type CreateForm = z.infer<typeof createSchema>;
+type CreateFormInput = z.input<typeof createSchema>;
+type CreateForm = z.output<typeof createSchema>;
 
 export default function BranchesPage({ userRole }: { userRole?: string }) {
   const queryClient = useQueryClient();
@@ -87,7 +88,7 @@ export default function BranchesPage({ userRole }: { userRole?: string }) {
     onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to reactivate branch', 'error'); },
   });
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<CreateForm>({
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<CreateFormInput, unknown, CreateForm>({
     resolver: zodResolver(createSchema),
     defaultValues: {
       name: '', address: '',

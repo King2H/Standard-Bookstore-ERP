@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as ordersService from './orders.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole, requirePermission } from '../../middleware/rbac.js';
-import { ValidationError } from '../../lib/errors.js';
+import { AppError, ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { computeOrderAllowedActions } from './orders.service.js';
 import { Permission } from '../../lib/permissions.js';
@@ -145,13 +145,15 @@ router.post(
   '/orders/:id/pay',
   authenticate,
   requirePermission('PROCESS_PAYMENT'),
-  (_req: Request, res: Response) => {
-    res.status(410).json({
-      error: 'DEPRECATED',
-      message:
+  (_req: Request, _res: Response, next: NextFunction) => {
+    next(
+      new AppError(
+        'DEPRECATED',
         'POST /orders/:id/pay is no longer supported. ' +
-        'Use POST /payments to record payments against an order.',
-    });
+          'Use POST /payments to record payments against an order.',
+        410,
+      ),
+    );
   },
 );
 

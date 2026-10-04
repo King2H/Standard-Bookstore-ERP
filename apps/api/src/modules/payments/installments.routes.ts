@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as installmentsService from './installments.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { ValidationError } from '../../lib/errors.js';
+import { AppError, ValidationError } from '../../lib/errors.js';
 import { paramStr } from '../../lib/http.js';
 
 const router = Router();
@@ -39,7 +39,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const plan = await installmentsService.getPlanByOrder(parseInt(paramStr(req.params.id), 10));
-      if (!plan) { res.status(404).json({ error: 'NOT_FOUND', message: 'No installment plan for this order' }); return; }
+      if (!plan) throw new AppError('NOT_FOUND', 'No installment plan for this order', 404);
       res.json(plan);
     } catch (err) { next(err); }
   },

@@ -14,6 +14,7 @@
  */
 import type { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
+import { AppError } from '../lib/errors.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const EXEMPT_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/pre-login', '/api/health', '/api/branches/public']);
@@ -39,7 +40,7 @@ export function setCsrfCookie(res: Response): string {
  * Skips safe methods and exempt paths.
  * Returns 403 CSRF_INVALID if the header doesn't match the cookie.
  */
-export function csrfMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function csrfMiddleware(req: Request, _res: Response, next: NextFunction): void {
   // Skip safe methods
   if (SAFE_METHODS.has(req.method)) { next(); return; }
 
@@ -53,10 +54,7 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction):
   if (!cookieToken) { next(); return; }
 
   if (!headerToken || headerToken !== cookieToken) {
-    res.status(403).json({
-      error: 'CSRF_INVALID',
-      message: 'CSRF token missing or invalid. Include the X-CSRF-Token header.',
-    });
+    next(new AppError('CSRF_INVALID', 'CSRF token missing or invalid. Include the X-CSRF-Token header.', 403));
     return;
   }
 

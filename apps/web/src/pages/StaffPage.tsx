@@ -37,13 +37,14 @@ const createSchema = z.object({
   allBranchesRole: z.enum(ROLES).default('Sales'),
   assignments: z.array(z.object({
     branchId: z.coerce.number().int().min(0),
-    role: z.enum(ROLES, { errorMap: () => ({ message: 'Select a role' }) }),
+    role: z.enum(ROLES, { error: 'Select a role' }),
   })).default([]),
 }).refine(data => data.isAllBranches || data.assignments.some(a => a.branchId > 0), {
   message: 'At least one branch-role assignment is required (or enable All Branches)',
   path: ['assignments'],
 });
-type CreateForm = z.infer<typeof createSchema>;
+type CreateFormInput = z.input<typeof createSchema>;
+type CreateForm = z.output<typeof createSchema>;
 
 const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
 
@@ -169,7 +170,7 @@ export default function StaffPage() {
     onError: (err: unknown) => { const e = err as { message?: string }; showToast(e.message ?? 'Failed to update all-branch access', 'error'); },
   });
 
-  const { register, handleSubmit, reset, control, watch, formState: { errors, isSubmitting } } = useForm<CreateForm>({
+  const { register, handleSubmit, reset, control, watch, formState: { errors, isSubmitting } } = useForm<CreateFormInput, unknown, CreateForm>({
     resolver: zodResolver(createSchema),
     defaultValues: { username: '', password: '', fullName: '', isAllBranches: false, allBranchesRole: 'Sales', assignments: [{ branchId: 0, role: 'Sales' }] },
   });

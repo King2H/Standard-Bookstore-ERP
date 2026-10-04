@@ -9,13 +9,8 @@ export type Role =
   | 'Sales'
   | 'Purchasor';
 
-export interface ApiError {
-  error: string;
-  message: string;
-  details?: Record<string, unknown>;
-  requestId: string;
-  timestamp: string;
-}
+/** The API error envelope; defined by ErrorResponseSchema in common.ts. */
+export type { ErrorResponse as ApiError } from './common.js';
 
 export interface PaginatedResponse<T> {
   items: T[];
@@ -25,5 +20,6 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+export * from './common.js';
 export { Money } from './money.js';
 export type { MoneyInput } from './money.js';
