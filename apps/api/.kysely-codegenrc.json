@@ -1,0 +1,5 @@
+{
+  "dialect": "postgres",
+  "outFile": "src/db/types.generated.ts",
+  "excludePattern": "pgmigrations"
+}

@@ -10,6 +10,7 @@
     "migrate": "dotenv -e ../../.env -- node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
     "migrate:down": "dotenv -e ../../.env -- node-pg-migrate down --database-url-var DATABASE_URL --migrations-dir src/db/migrations",
     "migrate:create": "dotenv -e ../../.env -- node-pg-migrate create --migrations-dir src/db/migrations",
+    "db:types": "dotenv -e ../../.env -- kysely-codegen",
     "test": "vitest run",
     "test:watch": "vitest",
     "reseed": "node scripts/reseed.mjs",
@@ -27,6 +28,7 @@
     "helmet": "^8.3.0",
     "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.2",
+    "kysely": "^0.29.6",
     "pg": "^8.11.5",
     "zod": "^3.23.8"
   },
@@ -39,6 +41,7 @@
     "@types/pg": "^8.11.6",
     "@types/supertest": "^6.0.2",
     "dotenv-cli": "^7.4.2",
+    "kysely-codegen": "^0.20.0",
     "node-pg-migrate": "^9.0.0",
     "supertest": "^7.0.0",
     "tsx": "^4.11.0",
