@@ -4,6 +4,8 @@ declare global {
   namespace Express {
     interface Request {
       requestId: string;
+      /** Parsed request parts, set by the validate() middleware. */
+      valid?: Record<string, unknown>;
       staff?: {
         staffId: number;
         role: Role;          // primary role (backward compat)

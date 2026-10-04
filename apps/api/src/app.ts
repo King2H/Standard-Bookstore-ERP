@@ -78,10 +78,13 @@ export function createApp() {
   app.use('/api', auditLogsRouter);
 
   // 404 handler
-  app.use((_req, res) => {
+  app.use((req, res) => {
     res.status(404).json({
       error: 'NOT_FOUND',
       message: 'Route not found',
+      details: {},
+      requestId: req.requestId,
+      timestamp: new Date().toISOString(),
     });
   });
 

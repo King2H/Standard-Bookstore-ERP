@@ -15,8 +15,8 @@ const createBranchSchema = z.object({
   contactInfo: z.object({
     phone: z.string().optional().default(''),
     email: z.string().optional().default(''),
-  }).default({}),
-  operatingHours: z.record(z.string()).default({
+  }).prefault({}),
+  operatingHours: z.record(z.string(), z.string()).default({
     mon: '09:00-18:00',
     tue: '09:00-18:00',
     wed: '09:00-18:00',

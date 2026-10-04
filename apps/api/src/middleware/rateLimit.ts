@@ -6,6 +6,7 @@
  * (important for localhost/office environments where everyone shares one IP).
  */
 import type { Request, Response, NextFunction } from 'express';
+import { AppError } from '../lib/errors.js';
 
 interface WindowEntry {
   count: number;
@@ -61,11 +62,9 @@ export function rateLimit(
     if (entry.count > maxRequests) {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
       res.setHeader('Retry-After', retryAfter);
-      res.status(429).json({
-        error: 'RATE_LIMIT_EXCEEDED',
-        message: 'Too many login attempts. Please try again later.',
-        retryAfter,
-      });
+      next(
+        new AppError('RATE_LIMIT_EXCEEDED', 'Too many login attempts. Please try again later.', 429, { retryAfter }),
+      );
       return;
     }
 

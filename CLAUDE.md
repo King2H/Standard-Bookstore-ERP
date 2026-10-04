@@ -92,7 +92,9 @@ The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/`
 - SQL is always parameterized. Never interpolate user input.
 - Money is stored as Postgres `numeric`. Never compare money with floating-point equality.
   New and refactored code does money arithmetic with `Money` from `@bms/shared` (no `parseFloat`/`Math.round` on amounts).
-- Business errors throw `AppError` subclasses (`ValidationError`, `BusinessError`, `NotFoundError`, …).
+- Business errors throw `AppError` subclasses (`ValidationError`, `BusinessError`, `NotFoundError`, …), never
+  `res.status(...).json(...)`. Error codes are a contract: list new ones in `docs/v2/api-errors.md` (a test checks).
+- Request validation uses `validate(schemas)` with zod schemas from `@bms/shared`.
 - Never trust client-supplied scope: branch and tenant come from the authenticated context.
 - Every bug fix comes with a regression test that fails before the fix.
 - Match the style of surrounding code; keep comments for *why*, not *what*.

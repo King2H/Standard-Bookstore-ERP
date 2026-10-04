@@ -12,6 +12,7 @@ import { db } from '../../db/index.js';
 import { authenticate } from '../../middleware/auth.js';
 import { paramStr } from '../../lib/http.js';
 import { sseManager } from '../../lib/sseManager.js';
+import { AppError } from '../../lib/errors.js';
 
 const router = Router();
 
@@ -175,8 +176,7 @@ router.put('/:id/read', authenticate, async (req: Request, res: Response, next: 
     const staff = req.staff!;
     const id = parseInt(paramStr(req.params.id), 10);
     if (isNaN(id)) {
-      res.status(400).json({ error: 'INVALID_ID', message: 'Notification ID must be a number' });
-      return;
+      throw new AppError('INVALID_ID', 'Notification ID must be a number', 400);
     }
 
     await db.query(
