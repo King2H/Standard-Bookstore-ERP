@@ -16,39 +16,7 @@ import {
 } from '../receivables/receivables.service.js';
 import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
 
-// ── Status value compatibility ────────────────────────────────────────────────
-// Migration 33 extends the orders.status CHECK constraint to include new lifecycle
-// values (DRAFT, CONFIRMED, PAID, etc.). On DBs where migration 33 hasn't run yet,
-// we fall back to the legacy values (Pending, Confirmed, etc.).
-// Checked once and cached for the process lifetime.
-let _usesNewStatusValues: boolean | null = null;
-async function usesNewStatusValues(): Promise<boolean> {
-  if (_usesNewStatusValues !== null) return _usesNewStatusValues;
-  try {
-    const r = await db.query(
-      `SELECT pg_get_constraintdef(c.oid) AS def
-       FROM pg_constraint c
-       JOIN pg_class t ON t.oid = c.conrelid
-       WHERE t.relname = 'orders' AND c.conname = 'orders_status_check'`,
-    );
-    const def: string = r.rows[0]?.def ?? '';
-    _usesNewStatusValues = def.includes("'DRAFT'");
-  } catch {
-    _usesNewStatusValues = false;
-  }
-  return _usesNewStatusValues;
-}
-
-// Map new lifecycle status → legacy status (for DBs without migration 33)
-const NEW_TO_LEGACY: Record<string, string> = {
-  DRAFT:     'Pending',
-  CONFIRMED: 'Confirmed',
-  PAID:      'Confirmed',   // no PAID in legacy — treat as Confirmed
-  FULFILLED: 'Fulfilled',
-  COMPLETED: 'Fulfilled',
-  CANCELLED: 'Cancelled',
-};
-
+// Rows written before migration 33 may still hold the legacy status names.
 // Map legacy status → new lifecycle status (for display/logic)
 const LEGACY_TO_NEW: Record<string, string> = {
   Pending:     'DRAFT',
@@ -61,12 +29,6 @@ const LEGACY_TO_NEW: Record<string, string> = {
 /** Normalise any status value to the new lifecycle format for business logic. */
 function normaliseStatus(status: string): string {
   return LEGACY_TO_NEW[status] ?? status;
-}
-
-/** Get the status value to write to the DB, respecting the constraint. */
-async function dbStatus(newStatus: string): Promise<string> {
-  if (await usesNewStatusValues()) return newStatus;
-  return NEW_TO_LEGACY[newStatus] ?? newStatus;
 }
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
@@ -321,7 +283,7 @@ export async function create(
   const taxRate = 0;
   const taxAmount = 0;
   const total = subtotal;
-  const initialStatus = await dbStatus('DRAFT');
+  const initialStatus = 'DRAFT';
 
   // ── Stock visibility: cannot order more than available branch inventory ──
   // A DRAFT order doesn't reserve or deduct stock yet (confirm() does that,
@@ -517,15 +479,6 @@ export async function confirm(
     await client.query('BEGIN');
     const locationId = await resolveLocationId(client, order, staffCtx);
 
-    // Check if inventory_reservations table exists (migration 33 may not have run)
-    let hasReservationsTable = false;
-    try {
-      const tblCheck = await client.query(
-        `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='inventory_reservations' LIMIT 1`,
-      );
-      hasReservationsTable = tblCheck.rows.length > 0;
-    } catch { /* non-fatal */ }
-
     for (const item of order.lineItems ?? []) {
       // ── Business rule: CONFIRM = stockOut + soft reservation ─────────────────
       // 1. Validate reservation-aware availability (throws INSUFFICIENT_STOCK if short)
@@ -554,18 +507,11 @@ export async function confirm(
       // Mark line item as reserved.
       await client.query('UPDATE order_line_items SET qty_reserved = $1 WHERE id = $2', [item.quantity, item.id]);
 
-      // Insert soft reservation record (only if table exists — graceful degradation).
-      if (hasReservationsTable) {
-        try {
-          await client.query(
-            "INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status) VALUES ($1, $2, $3, $4, 'reserved')",
-            [orderId, item.bookId, locationId, item.quantity],
-          );
-        } catch (invResErr) {
-          const msg = (invResErr as { message?: string }).message ?? '';
-          if (!msg.toLowerCase().includes('inventory_reservations')) throw invResErr;
-        }
-      }
+      // Insert soft reservation record.
+      await client.query(
+        "INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status) VALUES ($1, $2, $3, $4, 'reserved')",
+        [orderId, item.bookId, locationId, item.quantity],
+      );
 
       // ── Fix 9.1: Physically deduct stock at confirm() time ────────────────
       // CONFIRM = stockOut. inventory.quantity is decremented exactly once here.
@@ -637,7 +583,7 @@ export async function confirm(
       );
     }
 
-    const confirmedStatus = await dbStatus('CONFIRMED');
+    const confirmedStatus = 'CONFIRMED';
     await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [confirmedStatus, orderId]);
     await client.query(
       "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','order',$3,$4,$5)",
@@ -691,7 +637,7 @@ export async function pay(orderId: string | number, staffCtx: StaffCtx): Promise
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const paidStatus = await dbStatus('PAID');
+    const paidStatus = 'PAID';
     await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [paidStatus, orderId]);
     await client.query('INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,\'UPDATE\',\'order\',$3,$4,$5)', [staffCtx.staffId, staffCtx.role, String(orderId), staffCtx.branchId, JSON.stringify({ action: 'pay', fromStatus: 'CONFIRMED', toStatus: 'PAID' })]);
     await insertOutbox(client, 'order.paid', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId });
@@ -772,7 +718,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
     // Reservation status transition ('reserved' → 'deducted') is now handled
     // entirely inside fulfillReservation() above.
 
-    const fulfilledStatus = await dbStatus('FULFILLED');
+    const fulfilledStatus = 'FULFILLED';
     await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [fulfilledStatus, orderId]);
     await client.query(
       "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','order',$3,$4,$5)",
@@ -787,7 +733,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
     // the operational close state, not the financial close state.
     // Task 5.5: No receivable settlement here — receivables are settled only
     // by payments.service.createPayment().
-    const completedStatus = await dbStatus('COMPLETED');
+    const completedStatus = 'COMPLETED';
     await client.query('UPDATE orders SET status = $1, updated_at = now() WHERE id = $2', [completedStatus, orderId]);
     await insertOutbox(client, 'order.completed', { orderId: String(orderId), orderNumber: order.orderNumber, branchId: staffCtx.branchId });
 
@@ -896,7 +842,7 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
       );
     }
 
-    const cancelledStatus = await dbStatus('CANCELLED');
+    const cancelledStatus = 'CANCELLED';
     await client.query('UPDATE orders SET status = $1, cancel_reason = $2, updated_at = now() WHERE id = $3', [cancelledStatus, reason, orderId]);
     await client.query(
       "INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','order',$3,$4,$5)",

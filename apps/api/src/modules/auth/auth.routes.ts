@@ -604,16 +604,7 @@ router.put(
       await db.query(
         `UPDATE staff SET is_all_branches = $1 WHERE id = $2`,
         [isAllBranches, staffId],
-      ).catch(async (colErr: unknown) => {
-        // Column may not exist on older DBs — add it and retry once
-        const msg = (colErr as { message?: string }).message ?? '';
-        if (msg.includes('column') && msg.includes('is_all_branches')) {
-          await db.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS is_all_branches BOOLEAN NOT NULL DEFAULT false`);
-          await db.query(`UPDATE staff SET is_all_branches = $1 WHERE id = $2`, [isAllBranches, staffId]);
-        } else {
-          throw colErr;
-        }
-      });
+      );
 
       await db.query(
         `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)

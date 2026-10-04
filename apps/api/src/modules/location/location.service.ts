@@ -225,39 +225,27 @@ export async function deleteLocation(id: number, staffCtx: StaffCtx): Promise<vo
     const branchId: number = existing.rows[0].branch_id;
     const name: string = existing.rows[0].name;
 
-    // Dependency check: inventory (table added in Slice 7 — guard with existence check)
-    const inventoryTableExists = await client.query(
-      `SELECT 1 FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'inventory'`,
+    // Dependency check: inventory
+    const inventoryCheck = await client.query(
+      `SELECT COUNT(*) FROM inventory WHERE location_id = $1 AND quantity > 0`,
+      [id],
     );
-    if (inventoryTableExists.rows.length > 0) {
-      const inventoryCheck = await client.query(
-        `SELECT COUNT(*) FROM inventory WHERE location_id = $1 AND quantity > 0`,
-        [id],
-      );
-      if (parseInt(inventoryCheck.rows[0].count, 10) > 0) {
-        throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: inventory items exist', {
-          blockingDependencies: [{ type: 'inventory', count: parseInt(inventoryCheck.rows[0].count, 10) }],
-        });
-      }
+    if (parseInt(inventoryCheck.rows[0].count, 10) > 0) {
+      throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: inventory items exist', {
+        blockingDependencies: [{ type: 'inventory', count: parseInt(inventoryCheck.rows[0].count, 10) }],
+      });
     }
 
-    // Dependency check: open orders (table added in Slice 13 — guard with existence check)
-    const ordersTableExists = await client.query(
-      `SELECT 1 FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'orders'`,
+    // Dependency check: open orders
+    const ordersCheck = await client.query(
+      `SELECT COUNT(*) FROM orders
+       WHERE location_id = $1 AND status NOT IN ('completed', 'cancelled')`,
+      [id],
     );
-    if (ordersTableExists.rows.length > 0) {
-      const ordersCheck = await client.query(
-        `SELECT COUNT(*) FROM orders
-         WHERE location_id = $1 AND status NOT IN ('completed', 'cancelled')`,
-        [id],
-      );
-      if (parseInt(ordersCheck.rows[0].count, 10) > 0) {
-        throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: open orders exist', {
-          blockingDependencies: [{ type: 'orders', count: parseInt(ordersCheck.rows[0].count, 10) }],
-        });
-      }
+    if (parseInt(ordersCheck.rows[0].count, 10) > 0) {
+      throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: open orders exist', {
+        blockingDependencies: [{ type: 'orders', count: parseInt(ordersCheck.rows[0].count, 10) }],
+      });
     }
 
     await client.query(`DELETE FROM locations WHERE id = $1`, [id]);

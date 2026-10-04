@@ -15,7 +15,6 @@ import { getTestApp } from '../../../tests/helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from '../../../tests/helpers/testDb.js';
 import { createTestStaff, createTestBranch } from '../../../tests/helpers/seed.js';
 import { db } from '../../../db/index.js';
-import * as invTxSvc from '../../inventory/inventoryTransaction.service.js';
 
 // ── Prefixes to scope teardown ─────────────────────────────────────────────────
 const STAFF_PREFIX = 'integ_test_';
@@ -198,8 +197,6 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // Ensure zero tax for this suite — other tests may have changed it
     await ensureZeroTax();
 
-    // Reset inventoryTransaction cache so tests see the live DB state
-    invTxSvc.resetReservationsTableCache();
   });
 
   afterAll(async () => {

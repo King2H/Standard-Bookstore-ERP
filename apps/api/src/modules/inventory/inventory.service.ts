@@ -8,23 +8,6 @@ import { insertOutbox } from '../../lib/outbox.js';
 import * as invTxSvc from './inventoryTransaction.service.js';
 import { getAvailableStock } from './inventoryTransaction.service.js';
 
-// ── Feature flag: inventory_reservations table ────────────────────────────────
-// Checked once and cached. Falls back gracefully when migration 33 hasn't run.
-let _hasReservationsTable: boolean | null = null;
-async function hasReservationsTable(): Promise<boolean> {
-  if (_hasReservationsTable !== null) return _hasReservationsTable;
-  try {
-    const r = await db.query(
-      `SELECT 1 FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
-    );
-    _hasReservationsTable = r.rows.length > 0;
-  } catch {
-    _hasReservationsTable = false;
-  }
-  return _hasReservationsTable;
-}
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
@@ -137,54 +120,30 @@ export async function listInventory(opts: {
     ? `i.updated_at ${sortDir}, b.title ASC`
     : `b.title ${sortDir}, l.name ASC`;
 
-  // Build reservation-aware query — falls back gracefully if table doesn't exist
-  const hasResTable = await hasReservationsTable();
-
-  let dataQuery: string;
-  let countQuery: string;
-
-  if (hasResTable) {
-    countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
-    dataQuery = `
-      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn, b.is_active AS book_is_active,
-             i.location_id, l.name AS location_name, l.branch_id,
-             i.quantity,
-             COALESCE(SUM(r.quantity), 0)::int AS reserved,
-             -- available = quantity, NOT quantity - reserved: confirm() already
-             -- physically deducts stock via stockOut() (order-payment-unification
-             -- spec, 3.5); the reservation row is bookkeeping, not a second hold.
-             i.quantity::int AS available,
-             i.reorder_point, i.version, i.updated_at,
-             (i.quantity <= i.reorder_point) AS is_low_stock
-      FROM inventory i
-      JOIN locations l ON l.id = i.location_id
-      LEFT JOIN books b ON b.id = i.book_id
-      LEFT JOIN inventory_reservations r
-        ON r.book_id = i.book_id
-       AND r.location_id = i.location_id
-       AND r.status = 'reserved'
-      ${where}
-      GROUP BY i.book_id, b.title, b.isbn, b.is_active, i.location_id, l.name, l.branch_id,
-               i.quantity, i.reorder_point, i.version, i.updated_at
-      ORDER BY ${orderBy}
-      LIMIT $${limitParam} OFFSET $${offsetParam}`;
-  } else {
-    countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
-    dataQuery = `
-      SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn, b.is_active AS book_is_active,
-             i.location_id, l.name AS location_name, l.branch_id,
-             i.quantity,
-             0::int AS reserved,
-             i.quantity::int AS available,
-             i.reorder_point, i.version, i.updated_at,
-             (i.quantity <= i.reorder_point) AS is_low_stock
-      FROM inventory i
-      JOIN locations l ON l.id = i.location_id
-      LEFT JOIN books b ON b.id = i.book_id
-      ${where}
-      ORDER BY ${orderBy}
-      LIMIT $${limitParam} OFFSET $${offsetParam}`;
-  }
+  const countQuery = `SELECT COUNT(*) FROM inventory i JOIN locations l ON l.id = i.location_id LEFT JOIN books b ON b.id = i.book_id ${where}`;
+  const dataQuery = `
+    SELECT i.book_id, b.title AS book_title, b.isbn AS book_isbn, b.is_active AS book_is_active,
+           i.location_id, l.name AS location_name, l.branch_id,
+           i.quantity,
+           COALESCE(SUM(r.quantity), 0)::int AS reserved,
+           -- available = quantity, NOT quantity - reserved: confirm() already
+           -- physically deducts stock via stockOut() (order-payment-unification
+           -- spec, 3.5); the reservation row is bookkeeping, not a second hold.
+           i.quantity::int AS available,
+           i.reorder_point, i.version, i.updated_at,
+           (i.quantity <= i.reorder_point) AS is_low_stock
+    FROM inventory i
+    JOIN locations l ON l.id = i.location_id
+    LEFT JOIN books b ON b.id = i.book_id
+    LEFT JOIN inventory_reservations r
+      ON r.book_id = i.book_id
+     AND r.location_id = i.location_id
+     AND r.status = 'reserved'
+    ${where}
+    GROUP BY i.book_id, b.title, b.isbn, b.is_active, i.location_id, l.name, l.branch_id,
+             i.quantity, i.reorder_point, i.version, i.updated_at
+    ORDER BY ${orderBy}
+    LIMIT $${limitParam} OFFSET $${offsetParam}`;
 
   const [countRes, dataRes] = await Promise.all([
     db.query(countQuery, params),
@@ -547,52 +506,27 @@ export async function getBookStockBreakdown(
 
   const where = conditions.join(' AND ');
 
-  // Check whether inventory_reservations table exists (graceful degradation)
-  const hasResTable = await db.query(
-    `SELECT 1 FROM information_schema.tables
-     WHERE table_schema = 'public' AND table_name = 'inventory_reservations' LIMIT 1`,
-  );
-  const hasReservations = hasResTable.rows.length > 0;
-
-  let query: string;
-  if (hasReservations) {
-    query = `
-      SELECT
-        i.location_id,
-        l.name AS location_name,
-        l.branch_id,
-        i.quantity,
-        COALESCE(SUM(r.quantity), 0)::int AS reserved,
-        COALESCE(i.damaged_quantity, 0)::int AS damaged,
-        -- available = quantity, NOT quantity - reserved (see inventoryTransaction.
-        -- service.ts getAvailableStock()); sellable further excludes damaged units.
-        i.quantity::int AS available,
-        GREATEST(0, i.quantity - COALESCE(i.damaged_quantity, 0))::int AS sellable
-      FROM inventory i
-      JOIN locations l ON l.id = i.location_id
-      LEFT JOIN inventory_reservations r
-        ON r.book_id = i.book_id
-       AND r.location_id = i.location_id
-       AND r.status = 'reserved'
-      WHERE ${where}
-      GROUP BY i.location_id, l.name, l.branch_id, i.quantity, i.damaged_quantity
-      ORDER BY l.name ASC`;
-  } else {
-    query = `
-      SELECT
-        i.location_id,
-        l.name AS location_name,
-        l.branch_id,
-        i.quantity,
-        0::int AS reserved,
-        COALESCE(i.damaged_quantity, 0)::int AS damaged,
-        i.quantity::int AS available,
-        GREATEST(0, i.quantity - COALESCE(i.damaged_quantity, 0))::int AS sellable
-      FROM inventory i
-      JOIN locations l ON l.id = i.location_id
-      WHERE ${where}
-      ORDER BY l.name ASC`;
-  }
+  const query = `
+    SELECT
+      i.location_id,
+      l.name AS location_name,
+      l.branch_id,
+      i.quantity,
+      COALESCE(SUM(r.quantity), 0)::int AS reserved,
+      COALESCE(i.damaged_quantity, 0)::int AS damaged,
+      -- available = quantity, NOT quantity - reserved (see inventoryTransaction.
+      -- service.ts getAvailableStock()); sellable further excludes damaged units.
+      i.quantity::int AS available,
+      GREATEST(0, i.quantity - COALESCE(i.damaged_quantity, 0))::int AS sellable
+    FROM inventory i
+    JOIN locations l ON l.id = i.location_id
+    LEFT JOIN inventory_reservations r
+      ON r.book_id = i.book_id
+     AND r.location_id = i.location_id
+     AND r.status = 'reserved'
+    WHERE ${where}
+    GROUP BY i.location_id, l.name, l.branch_id, i.quantity, i.damaged_quantity
+    ORDER BY l.name ASC`;
 
   const result = await db.query(query, params);
   return result.rows.map((row: Record<string, unknown>) => ({
@@ -891,7 +825,6 @@ export async function stockOut(opts: {
 
 /**
  * Create a reservation for an order line item.
- * No-op if inventory_reservations table doesn't exist yet.
  */
 export async function createReservation(
   orderId: number | string,
@@ -899,7 +832,6 @@ export async function createReservation(
   locationId: number,
   quantity: number,
 ): Promise<void> {
-  if (!(await hasReservationsTable())) return;
   await db.query(
     `INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status)
      VALUES ($1, $2, $3, $4, 'reserved')`,
@@ -910,10 +842,8 @@ export async function createReservation(
 /**
  * Release all reserved (not yet deducted) reservations for an order.
  * Called when an order is cancelled from CONFIRMED status.
- * No-op if inventory_reservations table doesn't exist yet.
  */
 export async function releaseReservations(orderId: number | string): Promise<void> {
-  if (!(await hasReservationsTable())) return;
   await db.query(
     `UPDATE inventory_reservations
      SET status = 'released', updated_at = now()
@@ -924,10 +854,8 @@ export async function releaseReservations(orderId: number | string): Promise<voi
 
 /**
  * Convert reserved → deducted for an order (called on fulfilment).
- * No-op if inventory_reservations table doesn't exist yet.
  */
 export async function deductReservations(orderId: number | string): Promise<void> {
-  if (!(await hasReservationsTable())) return;
   await db.query(
     `UPDATE inventory_reservations
      SET status = 'deducted', updated_at = now()
