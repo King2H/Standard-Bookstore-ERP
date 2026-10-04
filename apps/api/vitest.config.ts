@@ -24,19 +24,9 @@ export default defineConfig({
       JWT_SECRET: envVars.JWT_SECRET ?? 'test_jwt_secret_not_for_production',
       COLUMN_ENCRYPTION_KEY: envVars.COLUMN_ENCRYPTION_KEY ?? '0000000000000000000000000000000000000000000000000000000000000001',
     },
-    // Run tests sequentially to avoid DB conflicts
+    // Test files share one database, so they run one at a time.
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        env: {
-          ...envVars,
-          DATABASE_URL: testDatabaseUrl,
-          JWT_SECRET: envVars.JWT_SECRET ?? 'test_jwt_secret_not_for_production',
-          COLUMN_ENCRYPTION_KEY: envVars.COLUMN_ENCRYPTION_KEY ?? '0000000000000000000000000000000000000000000000000000000000000001',
-        },
-      },
-    },
+    fileParallelism: false,
     testTimeout: 30_000,
     // Run after-hooks in reverse registration order (the Vitest 2+ default),
     // so the pool cleanup in setup.ts runs after each file's own afterAll.

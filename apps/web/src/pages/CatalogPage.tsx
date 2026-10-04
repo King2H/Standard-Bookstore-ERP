@@ -200,7 +200,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
   const allSel = allIds.length > 0 && allIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(allSel ? new Set() : new Set(allIds));
   const toggleOne = (id: number) => setSelected(prev => {
-    const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s;
+    const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s;
   });
   // doSort accepts string to match SortTh's onSort: (c: string) => void
   const doSort = (col: string) => {
@@ -371,7 +371,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Tag</label>
               <input
                 defaultValue=""
-                onChange={e => { const v = e.target.value; setTimeout(() => { const p = new URLSearchParams(window.location.search); v ? p.set('tag', v) : p.delete('tag'); window.history.replaceState(null, '', `?${p.toString()}`); }, 300); }}
+                onChange={e => { const v = e.target.value; setTimeout(() => { const p = new URLSearchParams(window.location.search); if (v) p.set('tag', v); else p.delete('tag'); window.history.replaceState(null, '', `?${p.toString()}`); }, 300); }}
                 placeholder="e.g. bestseller"
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
             </div>

@@ -70,7 +70,7 @@ export default function SuppliersPage({ userRole, userPermissions }: SuppliersPa
   function openCreate() { setEditing(null); setForm({ ...EMPTY }); setDrawerOpen(true); }
   function openEdit(s: Supplier) { setEditing(s); setForm({ name: s.name, contactPhone: s.contactInfo.phone ?? '', contactEmail: s.contactInfo.email ?? '', leadTimeDays: s.leadTimeDays, pricingTerms: s.pricingTerms ?? '', supplierType: s.supplierType, publisherId: s.publisherId }); setDrawerOpen(true); }
   function mkPayload(): SupplierPayload { return { name: form.name, contactInfo: { phone: form.contactPhone, email: form.contactEmail }, leadTimeDays: form.leadTimeDays, pricingTerms: form.pricingTerms || null, supplierType: form.supplierType, publisherId: form.supplierType === 'publisher' ? form.publisherId : null }; }
-  function handleSubmit(e: React.FormEvent) { e.preventDefault(); const p = mkPayload(); editing ? updateMut.mutate({ id: editing.id, b: p }) : createMut.mutate(p); }
+  function handleSubmit(e: React.FormEvent) { e.preventDefault(); const p = mkPayload(); if (editing) updateMut.mutate({ id: editing.id, b: p }); else createMut.mutate(p); }
 
   const suppliers = data?.items ?? [];
   const publishers = pubData?.items ?? [];
