@@ -71,7 +71,8 @@ Layers, top to bottom. Each layer calls only the layer below it.
 
 1. **Routes**: URL, middleware and a controller only.
 2. **Controller**: request → validated DTO → service → response. No business logic, no SQL.
-3. **Service**: one function per use case; owns the transaction boundary. Never touches `req`/`res`.
+3. **Service**: one function per use case; owns the transaction boundary, opened only with `withTransaction`
+   (`apps/api/src/db/tx.ts`). Never touches `req`/`res`.
 4. **Domain / policy**: pure functions (state machines, pricing, costing, allowed actions). Unit-tested.
 5. **Repository**: the only code that runs SQL (Kysely). Takes a `Queryable` (transaction or db) as its first argument.
    Branch-owned and tenant-owned queries require scope parameters.
