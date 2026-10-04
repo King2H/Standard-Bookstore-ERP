@@ -177,7 +177,8 @@ Once connected to GitHub, every `git push` to `main` automatically:
 | `COLUMN_ENCRYPTION_KEY` | API | ✅ Yes | 64-char hex key for AES-256-GCM encryption |
 | `NODE_ENV` | API | ✅ Yes | Set to `production` |
 | `PORT` | API | ✅ Yes | `3000` |
-| `FRONTEND_URL` | API | ✅ Yes | Your frontend URL (for CORS) |
+| `FRONTEND_URL` | API | ✅ Yes | Your frontend URL (for CORS). Without it, browsers on other origins are refused |
+| `TRUST_PROXY` | API | Recommended | Number of proxies in front of the API (usually `1` on a hosting platform). Makes login rate limiting see real client addresses. Never `true` |
 | `VITE_API_URL` | Frontend | ✅ Yes | Your API URL (set at build time) |
 | `REDIS_URL` | API | ❌ No | Optional — app works without it |
 
@@ -217,8 +218,8 @@ Once connected to GitHub, every `git push` to `main` automatically:
 ## Security Checklist Before Sharing with Users
 
 - [ ] Change default passwords for `superadmin` and `admin` accounts (via My Profile page)
-- [ ] `JWT_SECRET` is set to a generated random value (not the dev default)
-- [ ] `COLUMN_ENCRYPTION_KEY` is set to a proper 64-char hex value
+- [ ] `JWT_SECRET` is set to a generated random value (not the dev default). The API refuses to start otherwise
+- [ ] `COLUMN_ENCRYPTION_KEY` is set to a proper 64-char hex value. The API refuses to start otherwise
 - [ ] `FRONTEND_URL` is set to your exact frontend domain
 - [ ] Review and remove any test staff accounts
 
