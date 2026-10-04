@@ -99,6 +99,14 @@ in `_test`, so the tests can never run against real data by mistake.
 docker compose exec postgres psql -U bms -d bms
 ```
 
+**After adding a migration**, apply it and regenerate the database types that Kysely uses.
+CI fails if `apps/api/src/db/types.generated.ts` does not match the migrations.
+
+```powershell
+npm run migrate
+npm run db:types
+```
+
 **Reset the test database.** Drop it; the next `npm test` recreates it.
 
 ```powershell

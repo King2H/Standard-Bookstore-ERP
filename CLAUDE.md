@@ -39,6 +39,7 @@ Node from `.nvmrc`, dependencies, and PostgreSQL 18 on `localhost:5433` with mig
 npm install                      # install all workspaces
 docker compose up -d postgres    # start only PostgreSQL 18 (host port 5433)
 npm run migrate                  # apply database migrations
+npm run db:types                 # regenerate Kysely types after a migration (CI checks them)
 npm run dev:api                  # API on :3000
 npm run dev:web                  # web on :5173 (proxies /api)
 npm run lint                     # ESLint for api, web, shared
@@ -75,6 +76,7 @@ Layers, top to bottom. Each layer calls only the layer below it.
 5. **Repository**: the only code that runs SQL (Kysely). Takes a `Queryable` (transaction or db) as its first argument.
    Branch-owned and tenant-owned queries require scope parameters.
 6. **Database**: migrations are the only source of schema truth. No DDL or schema checks at runtime.
+   `apps/api/src/db/types.generated.ts` is generated from them (`npm run db:types`); never edit it by hand.
 
 Contracts (request/response schemas) live in `packages/shared` as zod schemas, used by API validation, web forms and types.
 

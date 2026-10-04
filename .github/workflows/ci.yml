@@ -84,3 +84,7 @@ jobs:
       # The tests create and migrate their own database (bms_test).
       - name: API tests
         run: npm test
+      # bms_test now holds exactly the schema the migrations produce.
+      - name: Generated database types are up to date
+        working-directory: apps/api
+        run: npx kysely-codegen --url postgres://bms:bms@localhost:5433/bms_test --verify
