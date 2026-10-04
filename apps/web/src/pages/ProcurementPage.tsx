@@ -316,7 +316,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
       receivingLocationId: receivingLocationId || null,
       lineItems: validLines.map(li => ({ bookId: li.bookId, quantity: li.quantity, unitCost: li.unitCost })),
     };
-    editing ? updateMut.mutate(body) : createMut.mutate(body);
+    if (editing) updateMut.mutate(body); else createMut.mutate(body);
   }
 
   return (

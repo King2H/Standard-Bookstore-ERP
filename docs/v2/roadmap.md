@@ -22,7 +22,7 @@ Day-to-day progress is tracked in issue #37.
 | # | Milestone | Issues | Size | Possible pre-release |
 |---|---|---|---|---|
 | M0 | Phase 0: design and workspace | #7, #8, #9, #10, #11 | done | — |
-| M1 | Quality gates | #29, #30, #16 | ~4 PRs | — |
+| M1 | Quality gates | #29, #30, #16, #47 | ~4 PRs | — |
 | M2 | Core infrastructure | #18, #14, #15, #17 | ~5 PRs | — |
 | M3 | Reference modules and scope | #19, #20, #12, #38 | ~5 PRs | — |
 | M4 | Tenancy | #13 | ~3 PRs | `v2.0.0-alpha.1` |
@@ -53,10 +53,12 @@ on each PR are what make that safe.
 |---|---|---|
 | 1 | #29 CI pipeline | GitHub Actions on every PR: install, lint, typecheck, API tests on PostgreSQL 18, web tests, build. Branch protection on `main` requires green CI. |
 | 2 | #30 Test isolation | Separate test database, created and migrated by the test run; tests no longer depend on order or leave data behind. (The bank-account tests already run with the module switched on, since PR #44.) |
-| 3 | #16 Security hardening | Fail-fast on invalid or placeholder secrets; CORS fails closed; rate limiter trusts only configured proxies; security headers; remaining `npm audit` advisory resolved. |
+| 3 | #16 Security hardening | Fail-fast on invalid or placeholder secrets; CORS fails closed; rate limiter trusts only configured proxies; security headers; production `npm audit` clean. |
+| 4 | #47 Dev tooling upgrades | Vitest (API), typescript-eslint and node-pg-migrate on current majors, clearing their audit advisories. |
 
 **Exit criteria:** CI green and required on `main`; the full suite passes on a fresh database
-with zero unexpected failures; no high or critical advisories.
+with zero unexpected failures; no high or critical advisories outside the web toolchain, which is
+upgraded in M6 step 1.
 
 ## M2: Core infrastructure
 
@@ -114,7 +116,7 @@ modules tenant-scoped.
 
 | Order | Step |
 |---|---|
-| 1 | React 19, current Vite and React Router upgrade, as one PR (ADR-0011) |
+| 1 | React 19, current Vite and React Router upgrade, as one PR (ADR-0011). Includes the web toolchain: Vitest, Tailwind CSS and esbuild, clearing their audit advisories |
 | 2 | App shell, typed API client, query-key factories |
 | 3 | Features migrated one per PR, following the API modules already refactored (Suppliers first) |
 
