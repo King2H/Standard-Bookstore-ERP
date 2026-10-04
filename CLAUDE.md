@@ -95,6 +95,8 @@ The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/`
 - Business errors throw `AppError` subclasses (`ValidationError`, `BusinessError`, `NotFoundError`, …), never
   `res.status(...).json(...)`. Error codes are a contract: list new ones in `docs/v2/api-errors.md` (a test checks).
 - Request validation uses `validate(schemas)` with zod schemas from `@bms/shared`.
+- The API is served under `/api/v1`. `/api/...` is a deprecated alias (with `Deprecation` and `Link` headers)
+  until the web app moves in M6; new code, tests and docs use `/api/v1`.
 - Never trust client-supplied scope: branch and tenant come from the authenticated context.
 - Every bug fix comes with a regression test that fails before the fix.
 - Match the style of surrounding code; keep comments for *why*, not *what*.

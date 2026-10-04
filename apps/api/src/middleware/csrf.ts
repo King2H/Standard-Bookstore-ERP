@@ -45,7 +45,9 @@ export function csrfMiddleware(req: Request, _res: Response, next: NextFunction)
   if (SAFE_METHODS.has(req.method)) { next(); return; }
 
   // Skip exempt paths
-  if (EXEMPT_PATHS.has(req.path)) { next(); return; }
+  // The same routes are served under /api/v1 and the deprecated /api alias.
+  const path = req.path.replace(/^\/api\/v1(?=\/|$)/, '/api');
+  if (EXEMPT_PATHS.has(path)) { next(); return; }
 
   const cookieToken = req.cookies?.['csrf-token'] as string | undefined;
   const headerToken = req.headers['x-csrf-token'] as string | undefined;

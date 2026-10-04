@@ -28,6 +28,7 @@ import notificationsRouter from './modules/notifications/notifications.routes.js
 import receivablesRouter from './modules/receivables/receivables.routes.js';
 import { csrfMiddleware } from './middleware/csrf.js';
 import { corsMiddleware } from './middleware/cors.js';
+import { deprecatedAlias } from './middleware/deprecatedAlias.js';
 import { readHttpConfig } from './lib/env.js';
 
 export function createApp() {
@@ -50,32 +51,38 @@ export function createApp() {
   app.use(csrfMiddleware);
 
   // ── Routes ────────────────────────────────────────────────────────────
-  app.use('/api', healthRouter);
-  app.use('/api', authRouter);
-  app.use('/api', branchRouter);
-  app.use('/api', configRouter);
+  // Every route is served under /api/v1 (ADR-0004). The unversioned /api
+  // paths stay as a deprecated alias until the web app moves to /api/v1 (M6).
+  const api = express.Router();
+  api.use(healthRouter);
+  api.use(authRouter);
+  api.use(branchRouter);
+  api.use(configRouter);
   // Bank Accounts is off unless explicitly enabled. Interim switch until
   // per-tenant feature flags replace it (#27).
   if (process.env.FEATURE_BANK_ACCOUNTS === 'true') {
-    app.use('/api', bankAccountRouter);
+    api.use(bankAccountRouter);
   }
-  app.use('/api', locationRouter);
-  app.use('/api', catalogRouter);
-  app.use('/api', inventoryRouter);
-  app.use('/api', supplierRouter);
-  app.use('/api', procurementRouter);
-  app.use('/api', customerRouter);
-  app.use('/api', posRouter);
-  app.use('/api', returnsRouter);
-  app.use('/api', ordersRouter);
-  app.use('/api', paymentsRouter);
-  app.use('/api', exchangesRouter);
-  app.use('/api', financialTransactionsRouter);
-  app.use('/api', reportsRouter);
-  app.use('/api', installmentsRouter);
-  app.use('/api/notifications', notificationsRouter);
-  app.use('/api', receivablesRouter);
-  app.use('/api', auditLogsRouter);
+  api.use(locationRouter);
+  api.use(catalogRouter);
+  api.use(inventoryRouter);
+  api.use(supplierRouter);
+  api.use(procurementRouter);
+  api.use(customerRouter);
+  api.use(posRouter);
+  api.use(returnsRouter);
+  api.use(ordersRouter);
+  api.use(paymentsRouter);
+  api.use(exchangesRouter);
+  api.use(financialTransactionsRouter);
+  api.use(reportsRouter);
+  api.use(installmentsRouter);
+  api.use('/notifications', notificationsRouter);
+  api.use(receivablesRouter);
+  api.use(auditLogsRouter);
+
+  app.use('/api/v1', api);
+  app.use('/api', deprecatedAlias('/api', '/api/v1', api));
 
   // 404 handler
   app.use((req, res) => {
