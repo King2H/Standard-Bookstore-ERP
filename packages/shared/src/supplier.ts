@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_PAGE_SIZE, IdSchema, LifecycleStatusSchema, MAX_PAGE_SIZE, PaginatedSchema } from './common.js';
+import { IdSchema, LifecycleStatusSchema, ListPagingQuerySchema, PaginatedSchema } from './common.js';
 
 /** Contracts for /api/v1/suppliers and /api/v1/books/{bookId}/suppliers (#19). */
 
@@ -26,7 +26,7 @@ export type Supplier = z.infer<typeof SupplierSchema>;
 
 const BooleanQuerySchema = z.enum(['true', 'false']).transform((v) => v === 'true');
 
-export const SupplierListQuerySchema = z.object({
+export const SupplierListQuerySchema = ListPagingQuerySchema.extend({
   supplierType: SupplierTypeSchema.optional(),
   isActive: BooleanQuerySchema.optional(),
   isBlacklisted: BooleanQuerySchema.optional(),
@@ -34,15 +34,6 @@ export const SupplierListQuerySchema = z.object({
   status: z.enum(['active', 'inactive', 'archived', 'all']).optional(),
   /** Case-insensitive match on the name. */
   q: z.string().optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  // Larger values are capped instead of rejected: the procurement supplier
-  // picker asks for 200 to get "all of them" in one request.
-  pageSize: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .default(DEFAULT_PAGE_SIZE)
-    .transform((n) => Math.min(n, MAX_PAGE_SIZE)),
 });
 export type SupplierListQuery = z.infer<typeof SupplierListQuerySchema>;
 
