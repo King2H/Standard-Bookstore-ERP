@@ -33,6 +33,14 @@ export function PaginatedSchema<T extends z.ZodType>(item: T) {
   });
 }
 
+/** Lifecycle of master data (books, suppliers, customers, ...). */
+export const LifecycleStatusSchema = z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']);
+export type LifecycleStatus = z.infer<typeof LifecycleStatusSchema>;
+
+/** Response of actions that return only a confirmation, e.g. `{ message: 'Supplier archived' }`. */
+export const MessageResponseSchema = z.object({ message: z.string() });
+export type MessageResponse = z.infer<typeof MessageResponseSchema>;
+
 /**
  * A money amount in a request: a JSON number (19.99) or a decimal string
  * ("19.99"), up to 4 decimals. Services turn it into `Money` for arithmetic.

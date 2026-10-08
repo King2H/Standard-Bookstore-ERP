@@ -1,428 +1,178 @@
-import { db } from '../../db/index.js';
-import { BusinessError, ConflictError, NotFoundError } from '../../lib/errors.js';
-import { transitionEntityStatus, computeUsage, type LifecycleStatus, type UsageQuery } from '../../lib/lifecycle.js';
+import type {
+  CreateSupplierRequest,
+  LifecycleStatus,
+  LinkBookSupplierRequest,
+  SupplierUsage,
+  UpdateSupplierRequest,
+} from '@bms/shared';
+import { kysely } from '../../db/kysely.js';
+import { isUniqueViolation } from '../../db/errors.js';
+import { withTransaction, type Queryable } from '../../db/tx.js';
+import { ConflictError, NotFoundError } from '../../lib/errors.js';
+import { insertAuditEntry } from '../audit/audit.repository.js';
+import * as policy from './supplier.policy.js';
+import * as suppliers from './supplier.repository.js';
+import type { Actor, BookSupplierRecord, SupplierFilter, SupplierRecord } from './supplier.types.js';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+/** Use cases of the Suppliers module (A4): one function each, owning its transaction. */
 
-export interface StaffCtx { staffId: number; role: string; branchId: number; }
-
-export interface SupplierRow {
-  id: number;
-  name: string;
-  contactInfo: Record<string, unknown>;
-  leadTimeDays: number;
-  pricingTerms: string | null;
-  supplierType: 'external' | 'publisher';
-  publisherId: number | null;
-  publisherName: string | null;
-  isActive: boolean;
-  isBlacklisted: boolean;
-  /** Prompt 3 — kept in lockstep with isActive (see transitionEntityStatus's syncIsActive option). is_blacklisted stays a separate, orthogonal flag — a misconduct ban, not a lifecycle stage. */
-  status: LifecycleStatus;
-  archivedAt: string | null;
-  createdAt: string;
+function audit(q: Queryable, actor: Actor, action: string, entityType: string, entityId: string | number, meta: Record<string, unknown>) {
+  return insertAuditEntry(q, {
+    staffId: actor.staffId,
+    staffRole: actor.role,
+    branchId: actor.branchId,
+    action,
+    entityType,
+    entityId,
+    meta,
+  });
 }
 
-export interface BookSupplierRow {
-  bookId: number;
-  supplierId: number;
-  supplierName: string;
-  supplierSku: string | null;
-  isPrimary: boolean;
+async function getOrThrow(q: Queryable, id: number): Promise<SupplierRecord> {
+  const supplier = await suppliers.findById(q, id);
+  if (!supplier) throw new NotFoundError('Supplier');
+  return supplier;
 }
 
-// ── Row mapper ────────────────────────────────────────────────────────────────
-
-function mapSupplierRow(row: Record<string, unknown>): SupplierRow {
-  return {
-    id: row.id as number,
-    name: row.name as string,
-    contactInfo: (row.contact_info as Record<string, unknown>) ?? {},
-    leadTimeDays: row.lead_time_days as number,
-    pricingTerms: (row.pricing_terms as string | null) ?? null,
-    supplierType: row.supplier_type as 'external' | 'publisher',
-    publisherId: (row.publisher_id as number | null) ?? null,
-    publisherName: (row.publisher_name as string | null) ?? null,
-    isActive: row.is_active as boolean,
-    isBlacklisted: row.is_blacklisted as boolean,
-    status: (row.status as LifecycleStatus | undefined) ?? (row.is_active ? 'ACTIVE' : 'INACTIVE'),
-    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
-    createdAt: (row.created_at as Date).toISOString(),
-  };
+export async function listSuppliers(
+  filter: SupplierFilter,
+  paging: { page: number; pageSize: number },
+): Promise<{ items: SupplierRecord[]; total: number; page: number; pageSize: number; totalPages: number }> {
+  const { page, pageSize } = paging;
+  const { items, total } = await suppliers.list(kysely, filter, {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  });
+  return { items, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
 }
 
-// ── Supplier SELECT fragment ──────────────────────────────────────────────────
-
-const SUPPLIER_SELECT = `
-  SELECT s.id, s.name, s.contact_info, s.lead_time_days, s.pricing_terms,
-         s.supplier_type, s.publisher_id, p.name AS publisher_name,
-         s.is_active, s.is_blacklisted, s.status, s.archived_at, s.created_at
-  FROM suppliers s
-  LEFT JOIN publishers p ON p.id = s.publisher_id
-`;
-
-// ── Validate supplier_type rules ──────────────────────────────────────────────
-
-function validateSupplierTypeRules(
-  supplierType: string | undefined,
-  publisherId: number | null | undefined,
-) {
-  if (supplierType === 'publisher' && !publisherId) {
-    throw new BusinessError('PUBLISHER_ID_REQUIRED', 'publisher_id is required when supplier_type is publisher');
-  }
-  if (supplierType === 'external' && publisherId != null) {
-    throw new BusinessError('PUBLISHER_ID_NOT_ALLOWED', 'publisher_id must not be set when supplier_type is external');
-  }
+export function getSupplier(id: number): Promise<SupplierRecord> {
+  return getOrThrow(kysely, id);
 }
 
-// ── Create ────────────────────────────────────────────────────────────────────
+export async function createSupplier(actor: Actor, dto: CreateSupplierRequest): Promise<SupplierRecord> {
+  const publisherId = dto.publisherId ?? null;
+  policy.checkSupplierType(dto.supplierType, publisherId);
 
-export async function create(
-  data: {
-    name: string;
-    contactInfo: Record<string, unknown>;
-    leadTimeDays?: number;
-    pricingTerms?: string;
-    supplierType: 'external' | 'publisher';
-    publisherId?: number | null;
-  },
-  staffCtx: StaffCtx,
-): Promise<SupplierRow> {
-  validateSupplierTypeRules(data.supplierType, data.publisherId ?? null);
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    let result;
+  return withTransaction({}, async (tx) => {
+    let id: number;
     try {
-      result = await client.query(
-        `INSERT INTO suppliers (name, contact_info, lead_time_days, pricing_terms, supplier_type, publisher_id)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id`,
-        [
-          data.name,
-          JSON.stringify(data.contactInfo),
-          data.leadTimeDays ?? 7,
-          data.pricingTerms ?? null,
-          data.supplierType,
-          data.publisherId ?? null,
-        ],
-      );
-    } catch (err: unknown) {
-      if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('DUPLICATE_SUPPLIER_NAME', `Supplier '${data.name}' already exists`);
+      id = await suppliers.insert(tx, {
+        name: dto.name,
+        contactInfo: dto.contactInfo,
+        leadTimeDays: dto.leadTimeDays ?? 7,
+        pricingTerms: dto.pricingTerms ?? null,
+        supplierType: dto.supplierType,
+        publisherId,
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictError('DUPLICATE_SUPPLIER_NAME', `Supplier '${dto.name}' already exists`);
       }
       throw err;
     }
-
-    const id: number = result.rows[0].id;
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1, $2, 'CREATE', 'supplier', $3, $4, $5)`,
-      [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ name: data.name })],
-    );
-
-    await client.query('COMMIT');
-    return getById(id);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    await audit(tx, actor, 'CREATE', 'supplier', id, { name: dto.name });
+    return getOrThrow(tx, id);
+  });
 }
 
-// ── Update ────────────────────────────────────────────────────────────────────
+export async function updateSupplier(actor: Actor, id: number, dto: UpdateSupplierRequest): Promise<SupplierRecord> {
+  return withTransaction({}, async (tx) => {
+    const current = await suppliers.findForUpdate(tx, id);
+    if (!current) throw new NotFoundError('Supplier');
 
-export async function update(
-  id: number,
-  data: {
-    name?: string;
-    contactInfo?: Record<string, unknown>;
-    leadTimeDays?: number;
-    pricingTerms?: string | null;
-    supplierType?: 'external' | 'publisher';
-    publisherId?: number | null;
-    isActive?: boolean;
-  },
-  staffCtx: StaffCtx,
-): Promise<SupplierRow> {
-  // Re-validate type rules if either field is being changed
-  if (data.supplierType !== undefined || data.publisherId !== undefined) {
-    // Fetch current values to fill in missing side
-    const current = await db.query(`SELECT supplier_type, publisher_id FROM suppliers WHERE id = $1`, [id]);
-    if (!current.rows.length) throw new NotFoundError('Supplier');
-    const effectiveType = data.supplierType ?? (current.rows[0].supplier_type as string);
-    const effectivePubId = data.publisherId !== undefined ? data.publisherId : (current.rows[0].publisher_id as number | null);
-    validateSupplierTypeRules(effectiveType, effectivePubId);
-  }
+    const type = policy.typeAfterUpdate(current, dto);
+    if (type) policy.checkSupplierType(type.supplierType, type.publisherId);
 
-  const sets: string[] = [];
-  const params: unknown[] = [];
-  let p = 1;
+    if (Object.values(dto).every((v) => v === undefined)) return getOrThrow(tx, id);
 
-  if (data.name !== undefined) { sets.push(`name = $${p++}`); params.push(data.name); }
-  if (data.contactInfo !== undefined) { sets.push(`contact_info = $${p++}`); params.push(JSON.stringify(data.contactInfo)); }
-  if (data.leadTimeDays !== undefined) { sets.push(`lead_time_days = $${p++}`); params.push(data.leadTimeDays); }
-  if (data.pricingTerms !== undefined) { sets.push(`pricing_terms = $${p++}`); params.push(data.pricingTerms); }
-  if (data.supplierType !== undefined) { sets.push(`supplier_type = $${p++}`); params.push(data.supplierType); }
-  if (data.publisherId !== undefined) { sets.push(`publisher_id = $${p++}`); params.push(data.publisherId); }
-  if (data.isActive !== undefined) { sets.push(`is_active = $${p++}`); params.push(data.isActive); }
-
-  if (!sets.length) return getById(id);
-
-  params.push(id);
-  const result = await db.query(
-    `UPDATE suppliers SET ${sets.join(', ')} WHERE id = $${p} RETURNING id`,
-    params,
-  );
-  if (!result.rows.length) throw new NotFoundError('Supplier');
-
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1, $2, 'UPDATE', 'supplier', $3, $4, $5)`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify(data)],
-  );
-
-  return getById(id);
-}
-
-// ── Deactivate / Activate (Prompt 3 — reuses the shared lifecycle helper) ───
-// No reactivate route existed before this — deactivate was a one-way action.
-
-export async function deactivate(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('suppliers', 'supplier', id, 'INACTIVATE', staffCtx, { syncIsActive: true });
-}
-
-export async function activate(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('suppliers', 'supplier', id, 'ACTIVATE', staffCtx, { syncIsActive: true });
-}
-
-// ── Archive / Restore (Prompt 3) ────────────────────────────────────────────
-// ARCHIVED additionally hides the supplier from procurement selection lists
-// by default (INACTIVE already blocks new POs via validateSupplierForProcurement
-// below — both states behave identically there since is_active stays synced).
-
-export async function archiveSupplier(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('suppliers', 'supplier', id, 'ARCHIVE', staffCtx, { syncIsActive: true });
-}
-
-export async function restoreSupplier(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('suppliers', 'supplier', id, 'RESTORE', staffCtx, { syncIsActive: true });
-}
-
-// ── Usage / dependency check (Prompt 3) ─────────────────────────────────────
-
-const SUPPLIER_USAGE_QUERIES: UsageQuery[] = [
-  { key: 'purchaseOrders', sql: `SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = $1` },
-];
-
-export async function getSupplierUsage(id: number): Promise<Record<string, number>> {
-  const supplier = await db.query(`SELECT id FROM suppliers WHERE id = $1`, [id]);
-  if (!supplier.rows.length) throw new NotFoundError('Supplier');
-  return computeUsage(id, SUPPLIER_USAGE_QUERIES);
-}
-
-// ── Blacklist ─────────────────────────────────────────────────────────────────
-
-export async function blacklist(id: number, staffCtx: StaffCtx): Promise<void> {
-  const result = await db.query(
-    `UPDATE suppliers SET is_blacklisted = true WHERE id = $1 RETURNING id`,
-    [id],
-  );
-  if (!result.rows.length) throw new NotFoundError('Supplier');
-
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1, $2, 'UPDATE', 'supplier', $3, $4, $5)`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'blacklist' })],
-  );
-}
-
-// ── Delete ────────────────────────────────────────────────────────────────────
-
-export async function deleteSupplier(id: number, staffCtx: StaffCtx): Promise<void> {
-  const poCheck = await db.query(
-    `SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = $1`,
-    [id],
-  );
-  const poCount = parseInt(poCheck.rows[0].count as string, 10);
-  if (poCount > 0) {
-    throw new ConflictError('DEPENDENCY_CONFLICT', 'Supplier has associated purchase orders', { poCount });
-  }
-
-  const result = await db.query(`DELETE FROM suppliers WHERE id = $1 RETURNING id`, [id]);
-  if (!result.rows.length) throw new NotFoundError('Supplier');
-
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1, $2, 'DELETE', 'supplier', $3, $4, $5)`,
-    [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'delete' })],
-  );
-}
-
-// ── List ──────────────────────────────────────────────────────────────────────
-
-export async function list(opts: {
-  supplierType?: string;
-  isActive?: boolean;
-  isBlacklisted?: boolean;
-  status?: LifecycleStatus[];
-  q?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<{ items: SupplierRow[]; total: number; page: number; totalPages: number }> {
-  const page = Math.max(1, opts.page ?? 1);
-  const pageSize = Math.min(100, opts.pageSize ?? 25);
-  const offset = (page - 1) * pageSize;
-
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let p = 1;
-
-  if (opts.supplierType) { conditions.push(`s.supplier_type = $${p++}`); params.push(opts.supplierType); }
-  if (opts.status) { conditions.push(`s.status = ANY($${p++})`); params.push(opts.status); }
-  else if (opts.isActive !== undefined) { conditions.push(`s.is_active = $${p++}`); params.push(opts.isActive); }
-  if (opts.isBlacklisted !== undefined) { conditions.push(`s.is_blacklisted = $${p++}`); params.push(opts.isBlacklisted); }
-  if (opts.q) {
-    conditions.push(`lower(s.name) LIKE lower($${p++})`);
-    params.push(`%${opts.q.trim()}%`);
-  }
-
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-  const [countRes, dataRes] = await Promise.all([
-    db.query(
-      `SELECT COUNT(*) FROM suppliers s LEFT JOIN publishers p ON p.id = s.publisher_id ${where}`,
-      params,
-    ),
-    db.query(
-      `${SUPPLIER_SELECT} ${where} ORDER BY s.name ASC LIMIT $${p++} OFFSET $${p++}`,
-      [...params, pageSize, offset],
-    ),
-  ]);
-
-  const total = parseInt(countRes.rows[0].count as string, 10);
-  return {
-    items: dataRes.rows.map(mapSupplierRow),
-    total,
-    page,
-    totalPages: Math.ceil(total / pageSize),
-  };
-}
-
-// ── Get by ID ─────────────────────────────────────────────────────────────────
-
-export async function getById(id: number): Promise<SupplierRow> {
-  const result = await db.query(`${SUPPLIER_SELECT} WHERE s.id = $1`, [id]);
-  if (!result.rows.length) throw new NotFoundError('Supplier');
-  return mapSupplierRow(result.rows[0]);
-}
-
-// ── Get suppliers for a book ──────────────────────────────────────────────────
-
-export async function getSuppliersForBook(bookId: number): Promise<BookSupplierRow[]> {
-  const result = await db.query(
-    `SELECT bs.book_id, bs.supplier_id, s.name AS supplier_name,
-            bs.supplier_sku, bs.is_primary
-     FROM book_suppliers bs
-     JOIN suppliers s ON s.id = bs.supplier_id
-     LEFT JOIN publishers p ON p.id = s.publisher_id
-     WHERE bs.book_id = $1
-     ORDER BY bs.is_primary DESC, s.name ASC`,
-    [bookId],
-  );
-  return result.rows.map(row => ({
-    bookId: row.book_id as number,
-    supplierId: row.supplier_id as number,
-    supplierName: row.supplier_name as string,
-    supplierSku: (row.supplier_sku as string | null) ?? null,
-    isPrimary: row.is_primary as boolean,
-  }));
-}
-
-// ── Validate supplier for procurement ────────────────────────────────────────
-
-export async function validateSupplierForProcurement(supplierId: number): Promise<void> {
-  const result = await db.query(
-    `SELECT is_active, is_blacklisted FROM suppliers WHERE id = $1`,
-    [supplierId],
-  );
-  if (!result.rows.length) throw new NotFoundError('Supplier');
-
-  const { is_active, is_blacklisted } = result.rows[0] as { is_active: boolean; is_blacklisted: boolean };
-  if (!is_active) {
-    throw new BusinessError('SUPPLIER_INACTIVE', 'Supplier is inactive and cannot be used for procurement');
-  }
-  if (is_blacklisted) {
-    throw new BusinessError('SUPPLIER_BLACKLISTED', 'Supplier is blacklisted and cannot be used for procurement');
-  }
-}
-
-// ── Link book to supplier ─────────────────────────────────────────────────────
-
-export async function linkBookToSupplier(
-  bookId: number,
-  supplierId: number,
-  supplierSku: string | null,
-  isPrimary: boolean,
-  staffCtx: StaffCtx,
-): Promise<void> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    if (isPrimary) {
-      // Clear existing primary for this book
-      await client.query(
-        `UPDATE book_suppliers SET is_primary = false WHERE book_id = $1`,
-        [bookId],
-      );
+    try {
+      await suppliers.update(tx, id, dto);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictError('DUPLICATE_SUPPLIER_NAME', `Supplier '${dto.name}' already exists`);
+      }
+      throw err;
     }
-
-    await client.query(
-      `INSERT INTO book_suppliers (book_id, supplier_id, supplier_sku, is_primary)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (book_id, supplier_id) DO UPDATE
-         SET supplier_sku = EXCLUDED.supplier_sku,
-             is_primary = EXCLUDED.is_primary`,
-      [bookId, supplierId, supplierSku, isPrimary],
-    );
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1, $2, 'CREATE', 'book_supplier', $3, $4, $5)`,
-      [staffCtx.staffId, staffCtx.role, `${bookId}:${supplierId}`, staffCtx.branchId,
-       JSON.stringify({ bookId, supplierId, supplierSku, isPrimary })],
-    );
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    await audit(tx, actor, 'UPDATE', 'supplier', id, dto);
+    return getOrThrow(tx, id);
+  });
 }
 
-// ── Unlink book from supplier ─────────────────────────────────────────────────
+async function transition(actor: Actor, id: number, action: policy.LifecycleAction): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    const current = await suppliers.findForUpdate(tx, id);
+    if (!current) throw new NotFoundError('Supplier');
 
-export async function unlinkBookFromSupplier(
-  bookId: number,
-  supplierId: number,
-  staffCtx: StaffCtx,
-): Promise<void> {
-  await db.query(
-    `DELETE FROM book_suppliers WHERE book_id = $1 AND supplier_id = $2`,
-    [bookId, supplierId],
-  );
+    const next = policy.lifecycleTransition(action);
+    await suppliers.setLifecycle(tx, id, next, actor.staffId);
+    const meta: { previousStatus: LifecycleStatus; newStatus: LifecycleStatus } = {
+      previousStatus: current.status,
+      newStatus: next.status,
+    };
+    await audit(tx, actor, action, 'supplier', id, meta);
+  });
+}
 
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1, $2, 'DELETE', 'book_supplier', $3, $4, $5)`,
-    [staffCtx.staffId, staffCtx.role, `${bookId}:${supplierId}`, staffCtx.branchId,
-     JSON.stringify({ bookId, supplierId })],
-  );
+export const deactivateSupplier = (actor: Actor, id: number) => transition(actor, id, 'INACTIVATE');
+export const activateSupplier = (actor: Actor, id: number) => transition(actor, id, 'ACTIVATE');
+/** Archived suppliers are hidden from the default list and cannot receive new purchase orders. */
+export const archiveSupplier = (actor: Actor, id: number) => transition(actor, id, 'ARCHIVE');
+export const restoreSupplier = (actor: Actor, id: number) => transition(actor, id, 'RESTORE');
+
+export async function blacklistSupplier(actor: Actor, id: number): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    if (!(await suppliers.setBlacklisted(tx, id))) throw new NotFoundError('Supplier');
+    await audit(tx, actor, 'UPDATE', 'supplier', id, { action: 'blacklist' });
+  });
+}
+
+export async function getSupplierUsage(id: number): Promise<SupplierUsage> {
+  await getOrThrow(kysely, id);
+  return { purchaseOrders: await suppliers.countPurchaseOrders(kysely, id) };
+}
+
+export async function deleteSupplier(actor: Actor, id: number): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    policy.checkDeletable({ purchaseOrders: await suppliers.countPurchaseOrders(tx, id) });
+    if (!(await suppliers.remove(tx, id))) throw new NotFoundError('Supplier');
+    await audit(tx, actor, 'DELETE', 'supplier', id, { action: 'delete' });
+  });
+}
+
+/**
+ * Throws SUPPLIER_INACTIVE or SUPPLIER_BLACKLISTED unless the supplier can
+ * take a new purchase order. Used by procurement; `q` lets a caller run it
+ * inside its own transaction.
+ */
+export async function validateSupplierForProcurement(supplierId: number, q: Queryable = kysely): Promise<void> {
+  const flags = await suppliers.findProcurementFlags(q, supplierId);
+  if (!flags) throw new NotFoundError('Supplier');
+  policy.checkUsableForProcurement(flags);
+}
+
+export function listBookSuppliers(bookId: number): Promise<BookSupplierRecord[]> {
+  return suppliers.listForBook(kysely, bookId);
+}
+
+export async function linkBookSupplier(actor: Actor, bookId: number, dto: LinkBookSupplierRequest): Promise<void> {
+  const link = {
+    bookId,
+    supplierId: dto.supplierId,
+    supplierSku: dto.supplierSku ?? null,
+    isPrimary: dto.isPrimary ?? false,
+  };
+  await withTransaction({}, async (tx) => {
+    // A book has at most one primary supplier (unique partial index).
+    if (link.isPrimary) await suppliers.clearPrimaryForBook(tx, bookId);
+    await suppliers.upsertBookLink(tx, link);
+    await audit(tx, actor, 'CREATE', 'book_supplier', `${bookId}:${dto.supplierId}`, link);
+  });
+}
+
+export async function unlinkBookSupplier(actor: Actor, bookId: number, supplierId: number): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    await suppliers.deleteBookLink(tx, bookId, supplierId);
+    await audit(tx, actor, 'DELETE', 'book_supplier', `${bookId}:${supplierId}`, { bookId, supplierId });
+  });
 }
