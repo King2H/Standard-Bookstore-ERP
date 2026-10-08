@@ -6,6 +6,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { paramStr } from '../../lib/http.js';
 import { ValidationError } from '../../lib/errors.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 
@@ -26,7 +27,7 @@ router.get(
   requirePermission('VIEW_REPORTS'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = qi(req.query.branchId) ?? req.staff?.branchId;
+      const branchId = scopedBranch(req);
       const summary = await receivablesService.getSummary(branchId);
       res.json(summary);
     } catch (err) { next(err); }
@@ -41,7 +42,7 @@ router.get(
   requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const branchId = qi(req.query.branchId) ?? req.staff?.branchId;
+      const branchId = scopedBranch(req);
       const result = await receivablesService.list({
         branchId,
         customerId:  qi(req.query.customerId),

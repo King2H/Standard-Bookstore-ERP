@@ -3,6 +3,7 @@ import * as returnsService from './returns.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramStr } from '../../lib/http.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 
@@ -41,7 +42,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await returnsService.list({
-        branchId:      qi(req.query.branchId, 0) || undefined,
+        branchId:      scopedBranch(req),
         customerId:    qi(req.query.customerId, 0) || undefined,
         transactionId: qi(req.query.transactionId, 0) || undefined,
         status:        qs(req.query.status),

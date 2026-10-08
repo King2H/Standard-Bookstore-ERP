@@ -120,6 +120,8 @@ export async function getById(id: string | number): Promise<PaymentRow> {
 // ── list ──────────────────────────────────────────────────────────────────────
 
 export async function list(opts: {
+  /** The branch whose payments to list (the order's, sale's or exchange's branch). */
+  branchId: number;
   orderId?: number;
   status?: string;
   paymentMethod?: string;
@@ -132,7 +134,8 @@ export async function list(opts: {
   const pageSize = Math.min(100, opts.pageSize ?? 25);
   const offset = (page - 1) * pageSize;
   const conditions: string[] = [];
-  const params: unknown[] = [];
+  const params: unknown[] = [opts.branchId];
+  conditions.push('u.branch_id = $1');
 
   if (opts.orderId)       { params.push(opts.orderId);       conditions.push('u.order_id = $' + params.length); }
   if (opts.status)        { params.push(opts.status);        conditions.push('u.status = $' + params.length); }
@@ -162,7 +165,8 @@ export async function list(opts: {
         p.created_at,
         p.processed_by,
         p.bank_account_id,
-        o.status AS order_status
+        o.status AS order_status,
+        o.branch_id
       FROM order_payments p
       JOIN orders o ON o.id = p.order_id
       UNION ALL
@@ -182,7 +186,8 @@ export async function list(opts: {
         tp.created_at,
         t.staff_id AS processed_by,
         NULL::integer AS bank_account_id,
-        NULL::text AS order_status
+        NULL::text AS order_status,
+        t.branch_id
       FROM transaction_payments tp
       JOIN transactions t ON t.id = tp.transaction_id
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
@@ -209,7 +214,8 @@ export async function list(opts: {
         ft.created_at,
         ft.staff_id AS processed_by,
         NULL::integer AS bank_account_id,
-        NULL::text AS order_status
+        NULL::text AS order_status,
+        e.branch_id
       FROM financial_transactions ft
       JOIN exchanges e ON e.id = ft.exchange_id
       WHERE ft.type = 'payment' AND ft.exchange_id IS NOT NULL
@@ -226,14 +232,17 @@ export async function list(opts: {
         p.order_id::text AS order_id,
         p.status,
         p.payment_method,
-        p.created_at
+        p.created_at,
+        o.branch_id
       FROM order_payments p
+      JOIN orders o ON o.id = p.order_id
       UNION ALL
       SELECT
         t.id::text AS order_id,
         'success' AS status,
         tp.method AS payment_method,
-        tp.created_at
+        tp.created_at,
+        t.branch_id
       FROM transaction_payments tp
       JOIN transactions t ON t.id = tp.transaction_id
       JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
@@ -242,7 +251,8 @@ export async function list(opts: {
         e.id::text AS order_id,
         'success' AS status,
         ft.method AS payment_method,
-        ft.created_at
+        ft.created_at,
+        e.branch_id
       FROM financial_transactions ft
       JOIN exchanges e ON e.id = ft.exchange_id
       WHERE ft.type = 'payment' AND ft.exchange_id IS NOT NULL

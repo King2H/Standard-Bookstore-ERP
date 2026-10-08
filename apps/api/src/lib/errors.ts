@@ -22,6 +22,18 @@ export class ForbiddenError extends AppError {
   }
 }
 
+/** The request names a branch the signed-in staff member may not use (#12). */
+export class BranchAccessError extends AppError {
+  constructor(branchId: number) {
+    super(
+      'BRANCH_ACCESS_DENIED',
+      `No access to branch ${branchId} in this session. Switch to that branch to work with its data.`,
+      403,
+      { branchId },
+    );
+  }
+}
+
 export class NotFoundError extends AppError {
   constructor(entity: string) {
     super('NOT_FOUND', `${entity} not found`, 404);
