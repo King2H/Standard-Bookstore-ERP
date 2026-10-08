@@ -215,12 +215,12 @@ export async function logout(staffId: number, refreshToken: string): Promise<voi
 
 export async function refresh(
   refreshToken: string,
-): Promise<{ accessToken: string; expiresIn: number }> {
+): Promise<{ accessToken: string; expiresIn: number; mustChangePassword: boolean }> {
   // Fetch all non-revoked, non-expired tokens for active staff.
   // branch_id and role are stored directly on the token (migration 1700000032).
   // Fall back to staff_branch_roles JOIN for tokens issued before the migration.
   const tokens = await db.query(
-    `SELECT rt.id, rt.token_hash, rt.staff_id, rt.branch_id, rt.role,
+    `SELECT rt.id, rt.token_hash, rt.staff_id, rt.branch_id, rt.role, s.must_change_password,
             sbr_fallback.role AS fallback_role, sbr_fallback.branch_id AS fallback_branch_id
      FROM refresh_tokens rt
      JOIN staff s ON s.id = rt.staff_id
@@ -260,7 +260,7 @@ export async function refresh(
         getJwtSecret(),
         { expiresIn: ACCESS_TOKEN_TTL },
       );
-      return { accessToken, expiresIn: 900 };
+      return { accessToken, expiresIn: 900, mustChangePassword: row.must_change_password === true };
     }
   }
 

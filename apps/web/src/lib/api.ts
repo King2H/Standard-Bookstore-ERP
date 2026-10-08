@@ -49,6 +49,13 @@ function getCsrfToken(): string | null {
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+// Called whenever the API answers PASSWORD_CHANGE_REQUIRED (#38), so the app
+// sends the user to the change-password screen however the request was made.
+let _onPasswordChangeRequired: (() => void) | null = null;
+export function setPasswordChangeRequiredHandler(fn: (() => void) | null) {
+  _onPasswordChangeRequired = fn;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -72,6 +79,7 @@ async function request<T>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
+    if (err.error === 'PASSWORD_CHANGE_REQUIRED') _onPasswordChangeRequired?.();
     throw Object.assign(new Error(err.message), { code: err.error, status: res.status, details: err.details });
   }
 

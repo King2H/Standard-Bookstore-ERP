@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role } from '@bms/shared';
-import { AuthError, BranchAccessError, ServiceUnavailableError } from '../lib/errors.js';
+import { AuthError, BranchAccessError, PasswordChangeRequiredError, ServiceUnavailableError } from '../lib/errors.js';
 import { db } from '../db/index.js';
 
 interface JwtPayload {
@@ -12,7 +12,31 @@ interface JwtPayload {
   permissions?: string[];
 }
 
-export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+/**
+ * Checks the access token and, on every request, the staff row behind it:
+ * the account is active, still holds a role in the token's branch (#12), and
+ * has no pending password change (#38). Endpoints the staff member needs in
+ * order to change the password use authenticateAllowingPasswordChange.
+ */
+export function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  return verify(req, res, next, { allowPendingPasswordChange: false });
+}
+
+/**
+ * authenticate() for the few endpoints usable while a password change is
+ * pending: reading the profile, changing the password, the branch list and
+ * logging out.
+ */
+export function authenticateAllowingPasswordChange(req: Request, res: Response, next: NextFunction): Promise<void> {
+  return verify(req, res, next, { allowPendingPasswordChange: true });
+}
+
+async function verify(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+  opts: { allowPendingPasswordChange: boolean },
+): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
@@ -48,7 +72,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   let allBranches: boolean;
   try {
     const result = await db.query(
-      `SELECT s.is_active, s.is_all_branches,
+      `SELECT s.is_active, s.is_all_branches, s.must_change_password,
               EXISTS (SELECT 1 FROM staff_branch_roles r WHERE r.staff_id = s.id AND r.branch_id = $2) AS has_branch_role
        FROM staff s WHERE s.id = $1`,
       [payload.staffId, payload.branchId],
@@ -59,6 +83,11 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     allBranches = result.rows[0].is_all_branches === true;
     if (!allBranches && !result.rows[0].has_branch_role) {
       return next(new BranchAccessError(payload.branchId));
+    }
+    // Read from the database, not the token, so an admin reset applies to
+    // sessions that are already open, and a change applies at once.
+    if (result.rows[0].must_change_password === true && !opts.allowPendingPasswordChange) {
+      return next(new PasswordChangeRequiredError());
     }
   } catch {
     return next(new ServiceUnavailableError('Unable to verify account status — please retry'));

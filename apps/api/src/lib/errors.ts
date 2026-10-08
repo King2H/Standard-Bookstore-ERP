@@ -34,6 +34,16 @@ export class BranchAccessError extends AppError {
   }
 }
 
+/**
+ * The staff member must change their password before doing anything else:
+ * after an admin reset, or while still on a seeded default password (#38).
+ */
+export class PasswordChangeRequiredError extends AppError {
+  constructor() {
+    super('PASSWORD_CHANGE_REQUIRED', 'Your password must be changed before continuing.', 403);
+  }
+}
+
 export class NotFoundError extends AppError {
   constructor(entity: string) {
     super('NOT_FOUND', `${entity} not found`, 404);
