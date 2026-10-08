@@ -79,7 +79,7 @@ export async function restoreSession(): Promise<{
     if (res.csrfToken) setCsrfToken(res.csrfToken);
     scheduleRefresh(res.expiresIn);
     const permissions = parsePermissionsFromToken(res.accessToken);
-    return { restored: true, mustChangePassword: false, permissions };
+    return { restored: true, mustChangePassword: res.mustChangePassword ?? false, permissions };
   } catch {
     // 401 = no valid cookie, 500 = server error — either way, show login
     setAccessToken(null);

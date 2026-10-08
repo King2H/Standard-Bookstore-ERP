@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -66,12 +66,13 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ProfilePage() {
+export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?: () => void } = {}) {
   const { showToast } = useToast();
   const [showPasswordForm, setShowPasswordForm] = useState(false);
 
   // ── Fetch own profile ──────────────────────────────────────────────────────
 
+  const queryClient = useQueryClient();
   const { data: profile, isLoading } = useQuery({
     queryKey: ['my-profile'],
     queryFn: () => api.get<MyProfile>('/staff/me'),
@@ -88,6 +89,8 @@ export default function ProfilePage() {
       showToast('Password updated successfully');
       setShowPasswordForm(false);
       reset();
+      queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+      onPasswordChanged?.();
     },
     onError: (err: unknown) => {
       const e = err as { message?: string; code?: string };
@@ -137,9 +140,9 @@ export default function ProfilePage() {
         <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-xl px-4 py-3 flex items-start gap-3">
           <span className="text-yellow-500 text-lg flex-shrink-0">⚠</span>
           <div>
-            <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-300">Password reset required</p>
+            <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-300">Password change required</p>
             <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
-              An administrator has reset your password. Please change it now before continuing.
+              Your password must be changed before continuing.
             </p>
           </div>
         </div>

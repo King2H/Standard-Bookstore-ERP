@@ -27,6 +27,7 @@ import Layout from './components/Layout.js';
 import SessionWarning from './components/SessionWarning.js';
 import { getAccessToken } from './lib/api.js';
 import { logout as doLogout, restoreSession, switchBranch } from './lib/auth.js';
+import { setPasswordChangeRequiredHandler } from './lib/api.js';
 import { startInactivityTimer, stopInactivityTimer } from './lib/session.js';
 
 const queryClient = new QueryClient({
@@ -84,7 +85,7 @@ export default function App() {
   useEffect(() => {
     if (hasAttemptedRestore.current) return;
     hasAttemptedRestore.current = true;
-    restoreSession().then(({ restored, permissions }) => {
+    restoreSession().then(({ restored, permissions, mustChangePassword: mustChange }) => {
       if (restored) {
         const { role, roles, branchId } = parseTokenPayload();
         setUserRole(role);
@@ -92,10 +93,18 @@ export default function App() {
         setUserPermissions(permissions);
         setActiveBranchId(branchId);
         setIsAuthenticated(true);
-        applyRoleLanding(role);
+        if (mustChange) requirePasswordChange();
+        else applyRoleLanding(role);
       }
       setSessionRestoring(false);
     });
+  }, []);
+
+  // The API refuses everything else until the password is changed (#38);
+  // whichever request hits that first brings the user to their profile.
+  useEffect(() => {
+    setPasswordChangeRequiredHandler(requirePasswordChange);
+    return () => setPasswordChangeRequiredHandler(null);
   }, []);
 
   // ── Inactivity timer — start when authenticated, stop on logout ────────────
@@ -128,6 +137,18 @@ export default function App() {
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
+  function requirePasswordChange() {
+    setMustChangePassword(true);
+    setCurrentPage('profile');
+  }
+
+  const handlePasswordChanged = () => {
+    if (!mustChangePassword) return;
+    setMustChangePassword(false);
+    applyRoleLanding(userRole);
+    queryClient.invalidateQueries();
+  };
+
   function applyRoleLanding(role: Role | null) {
     if (role === 'Super_Admin' || role === 'Admin') setCurrentPage('dashboard');
     else if (role === 'Manager' || role === 'Finance_Officer') setCurrentPage('dashboard');
@@ -145,8 +166,7 @@ export default function App() {
     setActiveBranchId(branchId);
     setUserPermissions(opts?.permissions ?? []);
     if (opts?.mustChangePassword) {
-      setMustChangePassword(true);
-      setCurrentPage('profile');
+      requirePasswordChange();
       return;
     }
     applyRoleLanding(role);
@@ -181,7 +201,8 @@ export default function App() {
       setUserPermissions(permissions);
       setActiveBranchId(branchId);
       // Re-apply landing page for the new role context
-      applyRoleLanding(role);
+      if (mustChangePassword) setCurrentPage('profile');
+      else applyRoleLanding(role);
       // Invalidate all cached queries so data refreshes for the new branch
       queryClient.invalidateQueries();
     } catch {
@@ -226,7 +247,7 @@ export default function App() {
               {mustChangePassword && (
                 <div className="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
                   <span>⚠️</span>
-                  <span>You must change your password before continuing. Please update it in your profile.</span>
+                  <span>Your password must be changed before continuing. Please update it in your profile.</span>
                 </div>
               )}
               {currentPage === 'dashboard'    && <DashboardPage userRole={userRole ?? undefined} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
@@ -248,7 +269,7 @@ export default function App() {
               {currentPage === 'installments' && <InstallmentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'exchanges'    && <ExchangesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
               {currentPage === 'receivables'  && <ReceivablesPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
-              {currentPage === 'profile'      && <ProfilePage />}
+              {currentPage === 'profile'      && <ProfilePage onPasswordChanged={handlePasswordChanged} />}
 
               {/* Inactivity warning overlay */}
               <SessionWarning

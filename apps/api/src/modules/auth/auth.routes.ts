@@ -3,7 +3,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import type { QueryResult } from 'pg';
 import * as authService from './auth.service.js';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, authenticateAllowingPasswordChange } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError, BusinessError, ForbiddenError, ServiceUnavailableError, AppError, AuthError } from '../../lib/errors.js';
 import { db } from '../../db/index.js';
@@ -181,7 +181,7 @@ router.post('/auth/login', loginRateLimit, async (req: Request, res: Response, n
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
 
-router.post('/auth/logout', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/auth/logout', authenticateAllowingPasswordChange, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
     if (refreshToken && req.staff) {
@@ -204,7 +204,12 @@ router.post('/auth/refresh', async (req: Request, res: Response, next: NextFunct
     }
 
     const result = await authService.refresh(refreshToken);
-    res.json({ accessToken: result.accessToken, expiresIn: result.expiresIn, csrfToken: setCsrfCookie(res) });
+    res.json({
+      accessToken: result.accessToken,
+      expiresIn: result.expiresIn,
+      mustChangePassword: result.mustChangePassword,
+      csrfToken: setCsrfCookie(res),
+    });
   } catch (err) {
     next(err);
   }
@@ -214,7 +219,7 @@ router.post('/auth/refresh', async (req: Request, res: Response, next: NextFunct
 // Returns branches the authenticated user has access to (for branch switcher).
 // Also used by login page after credential validation to show branch options.
 
-router.get('/auth/branches', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/auth/branches', authenticateAllowingPasswordChange, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const branches = await authService.getBranchesForUser(req.staff!.staffId);
     res.json({ branches });
@@ -245,7 +250,7 @@ router.post('/auth/switch-branch', authenticate, async (req: Request, res: Respo
 
 router.get(
   '/staff/me',
-  authenticate,
+  authenticateAllowingPasswordChange,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const staffId = req.staff!.staffId;
@@ -327,7 +332,7 @@ router.get(
 
 router.put(
   '/staff/me/password',
-  authenticate,
+  authenticateAllowingPasswordChange,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const staffId = req.staff!.staffId;
