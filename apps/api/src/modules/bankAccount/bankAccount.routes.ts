@@ -5,6 +5,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { paramStr } from '../../lib/http.js';
+import { branchParamInScope } from '../../middleware/recordScope.js';
 
 const router = Router({ mergeParams: true });
 
@@ -40,6 +41,7 @@ const clearSchema = z.object({
 router.get(
   '/branches/:branchId/bank-accounts',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -63,6 +65,7 @@ router.get(
 router.post(
   '/branches/:branchId/bank-accounts',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -88,6 +91,7 @@ router.post(
 router.get(
   '/branches/:branchId/bank-accounts/:id',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -105,6 +109,7 @@ router.get(
 router.put(
   '/branches/:branchId/bank-accounts/:id',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -127,6 +132,7 @@ router.put(
 router.post(
   '/branches/:branchId/bank-accounts/:id/deactivate',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -144,6 +150,7 @@ router.post(
 router.get(
   '/branches/:branchId/reconciliation',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -169,6 +176,7 @@ router.get(
 router.post(
   '/branches/:branchId/reconciliation/import',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -199,6 +207,7 @@ router.post(
 router.put(
   '/branches/:branchId/reconciliation/:entryId',
   authenticate,
+  branchParamInScope,
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

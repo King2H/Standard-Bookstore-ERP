@@ -1,5 +1,6 @@
 import type { Request } from 'express';
-import { BranchAccessError } from './errors.js';
+import { db } from '../db/index.js';
+import { BranchAccessError, NotFoundError } from './errors.js';
 
 /**
  * Branch scope for branch-owned data (#12). The scope comes from the access
@@ -57,4 +58,59 @@ export function scopedBranchOrAll(req: Request): number | undefined {
   const scope = scopeOf(req);
   if (scope.allBranches && requestedBranch(req) === undefined) return undefined;
   return scopedBranch(req);
+}
+
+/** read: GET requests; write: anything that changes the record. */
+export type RecordAccess = 'read' | 'write';
+
+/**
+ * Whether the session may use a record that belongs to `branches` (usually
+ * one; a purchase order also belongs to its receiving branch):
+ * - in the session's branch: read and write;
+ * - in another branch: read only, and only with access to all branches.
+ *   Acting on it needs a switch to that branch, so the money, stock and
+ *   audit entries are booked there with that branch's roles.
+ * Otherwise 404, so the response does not confirm the record exists.
+ */
+export function checkRecordBranch(req: Request, branches: number[], access: RecordAccess, entity: string): void {
+  const scope = scopeOf(req);
+  if (branches.includes(scope.branchId)) return;
+  if (access === 'read' && scope.allBranches) return;
+  throw new NotFoundError(entity);
+}
+
+/**
+ * A location named in a write request must be in the session's branch, for
+ * everyone: stock and sales are booked in the branch the staff member is
+ * signed in to. Null means "the branch's default location", which is.
+ */
+export async function assertLocationInBranch(req: Request, locationId: number | null | undefined): Promise<void> {
+  if (locationId === null || locationId === undefined) return;
+  const scope = scopeOf(req);
+  const { rows } = await db.query<{ branch_id: number }>('SELECT branch_id FROM locations WHERE id = $1', [locationId]);
+  if (!rows.length) throw new NotFoundError('Location');
+  if (rows[0].branch_id !== scope.branchId) throw new BranchAccessError(rows[0].branch_id);
+}
+
+/**
+ * The branch a new sale or purchase order is booked in: always the session's
+ * branch. A different `requested` branch (from an old client) is refused
+ * rather than silently ignored.
+ */
+export function bookingBranch(req: Request, requested: unknown): number {
+  const scope = scopeOf(req);
+  if (requested !== undefined && requested !== null && Number(requested) !== scope.branchId) {
+    throw new BranchAccessError(Number(requested));
+  }
+  return scope.branchId;
+}
+
+/**
+ * Changing a branch's setup (its locations, bank accounts) under
+ * /branches/:branchId: the session's branch, or any branch with access to
+ * all branches.
+ */
+export function checkBranchSetupAccess(req: Request, branchId: number): void {
+  const scope = scopeOf(req);
+  if (branchId !== scope.branchId && !scope.allBranches) throw new BranchAccessError(branchId);
 }
