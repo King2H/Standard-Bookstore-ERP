@@ -19,6 +19,11 @@ export interface TxContext {
    * (#13); until then it is optional.
    */
   tenantId?: number;
+  /**
+   * Isolation level, when READ COMMITTED (PostgreSQL's default) is not
+   * enough, e.g. a use case that must see one consistent snapshot of stock.
+   */
+  isolationLevel?: 'repeatable read' | 'serializable';
 }
 
 /**
@@ -39,8 +44,8 @@ export async function withTransaction<T>(
   try {
     // Kysely runs BEGIN/COMMIT/ROLLBACK on this connection, and its Transaction
     // refuses a nested transaction() instead of committing the outer one early.
-    return await kyselyOn(client)
-      .transaction()
+    const transaction = kyselyOn(client).transaction();
+    return await (ctx.isolationLevel ? transaction.setIsolationLevel(ctx.isolationLevel) : transaction)
       .execute(async (tx) => {
         if (ctx.tenantId !== undefined) {
           await sql`SELECT set_config('app.tenant_id', ${String(ctx.tenantId)}, true)`.execute(tx);
