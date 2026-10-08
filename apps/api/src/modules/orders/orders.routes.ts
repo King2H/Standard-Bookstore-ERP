@@ -7,6 +7,7 @@ import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { computeOrderAllowedActions } from './orders.service.js';
 import { Permission } from '../../lib/permissions.js';
 import { paramInt } from '../../lib/http.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -55,7 +56,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await ordersService.list({
-        branchId:      qi(req.query.branchId, 0) || undefined,
+        branchId:      scopedBranch(req),
         customerId:    qi(req.query.customerId, 0) || undefined,
         status:        qs(req.query.status),
         paymentStatus: qs(req.query.paymentStatus),

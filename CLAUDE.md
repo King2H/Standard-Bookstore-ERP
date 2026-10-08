@@ -100,5 +100,7 @@ The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/`
 - The API is served under `/api/v1`. `/api/...` is a deprecated alias (with `Deprecation` and `Link` headers)
   until the web app moves in M6; new code, tests and docs use `/api/v1`.
 - Never trust client-supplied scope: branch and tenant come from the authenticated context.
+  Branch-owned reads take their branch from `scopedBranch(req)` (or `scopedBranchOrAll(req)` for cross-branch
+  views such as reports) in `apps/api/src/lib/scope.ts`, never from `req.query.branchId` directly.
 - Every bug fix comes with a regression test that fails before the fix.
 - Match the style of surrounding code; keep comments for *why*, not *what*.

@@ -3,6 +3,7 @@ import * as posService from './pos.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await posService.list({
-        branchId:      qi(req.query.branchId, 0) || undefined,
+        branchId:      scopedBranch(req),
         customerId:    qi(req.query.customerId, 0) || undefined,
         staffId:       qi(req.query.staffId, 0) || undefined,
         dateFrom:      qs(req.query.dateFrom),

@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
 import { buildCsv, sendCsv, SUPPLIER_LEDGER_COLUMNS } from '../../lib/csvBuilder.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await procurementService.list({
-        branchId:   qi(req.query.branchId, 0) || undefined,
+        branchId:   scopedBranch(req),
         status:     qs(req.query.status),
         supplierId: qi(req.query.supplierId, 0) || undefined,
         dateFrom:   qs(req.query.dateFrom),

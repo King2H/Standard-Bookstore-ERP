@@ -36,6 +36,7 @@ router.get(
     try {
       const result = await customerService.searchCustomers({
         q:        qs(req.query.q),
+        // Customers are shared by all branches; branchId only filters by home branch.
         branchId: req.query.branchId ? qi(req.query.branchId, 0) : undefined,
         isActive: qb(req.query.isActive),
         status:   qs(req.query.status) !== undefined ? resolveStatusFilter(qs(req.query.status)) : undefined,

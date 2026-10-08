@@ -5,6 +5,7 @@ import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { paramStr } from '../../lib/http.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -20,7 +21,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await paymentsService.listUnpaidOrders({
-        branchId:   qi(req.query.branchId, 0) || undefined,
+        branchId:   scopedBranch(req),
         customerId: qi(req.query.customerId, 0) || undefined,
         // Deep-link pre-fill from Sales History / Receivables — see
         // listUnpaidOrders()'s entityId doc comment.
@@ -79,6 +80,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await paymentsService.list({
+        branchId:      scopedBranch(req),
         orderId:       qi(req.query.orderId, 0) || undefined,
         status:        qs(req.query.status),
         paymentMethod: qs(req.query.paymentMethod),

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as reportsService from './reports.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
+import { scopedBranchOrAll } from '../../lib/scope.js';
 import {
   buildCsv, sendCsv,
   SALES_COLUMNS, INVENTORY_COLUMNS, PROCUREMENT_COLUMNS, RECEIVABLES_COLUMNS,
@@ -24,11 +25,9 @@ const qi = (v: unknown): number | undefined => {
 
 function parseFilters(req: Request) {
   const groupBy = qs(req.query.groupBy);
-  // If branchId is explicitly provided in query, use it.
-  // Otherwise, for is_all_branches staff leave it undefined (all branches).
-  // For regular staff, default to their assigned branch.
-  const qBranchId = qi(req.query.branchId);
-  const branchId = qBranchId ?? req.staff?.branchId;
+  // The session's branch. Staff with access to all branches may pick any
+  // branch, and get all branches when they pick none (the dashboard's "All").
+  const branchId = scopedBranchOrAll(req);
   return {
     branchId,
     dateFrom: qs(req.query.dateFrom),
@@ -112,7 +111,7 @@ router.get(
   ...reportAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const kpis = await reportsService.getKpis(qi(req.query.branchId));
+      const kpis = await reportsService.getKpis(scopedBranchOrAll(req));
       res.json(kpis);
     } catch (err) { next(err); }
   },
@@ -368,7 +367,7 @@ router.get(
       const period: reportsService.KpiPeriod =
         rawPeriod === 'today' || rawPeriod === 'week' || rawPeriod === 'month' || rawPeriod === 'year'
           ? rawPeriod : 'today';
-      const branchId = qi(req.query.branchId) ?? req.staff?.branchId;
+      const branchId = scopedBranchOrAll(req);
       const salesKpis = await reportsService.getPeriodSalesKpis(branchId, period);
       const [cashCollected, prevCashCollected] = await Promise.all([
         reportsService.getPeriodCashCollected(branchId, salesKpis.dateFrom, salesKpis.dateTo),

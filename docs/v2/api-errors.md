@@ -32,6 +32,7 @@ a test fails if one is missing.
 | 401 | see "Authentication" | Not signed in, or the session is no longer valid. |
 | 403 | `FORBIDDEN` | Signed in, but not allowed to do this. |
 | 403 | `PERMISSION_DENIED` | The role lacks a required permission; `details.missing` lists it. |
+| 403 | `BRANCH_ACCESS_DENIED` | The request names a branch other than the session's branch, and the staff member does not have access to all branches; `details.branchId` is that branch. Switch branch to work there. (At login, the same code is a 401.) |
 | 403 | `CSRF_INVALID` | The CSRF token is missing or does not match. |
 | 404 | `NOT_FOUND` | The route or the requested record does not exist. |
 | 409 | see "Conflicts" | The request conflicts with the current state of the data. |

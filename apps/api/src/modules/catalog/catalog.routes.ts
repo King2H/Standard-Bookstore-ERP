@@ -122,6 +122,7 @@ router.get(
         status:     qs(req.query.status) !== undefined ? resolveStatusFilter(qs(req.query.status)) : undefined,
         // Use explicit query param if provided, otherwise fall back to the JWT branch
         // so stock quantities are always scoped to the user's active branch.
+        // Not branch-scoped (#12): staff may look up another branch's price and stock.
         branchId:   qi(req.query.branchId) ?? req.staff?.branchId,
         locationId: qi(req.query.locationId),
         sortBy:     qs(req.query.sortBy) as catalogService.SearchFilters['sortBy'],
@@ -154,6 +155,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const locationId = qi(req.query.locationId);
+      // Not branch-scoped (#12): staff may look up another branch's price and stock.
       const branchId   = qi(req.query.branchId) ?? req.staff?.branchId;
 
       // Step 1: Pure catalog search — no inventory dependency
@@ -273,6 +275,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = paramInt(req.params.id);
+      // Not branch-scoped (#12): staff may look up another branch's price and stock.
       const branchId = req.query.branchId
         ? qi(req.query.branchId, 0)
         : req.staff!.branchId;
@@ -479,6 +482,7 @@ router.get(
       }
 
       const limit    = qi(req.query.limit) ?? 50;
+      // Not branch-scoped (#12): staff may look up another branch's price and stock.
       const branchId = qi(req.query.branchId) ?? req.staff?.branchId;
 
       const results = await catalogSearchService.search(q, {

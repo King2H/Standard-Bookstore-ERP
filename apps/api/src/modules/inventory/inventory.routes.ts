@@ -6,6 +6,7 @@ import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { paramStr } from '../../lib/http.js';
 import type { LifecycleStatus } from '../../lib/lifecycle.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 
@@ -84,10 +85,8 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Support explicit branchId override (Admin/Super_Admin cross-branch view).
-      // Fall back to the staff's own branch from the JWT.
-      const qBranchId = req.query.branchId ? qi(req.query.branchId, 0) : undefined;
-      const branchId = (qBranchId && qBranchId > 0) ? qBranchId : req.staff!.branchId;
+      // The session's branch; staff with access to all branches may pick another.
+      const branchId = scopedBranch(req);
 
       if (!branchId || branchId <= 0) {
         return res.json({ items: [], total: 0, page: 1, totalPages: 0 });
@@ -297,6 +296,7 @@ router.get(
     try {
       const bookId = parseInt(paramStr(req.params.bookId), 10);
       if (!bookId || bookId <= 0) throw new ValidationError('Invalid bookId');
+      // Not branch-scoped (#12): staff may see where a book is in stock, in any branch.
       const branchId = req.query.branchId ? qi(req.query.branchId, 0) || undefined : req.staff!.branchId;
       const items = await inventoryService.getBookStockBreakdown(bookId, branchId);
       res.json({ items });

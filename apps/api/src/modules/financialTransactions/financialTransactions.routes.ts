@@ -3,6 +3,7 @@ import * as ftService from './financialTransactions.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
+import { scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -63,7 +64,7 @@ router.get(
         orderId:    qi(req.query.orderId,    0) || undefined,
         exchangeId: qi(req.query.exchangeId, 0) || undefined,
         type:       qs(req.query.type),
-        branchId:   qi(req.query.branchId,   0) || req.staff!.branchId,
+        branchId:   scopedBranch(req),
         page:       qi(req.query.page,    1),
         pageSize:   qi(req.query.pageSize, 25),
       });
