@@ -29,6 +29,7 @@ const ERROR_DESCRIPTIONS: Record<number, string> = {
   403: 'Not allowed',
   404: 'Not found',
   409: 'Conflicts with the current state of the data',
+  410: 'Retired; the message names the replacement (`DEPRECATED`)',
   422: 'A business rule forbids the request',
   429: 'Too many requests',
   500: 'Unexpected server error',

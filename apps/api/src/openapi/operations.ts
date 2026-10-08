@@ -1,5 +1,12 @@
 import type { z } from 'zod';
 import {
+  CancelOrderRequestSchema,
+  CollectOrderPaymentRequestSchema,
+  ConfirmOrderRequestSchema,
+  CreateOrderRequestSchema,
+  OrderListQuerySchema,
+  OrderListResponseSchema,
+  OrderSchema,
   BookIdParamsSchema,
   BookSupplierListResponseSchema,
   BookSupplierParamsSchema,
@@ -58,6 +65,7 @@ export const operations: ApiOperation[] = [
     },
   },
   ...supplierOperations(),
+  ...orderOperations(),
 ];
 
 function supplierOperations(): ApiOperation[] {
@@ -165,6 +173,116 @@ function supplierOperations(): ApiOperation[] {
       tag,
       request: { params: BookSupplierParamsSchema },
       responses: { 200: { description: 'Unlinked', schema: MessageResponseSchema } },
+    },
+  ];
+}
+
+function orderOperations(): ApiOperation[] {
+  const tag = 'Orders';
+  const byId = { params: IdParamsSchema };
+  const order = (description: string) => ({ 200: { description, schema: OrderSchema } });
+  return [
+    {
+      operationId: 'listOrders',
+      method: 'get',
+      path: '/orders',
+      summary: 'List the session branch\'s orders, newest first (?branchId= another branch needs access to all branches)',
+      tag,
+      request: { query: OrderListQuerySchema },
+      responses: { 200: { description: 'One page of orders', schema: OrderListResponseSchema } },
+    },
+    {
+      operationId: 'createOrder',
+      method: 'post',
+      path: '/orders',
+      summary: 'Create a draft order (send an Idempotency-Key header to make retries safe)',
+      tag,
+      request: { body: CreateOrderRequestSchema },
+      responses: {
+        201: { description: 'The new draft order', schema: OrderSchema },
+        200: { description: 'Replay of an earlier request with the same Idempotency-Key', schema: OrderSchema },
+      },
+      errors: [400, 401, 403, 404, 409, 422, 500],
+    },
+    {
+      operationId: 'getOrder',
+      method: 'get',
+      path: '/orders/{id}',
+      summary: 'Get an order with its lines',
+      tag,
+      request: byId,
+      responses: order('The order'),
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'deleteOrder',
+      method: 'delete',
+      path: '/orders/{id}',
+      summary: 'Delete a draft or cancelled order without payment or stock history (Admin)',
+      tag,
+      request: byId,
+      responses: { 200: { description: 'Deleted', schema: MessageResponseSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'confirmOrder',
+      method: 'post',
+      path: '/orders/{id}/confirm',
+      summary: 'Confirm a draft: takes the stock out, then records the cash payment or opens the receivable',
+      tag,
+      request: { params: IdParamsSchema, body: ConfirmOrderRequestSchema },
+      responses: order('The confirmed order'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'fulfillOrder',
+      method: 'post',
+      path: '/orders/{id}/fulfill',
+      summary: 'Hand over a confirmed order (it becomes COMPLETED)',
+      tag,
+      request: byId,
+      responses: order('The completed order'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'cancelOrder',
+      method: 'post',
+      path: '/orders/{id}/cancel',
+      summary: 'Cancel an unfulfilled order: restores stock and settles its receivable',
+      tag,
+      request: { params: IdParamsSchema, body: CancelOrderRequestSchema },
+      responses: order('The cancelled order'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'collectOrderPayment',
+      method: 'post',
+      path: '/orders/{id}/collect-payment',
+      summary: 'Collect a payment against a fulfilled credit order\'s receivable',
+      tag,
+      request: { params: IdParamsSchema, body: CollectOrderPaymentRequestSchema },
+      responses: order('The order with its new payment status'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'progressOrder',
+      method: 'post',
+      path: '/orders/{id}/progress',
+      summary: 'Legacy: move a pre-v1.1 Confirmed order to In_Progress (#69)',
+      tag,
+      request: byId,
+      responses: order('The order'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'payOrder',
+      method: 'post',
+      path: '/orders/{id}/pay',
+      summary: 'Retired: record payments with POST /payments',
+      tag,
+      request: byId,
+      responses: {},
+      errors: [401, 403, 404, 410],
     },
   ];
 }

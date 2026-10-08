@@ -22,6 +22,21 @@ export const PaginationQuerySchema = z.object({
 });
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 
+/**
+ * `?page=&pageSize=` for list endpoints whose existing clients ask for more
+ * than MAX_PAGE_SIZE (pickers that load "everything"): larger page sizes are
+ * capped instead of rejected.
+ */
+export const ListPagingQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(DEFAULT_PAGE_SIZE)
+    .transform((n) => Math.min(n, MAX_PAGE_SIZE)),
+});
+
 /** List response wrapper: `PaginatedSchema(BookSchema)`. */
 export function PaginatedSchema<T extends z.ZodType>(item: T) {
   return z.object({
