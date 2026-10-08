@@ -10,7 +10,7 @@ import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import * as policy from './orders.policy.js';
 import * as orders from './orders.repository.js';
-import type { OrderLineInput, OrderRow, PricedLine, SaleType, StaffCtx } from './orders.types.js';
+import type { OrderLineInput, OrderPaymentStatus, OrderRow, PricedLine, SaleType, StaffCtx } from './orders.types.js';
 
 export type { OrderLineInput, OrderLineItemRow, OrderRow, StaffCtx } from './orders.types.js';
 export { computeOrderAllowedActions } from './orders.policy.js';
@@ -365,7 +365,7 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
   return getById(orderId);
 }
 
-export async function updatePaymentStatus(orderId: string | number, paymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded'): Promise<void> {
+export async function updatePaymentStatus(orderId: string | number, paymentStatus: OrderPaymentStatus): Promise<void> {
   await orders.setPaymentStatus(kysely, String(orderId), paymentStatus);
 }
 
@@ -394,12 +394,12 @@ export async function collectPayment(
     if (outstanding === undefined) {
       throw new BusinessError('RECEIVABLE_NOT_FOUND', `No receivable found for order ${String(orderId)}`);
     }
-    const { newOutstanding, isFullySettled } = policy.applyPayment(outstanding, paymentAmount);
+    const { newOutstanding, isFullySettled, paymentStatus } = policy.applyPayment(outstanding, paymentAmount);
     await updateReceivableOnPayment(
       { sourceType: 'order_credit_sale', sourceEntityId: Number(orderId), newOutstandingAmount: newOutstanding.toNumber(), isFullySettled },
       client,
     );
-    await orders.setPaymentStatus(tx, order.id, isFullySettled ? 'paid' : 'partially_paid');
+    await orders.setPaymentStatus(tx, order.id, paymentStatus);
     await audit(tx, staffCtx, 'UPDATE', String(orderId), {
       action: 'collect_payment',
       paymentAmount,
