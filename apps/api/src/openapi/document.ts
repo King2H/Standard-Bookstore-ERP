@@ -78,6 +78,8 @@ export function buildOpenApiDocument(operations: ApiOperation[] = defaultOperati
     info: {
       title: 'Bookstore ERP API',
       version: 'v1',
+      // Placeholder until the owner sets the final license terms.
+      license: { name: 'Proprietary' },
       description:
         'Versioned HTTP API of the Bookstore ERP. Error codes are listed in docs/v2/api-errors.md. ' +
         'Endpoints are added here as each module moves to shared contracts.',
