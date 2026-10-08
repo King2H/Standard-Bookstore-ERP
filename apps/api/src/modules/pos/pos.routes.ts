@@ -3,7 +3,8 @@ import * as posService from './pos.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
-import { scopedBranch } from '../../lib/scope.js';
+import { assertLocationInBranch, bookingBranch, scopedBranch } from '../../lib/scope.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 
@@ -29,9 +30,10 @@ router.post(
   requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      await assertLocationInBranch(req, req.body.locationId);
       const tx = await posService.createTransaction(
         {
-          branchId:    req.body.branchId ?? req.staff!.branchId,
+          branchId:    bookingBranch(req, req.body.branchId),
           locationId:  req.body.locationId,
           customerId:  req.body.customerId ?? null,
           items:       req.body.items,
@@ -75,6 +77,7 @@ router.get(
 router.get(
   '/pos/transactions/:id',
   authenticate,
+  recordInBranch('posTransaction'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tx = await posService.getById(pi(req.params.id));
@@ -89,6 +92,7 @@ router.get(
 router.post(
   '/pos/transactions/:id/payment',
   authenticate,
+  recordInBranch('posTransaction'),
   requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -103,6 +107,7 @@ router.post(
 router.post(
   '/pos/transactions/:id/void',
   authenticate,
+  recordInBranch('posTransaction'),
   requireRole('Manager', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

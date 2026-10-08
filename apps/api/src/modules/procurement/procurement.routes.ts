@@ -4,7 +4,8 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
 import { buildCsv, sendCsv, SUPPLIER_LEDGER_COLUMNS } from '../../lib/csvBuilder.js';
-import { scopedBranch } from '../../lib/scope.js';
+import { assertLocationInBranch, bookingBranch, scopedBranch } from '../../lib/scope.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 
@@ -44,7 +45,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const po = await procurementService.createPO(
-        { ...req.body, branchId: req.body.branchId ?? req.staff!.branchId },
+        { ...req.body, branchId: bookingBranch(req, req.body.branchId) },
         req.staff!,
       );
       res.status(201).json(po);
@@ -57,6 +58,7 @@ router.post(
 router.get(
   '/purchase-orders/:id',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -71,6 +73,7 @@ router.get(
 router.put(
   '/purchase-orders/:id',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Purchasor'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -85,6 +88,7 @@ router.put(
 router.post(
   '/purchase-orders/:id/submit',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Purchasor'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -99,6 +103,7 @@ router.post(
 router.post(
   '/purchase-orders/:id/approve',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -113,6 +118,7 @@ router.post(
 router.post(
   '/purchase-orders/:id/order',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Purchasor'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -127,6 +133,7 @@ router.post(
 router.post(
   '/purchase-orders/:id/receive',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -135,6 +142,7 @@ router.post(
         items: procurementService.ReceiveItemInput[];
         notes?: string;
       };
+      await assertLocationInBranch(req, locationId ?? null);
       const po = await procurementService.receivePO(
         pi(req.params.id),
         locationId ?? null,
@@ -157,6 +165,7 @@ router.post(
 router.post(
   '/purchase-orders/:id/payments',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -183,6 +192,7 @@ router.post(
 router.post(
   '/purchase-orders/:id/credit-notes',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -241,6 +251,7 @@ router.get(
 router.post(
   '/purchase-orders/:id/close',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -255,6 +266,7 @@ router.post(
 router.post(
   '/purchase-orders/:id/cancel',
   authenticate,
+  recordInBranch('purchaseOrder'),
   requireRole('Admin', 'Manager', 'Purchasor'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

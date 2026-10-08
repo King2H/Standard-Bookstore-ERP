@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramStr } from '../../lib/http.js';
 import { scopedBranch } from '../../lib/scope.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 
@@ -61,6 +62,7 @@ router.get(
 router.get(
   '/returns/:id',
   authenticate,
+  recordInBranch('return'),
   requireRole('Admin', 'Manager', 'Finance_Officer', 'Sales'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -75,6 +77,7 @@ router.get(
 router.post(
   '/returns/:id/reject',
   authenticate,
+  recordInBranch('return'),
   requireRole('Manager', 'Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

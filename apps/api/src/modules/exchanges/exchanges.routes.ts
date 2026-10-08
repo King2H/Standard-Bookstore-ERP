@@ -7,7 +7,8 @@ import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { computeExchangeAllowedActions } from './exchanges.service.js';
 import type { Permission } from '../../lib/permissions.js';
 import { paramInt } from '../../lib/http.js';
-import { scopedBranch } from '../../lib/scope.js';
+import { assertLocationInBranch, scopedBranch } from '../../lib/scope.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -25,6 +26,7 @@ router.post(
       if ((!incomingItems || incomingItems.length === 0) && (!outgoingItems || outgoingItems.length === 0)) {
         throw new ValidationError('Exchange must have at least one incoming or outgoing item');
       }
+      await assertLocationInBranch(req, req.body.locationId ?? null);
       const body = {
         locationId:    req.body.locationId ?? null,
         customerId:    req.body.customerId ?? null,
@@ -97,6 +99,7 @@ router.get(
 router.get(
   '/exchanges/:id',
   authenticate,
+  recordInBranch('exchange'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const exchange = await exchangesService.getById(paramInt(req.params.id));
@@ -114,6 +117,7 @@ router.get(
 router.post(
   '/exchanges/:id/review',
   authenticate,
+  recordInBranch('exchange'),
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -132,6 +136,7 @@ router.post(
 router.post(
   '/exchanges/:id/approve',
   authenticate,
+  recordInBranch('exchange'),
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -150,6 +155,7 @@ router.post(
 router.post(
   '/exchanges/:id/settle',
   authenticate,
+  recordInBranch('exchange'),
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -185,6 +191,7 @@ router.post(
 router.post(
   '/exchanges/:id/cancel',
   authenticate,
+  recordInBranch('exchange'),
   requirePermission('APPROVE_EXCHANGE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

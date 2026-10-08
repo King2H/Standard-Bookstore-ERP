@@ -7,7 +7,8 @@ import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { computeOrderAllowedActions } from './orders.service.js';
 import { Permission } from '../../lib/permissions.js';
 import { paramInt } from '../../lib/http.js';
-import { scopedBranch } from '../../lib/scope.js';
+import { assertLocationInBranch, scopedBranch } from '../../lib/scope.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -24,6 +25,7 @@ router.post(
       if (!req.body.items || !Array.isArray(req.body.items) || req.body.items.length === 0) {
         throw new ValidationError('items array is required');
       }
+      await assertLocationInBranch(req, req.body.locationId ?? null);
       const body = {
         customerId: req.body.customerId ?? null,
         locationId: req.body.locationId ?? null,
@@ -81,6 +83,7 @@ router.get(
 router.get(
   '/orders/:id',
   authenticate,
+  recordInBranch('order'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const order = await ordersService.getById(paramInt(req.params.id));
@@ -95,6 +98,7 @@ router.get(
 router.post(
   '/orders/:id/confirm',
   authenticate,
+  recordInBranch('order'),
   requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -115,6 +119,7 @@ router.post(
 router.delete(
   '/orders/:id',
   authenticate,
+  recordInBranch('order'),
   requireRole('Admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -129,6 +134,7 @@ router.delete(
 router.post(
   '/orders/:id/progress',
   authenticate,
+  recordInBranch('order'),
   requireRole('Manager', 'Admin', 'Stock_Clerk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -145,6 +151,7 @@ router.post(
 router.post(
   '/orders/:id/pay',
   authenticate,
+  recordInBranch('order'),
   requirePermission('PROCESS_PAYMENT'),
   (_req: Request, _res: Response, next: NextFunction) => {
     next(
@@ -163,6 +170,7 @@ router.post(
 router.post(
   '/orders/:id/fulfill',
   authenticate,
+  recordInBranch('order'),
   requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -178,6 +186,7 @@ router.post(
 router.post(
   '/orders/:id/cancel',
   authenticate,
+  recordInBranch('order'),
   requirePermission('CREATE_SALE'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -194,6 +203,7 @@ router.post(
 router.post(
   '/orders/:id/collect-payment',
   authenticate,
+  recordInBranch('order'),
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

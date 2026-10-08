@@ -7,6 +7,7 @@ import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { paramStr } from '../../lib/http.js';
 import { ValidationError } from '../../lib/errors.js';
 import { scopedBranch } from '../../lib/scope.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 
@@ -64,6 +65,7 @@ router.get(
 router.get(
   '/receivables/:id',
   authenticate,
+  recordInBranch('receivable'),
   requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -84,6 +86,7 @@ router.get(
 router.post(
   '/receivables/:id/collect',
   authenticate,
+  recordInBranch('receivable'),
   requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -125,6 +128,7 @@ router.post(
 router.post(
   '/receivables/:id/settle',
   authenticate,
+  recordInBranch('receivable'),
   requireRole('Admin', 'Manager', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -143,6 +147,7 @@ router.post(
 router.patch(
   '/receivables/:id/due-date',
   authenticate,
+  recordInBranch('receivable'),
   requirePermission('PROCESS_PAYMENT'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

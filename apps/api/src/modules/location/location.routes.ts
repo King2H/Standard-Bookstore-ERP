@@ -6,6 +6,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { paramInt } from '../../lib/http.js';
+import { branchParamInScope } from '../../middleware/recordScope.js';
 
 const router = Router();
 
@@ -58,6 +59,7 @@ router.get(
 router.post(
   '/branches/:branchId/locations',
   authenticate,
+  branchParamInScope,
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -81,6 +83,7 @@ router.post(
 router.put(
   '/branches/:branchId/locations/:id',
   authenticate,
+  branchParamInScope,
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -103,6 +106,7 @@ router.put(
 router.put(
   '/branches/:branchId/locations/:id/set-default',
   authenticate,
+  branchParamInScope,
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -120,6 +124,7 @@ router.put(
 router.delete(
   '/branches/:branchId/locations/:id',
   authenticate,
+  branchParamInScope,
   requireRole('Super_Admin', 'Admin', 'Manager'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

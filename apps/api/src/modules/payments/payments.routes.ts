@@ -6,6 +6,7 @@ import { ValidationError } from '../../lib/errors.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { paramStr } from '../../lib/http.js';
 import { scopedBranch } from '../../lib/scope.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 const qs = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
@@ -99,6 +100,7 @@ router.get(
 router.get(
   '/payments/:id',
   authenticate,
+  recordInBranch('payment'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payment = await paymentsService.getById(parseInt(paramStr(req.params.id), 10));
@@ -112,6 +114,7 @@ router.get(
 router.post(
   '/payments/:id/refund',
   authenticate,
+  recordInBranch('payment'),
   requireRole('Manager', 'Admin', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -136,6 +139,7 @@ router.post(
 router.get(
   '/payments/:id/refunds',
   authenticate,
+  recordInBranch('payment'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payment = await paymentsService.getById(parseInt(paramStr(req.params.id), 10));
@@ -149,6 +153,7 @@ router.get(
 router.get(
   '/orders/:id/payments',
   authenticate,
+  recordInBranch('order'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payments = await paymentsService.listByOrder(parseInt(paramStr(req.params.id), 10));
@@ -162,6 +167,7 @@ router.get(
 router.get(
   '/orders/:id/balance',
   authenticate,
+  recordInBranch('order'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const balance = await paymentsService.getOrderBalance(parseInt(paramStr(req.params.id), 10));

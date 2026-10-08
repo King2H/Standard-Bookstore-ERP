@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { AppError, ValidationError } from '../../lib/errors.js';
 import { paramStr } from '../../lib/http.js';
+import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
 
@@ -12,6 +13,7 @@ const router = Router();
 router.post(
   '/orders/:id/installment-plan',
   authenticate,
+  recordInBranch('order'),
   requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -36,6 +38,7 @@ router.post(
 router.get(
   '/orders/:id/installment-plan',
   authenticate,
+  recordInBranch('order'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const plan = await installmentsService.getPlanByOrder(parseInt(paramStr(req.params.id), 10));
@@ -50,6 +53,7 @@ router.get(
 router.get(
   '/installment-plans/:id',
   authenticate,
+  recordInBranch('installmentPlan'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const plan = await installmentsService.getPlanById(paramStr(req.params.id));
@@ -63,6 +67,7 @@ router.get(
 router.post(
   '/installments/:id/pay',
   authenticate,
+  recordInBranch('installment'),
   requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
