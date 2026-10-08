@@ -74,6 +74,16 @@ describe('withTransaction', () => {
     expect(rows[0].tenant ?? '').toBe('');
   });
 
+  it('runs at the requested isolation level, and at the default otherwise', async () => {
+    const level = (ctx: Parameters<typeof withTransaction>[0]) =>
+      withTransaction(ctx, async (tx) => {
+        const { rows } = await sql<{ level: string }>`SELECT current_setting('transaction_isolation') AS level`.execute(tx);
+        return rows[0].level;
+      });
+    expect(await level({ isolationLevel: 'repeatable read' })).toBe('repeatable read');
+    expect(await level({})).toBe('read committed');
+  });
+
   it('refuses a nested transaction instead of committing the outer one early', async () => {
     await expect(
       withTransaction({}, async (tx) => {
