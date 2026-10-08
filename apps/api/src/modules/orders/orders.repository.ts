@@ -1,7 +1,7 @@
 import { sql } from 'kysely';
 import type { Queryable } from '../../db/tx.js';
 import { toLineItemRow, toOrderRow, type OrderDbRow } from './orders.mapper.js';
-import type { OrderLineItemRow, OrderRow, OrderTotals, PricedLine, SaleType } from './orders.types.js';
+import type { OrderLineItemRow, OrderPaymentStatus, OrderRow, OrderTotals, PricedLine, SaleType } from './orders.types.js';
 
 // All SQL of the Orders module (A6). A few statements touch tables owned by
 // Inventory (inventory, inventory_reservations) and Customers (store credit);
@@ -204,7 +204,7 @@ export async function setStatus(q: Queryable, orderId: string, status: string, c
     .execute();
 }
 
-export async function setPaymentStatus(q: Queryable, orderId: string, paymentStatus: string): Promise<void> {
+export async function setPaymentStatus(q: Queryable, orderId: string, paymentStatus: OrderPaymentStatus): Promise<void> {
   await q.updateTable('orders').set({ payment_status: paymentStatus, updated_at: sql`now()` }).where('id', '=', orderId).execute();
 }
 

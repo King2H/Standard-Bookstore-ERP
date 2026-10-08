@@ -4,6 +4,9 @@ export interface StaffCtx { staffId: number; role: string; branchId: number; }
 
 export type SaleType = 'cash_sale' | 'credit_sale';
 
+/** The values the orders.payment_status constraint allows. */
+export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded';
+
 export interface OrderLineInput {
   bookId: number;
   quantity: number;

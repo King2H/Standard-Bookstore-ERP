@@ -2,7 +2,7 @@ import { Money } from '@bms/shared';
 import { BusinessError, ValidationError } from '../../lib/errors.js';
 import { resolveDiscountFields, enforceDiscountCap, type DiscountMode, type DiscountType } from '../../lib/discount.js';
 import type { Permission } from '../../lib/permissions.js';
-import type { OrderLineInput, OrderTotals, PricedLine, SaleType } from './orders.types.js';
+import type { OrderLineInput, OrderPaymentStatus, OrderTotals, PricedLine, SaleType } from './orders.types.js';
 
 /**
  * Order rules as pure functions (A5): the lifecycle, pricing and settlement
@@ -263,8 +263,15 @@ export function amountToInvoice(total: number, alreadyPaid: string): Money | nul
   return outstanding.greaterThan('0.01') ? outstanding : null;
 }
 
-/** A payment against a credit order's receivable; never below zero. */
-export function applyPayment(currentOutstanding: string, amount: number): { newOutstanding: Money; isFullySettled: boolean } {
+/**
+ * A payment against a credit order's receivable: what is still owed (never
+ * below zero) and the order's resulting payment status.
+ */
+export function applyPayment(
+  currentOutstanding: string,
+  amount: number,
+): { newOutstanding: Money; isFullySettled: boolean; paymentStatus: OrderPaymentStatus } {
   const newOutstanding = Money.max(0, Money.of(currentOutstanding).minus(amount));
-  return { newOutstanding, isFullySettled: newOutstanding.isZero() };
+  const isFullySettled = newOutstanding.isZero();
+  return { newOutstanding, isFullySettled, paymentStatus: isFullySettled ? 'paid' : 'partial' };
 }

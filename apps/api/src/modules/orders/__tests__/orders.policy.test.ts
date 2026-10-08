@@ -146,9 +146,9 @@ describe('confirming an order', () => {
 describe('collecting a credit payment', () => {
   it('reduces the outstanding amount, never below zero', () => {
     const partial = applyPayment('100.00', 40);
-    expect([partial.newOutstanding.toFixed(), partial.isFullySettled]).toEqual(['60.00', false]);
+    expect([partial.newOutstanding.toFixed(), partial.isFullySettled, partial.paymentStatus]).toEqual(['60.00', false, 'partial']);
     const full = applyPayment('0.30', 0.3);
-    expect([full.newOutstanding.toFixed(), full.isFullySettled]).toEqual(['0.00', true]);
+    expect([full.newOutstanding.toFixed(), full.isFullySettled, full.paymentStatus]).toEqual(['0.00', true, 'paid']);
     expect(applyPayment('10.00', 25).newOutstanding.toFixed()).toBe('0.00');
   });
 });
