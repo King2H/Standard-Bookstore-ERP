@@ -10,6 +10,7 @@ const BRANCH_PREFIX = 'Loc Test ';
 
 describe('Locations', () => {
   let adminToken: string;
+  let adminStaffId: number;
   let managerToken: string;
   let salesToken: string;
   let branchId: number;
@@ -27,6 +28,7 @@ describe('Locations', () => {
 
     const admin = await createTestStaff({ username: 'loc_test_admin', role: 'Admin', branchId });
     adminToken = admin.token;
+    adminStaffId = admin.staffId;
 
     const manager = await createTestStaff({ username: 'loc_test_manager', role: 'Manager', branchId });
     managerToken = manager.token;
@@ -288,6 +290,63 @@ describe('Locations', () => {
       .set('Authorization', `Bearer ${salesToken}`);
 
     expect(res.status).toBe(403);
+  });
+
+  // Regression (#59): history rows reference the location without ON DELETE,
+  // so a location with any history must be refused with a clear 409, never
+  // reported as having "open orders" or failing with a database error (500).
+  it('refuses to delete a location whose only orders are completed (409, history)', async () => {
+    const app = getTestApp();
+    const createRes = await request(app)
+      .post(`/api/branches/${branchId}/locations`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Completed Orders Location' });
+    const locationId = createRes.body.id as number;
+
+    const order = await db.query(
+      `INSERT INTO orders (order_number, branch_id, location_id, created_by, status)
+       VALUES ($1, $2, $3, $4, 'COMPLETED') RETURNING id`,
+      [`LOC-TEST-${locationId}`, branchId, locationId, adminStaffId],
+    );
+
+    try {
+      const res = await request(app)
+        .delete(`/api/branches/${branchId}/locations/${locationId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('DEPENDENCY_CONFLICT');
+      expect(res.body.message).toBe('Cannot delete location: it has transaction history');
+      expect(res.body.details.blockingDependencies).toEqual([{ type: 'orders', count: 1 }]);
+    } finally {
+      await db.query(`DELETE FROM orders WHERE id = $1`, [order.rows[0].id]);
+    }
+  });
+
+  it('refuses to delete a location with POS sales and no stock (409, not a database error)', async () => {
+    const app = getTestApp();
+    const createRes = await request(app)
+      .post(`/api/branches/${branchId}/locations`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'POS History Location' });
+    const locationId = createRes.body.id as number;
+
+    const sale = await db.query(
+      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total)
+       VALUES ($1, $2, $3, $4, 0, 0) RETURNING id`,
+      [`LOC-TEST-POS-${locationId}`, branchId, locationId, adminStaffId],
+    );
+
+    try {
+      const res = await request(app)
+        .delete(`/api/branches/${branchId}/locations/${locationId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.details.blockingDependencies).toEqual([{ type: 'pos_transactions', count: 1 }]);
+    } finally {
+      await db.query(`DELETE FROM transactions WHERE id = $1`, [sale.rows[0].id]);
+    }
   });
 
   // ── Audit log verification ─────────────────────────────────────────────────

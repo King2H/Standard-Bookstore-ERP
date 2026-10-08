@@ -236,15 +236,28 @@ export async function deleteLocation(id: number, staffCtx: StaffCtx): Promise<vo
       });
     }
 
-    // Dependency check: open orders
-    const ordersCheck = await client.query(
-      `SELECT COUNT(*) FROM orders
-       WHERE location_id = $1 AND status NOT IN ('completed', 'cancelled')`,
+    // Dependency check: history. These tables reference the location without
+    // ON DELETE, so the database refuses the delete while any such row exists,
+    // whatever its status. Report them as a 409 instead of failing with a 500.
+    const history = await client.query(
+      `SELECT type, count FROM (VALUES
+         ('orders',            (SELECT COUNT(*) FROM orders WHERE location_id = $1)),
+         ('pos_transactions',  (SELECT COUNT(*) FROM transactions WHERE location_id = $1)),
+         ('exchanges',         (SELECT COUNT(*) FROM exchanges WHERE location_id = $1)),
+         ('purchase_orders',   (SELECT COUNT(*) FROM purchase_orders WHERE receiving_location_id = $1)),
+         ('po_receipts',       (SELECT COUNT(*) FROM po_receipts WHERE location_id = $1)),
+         ('inventory_history', (SELECT COUNT(*) FROM inventory_history WHERE location_id = $1)),
+         ('reservations',      (SELECT COUNT(*) FROM inventory_reservations WHERE location_id = $1))
+       ) AS h(type, count)
+       WHERE count > 0`,
       [id],
     );
-    if (parseInt(ordersCheck.rows[0].count, 10) > 0) {
-      throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: open orders exist', {
-        blockingDependencies: [{ type: 'orders', count: parseInt(ordersCheck.rows[0].count, 10) }],
+    if (history.rows.length > 0) {
+      throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: it has transaction history', {
+        blockingDependencies: history.rows.map((r: { type: string; count: string }) => ({
+          type: r.type,
+          count: parseInt(r.count, 10),
+        })),
       });
     }
 
