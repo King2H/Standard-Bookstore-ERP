@@ -8,6 +8,7 @@ import {
 import { insertOutbox } from '../../lib/outbox.js';
 import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
 import { updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import { assertAssignedLocation } from '../location/location.service.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 export interface ReturnLineInput {
@@ -114,6 +115,7 @@ export async function createReturn(
   if (!isCrossBranchRole && Number(tx.branch_id) !== staffCtx.branchId) {
     throw new ForbiddenError('Transaction belongs to a different branch');
   }
+  await assertAssignedLocation(Number(tx.location_id), staffCtx);
   const windowDays = await getReturnWindowDays(staffCtx.branchId);
   const daysSinceTx = (Date.now() - (tx.created_at as Date).getTime()) / (1000 * 60 * 60 * 24);
   if (daysSinceTx > windowDays) {

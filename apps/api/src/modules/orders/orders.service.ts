@@ -8,6 +8,7 @@ import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.
 import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { assertAssignedLocation } from '../location/location.service.js';
 import * as policy from './orders.policy.js';
 import * as orders from './orders.repository.js';
 import type { OrderLineInput, OrderPaymentStatus, OrderRow, PricedLine, SaleType, StaffCtx } from './orders.types.js';
@@ -175,6 +176,7 @@ export async function confirm(
     const method = policy.confirmPaymentMethod(order, paymentMethod);
 
     const locationId = await stockLocation(tx, order, staffCtx);
+    await assertAssignedLocation(locationId, staffCtx);
     for (const item of order.lineItems ?? []) {
       await orders.lockStock(tx, item.bookId, locationId);
       const stock = await invTxSvc.getAvailableStock(item.bookId, locationId, client);
@@ -285,6 +287,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
     policy.checkCanFulfill(order.status);
 
     const locationId = await stockLocation(tx, order, staffCtx);
+    await assertAssignedLocation(locationId, staffCtx);
     const reserved = (order.lineItems ?? []).filter((item) => item.qtyReserved > 0);
     if (reserved.length > 0) {
       await invTxSvc.fulfillReservation(

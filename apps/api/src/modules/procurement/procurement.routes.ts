@@ -4,7 +4,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { paramInt } from '../../lib/http.js';
 import { buildCsv, sendCsv, SUPPLIER_LEDGER_COLUMNS } from '../../lib/csvBuilder.js';
-import { assertLocationInBranch, bookingBranch, scopedBranch } from '../../lib/scope.js';
+import { assertLocationUsable, bookingBranch, scopedBranch } from '../../lib/scope.js';
 import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
@@ -142,7 +142,7 @@ router.post(
         items: procurementService.ReceiveItemInput[];
         notes?: string;
       };
-      await assertLocationInBranch(req, locationId ?? null);
+      await assertLocationUsable(req, locationId ?? null);
       const po = await procurementService.receivePO(
         pi(req.params.id),
         locationId ?? null,

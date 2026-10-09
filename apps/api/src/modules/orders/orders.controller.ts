@@ -13,7 +13,7 @@ import {
 import { valid } from '../../middleware/validate.js';
 import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import type { Permission } from '../../lib/permissions.js';
-import { assertLocationInBranch, scopedBranch } from '../../lib/scope.js';
+import { assertLocationUsable, scopedBranch } from '../../lib/scope.js';
 import { computeOrderAllowedActions } from './orders.policy.js';
 import * as service from './orders.service.js';
 import type { OrderRow } from './orders.types.js';
@@ -65,7 +65,7 @@ export async function get(req: Request, res: Response): Promise<void> {
  */
 export async function create(req: Request, res: Response): Promise<void> {
   const { body: dto } = valid(req, schemas.create);
-  await assertLocationInBranch(req, dto.locationId ?? null);
+  await assertLocationUsable(req, dto.locationId ?? null);
   const data = {
     ...dto,
     customerId: dto.customerId ?? null,

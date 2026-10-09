@@ -6,7 +6,7 @@ import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
 import { paramStr } from '../../lib/http.js';
 import type { LifecycleStatus } from '../../lib/lifecycle.js';
-import { assertLocationInBranch, scopedBranch } from '../../lib/scope.js';
+import { assertLocationInBranch, assertLocationUsable, scopedBranch } from '../../lib/scope.js';
 
 const router = Router();
 
@@ -174,7 +174,7 @@ router.post(
     try {
       const parsed = adjustSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError('Invalid payload', { issues: parsed.error.issues });
-      await assertLocationInBranch(req, parsed.data.locationId);
+      await assertLocationUsable(req, parsed.data.locationId);
       const row = await inventoryService.adjustStock({ ...parsed.data, staffCtx: req.staff! });
       res.json(row);
     } catch (err) { next(err); }
@@ -192,7 +192,8 @@ router.post(
     try {
       const parsed = transferSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError('Invalid payload', { issues: parsed.error.issues });
-      await assertLocationInBranch(req, parsed.data.fromLocationId);
+      // Restricted staff send stock only from their own locations, to any location of the branch.
+      await assertLocationUsable(req, parsed.data.fromLocationId);
       await assertLocationInBranch(req, parsed.data.toLocationId);
       const result = await inventoryService.transferStock({ ...parsed.data, staffCtx: req.staff! });
       res.json(result);
@@ -257,7 +258,7 @@ router.post(
     try {
       const parsed = stockInSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError('Invalid payload', { issues: parsed.error.issues });
-      await assertLocationInBranch(req, parsed.data.locationId);
+      await assertLocationUsable(req, parsed.data.locationId);
       const row = await inventoryService.stockIn({ ...parsed.data, staffCtx: req.staff! });
       res.json(row);
     } catch (err) { next(err); }
@@ -285,7 +286,7 @@ router.post(
     try {
       const parsed = stockOutSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError('Invalid payload', { issues: parsed.error.issues });
-      await assertLocationInBranch(req, parsed.data.locationId);
+      await assertLocationUsable(req, parsed.data.locationId);
       const row = await inventoryService.stockOut({ ...parsed.data, staffCtx: req.staff! });
       res.json(row);
     } catch (err) { next(err); }
