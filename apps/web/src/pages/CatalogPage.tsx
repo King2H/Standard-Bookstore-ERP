@@ -2,6 +2,7 @@
 // Sub-navigation: Books | Authors | Categories | Publishers
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { isValidIsbn } from '../lib/isbn.js';
 import { api } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 import { StatusFilter, StatusBadge, type StatusFilterValue, type LifecycleStatus } from '../components/StatusFilter.js';
@@ -43,11 +44,6 @@ function useDebounce<T>(v: T, ms: number): T {
 }
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-function validateIsbn13(isbn: string): boolean {
-  const d = isbn.replace(/[-\s]/g, '');
-  if (!/^\d{13}$/.test(d)) return false;
-  return d.split('').reduce((a, c, i) => a + parseInt(c, 10) * (i % 2 === 0 ? 1 : 3), 0) % 10 === 0;
 }
 
 export default function CatalogPage({ userRole, userPermissions }: { userRole?: Role; userPermissions?: string[] }) {
@@ -475,8 +471,7 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
     if (!editionId) { setError('Edition is required'); return; }
     const rawIsbn = isbn.replace(/[-\s]/g, '');
     if (!book && rawIsbn) {
-      if (!/^\d{13}$/.test(rawIsbn)) { setError('ISBN must be 13 digits'); return; }
-      if (!validateIsbn13(rawIsbn)) { setError('Invalid ISBN-13 check digit'); return; }
+      if (!isValidIsbn(rawIsbn)) { setError('Enter a valid ISBN-13 or ISBN-10'); return; }
     }
     const body = {
       ...(book ? {} : { isbn: rawIsbn || undefined }),
@@ -527,7 +522,7 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
             <FField label="Title *" value={title} onChange={setTitle} />
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <FField label="ISBN-13 (optional)" value={isbn} onChange={setIsbn} placeholder="9780306406157" disabled={!!book} />
+                <FField label="ISBN-13 or ISBN-10 (optional)" value={isbn} onChange={setIsbn} placeholder="9780306406157" disabled={!!book} />
                 {!book && <p className="text-xs text-gray-400 mt-1">Leave blank to use SKU</p>}
               </div>
               <FField label="SKU / Internal ID" value={sku} onChange={setSku} placeholder="BK-001" />

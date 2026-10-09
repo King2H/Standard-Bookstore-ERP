@@ -244,62 +244,34 @@ describe('Bug 1 -- Catalog Search Bug Condition Exploration', () => {
   // ---- C1: ISBN on page 3 does not find the matching book ---------
 
   /**
-   * C1 -- Bug condition: matchingBookPageNumber(q) > page (caller's page)
-   *
-   * The actual bug: a transactional module (e.g. Procurement) sends
-   * searchBooks({ q, page: currentUiPage, pageSize: 25 }) to the server.
-   * If the user is browsing page 3 of the catalog (OFFSET=50) and types a
-   * search term, searchBooks returns the WHERE-filtered rows BUT applies
-   * OFFSET=50 to that filtered set. If only 1 book matches the search term,
-   * it sits at filtered-result position 1, which is excluded by OFFSET=50.
-   *
-   * Test setup:
-   *   - 26 filler books with titles "ZZZBUG1FILLER_xx_..." are seeded
-   *   - Target book title is "ZZZBUG1TARGET Book" -- unique, only 1 match
-   *   - When caller is on page 1 (OFFSET=0): the 1 matching book IS returned
-   *   - When caller is on page 3 (OFFSET=50): the 1 matching book is EXCLUDED
-   *     even though it exists (there is only 1 match, so OFFSET=50 skips it)
-   *
-   * EXPECTED ON UNFIXED CODE:
-   *   page=1 → items.length >= 1  (works by luck: OFFSET=0)
-   *   page=3 → items.length === 0  (FAILS: OFFSET=50 skips the only match)
-   *   FAIL -- confirms the bug exists for page > 1
-   *
-   * EXPECTED ON FIXED CODE:
-   *   Any page → items.length >= 1  (catalogSearch has no OFFSET)
+   * C1 -- A search answers the page asked for (#21, catalog part 2). An
+   * earlier fix ignored `page` whenever there was a search term, so a stale
+   * page from browsing could not hide the only match; that also made every
+   * page of a search the first page. The Catalog page resets to page 1 when
+   * the term changes, so the server honours `page`: page 1 finds the book,
+   * page 3 of a one-result search is empty (and says there is one result).
    */
-  it('C1 -- GET /api/books?q=<isbn>&page=3 returns 0 results (OFFSET skips the only match when caller is on page 3; FAILS on unfixed code)', async () => {
+  it('C1 -- GET /api/books?q=<isbn> finds the book on page 1; page 3 of a one-result search is empty', async () => {
     const app = getTestApp();
 
-    // Verify the target book IS in the database
     const dbCheck = await db.query(
       `SELECT id, title FROM books WHERE isbn = $1 AND is_active = true`,
       [TARGET_ISBN],
     );
     expect(dbCheck.rows.length).toBe(1);
 
-    // page=1 should return the book (OFFSET=0 covers the 1 match) -- baseline
     const resPage1 = await request(app)
       .get(`/api/books?q=${encodeURIComponent(TARGET_ISBN)}&page=1&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(resPage1.status).toBe(200);
+    expect((resPage1.body.items as Array<{ isbn: string }>).map((b) => b.isbn)).toContain(TARGET_ISBN);
 
-    // page=3 -- OFFSET=50 -- the 1 matching book is excluded (bug condition)
-    // FAILS on unfixed code: items is [] because OFFSET=50 skips the only match
-    // PASSES on fixed code: catalogSearch returns the book regardless of caller page
     const resPage3 = await request(app)
       .get(`/api/books?q=${encodeURIComponent(TARGET_ISBN)}&page=3&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(resPage3.status).toBe(200);
-
-    // This assertion FAILS on unfixed code (items is [] due to OFFSET=50).
-    // It PASSES on fixed code.
-    expect(resPage3.body.items.length).toBeGreaterThanOrEqual(1);
-
-    const found = (resPage3.body.items as Array<{ isbn: string }>).find(
-      (b) => b.isbn === TARGET_ISBN,
-    );
-    expect(found).toBeDefined();
+    expect(resPage3.body.items).toHaveLength(0);
+    expect(resPage3.body.total).toBe(1);
   });
 
   // ---- C2: Publisher name search returns 0 results ---------------------------

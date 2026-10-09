@@ -22,6 +22,7 @@ export interface PaginatedResponse<T> {
 
 export * from './audit.js';
 export * from './branch.js';
+export * from './catalog.js';
 export * from './catalogReference.js';
 export * from './common.js';
 export * from './config.js';
