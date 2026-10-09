@@ -1,5 +1,7 @@
 import type { z } from 'zod';
 import {
+  AuditLogListQuerySchema,
+  AuditLogListResponseSchema,
   BranchListQuerySchema,
   BranchListResponseSchema,
   BranchSchema,
@@ -87,12 +89,27 @@ export const operations: ApiOperation[] = [
       503: { description: 'The database is unavailable', schema: HealthResponseSchema },
     },
   },
+  ...auditOperations(),
   ...branchOperations(),
   ...configOperations(),
   ...locationOperations(),
   ...supplierOperations(),
   ...orderOperations(),
 ];
+
+function auditOperations(): ApiOperation[] {
+  return [
+    {
+      operationId: 'listAuditLogs',
+      method: 'get',
+      path: '/audit-logs',
+      summary: 'Audit entries, newest first (Super_Admin, Admin): the session branch\'s; with access to all branches every branch and the entries of no branch, unless ?branchId= asks for one',
+      tag: 'Audit',
+      request: { query: AuditLogListQuerySchema },
+      responses: { 200: { description: 'One page of audit entries', schema: AuditLogListResponseSchema } },
+    },
+  ];
+}
 
 function branchOperations(): ApiOperation[] {
   const tag = 'Branches';
