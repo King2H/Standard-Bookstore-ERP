@@ -24,6 +24,7 @@ export * from './audit.js';
 export * from './branch.js';
 export * from './common.js';
 export * from './config.js';
+export * from './financialTransaction.js';
 export * from './health.js';
 export * from './location.js';
 export * from './notification.js';

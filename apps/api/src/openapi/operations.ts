@@ -1,5 +1,7 @@
 import type { z } from 'zod';
 import {
+  FinancialTransactionListQuerySchema,
+  FinancialTransactionListResponseSchema,
   MarkAllReadResponseSchema,
   MarkReadResponseSchema,
   NotificationIdParamsSchema,
@@ -99,6 +101,7 @@ export const operations: ApiOperation[] = [
   ...branchOperations(),
   ...configOperations(),
   ...locationOperations(),
+  ...financialTransactionOperations(),
   ...notificationOperations(),
   ...supplierOperations(),
   ...orderOperations(),
@@ -345,6 +348,30 @@ function locationOperations(): ApiOperation[] {
       tag,
       request: { params: IdParamsSchema, body: SetStaffLocationsRequestSchema },
       responses: { 200: { description: 'Saved', schema: MessageResponseSchema } },
+    },
+  ];
+}
+
+function financialTransactionOperations(): ApiOperation[] {
+  const tag = 'Financial transactions';
+  return [
+    {
+      operationId: 'listFinancialTransactions',
+      method: 'get',
+      path: '/financial-transactions',
+      summary: 'The session branch\'s ledger entries, newest first (?branchId= another branch needs access to all branches)',
+      tag,
+      request: { query: FinancialTransactionListQuerySchema },
+      responses: { 200: { description: 'One page of ledger entries', schema: FinancialTransactionListResponseSchema } },
+    },
+    {
+      operationId: 'createFinancialTransaction',
+      method: 'post',
+      path: '/financial-transactions',
+      summary: 'Retired: entries are written by POST /payments, collection and exchange settlement',
+      tag,
+      responses: {},
+      errors: [401, 403, 410],
     },
   ];
 }
