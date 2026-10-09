@@ -211,14 +211,12 @@ export interface Customers {
   created_by: number | null;
   customer_code: string;
   date_of_birth: Timestamp | null;
-  email: string | null;
   email_encrypted: string | null;
   email_lookup: string | null;
   full_name: string;
   gender: string | null;
   id: Generated<number>;
   is_active: Generated<boolean>;
-  phone: string | null;
   phone_encrypted: string | null;
   phone_lookup: string | null;
   status: Generated<string>;

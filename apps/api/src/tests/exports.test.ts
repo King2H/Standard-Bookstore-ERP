@@ -94,8 +94,8 @@ describe('Export Integrity (Module 7)', () => {
     staffId = mgr.staffId;
 
     const custRes = await db.query(
-      `INSERT INTO customers (branch_id, customer_code, full_name, phone, is_active, created_at)
-       VALUES ($1, 'EXPCUS-001', 'Export Test Customer', '555-8888', true, now())
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
+       VALUES ($1, 'EXPCUS-001', 'Export Test Customer', true, now())
        ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [branchId],

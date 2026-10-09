@@ -96,8 +96,8 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
 
     // Create a test customer associated with the test branch
     const custRes = await db.query(
-      `INSERT INTO customers (branch_id, customer_code, full_name, phone, is_active, created_at)
-       VALUES ($1, 'BUG2CUS-001', 'Bug2 Test Customer', '555-9999', true, now())
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
+       VALUES ($1, 'BUG2CUS-001', 'Bug2 Test Customer', true, now())
        ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [testBranchId],
@@ -657,8 +657,8 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
 
     // Create a test customer
     const custRes = await db.query(
-      `INSERT INTO customers (branch_id, customer_code, full_name, phone, is_active, created_at)
-       VALUES ($1, 'BUG2FIX-001', 'Bug2 Fix Verification Customer', '555-8888', true, now())
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
+       VALUES ($1, 'BUG2FIX-001', 'Bug2 Fix Verification Customer', true, now())
        ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [fixBranchId],

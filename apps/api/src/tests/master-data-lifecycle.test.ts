@@ -61,8 +61,8 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
     locationId = locRes.rows[0].id as number;
 
     const custRes = await db.query(
-      `INSERT INTO customers (branch_id, customer_code, full_name, phone, is_active, created_at)
-       VALUES ($1, 'MDLCUS-001', 'MDL Test Customer', '555-9999', true, now())
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
+       VALUES ($1, 'MDLCUS-001', 'MDL Test Customer', true, now())
        RETURNING id`,
       [branchId],
     );
