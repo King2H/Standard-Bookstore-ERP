@@ -22,6 +22,8 @@ describe('Branches', () => {
     branchId = branch.branchId;
 
     const admin = await createTestStaff({ username: 'branch_test_admin', role: 'Admin', branchId });
+    // Opening, closing and deleting branches need access to all branches (#21).
+    await db.query(`UPDATE staff SET is_all_branches = true WHERE id = $1`, [admin.staffId]);
     adminToken = admin.token;
 
     const sales = await createTestStaff({ username: 'branch_test_sales', role: 'Sales', branchId });

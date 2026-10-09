@@ -1,5 +1,11 @@
 import type { z } from 'zod';
 import {
+  BranchListQuerySchema,
+  BranchListResponseSchema,
+  BranchSchema,
+  CreateBranchRequestSchema,
+  PublicBranchListResponseSchema,
+  UpdateBranchRequestSchema,
   BranchLocationParamsSchema,
   BranchLocationsParamsSchema,
   LocationListResponseSchema,
@@ -81,11 +87,98 @@ export const operations: ApiOperation[] = [
       503: { description: 'The database is unavailable', schema: HealthResponseSchema },
     },
   },
+  ...branchOperations(),
   ...configOperations(),
   ...locationOperations(),
   ...supplierOperations(),
   ...orderOperations(),
 ];
+
+function branchOperations(): ApiOperation[] {
+  const tag = 'Branches';
+  const headOffice = 'Super_Admin, or Admin with access to all branches';
+  const byId = { params: IdParamsSchema };
+  return [
+    {
+      operationId: 'listPublicBranches',
+      method: 'get',
+      path: '/branches/public',
+      summary: 'Active branches for the sign-in page (no token needed)',
+      tag,
+      auth: false,
+      responses: { 200: { description: 'Id and name of each active branch', schema: PublicBranchListResponseSchema } },
+    },
+    {
+      operationId: 'listBranches',
+      method: 'get',
+      path: '/branches',
+      summary: 'List branches by name (?isActive=true|false)',
+      tag,
+      request: { query: BranchListQuerySchema },
+      responses: { 200: { description: 'One page of branches', schema: BranchListResponseSchema } },
+    },
+    {
+      operationId: 'getBranch',
+      method: 'get',
+      path: '/branches/{id}',
+      summary: 'Get a branch',
+      tag,
+      request: byId,
+      responses: { 200: { description: 'The branch', schema: BranchSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'createBranch',
+      method: 'post',
+      path: '/branches',
+      summary: `Open a branch (${headOffice})`,
+      tag,
+      request: { body: CreateBranchRequestSchema },
+      responses: { 201: { description: 'The new branch', schema: BranchSchema } },
+      errors: [400, 401, 403, 409, 500],
+    },
+    {
+      operationId: 'updateBranch',
+      method: 'put',
+      path: '/branches/{id}',
+      summary: 'Change some of a branch\'s details (Super_Admin, Admin, Manager; the session branch, or any branch with access to all branches)',
+      tag,
+      request: { params: IdParamsSchema, body: UpdateBranchRequestSchema },
+      responses: { 200: { description: 'The updated branch', schema: BranchSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+    {
+      operationId: 'deactivateBranch',
+      method: 'post',
+      path: '/branches/{id}/deactivate',
+      summary: `Close a branch (${headOffice})`,
+      tag,
+      request: byId,
+      responses: { 200: { description: 'Deactivated', schema: MessageResponseSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'reactivateBranch',
+      method: 'post',
+      path: '/branches/{id}/reactivate',
+      summary: `Reopen a branch (${headOffice})`,
+      tag,
+      request: byId,
+      responses: { 200: { description: 'Reactivated', schema: MessageResponseSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'deleteBranch',
+      method: 'delete',
+      path: '/branches/{id}',
+      summary: `Delete a branch that nothing belongs to any more (${headOffice})`,
+      tag,
+      request: byId,
+      responses: { 200: { description: 'Deleted', schema: MessageResponseSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+  ];
+}
 
 function configOperations(): ApiOperation[] {
   const tag = 'Configuration';
