@@ -195,7 +195,7 @@ describe('Customer Management', () => {
         return;
       }
 
-      await accruePoints(customerId, belowThreshold, null, { staffId: 1, role: 'Admin', branchId });
+      await accruePoints(customerId, belowThreshold, null);
 
       const la = await db.query(`SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1`, [customerId]);
       expect(Number(la.rows[0].points_balance)).toBe(0);
@@ -212,7 +212,7 @@ describe('Customer Management', () => {
       const amount = Math.max(minAmount + 1, 100);
       const expectedPoints = Math.floor(amount * rate);
 
-      await accruePoints(customerId, amount, 'TXN-001', { staffId: 1, role: 'Admin', branchId });
+      await accruePoints(customerId, amount, 'TXN-001');
 
       const la = await db.query(`SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1`, [customerId]);
       expect(Number(la.rows[0].points_balance)).toBe(expectedPoints);
@@ -228,7 +228,7 @@ describe('Customer Management', () => {
         .post(`/api/customers/${customerId}/loyalty/redeem`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ points: balance + 9999 });
+        .send({ points: balance + 9999, reason: 'Test correction' });
 
       expect(res.status).toBe(422);
       expect(res.body.error).toBe('INSUFFICIENT_LOYALTY_POINTS');
@@ -250,7 +250,7 @@ describe('Customer Management', () => {
         .post(`/api/customers/${customerId}/loyalty/redeem`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ points: redeemAmt, transactionRef: 'TXN-REDEEM' });
+        .send({ points: redeemAmt, transactionRef: 'TXN-REDEEM', reason: 'Test correction' });
 
       expect(res.status).toBe(200);
 
@@ -280,7 +280,7 @@ describe('Customer Management', () => {
         .post(`/api/customers/${customerId}/store-credit/adjust`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ amount: 50.00, direction: 'credit', refType: 'manual', refId: 'REF-001' });
+        .send({ amount: 50.00, direction: 'credit', refType: 'manual', refId: 'REF-001', reason: 'Test correction' });
 
       expect(res.status).toBe(200);
 
@@ -295,7 +295,7 @@ describe('Customer Management', () => {
         .post(`/api/customers/${customerId}/store-credit/adjust`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ amount: 9999.00, direction: 'debit' });
+        .send({ amount: 9999.00, direction: 'debit', reason: 'Test correction' });
 
       expect(res.status).toBe(422);
       expect(res.body.error).toBe('INSUFFICIENT_STORE_CREDIT');

@@ -59,8 +59,9 @@ interface CustomersPageProps { userRole?: Role; userPermissions?: string[]; }
 
 const canWrite = (r?: string, perms?: string[]) => (perms?.includes('CREATE_SALE')) || ['Admin', 'Manager', 'Sales'].includes(r ?? '');
 const canDeactivate = (r?: string, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
-const canAdjustCredit = (r?: string, perms?: string[]) => (perms?.includes('PROCESS_PAYMENT')) || ['Admin', 'Finance_Officer'].includes(r ?? '');
-const canRedeem = (r?: string, perms?: string[]) => (perms?.includes('CREATE_SALE') || perms?.includes('PROCESS_PAYMENT')) || ['Admin', 'Manager', 'Sales'].includes(r ?? '');
+// Manual loyalty and store-credit changes are back-office corrections with a
+// reason (#21); at checkout customers spend both as a payment.
+const canCorrectBalances = (r?: string) => ['Admin', 'Manager', 'Finance_Officer'].includes(r ?? '');
 
 const EMPTY_FORM = { fullName: '', phone: '', email: '', gender: '', dateOfBirth: '', address: '', city: '', branchId: '' };
 
@@ -90,12 +91,14 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
   // Loyalty redeem state
   const [redeemPoints, setRedeemPoints] = useState('');
   const [redeemRef, setRedeemRef] = useState('');
+  const [redeemReason, setRedeemReason] = useState('');
 
   // Store credit adjust state
   const [creditAmount, setCreditAmount] = useState('');
   const [creditDirection, setCreditDirection] = useState<'credit' | 'debit'>('credit');
   const [creditRefType, setCreditRefType] = useState('');
   const [creditRefId, setCreditRefId] = useState('');
+  const [creditReason, setCreditReason] = useState('');
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (q) params.set('q', q);
@@ -165,29 +168,29 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
   });
 
   const redeemMut = useMutation({
-    mutationFn: ({ id, points, ref }: { id: number; points: number; ref: string }) =>
-      api.post(`/customers/${id}/loyalty/redeem`, { points, transactionRef: ref || null }),
+    mutationFn: ({ id, points, ref, reason }: { id: number; points: number; ref: string; reason: string }) =>
+      api.post(`/customers/${id}/loyalty/redeem`, { points, transactionRef: ref || null, reason }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['loyalty-history', selectedCustomer?.id] });
       // Refresh customer data
       if (selectedCustomer) {
         api.get<Customer>(`/customers/${selectedCustomer.id}`).then(c => setSelectedCustomer(c));
       }
-      setRedeemPoints(''); setRedeemRef('');
+      setRedeemPoints(''); setRedeemRef(''); setRedeemReason('');
       showToast('Points redeemed', 'success');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
   const adjustCreditMut = useMutation({
-    mutationFn: ({ id, amount, direction, refType, refId }: { id: number; amount: number; direction: 'credit' | 'debit'; refType: string; refId: string }) =>
-      api.post(`/customers/${id}/store-credit/adjust`, { amount, direction, refType: refType || null, refId: refId || null }),
+    mutationFn: ({ id, amount, direction, refType, refId, reason }: { id: number; amount: number; direction: 'credit' | 'debit'; refType: string; refId: string; reason: string }) =>
+      api.post(`/customers/${id}/store-credit/adjust`, { amount, direction, refType: refType || null, refId: refId || null, reason }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['credit-history', selectedCustomer?.id] });
       if (selectedCustomer) {
         api.get<Customer>(`/customers/${selectedCustomer.id}`).then(c => setSelectedCustomer(c));
       }
-      setCreditAmount(''); setCreditRefType(''); setCreditRefId('');
+      setCreditAmount(''); setCreditRefType(''); setCreditRefId(''); setCreditReason('');
       showToast('Store credit adjusted', 'success');
     },
     onError: (e: Error) => showToast(e.message, 'error'),
@@ -400,7 +403,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
             </div>
           </div>
 
-          {canRedeem(userRole, userPermissions) && (
+          {canCorrectBalances(userRole) && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Redeem Points</h3>
               <div className="flex gap-3 items-end">
@@ -408,8 +411,10 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                   <input type="number" min="1" value={redeemPoints} onChange={e => setRedeemPoints(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
                 <div className="flex-1"><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Transaction Ref</label>
                   <input value={redeemRef} onChange={e => setRedeemRef(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-                <button disabled={!redeemPoints || redeemMut.isPending}
-                  onClick={() => redeemMut.mutate({ id: c.id, points: Number(redeemPoints), ref: redeemRef })}
+                <div className="flex-1"><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason *</label>
+                  <input value={redeemReason} onChange={e => setRedeemReason(e.target.value)} placeholder="Why are points taken off?" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                <button disabled={!redeemPoints || !redeemReason.trim() || redeemMut.isPending}
+                  onClick={() => redeemMut.mutate({ id: c.id, points: Number(redeemPoints), ref: redeemRef, reason: redeemReason.trim() })}
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
                   {redeemMut.isPending ? 'Redeeming...' : 'Redeem'}
                 </button>
@@ -477,7 +482,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
             </div>
           </div>
 
-          {canAdjustCredit(userRole, userPermissions) && (
+          {canCorrectBalances(userRole) && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Manual Adjustment</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -492,9 +497,11 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                   <input value={creditRefType} onChange={e => setCreditRefType(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ref ID</label>
                   <input value={creditRefId} onChange={e => setCreditRefId(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                <div className="col-span-2"><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason *</label>
+                  <input value={creditReason} onChange={e => setCreditReason(e.target.value)} placeholder="Why is the balance changed?" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
               </div>
-              <button disabled={!creditAmount || adjustCreditMut.isPending}
-                onClick={() => adjustCreditMut.mutate({ id: c.id, amount: Number(creditAmount), direction: creditDirection, refType: creditRefType, refId: creditRefId })}
+              <button disabled={!creditAmount || !creditReason.trim() || adjustCreditMut.isPending}
+                onClick={() => adjustCreditMut.mutate({ id: c.id, amount: Number(creditAmount), direction: creditDirection, refType: creditRefType, refId: creditRefId, reason: creditReason.trim() })}
                 className="mt-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
                 {adjustCreditMut.isPending ? 'Applying...' : 'Apply Adjustment'}
               </button>
