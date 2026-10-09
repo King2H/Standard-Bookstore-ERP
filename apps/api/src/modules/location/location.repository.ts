@@ -38,6 +38,17 @@ export async function branchesOf(q: Queryable, ids: number[]): Promise<Map<numbe
   return new Map(rows.map((r) => [r.id, r.branch_id]));
 }
 
+/** The branch's default location for fulfilment, if it has one. */
+export async function findDefaultId(q: Queryable, branchId: number): Promise<number | undefined> {
+  const row = await q
+    .selectFrom('locations')
+    .select('id')
+    .where('branch_id', '=', branchId)
+    .where('is_default_fulfillment', '=', true)
+    .executeTakeFirst();
+  return row?.id;
+}
+
 /** Locations are added only to active branches. */
 export async function isBranchActive(q: Queryable, branchId: number): Promise<boolean> {
   const row = await q

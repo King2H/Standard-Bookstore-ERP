@@ -7,7 +7,7 @@ import { withIdempotency, hashBody } from '../../lib/idempotency.js';
 import { computeExchangeAllowedActions } from './exchanges.service.js';
 import type { Permission } from '../../lib/permissions.js';
 import { paramInt } from '../../lib/http.js';
-import { assertLocationInBranch, scopedBranch } from '../../lib/scope.js';
+import { assertLocationUsable, scopedBranch } from '../../lib/scope.js';
 import { recordInBranch } from '../../middleware/recordScope.js';
 
 const router = Router();
@@ -26,7 +26,7 @@ router.post(
       if ((!incomingItems || incomingItems.length === 0) && (!outgoingItems || outgoingItems.length === 0)) {
         throw new ValidationError('Exchange must have at least one incoming or outgoing item');
       }
-      await assertLocationInBranch(req, req.body.locationId ?? null);
+      await assertLocationUsable(req, req.body.locationId ?? null);
       const body = {
         locationId:    req.body.locationId ?? null,
         customerId:    req.body.customerId ?? null,

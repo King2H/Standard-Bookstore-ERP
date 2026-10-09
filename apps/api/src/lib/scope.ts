@@ -1,6 +1,7 @@
 import type { Request } from 'express';
 import { kysely } from '../db/kysely.js';
 import { branchesOf } from '../modules/location/location.repository.js';
+import { assertAssignedLocation } from '../modules/location/location.service.js';
 import { BranchAccessError, NotFoundError } from './errors.js';
 
 /**
@@ -91,6 +92,15 @@ export async function assertLocationInBranch(req: Request, locationId: number | 
   const branchId = (await branchesOf(kysely, [locationId])).get(locationId);
   if (branchId === undefined) throw new NotFoundError('Location');
   if (branchId !== scope.branchId) throw new BranchAccessError(branchId);
+}
+
+/**
+ * assertLocationInBranch, plus the staff member's location restrictions:
+ * staff with assigned locations book sales and stock only there (#72).
+ */
+export async function assertLocationUsable(req: Request, locationId: number | null | undefined): Promise<void> {
+  await assertLocationInBranch(req, locationId);
+  await assertAssignedLocation(locationId ?? null, req.staff!);
 }
 
 /**

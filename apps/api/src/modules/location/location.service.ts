@@ -94,15 +94,26 @@ export async function getAccessibleLocations(staff: Staff): Promise<LocationReco
 
 /**
  * Throws unless the staff member may use the location: it must be in their
- * session branch (403) and, if they have assignments there, one of them (403).
+ * session branch (403) and pass assertAssignedLocation.
  */
 export async function assertLocationAccess(locationId: number, staff: Staff): Promise<void> {
   const branchId = (await locations.branchesOf(kysely, [locationId])).get(locationId);
   if (branchId === undefined) throw new NotFoundError('Location');
   if (branchId !== staff.branchId) throw new ForbiddenError('Location does not belong to your current branch');
+  await assertAssignedLocation(locationId, staff);
+}
 
-  const assigned = await locations.listAssignedInBranch(kysely, staff.staffId, branchId);
-  if (assigned.length > 0 && !assigned.some((l) => l.id === locationId)) {
+/**
+ * Staff with location assignments in their session branch may book stock and
+ * sales only at those locations (#72). Roles that manage locations are never
+ * limited. Null means the branch's default location.
+ */
+export async function assertAssignedLocation(locationId: number | null, staff: Staff): Promise<void> {
+  if (policy.hasFullLocationAccess(staff.role)) return;
+  const assigned = await locations.listAssignedInBranch(kysely, staff.staffId, staff.branchId);
+  if (assigned.length === 0) return;
+  const id = locationId ?? (await locations.findDefaultId(kysely, staff.branchId));
+  if (id === undefined || !assigned.some((l) => l.id === id)) {
     throw new ForbiddenError('You do not have access to this location');
   }
 }
