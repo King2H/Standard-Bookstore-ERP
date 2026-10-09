@@ -1,5 +1,15 @@
 import type { z } from 'zod';
 import {
+  BranchConfigKeyParamsSchema,
+  BranchConfigListResponseSchema,
+  BranchConfigParamsSchema,
+  ConfigEntrySchema,
+  ConfigKeyParamsSchema,
+  CurrencyResponseSchema,
+  EffectiveConfigQuerySchema,
+  EffectiveConfigResponseSchema,
+  SetConfigValueRequestSchema,
+  SystemConfigListResponseSchema,
   CancelOrderRequestSchema,
   CollectOrderPaymentRequestSchema,
   ConfirmOrderRequestSchema,
@@ -64,9 +74,81 @@ export const operations: ApiOperation[] = [
       503: { description: 'The database is unavailable', schema: HealthResponseSchema },
     },
   },
+  ...configOperations(),
   ...supplierOperations(),
   ...orderOperations(),
 ];
+
+function configOperations(): ApiOperation[] {
+  const tag = 'Configuration';
+  return [
+    {
+      operationId: 'listSystemConfig',
+      method: 'get',
+      path: '/config/system',
+      summary: 'List the system settings (Super_Admin, Admin, Manager)',
+      tag,
+      responses: { 200: { description: 'Every system setting, by key', schema: SystemConfigListResponseSchema } },
+      errors: [401, 403, 500],
+    },
+    {
+      operationId: 'setSystemConfig',
+      method: 'put',
+      path: '/config/system/{key}',
+      summary: 'Set a system setting (Super_Admin); the value must have the key\'s type',
+      tag,
+      request: { params: ConfigKeyParamsSchema, body: SetConfigValueRequestSchema },
+      responses: { 200: { description: 'The saved setting', schema: ConfigEntrySchema } },
+    },
+    {
+      operationId: 'getCurrency',
+      method: 'get',
+      path: '/config/currency',
+      summary: 'The session branch\'s currency (ETB when it cannot be read)',
+      tag,
+      responses: { 200: { description: 'The currency code', schema: CurrencyResponseSchema } },
+      errors: [401, 403, 500],
+    },
+    {
+      operationId: 'getEffectiveConfig',
+      method: 'get',
+      path: '/config/effective',
+      summary: 'The session branch\'s effective values for ?keys=a,b (null for a key set nowhere)',
+      tag,
+      request: { query: EffectiveConfigQuerySchema },
+      responses: { 200: { description: 'One entry per requested key', schema: EffectiveConfigResponseSchema } },
+    },
+    {
+      operationId: 'listBranchConfig',
+      method: 'get',
+      path: '/config/branches/{branchId}',
+      summary: 'A branch\'s effective settings, each marked branch or system (Super_Admin, Admin, Manager)',
+      tag,
+      request: { params: BranchConfigParamsSchema },
+      responses: { 200: { description: 'Every system key with its effective value', schema: BranchConfigListResponseSchema } },
+    },
+    {
+      operationId: 'setBranchConfig',
+      method: 'put',
+      path: '/config/branches/{branchId}/{key}',
+      summary: 'Override a setting for a branch (Super_Admin, Admin, Manager)',
+      tag,
+      request: { params: BranchConfigKeyParamsSchema, body: SetConfigValueRequestSchema },
+      responses: { 200: { description: 'The saved override', schema: ConfigEntrySchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'removeBranchConfig',
+      method: 'delete',
+      path: '/config/branches/{branchId}/{key}',
+      summary: 'Remove a branch override, so the system default applies again (Super_Admin, Admin)',
+      tag,
+      request: { params: BranchConfigKeyParamsSchema },
+      responses: { 200: { description: 'Removed', schema: MessageResponseSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+  ];
+}
 
 function supplierOperations(): ApiOperation[] {
   const tag = 'Suppliers';

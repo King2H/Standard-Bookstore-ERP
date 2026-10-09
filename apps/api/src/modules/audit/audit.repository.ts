@@ -3,7 +3,8 @@ import type { Queryable } from '../../db/tx.js';
 export interface AuditEntry {
   staffId: number;
   staffRole: string;
-  branchId: number;
+  /** Null for changes that belong to no branch, such as system settings. */
+  branchId: number | null;
   /** CREATE, UPDATE, DELETE or a lifecycle action such as ARCHIVE. */
   action: string;
   entityType: string;
