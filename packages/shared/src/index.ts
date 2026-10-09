@@ -20,6 +20,7 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+export * from './branch.js';
 export * from './common.js';
 export * from './config.js';
 export * from './health.js';
