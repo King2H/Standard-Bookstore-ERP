@@ -323,7 +323,7 @@ describe('Catalog — Books', () => {
     expect(histRes.status).toBe(200);
     expect(histRes.body.items.length).toBeGreaterThan(0);
     const titleChange = histRes.body.items.find(
-      (h: { field_name: string }) => h.field_name === 'title',
+      (h: { fieldName: string }) => h.fieldName === 'title',
     );
     expect(titleChange).toBeDefined();
   });

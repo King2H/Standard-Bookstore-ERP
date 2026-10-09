@@ -1,909 +1,260 @@
-﻿import pg from 'pg';
-import { db } from '../../db/index.js';
-import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
-import { transitionEntityStatus, computeUsage, totalUsage, type LifecycleStatus, type UsageQuery } from '../../lib/lifecycle.js';
-import { insertAuditLog } from '../../lib/auditLog.js';
+import { Money, type CreateBookRequest, type QuickRegisterBookRequest, type UpdateBookRequest } from '@bms/shared';
+import { kysely } from '../../db/kysely.js';
+import { isUniqueViolation } from '../../db/errors.js';
+import { withTransaction, type Queryable } from '../../db/tx.js';
+import { ConflictError, NotFoundError } from '../../lib/errors.js';
+import { insertAuditEntry } from '../audit/audit.repository.js';
+import { bookAvailability } from '../inventory/inventory.service.js';
+import * as policy from './catalog.policy.js';
+import * as books from './catalog.repository.js';
+import type { Actor, BookEditRecord, BookFields, BookFilter, BookRecord, BranchPriceRecord, LinkedName, Paging } from './catalog.types.js';
+import type { LifecycleAction } from '../catalogReference/catalogReference.types.js';
 
-type PoolClient = pg.PoolClient;
+/**
+ * Use cases of the book catalog (A4): one function each, owning its
+ * transaction. Books are shared by every branch; each branch may set its own
+ * price.
+ */
 
-// ── Feature flag: inventory_reservations table ────────────────────────────────
-// ── Types ─────────────────────────────────────────────────────────────────────
+type Paged<T> = { items: T[]; total: number; page: number; pageSize: number; totalPages: number };
 
-export interface StaffCtx {
-  staffId: number;
-  role: string;
-  branchId: number;
+function window(paging: Paging) {
+  return { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize };
 }
 
-export interface BookInput {
-  isbn: string;
-  sku?: string;
-  title: string;
-  authors: string[];
-  authorIds?: number[];
-  genre?: string;
-  publisher?: string;
-  publisherId?: number | null;
-  formatId?: number | null;   // FK to book_formats
-  editionId?: number | null;  // FK to book_editions
-  edition?: string;           // legacy free-text (kept for backward compat)
-  language?: string;
-  format?: string;            // legacy free-text (kept for backward compat)
-  description?: string;
-  coverImageUrl?: string;
-  defaultPrice?: number;
-  tradeValue?: number;
-  categories?: string[];
-  categoryIds?: number[];
-  tags?: string[];
+function audit(q: Queryable, actor: Actor, action: string, entityType: string, id: number, meta: Record<string, unknown>, branchId = actor.branchId) {
+  return insertAuditEntry(q, {
+    staffId: actor.staffId,
+    staffRole: actor.role,
+    branchId,
+    action,
+    entityType,
+    entityId: id,
+    meta,
+  });
 }
 
-export interface BookRecord {
-  id: number;
-  isbn: string;
-  sku: string | null;
-  title: string;
-  authors: string[];
-  authorIds: number[];
-  genre: string | null;
-  publisher: string | null;
-  publisherId: number | null;
-  formatId: number | null;
-  formatCode: string | null;
-  formatLabel: string | null;
-  editionId: number | null;
-  editionCode: string | null;
-  editionLabel: string | null;
-  edition: string | null;   // legacy free-text
-  language: string | null;
-  format: string | null;    // legacy free-text
-  description: string | null;
-  coverImageUrl: string | null;
-  defaultPrice: number | null;
-  tradeValue: number | null;
-  isActive: boolean;
-  /** Prompt 3 — Master Data Lifecycle. Kept in lockstep with isActive
-   *  (status==='ACTIVE' <=> isActive===true) via transitionEntityStatus's
-   *  syncIsActive option, so `status` distinguishes INACTIVE from ARCHIVED
-   *  for admin-visibility purposes while isActive keeps every existing
-   *  consumer-guard (POS/Orders/Exchange/Procurement) working unchanged. */
-  status: LifecycleStatus;
-  archivedAt: string | null;
-  createdAt: string;
-  categories: string[];
-  categoryIds: number[];
-  tags: string[];
-  branchPrice?: number | null;
-  stockQuantity?: number | null;
-}
-
-export interface SearchFilters {
-  q?: string;
-  isbn?: string;
-  sku?: string;
-  author?: string;
-  genre?: string;
-  category?: string;
-  tag?: string;
-  isActive?: boolean;
-  /** Prompt 3 — takes precedence over isActive when provided. undefined = no status filter (caller relies on isActive or wants everything). */
-  status?: LifecycleStatus[];
-  branchId?: number;
-  locationId?: number;
-  sortBy?: 'title' | 'isbn' | 'created_at' | 'default_price';
-  sortDir?: 'asc' | 'desc';
-  page?: number;
-  pageSize?: number;
-}
-
-// ── ISBN-13 check digit validation ────────────────────────────────────────────
-
-export function validateIsbn13(isbn: string): boolean {
-  const digits = isbn.replace(/[-\s]/g, '');
-  if (!/^\d{13}$/.test(digits)) return false;
-  const sum = digits.split('').reduce((acc, d, i) => {
-    return acc + parseInt(d, 10) * (i % 2 === 0 ? 1 : 3);
-  }, 0);
-  return sum % 10 === 0;
-}
-
-// ── Author helpers ────────────────────────────────────────────────────────────
-// Upsert by normalized_name (case-insensitive dedup). Returns author IDs.
-
-async function upsertAuthors(
-  client: PoolClient,
-  names: string[],
-): Promise<number[]> {
-  const ids: number[] = [];
-  for (const name of names) {
-    const normalized = name.trim().toLowerCase();
-    if (!normalized) continue;
-    const result = await client.query(
-      `INSERT INTO authors (name, normalized_name)
-       VALUES ($1, $2)
-       ON CONFLICT (normalized_name) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id`,
-      [name.trim(), normalized],
-    );
-    ids.push(result.rows[0].id as number);
-  }
-  return ids;
-}
-
-// ── Category helpers ──────────────────────────────────────────────────────────
-
-async function upsertCategories(
-  client: PoolClient,
-  names: string[],
-): Promise<number[]> {
-  const ids: number[] = [];
-  for (const name of names) {
-    const normalized = name.trim().toLowerCase();
-    if (!normalized) continue;
-    const result = await client.query(
-      `INSERT INTO categories (name, normalized_name)
-       VALUES ($1, $2)
-       ON CONFLICT (normalized_name) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id`,
-      [name.trim(), normalized],
-    );
-    ids.push(result.rows[0].id as number);
-  }
-  return ids;
-}
-
-// ── Row mapper ────────────────────────────────────────────────────────────────
-
-function mapBook(row: Record<string, unknown>): BookRecord {
-  return {
-    id: row.id as number,
-    isbn: row.isbn as string,
-    sku: (row.sku as string | null) ?? null,
-    title: row.title as string,
-    authors: (row.authors as string[] | null) ?? [],
-    authorIds: (row.author_ids as number[] | null) ?? [],
-    genre: (row.genre as string | null) ?? null,
-    publisher: (row.publisher as string | null) ?? null,
-    publisherId: (row.publisher_id as number | null) ?? null,
-    formatId: (row.format_id as number | null) ?? null,
-    formatCode: (row.format_code as string | null) ?? null,
-    formatLabel: (row.format_label as string | null) ?? null,
-    editionId: (row.edition_id as number | null) ?? null,
-    editionCode: (row.edition_code as string | null) ?? null,
-    editionLabel: (row.edition_label as string | null) ?? null,
-    edition: (row.edition as string | null) ?? null,
-    language: (row.language as string | null) ?? null,
-    format: (row.format as string | null) ?? null,
-    description: (row.description as string | null) ?? null,
-    coverImageUrl: (row.cover_image_url as string | null) ?? null,
-    defaultPrice: row.default_price != null ? parseFloat(row.default_price as string) : null,
-    tradeValue: row.trade_value != null ? parseFloat(row.trade_value as string) : null,
-    isActive: row.is_active as boolean,
-    status: (row.status as LifecycleStatus | undefined) ?? (row.is_active ? 'ACTIVE' : 'INACTIVE'),
-    archivedAt: row.archived_at ? (row.archived_at as Date).toISOString() : null,
-    createdAt: (row.created_at as Date).toISOString(),
-    categories: (row.categories as string[] | null) ?? [],
-    categoryIds: (row.category_ids as number[] | null) ?? [],
-    tags: (row.tags as string[] | null) ?? [],
-    branchPrice: row.branch_price != null ? parseFloat(row.branch_price as string) : null,
-    stockQuantity: row.stock_quantity != null ? Math.max(0, parseInt(row.stock_quantity as string, 10)) : null,
-  };
-}
-
-// ── Fetch full book with authors, categories, tags ────────────────────────────
-
-async function fetchBookById(
-  bookId: number,
-  branchId?: number,
-): Promise<BookRecord | null> {
-  const result = await db.query(
-    `SELECT
-       b.id, b.isbn, b.sku, b.title, b.genre, b.publisher, b.publisher_id,
-       b.edition, b.language, b.format, b.description, b.cover_image_url,
-       b.default_price, b.trade_value, b.is_active, b.status, b.archived_at, b.created_at,
-       b.format_id, bf.code AS format_code, bf.label AS format_label,
-       b.edition_id, be.code AS edition_code, be.label AS edition_label,
-       COALESCE(
-         ARRAY_AGG(DISTINCT a.name ORDER BY a.name) FILTER (WHERE a.id IS NOT NULL),
-         '{}'
-       ) AS authors,
-       COALESCE(
-         ARRAY_AGG(a.id ORDER BY a.name) FILTER (WHERE a.id IS NOT NULL),
-         '{}'
-       ) AS author_ids,
-       COALESCE(
-         ARRAY_AGG(DISTINCT c.name ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL),
-         '{}'
-       ) AS categories,
-       COALESCE(
-         ARRAY_AGG(c.id ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL),
-         '{}'
-       ) AS category_ids,
-       COALESCE(
-         ARRAY_AGG(DISTINCT bt.tag ORDER BY bt.tag) FILTER (WHERE bt.tag IS NOT NULL),
-         '{}'
-       ) AS tags,
-       bbp.price AS branch_price
-
-     FROM books b
-     LEFT JOIN book_formats bf ON bf.id = b.format_id
-     LEFT JOIN book_editions be ON be.id = b.edition_id
-     LEFT JOIN book_authors ba ON ba.book_id = b.id
-     LEFT JOIN authors a ON a.id = ba.author_id
-     LEFT JOIN book_categories bc ON bc.book_id = b.id
-     LEFT JOIN categories c ON c.id = bc.category_id
-     LEFT JOIN book_tags bt ON bt.book_id = b.id
-     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $2
-       AND bbp.format_id = 0 AND bbp.edition_id = 0
-     WHERE b.id = $1
-     GROUP BY b.id, bf.code, bf.label, be.code, be.label, bbp.price`,
-    [bookId, branchId ?? null],
-  );
-  if (result.rows.length === 0) return null;
-  return mapBook(result.rows[0]);
-}
-
-// ── Prompt 3 — master-data selectability guard ──────────────────────────────
-// "INACTIVE: Cannot be selected when creating/editing books. ARCHIVED:
-// Hidden from Catalog dropdowns and searches" — the frontend's dropdowns
-// already default to ACTIVE-only (GET /authors etc. omit ?status=), but
-// that's not enforcement: a direct API call with a stale or hand-crafted
-// non-ACTIVE id must still be rejected here, not just hidden in the UI.
-async function assertSelectableMasterData(
-  data: { authorIds?: number[]; categoryIds?: number[]; publisherId?: number | null },
-  existing?: { authorIds: number[]; categoryIds: number[]; publisherId: number | null },
-): Promise<void> {
-  // The book form always resends the book's *entire current* author/category
-  // selection on every edit (even an unrelated field change) — so only the
-  // newly-added ids (not already linked) get validated here. This is what
-  // makes "cannot be selected when creating/editing" and "existing books
-  // remain linked" both true at once: you can't add a new INACTIVE/ARCHIVED
-  // link, but an edit that doesn't touch an already-linked one never
-  // re-validates it.
-  const newAuthorIds = (data.authorIds ?? []).filter(id => !existing?.authorIds.includes(id));
-  const newCategoryIds = (data.categoryIds ?? []).filter(id => !existing?.categoryIds.includes(id));
-  const newPublisherId = data.publisherId && data.publisherId !== existing?.publisherId ? data.publisherId : null;
-
-  const checks: Array<{ table: string; ids: number[]; label: string }> = [];
-  if (newAuthorIds.length) checks.push({ table: 'authors', ids: newAuthorIds, label: 'Author' });
-  if (newCategoryIds.length) checks.push({ table: 'categories', ids: newCategoryIds, label: 'Category' });
-  if (newPublisherId) checks.push({ table: 'publishers', ids: [newPublisherId], label: 'Publisher' });
-
-  for (const { table, ids, label } of checks) {
-    const res = await db.query(`SELECT id, name, status FROM ${table} WHERE id = ANY($1)`, [ids]);
-    const nonActive = res.rows.filter(r => r.status !== 'ACTIVE');
-    if (nonActive.length > 0) {
-      const names = nonActive.map(r => `${r.name as string} (${r.status as string})`).join(', ');
-      throw new BusinessError(`${label.toUpperCase()}_NOT_SELECTABLE`, `${label} not selectable while INACTIVE or ARCHIVED: ${names}`);
-    }
-  }
-}
-
-// ── Create ────────────────────────────────────────────────────────────────────
-
-export async function createBook(data: BookInput, staffCtx: StaffCtx): Promise<BookRecord> {
-  // ISBN is optional in the UI — if blank, auto-generate a placeholder
-  const rawIsbn = data.isbn ? data.isbn.replace(/[-\s]/g, '') : '';
-  if (rawIsbn && !validateIsbn13(rawIsbn)) {
-    throw new ValidationError('Invalid ISBN-13 check digit');
-  }
-  await assertSelectableMasterData(data);
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Insert book — use placeholder ISBN if none provided (will be replaced by trigger-generated value)
-    let bookResult;
-    try {
-      // If no ISBN provided, generate a unique placeholder from SKU or timestamp
-      const isbnToInsert = rawIsbn || `SKU-${(data.sku ?? '').replace(/\s/g, '-') || Date.now()}`;
-      bookResult = await client.query(
-        `INSERT INTO books (isbn, sku, title, genre, publisher, publisher_id, format_id, edition_id,
-                            edition, language, format, description, cover_image_url,
-                            default_price, trade_value, is_active)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,true)
-         RETURNING id`,
-        [
-          isbnToInsert,
-          data.sku?.trim() || null,
-          data.title,
-          data.genre ?? null,
-          data.publisher ?? null,
-          data.publisherId ?? null,
-          data.formatId ?? null,
-          data.editionId ?? null,
-          data.edition ?? null,
-          data.language ?? null,
-          data.format ?? null,
-          data.description ?? null,
-          data.coverImageUrl ?? null,
-          data.defaultPrice ?? null,
-          data.tradeValue ?? null,
-        ],
-      );
-    } catch (err: unknown) {
-      if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('DUPLICATE_ISBN', `ISBN '${data.isbn}' already exists in the catalog`);
-      }
-      throw err;
-    }
-
-    const bookId: number = bookResult.rows[0].id;
-
-    // Link authors — prefer authorIds (master data), fall back to name-based upsert
-    const resolvedAuthorIds: number[] = data.authorIds && data.authorIds.length > 0
-      ? data.authorIds
-      : (data.authors.length > 0 ? await upsertAuthors(client, data.authors) : []);
-    for (let i = 0; i < resolvedAuthorIds.length; i++) {
-      await client.query(
-        `INSERT INTO book_authors (book_id, author_id, sort_order) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-        [bookId, resolvedAuthorIds[i], i],
-      );
-    }
-
-    // Link categories — prefer categoryIds, fall back to name-based upsert
-    const resolvedCatIds: number[] = data.categoryIds && data.categoryIds.length > 0
-      ? data.categoryIds
-      : (data.categories && data.categories.length > 0 ? await upsertCategories(client, data.categories) : []);
-    for (const catId of resolvedCatIds) {
-      await client.query(
-        `INSERT INTO book_categories (book_id, category_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [bookId, catId],
-      );
-    }
-
-    // Insert tags
-    if (data.tags && data.tags.length > 0) {
-      for (const tag of data.tags) {
-        const t = tag.trim().toLowerCase();
-        if (t) {
-          await client.query(
-            `INSERT INTO book_tags (book_id, tag) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-            [bookId, t],
-          );
-        }
-      }
-    }
-
-    // Rebuild search_vector (trigger fires on UPDATE; force it)
-    await client.query(`UPDATE books SET title = title WHERE id = $1`, [bookId]);
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1,$2,'CREATE','book',$3,$4,$5)`,
-      [staffCtx.staffId, staffCtx.role, String(bookId), staffCtx.branchId,
-       JSON.stringify({ isbn: data.isbn, title: data.title })],
-    );
-
-    await client.query('COMMIT');
-
-    const book = await fetchBookById(bookId);
-    return book!;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── Update ────────────────────────────────────────────────────────────────────
-
-export async function updateBook(
-  id: number,
-  data: Partial<BookInput>,
-  staffCtx: StaffCtx,
-): Promise<BookRecord> {
-  const existing = await fetchBookById(id);
-  if (!existing) throw new NotFoundError('Book');
-  await assertSelectableMasterData(data, { authorIds: existing.authorIds, categoryIds: existing.categoryIds, publisherId: existing.publisherId });
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Track changed bibliographic fields for edit history
-    const trackableFields: Array<keyof BookInput> = [
-      'title', 'genre', 'publisher', 'edition', 'language', 'format',
-      'description', 'coverImageUrl', 'defaultPrice', 'tradeValue',
-    ];
-
-    const dbFieldMap: Record<string, string> = {
-      coverImageUrl: 'cover_image_url',
-      defaultPrice: 'default_price',
-      tradeValue: 'trade_value',
-    };
-
-    for (const field of trackableFields) {
-      if (!(field in data)) continue;
-      const dbField = dbFieldMap[field] ?? field;
-      const oldVal = String(((existing as unknown) as Record<string, unknown>)[field] ?? '');
-      const newVal = String(((data as unknown) as Record<string, unknown>)[field] ?? '');
-      if (oldVal !== newVal) {
-        await client.query(
-          `INSERT INTO book_edit_history (book_id, field_name, old_value, new_value, changed_by)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [id, dbField, oldVal, newVal, staffCtx.staffId],
-        );
-      }
-    }
-
-    // Build SET clause for scalar fields
-    const setClauses: string[] = [];
-    const params: unknown[] = [];
-    let paramIdx = 1;
-
-    const scalarMap: Record<string, string> = {
-      title: 'title', genre: 'genre', publisher: 'publisher', publisherId: 'publisher_id',
-      formatId: 'format_id', editionId: 'edition_id',
-      edition: 'edition', language: 'language', format: 'format', description: 'description',
-      coverImageUrl: 'cover_image_url', defaultPrice: 'default_price', tradeValue: 'trade_value',
-      sku: 'sku',
-    };
-
-    for (const [jsKey, dbCol] of Object.entries(scalarMap)) {
-      if (jsKey in data) {
-        setClauses.push(`${dbCol} = $${paramIdx++}`);
-        params.push((data as Record<string, unknown>)[jsKey] ?? null);
-      }
-    }
-
-    if (setClauses.length > 0) {
-      params.push(id);
-      await client.query(
-        `UPDATE books SET ${setClauses.join(', ')} WHERE id = $${paramIdx}`,
-        params,
-      );
-    }
-
-    // Update authors if provided (prefer authorIds, fall back to names)
-    const hasAuthorUpdate = data.authorIds !== undefined || data.authors !== undefined;
-    if (hasAuthorUpdate) {
-      await client.query(`DELETE FROM book_authors WHERE book_id = $1`, [id]);
-      const resolvedIds: number[] = data.authorIds && data.authorIds.length > 0
-        ? data.authorIds
-        : (data.authors && data.authors.length > 0 ? await upsertAuthors(client, data.authors) : []);
-      for (let i = 0; i < resolvedIds.length; i++) {
-        await client.query(
-          `INSERT INTO book_authors (book_id, author_id, sort_order) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-          [id, resolvedIds[i], i],
-        );
-      }
-    }
-
-    // Update categories if provided (prefer categoryIds, fall back to names)
-    const hasCatUpdate = data.categoryIds !== undefined || data.categories !== undefined;
-    if (hasCatUpdate) {
-      await client.query(`DELETE FROM book_categories WHERE book_id = $1`, [id]);
-      const resolvedCatIds: number[] = data.categoryIds && data.categoryIds.length > 0
-        ? data.categoryIds
-        : (data.categories && data.categories.length > 0 ? await upsertCategories(client, data.categories) : []);
-      for (const catId of resolvedCatIds) {
-        await client.query(
-          `INSERT INTO book_categories (book_id, category_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-          [id, catId],
-        );
-      }
-    }
-
-    // Update tags if provided
-    if (data.tags !== undefined) {
-      await client.query(`DELETE FROM book_tags WHERE book_id = $1`, [id]);
-      for (const tag of data.tags) {
-        const t = tag.trim().toLowerCase();
-        if (t) {
-          await client.query(
-            `INSERT INTO book_tags (book_id, tag) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-            [id, t],
-          );
-        }
-      }
-    }
-
-    // Rebuild search_vector
-    await client.query(`UPDATE books SET title = title WHERE id = $1`, [id]);
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1,$2,'UPDATE','book',$3,$4,$5)`,
-      [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId,
-       JSON.stringify({ updatedFields: Object.keys(data) })],
-    );
-
-    await client.query('COMMIT');
-    return (await fetchBookById(id))!;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── Deactivate ────────────────────────────────────────────────────────────────
-
-// Prompt 3 — reuses the shared lifecycle transition + audit log helper
-// (syncIsActive keeps books.is_active in lockstep so every existing
-// POS/Orders/Exchange/Procurement is_active guard keeps working
-// unchanged). This is INACTIVE, not ARCHIVED — still visible in Catalog
-// admin/Inventory admin with a status badge; see archiveBook for the
-// ARCHIVED transition (hidden from admin defaults too).
-export async function deactivateBook(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('books', 'book', id, 'INACTIVATE', staffCtx, { syncIsActive: true });
-}
-
-// ── Reactivate ────────────────────────────────────────────────────────────────
-
-export async function reactivateBook(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('books', 'book', id, 'ACTIVATE', staffCtx, { syncIsActive: true });
-}
-
-// ── Archive / Restore (Prompt 3) ────────────────────────────────────────────
-// ARCHIVED differs from INACTIVE: hidden from Catalog/Inventory admin
-// default views too (not just operational modules), per the lifecycle
-// spec. Historical transactions keep displaying the book's title/name —
-// archiving never deletes or hides the row itself, only default-view
-// visibility.
-
-export async function archiveBook(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('books', 'book', id, 'ARCHIVE', staffCtx, { syncIsActive: true });
-}
-
-export async function restoreBook(id: number, staffCtx: StaffCtx): Promise<void> {
-  await transitionEntityStatus('books', 'book', id, 'RESTORE', staffCtx, { syncIsActive: true });
-}
-
-// ── Usage / dependency check (Prompt 3) ─────────────────────────────────────
-// Powers both GET /catalog/:id/usage and the delete dependency-guard below.
-// Field names match the spec's usage-endpoint contract exactly
-// (inventory/sales/orders/returns/exchanges/purchaseOrders); inventory
-// transactions (inventory_history) are folded into the delete-guard as an
-// additional check but not surfaced as their own field, since the spec's
-// example response doesn't list one.
-
-const BOOK_USAGE_QUERIES: UsageQuery[] = [
-  { key: 'inventory',      sql: `SELECT COUNT(*) FROM inventory WHERE book_id = $1 AND quantity > 0` },
-  { key: 'sales',          sql: `SELECT COUNT(*) FROM transaction_line_items WHERE book_id = $1` },
-  { key: 'orders',         sql: `SELECT COUNT(DISTINCT order_id) FROM order_line_items WHERE book_id = $1` },
-  { key: 'returns',        sql: `SELECT COUNT(*) FROM return_line_items WHERE book_id = $1` },
-  { key: 'exchanges',      sql: `SELECT COUNT(DISTINCT exchange_id) FROM (
-                                    SELECT exchange_id, book_id FROM exchange_incoming_items
-                                    UNION ALL
-                                    SELECT exchange_id, book_id FROM exchange_outgoing_items
-                                  ) x WHERE book_id = $1` },
-  { key: 'purchaseOrders', sql: `SELECT COUNT(DISTINCT po_id) FROM po_line_items WHERE book_id = $1` },
-];
-
-export async function getBookUsage(id: number): Promise<Record<string, number>> {
-  const book = await db.query(`SELECT id FROM books WHERE id = $1`, [id]);
-  if (!book.rows.length) throw new NotFoundError('Book');
-  return computeUsage(id, BOOK_USAGE_QUERIES);
-}
-
-// ── Delete (Prompt 3 — dependency-guarded hard delete; did not exist before) ─
-// Books could previously only be deactivated, never deleted. Blocked if any
-// inventory, sales, order, return, exchange, or purchase-order reference
-// exists — plus inventory_history (transaction) rows, which the usage-count
-// contract above doesn't surface as a field but must still block deletion
-// per the spec's deletion policy.
-
-export async function deleteBook(id: number, staffCtx: StaffCtx): Promise<void> {
-  const usage = await getBookUsage(id);
-  const historyCheck = await db.query(`SELECT COUNT(*) FROM inventory_history WHERE book_id = $1`, [id]);
-  const inventoryTransactions = parseInt(historyCheck.rows[0].count as string, 10);
-
-  if (totalUsage(usage) > 0 || inventoryTransactions > 0) {
-    throw new ConflictError('BOOK_IN_USE', 'Book has historical references and cannot be deleted — archive it instead', {
-      ...usage,
-      inventoryTransactions,
-    });
-  }
-
-  const result = await db.query(`DELETE FROM books WHERE id = $1 RETURNING id`, [id]);
-  if (!result.rows.length) throw new NotFoundError('Book');
-  await insertAuditLog(staffCtx, 'DELETE', 'book', id, {});
-}
-
-// ── Get by ID ─────────────────────────────────────────────────────────────────
-
-export async function getBookById(id: number, branchId?: number): Promise<BookRecord> {
-  const book = await fetchBookById(id, branchId);
+async function bookOrThrow(q: Queryable, id: number, branchId: number | null = null): Promise<BookRecord> {
+  const book = await books.findBook(q, id, branchId);
   if (!book) throw new NotFoundError('Book');
   return book;
 }
 
-// ── Set branch price ──────────────────────────────────────────────────────────
-
-export async function setBranchPrice(
-  bookId: number,
-  branchId: number,
-  price: number,
-  staffCtx: StaffCtx,
-): Promise<void> {
-  const bookCheck = await db.query(`SELECT id FROM books WHERE id = $1`, [bookId]);
-  if (bookCheck.rows.length === 0) throw new NotFoundError('Book');
-
-  await db.query(
-    `INSERT INTO book_branch_prices (book_id, branch_id, price, format_id, edition_id)
-     VALUES ($1,$2,$3,0,0)
-     ON CONFLICT (book_id, branch_id, format_id, edition_id) DO UPDATE SET price = EXCLUDED.price`,
-    [bookId, branchId, price],
-  );
-
-  await db.query(
-    `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-     VALUES ($1,$2,'UPDATE','book_price',$3,$4,$5)`,
-    [staffCtx.staffId, staffCtx.role, String(bookId), branchId,
-     JSON.stringify({ branchId, price })],
-  );
+async function lockOrThrow(q: Queryable, id: number) {
+  const status = await books.lockStatus(q, id);
+  if (!status) throw new NotFoundError('Book');
+  return status;
 }
 
-// ── Get effective price ───────────────────────────────────────────────────────
+// ── Links to authors, categories and publishers ──────────────────────────────
 
-export async function getEffectivePrice(bookId: number, branchId: number): Promise<number | null> {
-  const result = await db.query(
-    `SELECT COALESCE(bbp.price, b.default_price) AS price
-     FROM books b
-     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $2
-     WHERE b.id = $1`,
-    [bookId, branchId],
-  );
-  if (result.rows.length === 0) return null;
-  return result.rows[0].price != null ? parseFloat(result.rows[0].price as string) : null;
+async function byId(q: Queryable, table: 'authors' | 'categories' | 'publishers', ids: number[]): Promise<LinkedName[]> {
+  const unique = [...new Set(ids)];
+  const found = await books.linkedById(q, table, unique);
+  if (found.length !== unique.length) throw new NotFoundError(table === 'authors' ? 'Author' : table === 'categories' ? 'Category' : 'Publisher');
+  // Keep the caller's order (the first author is the main one).
+  return unique.map((id) => found.find((f) => f.id === id)!);
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
-// Full-text search via tsvector (title + authors). Supports:
-//   - ?q: full-text query
-//   - ?isbn: exact match
-//   - ?genre, ?category, ?tag: filter
-//   - ?isActive: filter (default true)
-//   - ?branchId: include branch price in results
-//   - ?sortBy, ?sortDir, ?page, ?pageSize: pagination
+/**
+ * The authors or categories a book should link to: ids win over names;
+ * names match existing records ignoring letter case and never rename them.
+ * Records the book does not link to yet must be active.
+ */
+async function resolveLinks(
+  q: Queryable,
+  table: 'authors' | 'categories',
+  ids: number[] | undefined,
+  names: string[] | undefined,
+  alreadyLinked: number[],
+): Promise<number[]> {
+  const linked = ids && ids.length > 0 ? await byId(q, table, ids) : await books.findOrCreateByName(q, table, names ?? []);
+  policy.checkSelectable(
+    table === 'authors' ? 'Author' : 'Category',
+    linked.filter((l) => !alreadyLinked.includes(l.id)),
+  );
+  return linked.map((l) => l.id);
+}
 
-export async function searchBooks(filters: SearchFilters): Promise<{
-  items: BookRecord[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}> {
-  // Bug 1 fix (C1): when a text query (q) is present, ignore the caller's
-  // page/offset. A search term reflects a fresh, targeted lookup, not a
-  // continuation of whatever catalog-browsing page the caller happened to be
-  // on — a stale page value (e.g. leftover from browsing page 3) previously
-  // applied OFFSET against the WHERE-*filtered* result set, which could skip
-  // past the only match entirely. catalogSearch.service.ts's search() (used
-  // elsewhere for the same kind of lookup) already has no OFFSET for this
-  // reason; this brings searchBooks() in line with it for q-searches while
-  // leaving normal catalog browsing (no q) paginated as before.
-  const isTextSearch = !!filters.q;
-  const page = isTextSearch ? 1 : Math.max(1, filters.page ?? 1);
-  const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 25));
-  const offset = (page - 1) * pageSize;
+async function checkPublisher(q: Queryable, publisherId: number | null | undefined, current: number | null): Promise<void> {
+  if (!publisherId || publisherId === current) return;
+  policy.checkSelectable('Publisher', await byId(q, 'publishers', [publisherId]));
+}
 
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let p = 1;
+function duplicateIsbn(isbn: string | undefined) {
+  return (err: unknown): never => {
+    if (isUniqueViolation(err)) throw new ConflictError('DUPLICATE_ISBN', `ISBN '${isbn}' already exists in the catalog`);
+    throw err;
+  };
+}
 
-  // Full-text search — covers title, author name, SKU, publisher, description,
-  // and exact ISBN via OR.
-  //
-  // Bug 1 fix (C2, C3): publisher and description were previously absent from
-  // this predicate, so searching by either always returned 0 results even
-  // though catalogSearch.service.ts's search() (used elsewhere) already
-  // covered publisher correctly — this function had drifted out of sync with it.
-  if (filters.q) {
-    const q = filters.q.trim();
-    const qParam = `%${q}%`;
-    const normalizedIsbn = q.replace(/[-\s]/g, '');
-    const parts = [
-      `lower(b.title) LIKE lower($${p})`,
-      `lower(COALESCE(b.sku, '')) LIKE lower($${p})`,
-      `lower(COALESCE(b.publisher, '')) LIKE lower($${p})`,
-      `lower(COALESCE(b.description, '')) LIKE lower($${p})`,
-      `EXISTS (
-        SELECT 1 FROM book_authors ba_q
-        JOIN authors a_q ON a_q.id = ba_q.author_id
-        WHERE ba_q.book_id = b.id AND lower(a_q.name) LIKE lower($${p})
-      )`,
-    ];
-    params.push(qParam);
-    p += 1;
+// ── Reads ─────────────────────────────────────────────────────────────────────
 
-    if (/^[0-9]{10,13}$/.test(normalizedIsbn)) {
-      parts.push(`b.isbn = $${p}`);
-      params.push(normalizedIsbn);
-      p += 1;
+export async function listBooks(filter: BookFilter, branchId: number | null, paging: Paging): Promise<Paged<BookRecord>> {
+  const result = await books.listBooks(kysely, filter, branchId, window(paging));
+  return { ...result, page: paging.page, pageSize: paging.pageSize, totalPages: Math.ceil(result.total / paging.pageSize) };
+}
+
+/** Books with their stock at one location, for the sale and receiving screens. */
+export async function listBooksWithAvailability(
+  filter: BookFilter,
+  branchId: number | null,
+  locationId: number | undefined,
+  paging: Paging,
+) {
+  const result = await listBooks(filter, branchId, paging);
+  const stock = locationId
+    ? await bookAvailability(kysely, result.items.map((b) => b.id), locationId)
+    : [];
+  return {
+    ...result,
+    items: result.items.map((book) => {
+      const found = stock.find((s) => s.bookId === book.id);
+      const availability = locationId
+        ? (found ?? { locationId, locationName: null, onHand: 0, reserved: 0, available: 0 })
+        : null;
+      return { book, availability };
+    }),
+  };
+}
+
+/** A quick lookup across the active catalog, without paging (scanners and pickers). */
+export async function searchCatalog(term: string, branchId: number | null, limit: number): Promise<BookRecord[]> {
+  const filter: BookFilter = { q: term, qIsbns: policy.isbnSearchForms(term), statuses: ['ACTIVE'] };
+  return (await books.listBooks(kysely, filter, branchId, { limit, offset: 0 })).items;
+}
+
+export function getBook(id: number, branchId: number | null): Promise<BookRecord> {
+  return bookOrThrow(kysely, id, branchId);
+}
+
+export async function usage(id: number): Promise<Record<string, number>> {
+  await bookOrThrow(kysely, id);
+  return books.usage(kysely, id);
+}
+
+export async function branchPrices(id: number): Promise<BranchPriceRecord[]> {
+  await bookOrThrow(kysely, id);
+  return books.branchPrices(kysely, id);
+}
+
+export async function editHistory(id: number, paging: Paging): Promise<{ items: BookEditRecord[]; total: number }> {
+  return books.editHistory(kysely, id, window(paging));
+}
+
+/** Active authors whose name starts with `prefix`. */
+export function suggestAuthors(prefix: string): Promise<string[]> {
+  return books.suggest(kysely, 'authors', prefix, 10);
+}
+
+/** Active categories whose name starts with `prefix`. */
+export function suggestCategories(prefix: string): Promise<string[]> {
+  return books.suggest(kysely, 'categories', prefix, 10);
+}
+
+// ── Create and update ─────────────────────────────────────────────────────────
+
+function fieldsOf(dto: UpdateBookRequest): BookFields {
+  const has = (key: keyof UpdateBookRequest) => key in dto;
+  const value = <K extends keyof UpdateBookRequest>(key: K) => (has(key) ? (dto[key] ?? null) : undefined);
+  return {
+    sku: has('sku') ? dto.sku?.trim() || null : undefined,
+    title: dto.title,
+    genre: value('genre') as string | null | undefined,
+    publisher: value('publisher') as string | null | undefined,
+    publisherId: value('publisherId') as number | null | undefined,
+    formatId: value('formatId') as number | null | undefined,
+    editionId: value('editionId') as number | null | undefined,
+    edition: value('edition') as string | null | undefined,
+    language: value('language') as string | null | undefined,
+    format: value('format') as string | null | undefined,
+    description: value('description') as string | null | undefined,
+    coverImageUrl: value('coverImageUrl') as string | null | undefined,
+    defaultPrice: value('defaultPrice') as number | null | undefined,
+    tradeValue: value('tradeValue') as number | null | undefined,
+  };
+}
+
+export async function createBook(actor: Actor, dto: CreateBookRequest): Promise<BookRecord> {
+  const isbn = policy.storedIsbn(dto.isbn) ?? policy.placeholderIsbn(dto.sku, Date.now());
+  return withTransaction({}, async (tx) => {
+    const authorIds = await resolveLinks(tx, 'authors', dto.authorIds, dto.authors, []);
+    const categoryIds = await resolveLinks(tx, 'categories', dto.categoryIds, dto.categories, []);
+    await checkPublisher(tx, dto.publisherId, null);
+
+    const id = await books
+      .insertBook(tx, { ...fieldsOf(dto), isbn, title: dto.title })
+      .catch(duplicateIsbn(dto.isbn));
+    await books.replaceAuthors(tx, id, authorIds);
+    await books.replaceCategories(tx, id, categoryIds);
+    await books.replaceTags(tx, id, dto.tags ?? []);
+    await books.refreshSearch(tx, id);
+    await audit(tx, actor, 'CREATE', 'book', id, { isbn: dto.isbn, title: dto.title });
+    return bookOrThrow(tx, id);
+  });
+}
+
+/** A catalog-only entry from the sale screens; the rest is filled in later. */
+export function quickRegister(actor: Actor, dto: QuickRegisterBookRequest): Promise<BookRecord> {
+  return createBook(actor, {
+    isbn: dto.isbn,
+    title: dto.title,
+    authors: dto.author ? [dto.author] : [],
+    defaultPrice: dto.defaultPrice,
+  });
+}
+
+export async function updateBook(actor: Actor, id: number, dto: UpdateBookRequest): Promise<BookRecord> {
+  return withTransaction({}, async (tx) => {
+    await lockOrThrow(tx, id);
+    const existing = await bookOrThrow(tx, id);
+
+    await books.insertEdits(tx, id, policy.editsOf({ ...existing }, dto), actor.staffId);
+    await checkPublisher(tx, dto.publisherId, existing.publisherId);
+    await books.updateBook(tx, id, fieldsOf(dto), actor.staffId);
+
+    if (dto.authorIds !== undefined || dto.authors !== undefined) {
+      await books.replaceAuthors(tx, id, await resolveLinks(tx, 'authors', dto.authorIds, dto.authors, existing.authorIds));
     }
+    if (dto.categoryIds !== undefined || dto.categories !== undefined) {
+      await books.replaceCategories(tx, id, await resolveLinks(tx, 'categories', dto.categoryIds, dto.categories, existing.categoryIds));
+    }
+    if (dto.tags !== undefined) await books.replaceTags(tx, id, dto.tags);
 
-    conditions.push(`(${parts.join(' OR ')})`);
-  }
-
-  // Exact ISBN (strip dashes/spaces)
-  if (filters.isbn) {
-    conditions.push(`b.isbn = $${p++}`);
-    params.push(filters.isbn.replace(/[-\s]/g, ''));
-  }
-
-  // SKU partial match
-  if (filters.sku) {
-    conditions.push(`lower(b.sku) LIKE lower($${p++})`);
-    params.push(`%${filters.sku.trim()}%`);
-  }
-
-  // Author partial match via JOIN
-  if (filters.author) {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM book_authors ba2
-      JOIN authors a2 ON a2.id = ba2.author_id
-      WHERE ba2.book_id = b.id AND lower(a2.name) LIKE lower($${p++})
-    )`);
-    params.push(`%${filters.author.trim()}%`);
-  }
-
-  // Genre exact match (case-insensitive)
-  if (filters.genre) {
-    conditions.push(`lower(b.genre) = lower($${p++})`);
-    params.push(filters.genre);
-  }
-
-  // Category via JOIN
-  if (filters.category) {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM book_categories bc2
-      JOIN categories c2 ON c2.id = bc2.category_id
-      WHERE bc2.book_id = b.id AND lower(c2.name) = lower($${p++})
-    )`);
-    params.push(filters.category);
-  }
-
-  // Tag via JOIN
-  if (filters.tag) {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM book_tags bt2
-      WHERE bt2.book_id = b.id AND lower(bt2.tag) = lower($${p++})
-    )`);
-    params.push(filters.tag);
-  }
-
-  // Prompt 3 — status filter takes precedence over the legacy isActive
-  // boolean when provided; both are "only applied when explicitly set".
-  if (filters.status !== undefined) {
-    conditions.push(`b.status = ANY($${p++})`);
-    params.push(filters.status);
-  } else if (filters.isActive !== undefined) {
-    conditions.push(`b.is_active = $${p++}`);
-    params.push(filters.isActive);
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-  // Sort
-  const sortableColumns: Record<string, string> = {
-    title: 'b.title',
-    isbn: 'b.isbn',
-    created_at: 'b.created_at',
-    default_price: 'b.default_price',
-  };
-  const sortCol = sortableColumns[filters.sortBy ?? 'title'] ?? 'b.title';
-  const sortDir = filters.sortDir === 'desc' ? 'DESC' : 'ASC';
-
-  // Count query
-  const countResult = await db.query(
-    `SELECT COUNT(DISTINCT b.id) FROM books b ${whereClause}`,
-    params,
-  );
-  const total = parseInt(countResult.rows[0].count as string, 10);
-
-  // Data query — aggregate authors, categories, tags per book.
-  // Catalog is book-only: NO inventory joins, NO stock quantities.
-  // Stock quantities are fetched separately by POS/Orders via inventoryTransaction.service.ts.
-  const bbpParam    = p;
-  const limitParam  = p + 1;
-  const offsetParam = p + 2;
-
-  const dataResult = await db.query(
-    `SELECT
-       b.id, b.isbn, b.sku, b.title, b.genre, b.publisher, b.publisher_id,
-       b.edition, b.language, b.format, b.description, b.cover_image_url,
-       b.default_price, b.trade_value, b.is_active, b.status, b.archived_at, b.created_at,
-       b.format_id, bf.code AS format_code, bf.label AS format_label,
-       b.edition_id, be.code AS edition_code, be.label AS edition_label,
-       COALESCE(
-         ARRAY_AGG(DISTINCT a.name ORDER BY a.name) FILTER (WHERE a.id IS NOT NULL),
-         '{}'
-       ) AS authors,
-       COALESCE(
-         ARRAY_AGG(a.id ORDER BY a.name) FILTER (WHERE a.id IS NOT NULL),
-         '{}'
-       ) AS author_ids,
-       COALESCE(
-         ARRAY_AGG(DISTINCT c.name ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL),
-         '{}'
-       ) AS categories,
-       COALESCE(
-         ARRAY_AGG(c.id ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL),
-         '{}'
-       ) AS category_ids,
-       COALESCE(
-         ARRAY_AGG(DISTINCT bt.tag ORDER BY bt.tag) FILTER (WHERE bt.tag IS NOT NULL),
-         '{}'
-       ) AS tags,
-       bbp.price AS branch_price,
-       NULL::int AS stock_quantity
-     FROM books b
-     LEFT JOIN book_formats bf ON bf.id = b.format_id
-     LEFT JOIN book_editions be ON be.id = b.edition_id
-     LEFT JOIN book_authors ba ON ba.book_id = b.id
-     LEFT JOIN authors a ON a.id = ba.author_id
-     LEFT JOIN book_categories bc ON bc.book_id = b.id
-     LEFT JOIN categories c ON c.id = bc.category_id
-     LEFT JOIN book_tags bt ON bt.book_id = b.id
-     LEFT JOIN book_branch_prices bbp ON bbp.book_id = b.id AND bbp.branch_id = $${bbpParam}
-       AND bbp.format_id = 0 AND bbp.edition_id = 0
-     ${whereClause}
-     GROUP BY b.id, bf.code, bf.label, be.code, be.label, bbp.price
-     ORDER BY ${sortCol} ${sortDir}
-     LIMIT $${limitParam} OFFSET $${offsetParam}`,
-    [...params, filters.branchId ?? null, pageSize, offset],
-  );
-
-  return {
-    items: dataResult.rows.map(mapBook),
-    total,
-    page,
-    pageSize,
-    totalPages: Math.ceil(total / pageSize),
-  };
+    await books.refreshSearch(tx, id);
+    await audit(tx, actor, 'UPDATE', 'book', id, { updatedFields: Object.keys(dto) });
+    return bookOrThrow(tx, id);
+  });
 }
 
-// ── Get edit history ──────────────────────────────────────────────────────────
+// ── Lifecycle, delete, prices ─────────────────────────────────────────────────
 
-export async function getBookEditHistory(
-  bookId: number,
-  page = 1,
-  pageSize = 25,
-): Promise<{ items: unknown[]; total: number }> {
-  const offset = (page - 1) * pageSize;
-  const [countRes, dataRes] = await Promise.all([
-    db.query(`SELECT COUNT(*) FROM book_edit_history WHERE book_id = $1`, [bookId]),
-    db.query(
-      `SELECT beh.*, s.username AS changed_by_username
-       FROM book_edit_history beh
-       LEFT JOIN staff s ON s.id = beh.changed_by
-       WHERE beh.book_id = $1
-       ORDER BY beh.changed_at DESC
-       LIMIT $2 OFFSET $3`,
-      [bookId, pageSize, offset],
-    ),
-  ]);
-  return {
-    items: dataRes.rows,
-    total: parseInt(countRes.rows[0].count as string, 10),
-  };
+/** A repeat of the current status changes nothing and is not audited. */
+export async function transition(actor: Actor, id: number, action: LifecycleAction): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    const previousStatus = await lockOrThrow(tx, id);
+    const newStatus = policy.nextStatus(previousStatus, action);
+    if (newStatus === null) return;
+    await books.setStatus(tx, id, newStatus, actor.staffId);
+    await audit(tx, actor, action, 'book', id, { previousStatus, newStatus });
+  });
 }
 
-// ── Autocomplete helpers ──────────────────────────────────────────────────────
-// Used by UI for author/category suggestions.
-
-export async function suggestAuthors(prefix: string, limit = 10): Promise<string[]> {
-  const result = await db.query(
-    `SELECT name FROM authors
-     WHERE normalized_name LIKE lower($1) || '%'
-     ORDER BY name ASC LIMIT $2`,
-    [prefix.trim(), limit],
-  );
-  return result.rows.map(r => r.name as string);
+/** Only a book nothing refers to may be deleted, stock movements included. */
+export async function remove(actor: Actor, id: number): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    await lockOrThrow(tx, id);
+    policy.checkDeletable({ ...(await books.usage(tx, id)), inventoryTransactions: await books.stockMovementCount(tx, id) });
+    await books.remove(tx, id);
+    await audit(tx, actor, 'DELETE', 'book', id, {});
+  });
 }
 
-export async function suggestCategories(prefix: string, limit = 10): Promise<string[]> {
-  const result = await db.query(
-    `SELECT name FROM categories
-     WHERE normalized_name LIKE lower($1) || '%'
-     ORDER BY name ASC LIMIT $2`,
-    [prefix.trim(), limit],
-  );
-  return result.rows.map(r => r.name as string);
+/** The routes allow only the session's branch, or any with access to all branches. */
+export async function setBranchPrice(actor: Actor, bookId: number, branchId: number, price: number): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    await lockOrThrow(tx, bookId);
+    await books.setBranchPrice(tx, bookId, branchId, Money.of(price));
+    await audit(tx, actor, 'UPDATE', 'book_price', bookId, { branchId, price }, branchId);
+  });
 }
