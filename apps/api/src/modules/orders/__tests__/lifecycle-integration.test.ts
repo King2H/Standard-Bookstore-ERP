@@ -354,15 +354,12 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       [String(orderId), bookId, locationId],
     );
 
-    // order_fulfilled row is fulfillReservation()'s zero-delta audit trail
-    // entry -- the actual deduction (delta=-ORDER_QTY) already happened at
-    // confirm() (reference_type='order_confirmed').
+    // Fulfilment writes no stock history (#21): the deduction
+    // (delta=-ORDER_QTY) happened at confirm() (reference_type='order_confirmed').
     const fulfillHistRow = histRows.rows.find(
       (r: Record<string, unknown>) => r.reference_type === 'order_fulfilled',
     );
-    expect(fulfillHistRow).toBeDefined();
-    expect(Number(fulfillHistRow!.delta)).toBe(0);
-    expect(fulfillHistRow!.movement_type).toBe('stock_out');
+    expect(fulfillHistRow).toBeUndefined();
 
     // Only one row with a negative delta for this order (the confirm()-time
     // deduction) — no double-deduction at fulfill.

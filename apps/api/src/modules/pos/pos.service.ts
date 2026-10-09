@@ -1,9 +1,11 @@
 import { db } from '../../db/index.js';
+import type { Money } from '@bms/shared';
+import { queryableOn } from '../../db/tx.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { getMaxLineDiscountPct } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
-import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
+import * as inventoryService from '../inventory/inventory.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -391,7 +393,7 @@ export async function createTransaction(
       }
     }
 
-    // Inventory availability is checked inside invTxSvc.stockOut (reservation-aware).
+    // Inventory availability is checked inside inventoryService.issueStock (reservation-aware).
     // No pre-check needed here — removing the old raw-quantity check prevents stale reads.
 
     // Generate transaction number. Module 9: date-stamp derived from the
@@ -416,26 +418,23 @@ export async function createTransaction(
 
     // Decrement inventory via centralized InventoryTransactionService (Requirement 2.1, 2.3, 2.4)
     // Availability check is available = quantity (reservations are bookkeeping,
-    // not a second hold -- see inventoryTransaction.service.ts getAvailableStock()).
+    // not a second hold -- see inventory.service.ts availableStock()).
     //
     // Sales Posting Rule: COGS = issued_qty × current average_cost_at_posting_time,
     // and that cost must be persisted on the line item permanently — done here
-    // in the same loop as the stock-out, right after invTxSvc.stockOut() hands
+    // in the same loop as the stock-out, right after inventoryService.issueStock() hands
     // back the cost it just posted at, so it's frozen before the INSERT below
     // and never silently recomputed later against a future, different cost.
-    const lineItemCosts: number[] = [];
+    const lineItemCosts: Money[] = [];
     for (const item of resolvedItems) {
-      const { unitCost } = await invTxSvc.stockOut(
-        {
+      const { unitCost } = await inventoryService.issueStock(queryableOn(client), {
           bookId: item.bookId,
           locationId: data.locationId,
           quantity: item.quantity,
           referenceType: 'sale',
           referenceId: txId,
           staffCtx,
-        },
-        client,
-      );
+        });
       lineItemCosts.push(unitCost);
     }
 
@@ -724,8 +723,7 @@ export async function voidTransaction(id: string | number, staffCtx: StaffCtx): 
       // price it actually left at and feeds it back into the moving
       // average correctly. Falls back to no cost (average left unchanged)
       // only for pre-migration sales that never had a cost persisted.
-      await invTxSvc.stockIn(
-        {
+      await inventoryService.receiveStock(queryableOn(client), {
           bookId: item.bookId,
           locationId: tx.locationId,
           quantity: item.quantity,
@@ -734,9 +732,7 @@ export async function voidTransaction(id: string | number, staffCtx: StaffCtx): 
           reasonCode: 'return',
           staffCtx,
           unitCost: item.unitCost != null && item.unitCost > 0 ? item.unitCost : undefined,
-        },
-        client,
-      );
+        });
     }
 
     if (tx.customerId) {

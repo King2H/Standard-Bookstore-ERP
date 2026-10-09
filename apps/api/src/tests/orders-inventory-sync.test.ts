@@ -15,8 +15,8 @@
  *               same transaction — both happen at confirm(), not one or the
  *               other.
  *   PAID      → financial state only (no inventory change)
- *   FULFILLED → fulfillReservation() writes a zero-delta audit row and
- *               transitions the reservation to 'deducted'; it does NOT
+ *   FULFILLED → fulfillReservations() transitions the reservation to
+ *               'deducted' and writes no stock history (#21); it does NOT
  *               deduct inventory.quantity again.
  *   COMPLETED → operational close; receivable may still be open
  *   CANCELLED → reservation released AND inventory.quantity restored via
@@ -367,7 +367,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
 
   // ── 6.9 Fulfill → stock deducted exactly once at fulfillment ────────────────
 
-  it('6.9 cash_sale: confirm deducts stock; fulfill writes a zero-delta audit row (no second deduction)', async () => {
+  it('6.9 cash_sale: confirm deducts stock; fulfill writes no stock history (no second deduction)', async () => {
     await setInventory(bookId, locationId, 20);
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
@@ -398,15 +398,13 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     // fulfill() does not deduct again — already deducted at confirm.
     expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore - 3);
 
-    // order_fulfilled row is fulfillReservation()'s zero-delta audit-trail
-    // entry; the actual -3 deduction is on the order_confirmed row.
+    // Fulfilment writes no stock history (#21): the stock left at confirm,
+    // on the order_confirmed row.
     const hist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_fulfilled' AND reference_id = $1 AND book_id = $2`,
       [orderId, bookId],
     );
-    expect(hist.rows.length).toBeGreaterThan(0);
-    expect(Number(hist.rows[0].delta)).toBe(0);
-    expect(hist.rows[0].movement_type).toBe('stock_out');
+    expect(hist.rows).toHaveLength(0);
 
     const confirmHist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_confirmed' AND reference_id = $1 AND book_id = $2`,

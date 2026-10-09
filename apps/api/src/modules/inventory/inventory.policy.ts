@@ -1,4 +1,4 @@
-import type { AdjustmentReason, LifecycleStatus } from '@bms/shared';
+import { Money, type AdjustmentReason, type LifecycleStatus } from '@bms/shared';
 import { BusinessError, ConflictError, ValidationError } from '../../lib/errors.js';
 import type { StockAlert } from './inventory.types.js';
 
@@ -47,13 +47,33 @@ export function checkAdjustmentDirection(reason: AdjustmentReason, delta: number
   }
 }
 
-/** Manual adjustments never take stock below zero. */
-export function quantityAfterAdjustment(quantity: number, delta: number): number {
+/**
+ * Stock may go below zero only when the shop allows negative stock
+ * (allow_negative_stock); then the quantity really goes negative, so a later
+ * receipt brings it back to the true count (owner decision, #21).
+ */
+export function quantityAfterAdjustment(quantity: number, delta: number, allowNegative: boolean): number {
   const after = quantity + delta;
-  if (after < 0) {
+  if (after < 0 && !allowNegative) {
     throw new BusinessError('INSUFFICIENT_STOCK', `Cannot reduce stock below 0. Current: ${quantity}, Delta: ${delta}`);
   }
   return after;
+}
+
+/** True when `quantity` units may leave a shelf that has `available`. */
+export function canIssue(available: number, quantity: number, allowNegative: boolean): boolean {
+  return allowNegative || available >= quantity;
+}
+
+/**
+ * Weighted average cost after `received` units at `unitCost` arrive on a
+ * shelf holding `quantity` units at `averageCost`.
+ * A receipt into an empty or negative shelf sets the average to its own
+ * cost: the units already sold were costed when they left.
+ */
+export function averageCostAfterReceipt(quantity: number, averageCost: Money, received: number, unitCost: Money): Money {
+  if (quantity <= 0) return unitCost.round(4);
+  return averageCost.times(quantity).plus(unitCost.times(received)).dividedBy(quantity + received).round(4);
 }
 
 /**

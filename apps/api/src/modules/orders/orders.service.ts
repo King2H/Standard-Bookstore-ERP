@@ -6,7 +6,7 @@ import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutbox, type OutboxEventType } from '../../lib/outbox.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
 import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
-import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
+import * as inventoryService from '../inventory/inventory.service.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 import * as policy from './orders.policy.js';
@@ -120,7 +120,7 @@ export async function create(
   if (!(await isNegativeStockAllowed())) {
     const locationId = data.locationId || (await orders.findBranchLocation(kysely, staffCtx.branchId)) || staffCtx.branchId;
     for (const line of lines) {
-      const stock = await invTxSvc.getAvailableStock(line.bookId, locationId);
+      const stock = await inventoryService.availableStock(kysely, line.bookId, locationId);
       if (stock.available < line.quantity) {
         const title = (await orders.findBook(kysely, line.bookId))?.title ?? `Book ${line.bookId}`;
         throw new BusinessError(
@@ -179,7 +179,7 @@ export async function confirm(
     await assertAssignedLocation(locationId, staffCtx);
     for (const item of order.lineItems ?? []) {
       await orders.lockStock(tx, item.bookId, locationId);
-      const stock = await invTxSvc.getAvailableStock(item.bookId, locationId, client);
+      const stock = await inventoryService.availableStock(tx, item.bookId, locationId);
       if (!(await isNegativeStockAllowed()) && stock.available < item.quantity) {
         const title = (await orders.findBook(tx, item.bookId))?.title ?? `Book ${item.bookId}`;
         const place = (await orders.findLocationName(tx, locationId)) ?? `Location ${locationId}`;
@@ -192,8 +192,7 @@ export async function confirm(
       await orders.insertReservation(tx, { orderId: order.id, bookId: item.bookId, locationId, quantity: item.quantity });
       // Stock leaves once, here; fulfil only records it. The line keeps the
       // average cost it left at, so its cost of goods never changes later.
-      const { unitCost } = await invTxSvc.stockOut(
-        {
+      const { unitCost } = await inventoryService.issueStock(tx, {
           bookId: item.bookId,
           locationId,
           quantity: item.quantity,
@@ -202,9 +201,7 @@ export async function confirm(
           reasonCode: 'correction',
           notes: `Order confirmation – order ${String(orderId)}`,
           staffCtx,
-        },
-        client,
-      );
+        });
       await orders.setLineUnitCost(tx, item.id, Money.of(unitCost).toFixed(2));
     }
 
@@ -289,17 +286,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
     const locationId = await stockLocation(tx, order, staffCtx);
     await assertAssignedLocation(locationId, staffCtx);
     const reserved = (order.lineItems ?? []).filter((item) => item.qtyReserved > 0);
-    if (reserved.length > 0) {
-      await invTxSvc.fulfillReservation(
-        {
-          orderId,
-          locationId,
-          lineItems: reserved.map((item) => ({ bookId: item.bookId, qtyReserved: item.qtyReserved })),
-          staffCtx,
-        },
-        client,
-      );
-    }
+    if (reserved.length > 0) await inventoryService.fulfillReservations(tx, orderId);
     for (const item of reserved) await orders.fulfillLine(tx, item.id, item.qtyReserved);
 
     const ref = { ...order, id: String(orderId) };
@@ -328,8 +315,7 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
       const locationId = await stockLocation(tx, order, staffCtx);
       for (const item of order.lineItems ?? []) {
         if (item.qtyReserved <= 0) continue;
-        await invTxSvc.stockIn(
-          {
+        await inventoryService.receiveStock(tx, {
             bookId: item.bookId,
             locationId,
             quantity: item.qtyReserved,
@@ -339,9 +325,7 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
             notes: `Order cancellation – order ${String(orderId)}`,
             staffCtx,
             unitCost: item.unitCost != null && item.unitCost > 0 ? item.unitCost : undefined,
-          },
-          client,
-        );
+          });
       }
       await orders.releaseReservations(tx, order.id);
     }

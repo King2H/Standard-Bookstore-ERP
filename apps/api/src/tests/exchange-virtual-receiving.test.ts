@@ -19,7 +19,8 @@ import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
 import { db } from '../db/index.js';
 import { getInventoryExportRowsV2, getSalesReportRows } from '../modules/reports/reports.service.js';
-import * as invTxSvc from '../modules/inventory/inventoryTransaction.service.js';
+import * as inventoryService from '../modules/inventory/inventory.service.js';
+import { withTransaction } from '../db/tx.js';
 
 const STAFF_PREFIX = 'exc_vr_test_';
 const BRANCH_PREFIX = 'Exchange VR Test ';
@@ -385,9 +386,9 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     expect(exchangeRow!.grossProfit).toBeCloseTo(-ALLOWANCE, 2);  // the full allowance is a real loss, recognized now
   });
 
-  // ── invTxSvc.stockIn() unitCost — Valuation Integrity at the shared layer ──
+  // ── inventoryService.receiveStock() unitCost — Valuation Integrity at the shared layer ──
 
-  describe('invTxSvc.stockIn() unitCost', () => {
+  describe('inventoryService.receiveStock() unitCost', () => {
     it('8. rejects a zero/negative unitCost when explicitly provided', async () => {
       const regRes = await request(getTestApp())
         .post('/api/books/quick-register')
@@ -398,15 +399,15 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
       const bookId = regRes.body.id as number;
       await db.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [bookId, locationId]);
 
-      await expect(invTxSvc.stockIn({
+      await expect(withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
         bookId, locationId, quantity: 1, unitCost: 0,
         staffCtx: { staffId: 1, role: 'Admin', branchId },
-      })).rejects.toThrow();
+      }))).rejects.toThrow();
 
-      await expect(invTxSvc.stockIn({
+      await expect(withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
         bookId, locationId, quantity: 1, unitCost: -5,
         staffCtx: { staffId: 1, role: 'Admin', branchId },
-      })).rejects.toThrow();
+      }))).rejects.toThrow();
     });
 
     it('9. a stockIn() with no unitCost (the default for every other caller) still works and leaves unit_cost NULL', async () => {
@@ -419,10 +420,10 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
       const bookId = regRes.body.id as number;
       await db.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [bookId, locationId]);
 
-      await invTxSvc.stockIn({
+      await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
         bookId, locationId, quantity: 4, referenceType: 'manual',
         staffCtx: { staffId: 1, role: 'Admin', branchId },
-      });
+      }));
 
       const histRes = await db.query(
         `SELECT unit_cost FROM inventory_history WHERE book_id = $1 AND location_id = $2 AND reference_type = 'manual'`,

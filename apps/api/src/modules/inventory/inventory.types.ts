@@ -1,4 +1,4 @@
-import type { AdjustmentReason, LifecycleStatus, MovementType } from '@bms/shared';
+import type { AdjustmentReason, LifecycleStatus, Money, MoneyInput, MovementType } from '@bms/shared';
 
 /** The signed-in staff member. */
 export interface Actor {
@@ -74,11 +74,59 @@ export interface LocationStockRecord {
   damaged: number;
 }
 
-/** The locked row a manual change starts from. */
+/** The locked row a stock change starts from. */
 export interface LockedLevel {
   quantity: number;
   version: number;
   reorderPoint: number;
+  averageCost: Money;
+}
+
+/** One inventory_history row; `unitCost` values the units moved (null when unknown). */
+export interface NewStockMovement {
+  bookId: number;
+  locationId: number;
+  qtyBefore: number;
+  qtyAfter: number;
+  movementType: MovementType;
+  reasonCode: string;
+  referenceType: string | null;
+  referenceId: number | string | null;
+  notes: string | null;
+  staffId: number;
+  unitCost: Money | null;
+}
+
+export interface BookAvailabilityRecord {
+  bookId: number;
+  locationId: number;
+  locationName: string;
+  quantity: number;
+  reserved: number;
+}
+
+/**
+ * A stock movement booked by another module (a sale, a receipt, a return)
+ * inside its own transaction. `staffCtx` is the staff member who made it.
+ */
+export interface StockChange {
+  bookId: number;
+  locationId: number;
+  quantity: number;
+  staffCtx: Actor;
+  reasonCode?: string;
+  referenceType?: string;
+  referenceId?: number | string;
+  notes?: string;
+}
+
+export interface StockReceipt extends StockChange {
+  /**
+   * What each unit cost, when known (a purchase-order line, the cost a sold
+   * unit left at). It moves the weighted average cost; a receipt without one
+   * leaves the average as it was. It must be more than zero.
+   */
+  unitCost?: MoneyInput;
 }
 
 export interface Adjustment {
