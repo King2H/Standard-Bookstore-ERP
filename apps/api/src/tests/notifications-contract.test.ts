@@ -26,7 +26,8 @@ describe('Notifications on the shared contracts', () => {
   const as = (r: request.Test, token: string) => r.set('Authorization', `Bearer ${token}`);
   const titles = (res: request.Response) =>
     res.body.data.filter((n: { eventType: string }) => n.eventType === EVENT).map((n: { title: string }) => n.title).sort();
-  const isRead = async (id: string) => (await db.query(`SELECT is_read FROM notifications WHERE id = $1`, [id])).rows[0].is_read;
+  const readers = async (id: string) =>
+    (await db.query(`SELECT staff_id FROM notification_reads WHERE notification_id = $1`, [id])).rows.length;
 
   async function cleanUp() {
     await db.query(`DELETE FROM notifications WHERE event_type = $1`, [EVENT]);
@@ -70,7 +71,7 @@ describe('Notifications on the shared contracts', () => {
   it('does not let an Admin of one branch mark another branch\'s notification read (was: marked)', async () => {
     await as(api().put(`/api/v1/notifications/${inB}/read`), adminOfA);
     await as(api().put('/api/v1/notifications/read-all'), adminOfA);
-    expect(await isRead(inB)).toBe(false);
+    expect(await readers(inB)).toBe(0);
   });
 
   it('answers 400 VALIDATION_ERROR for an id that is not a number', async () => {

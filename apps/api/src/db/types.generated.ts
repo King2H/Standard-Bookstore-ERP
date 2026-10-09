@@ -420,6 +420,12 @@ export interface Merchants {
   name: string;
 }
 
+export interface NotificationReads {
+  notification_id: Int8;
+  read_at: Generated<Timestamp>;
+  staff_id: number;
+}
+
 export interface Notifications {
   body: string;
   branch_id: number | null;
@@ -802,6 +808,7 @@ export interface DB {
   loyalty_accounts: LoyaltyAccounts;
   loyalty_history: LoyaltyHistory;
   merchants: Merchants;
+  notification_reads: NotificationReads;
   notifications: Notifications;
   order_line_items: OrderLineItems;
   order_payments: OrderPayments;
