@@ -1,5 +1,12 @@
 import type { z } from 'zod';
 import {
+  BranchLocationParamsSchema,
+  BranchLocationsParamsSchema,
+  LocationListResponseSchema,
+  LocationNameRequestSchema,
+  LocationSchema,
+  SetStaffLocationsRequestSchema,
+  StaffLocationListResponseSchema,
   BranchConfigKeyParamsSchema,
   BranchConfigListResponseSchema,
   BranchConfigParamsSchema,
@@ -75,6 +82,7 @@ export const operations: ApiOperation[] = [
     },
   },
   ...configOperations(),
+  ...locationOperations(),
   ...supplierOperations(),
   ...orderOperations(),
 ];
@@ -146,6 +154,80 @@ function configOperations(): ApiOperation[] {
       request: { params: BranchConfigKeyParamsSchema },
       responses: { 200: { description: 'Removed', schema: MessageResponseSchema } },
       errors: [400, 401, 403, 404, 500],
+    },
+  ];
+}
+
+function locationOperations(): ApiOperation[] {
+  const tag = 'Locations';
+  const inScope = 'the session branch, or any branch with access to all branches';
+  return [
+    {
+      operationId: 'listLocations',
+      method: 'get',
+      path: '/branches/{branchId}/locations',
+      summary: 'List a branch\'s locations, default first (staff with location restrictions get only theirs)',
+      tag,
+      request: { params: BranchLocationsParamsSchema },
+      responses: { 200: { description: 'The locations and the caller\'s access mode', schema: LocationListResponseSchema } },
+    },
+    {
+      operationId: 'createLocation',
+      method: 'post',
+      path: '/branches/{branchId}/locations',
+      summary: `Add a location to a branch (Super_Admin, Admin, Manager; ${inScope})`,
+      tag,
+      request: { params: BranchLocationsParamsSchema, body: LocationNameRequestSchema },
+      responses: { 201: { description: 'The new location', schema: LocationSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+    {
+      operationId: 'renameLocation',
+      method: 'put',
+      path: '/branches/{branchId}/locations/{id}',
+      summary: `Rename a location (Super_Admin, Admin, Manager; ${inScope})`,
+      tag,
+      request: { params: BranchLocationParamsSchema, body: LocationNameRequestSchema },
+      responses: { 200: { description: 'The renamed location', schema: LocationSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+    {
+      operationId: 'setDefaultLocation',
+      method: 'put',
+      path: '/branches/{branchId}/locations/{id}/set-default',
+      summary: `Make a location the branch's default for fulfilment (Super_Admin, Admin, Manager; ${inScope})`,
+      tag,
+      request: { params: BranchLocationParamsSchema },
+      responses: { 200: { description: 'The new default location', schema: LocationSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'deleteLocation',
+      method: 'delete',
+      path: '/branches/{branchId}/locations/{id}',
+      summary: `Delete a location without stock or history (Super_Admin, Admin, Manager; ${inScope})`,
+      tag,
+      request: { params: BranchLocationParamsSchema },
+      responses: { 200: { description: 'Deleted', schema: MessageResponseSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+    {
+      operationId: 'listStaffLocations',
+      method: 'get',
+      path: '/staff/{id}/locations',
+      summary: 'A staff member\'s location restrictions in every branch (Super_Admin, Admin, Manager)',
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The assigned locations', schema: StaffLocationListResponseSchema } },
+    },
+    {
+      operationId: 'setStaffLocations',
+      method: 'put',
+      path: '/staff/{id}/locations',
+      summary: 'Replace a staff member\'s location restrictions; [] lifts them. Other branches\' locations must be sent back unchanged unless the caller has access to all branches',
+      tag,
+      request: { params: IdParamsSchema, body: SetStaffLocationsRequestSchema },
+      responses: { 200: { description: 'Saved', schema: MessageResponseSchema } },
     },
   ];
 }
