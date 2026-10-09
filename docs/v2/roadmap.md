@@ -1,7 +1,7 @@
 # Bookstore ERP v2: roadmap
 
 Status: **accepted** by the owner on 2026-10-03 (issue #11); updated as work progresses
-Owner: King2H · Last updated: 2026-10-03
+Owner: King2H · Last updated: 2026-10-08
 
 This roadmap orders the v2 backlog (epics #2–#6) into milestones, from the completed
 Phase 0 to the `v2.0.0` release. Each milestone is a GitHub Milestone with the same name.
@@ -9,6 +9,9 @@ Day-to-day progress is tracked in issue #37.
 
 **How to read it**
 - Milestones are done **in order**. M6 (web app) can run in parallel from M3 onwards.
+- **Exception:** M5 (module migration) comes before M4 (tenancy), because tenancy is enforced
+  in repositories and most modules have none yet (owner decision, 2026-10-08). The
+  milestone numbers stay as they are, to match the GitHub Milestones.
 - **Dates are not fixed.** The owner can set target dates on the GitHub Milestones at any
   time. Size is given in pull requests, because every change is one reviewed PR.
 - Each milestone has **exit criteria**. It is closed only when all of them are met.
@@ -25,15 +28,15 @@ Day-to-day progress is tracked in issue #37.
 | M1 | Quality gates | #29, #30, #16, #47 | ~4 PRs | — |
 | M2 | Core infrastructure | #18, #14, #15, #17 | ~5 PRs | — |
 | M3 | Reference modules and scope | #19, #20, #12, #38 | ~5 PRs | — |
-| M4 | Tenancy | #13 | ~3 PRs | `v2.0.0-alpha.1` |
-| M5 | Module migration | #21, #22 | ~18 PRs | — |
+| M5 | Module migration | #21, #22, #66, #68, #69, #70, #72 | ~28 PRs | — |
+| M4 | Tenancy (after M5) | #13 | ~4 PRs | `v2.0.0-alpha.1` |
 | M6 | Web app | #23 | ~20 PRs (parallel from M3) | `v2.0.0-alpha.2` |
 | M7 | Productization | #24, #25, #26, #27, #28 | ~10 PRs | `v2.0.0-beta.1` |
 | M8 | Operations and release | #31, #32, #33 | ~6 PRs | `v2.0.0-rc.1` → `v2.0.0` |
 
 ```mermaid
 flowchart LR
-  M0[M0 Phase 0 ✓] --> M1[M1 Quality gates] --> M2[M2 Core infrastructure] --> M3[M3 Reference modules + scope] --> M4[M4 Tenancy] --> M5[M5 Module migration] --> M7[M7 Productization] --> M8[M8 Operations + release]
+  M0[M0 Phase 0 ✓] --> M1[M1 Quality gates] --> M2[M2 Core infrastructure] --> M3[M3 Reference modules + scope] --> M5[M5 Module migration] --> M4[M4 Tenancy] --> M7[M7 Productization] --> M8[M8 Operations + release]
   M3 --> M6[M6 Web app] --> M7
 ```
 
@@ -88,29 +91,42 @@ repeated everywhere.
 **Exit criteria:** Suppliers and Orders follow ADR-0001 fully; scope and password-change
 regression tests pass.
 
-## M4: Tenancy
+## M5: Module migration
 
-**Why after M3:** scope is enforced in repositories, so they must exist first (ADR-0003).
+One PR per module (#21), each following the Suppliers/Orders pattern (controller, service,
+policy, repository, shared contracts, OpenAPI, `Money`) and passing its existing tests. Large
+modules (inventory, catalog, procurement, auth) take two PRs. Modules go in dependency order,
+so each one builds on modules already migrated (owner decision, 2026-10-08):
+
+| Order | Modules |
+|---|---|
+| 1 | config, location, branch, audit logs, notifications, financial transactions |
+| 2 | customer, inventory, catalog |
+| 3 | receivables, payments/installments, pos, returns, procurement, exchanges |
+| 4 | auth, bank accounts |
+
+Issues found earlier get their own small PR right after the module they belong to: #72 after
+location, #66 after procurement, #68, #69 and #70 after payments and pos. Then the reports
+service is split into read-model queries (#22).
+
+**Exit criteria:** no SQL outside repositories; no service over a few hundred lines; every
+repository function takes an explicit scope, ready for tenancy (M4).
+
+## M4: Tenancy (after M5)
+
+**Why after M5:** scope is enforced in repositories, so they must exist first (ADR-0003).
+The plan and the schema decisions are recorded on #13.
 
 | Order | Issue | Outcome |
 |---|---|---|
 | 1 | #13 part 1 | `tenants` table; `tenant_id` on business tables; backfill existing data as tenant 1. |
-| 2 | #13 part 2 | Row-level security policies; application role subject to RLS; tenant set per transaction. |
-| 3 | #13 part 3 | Cross-tenant isolation tests on every refactored module. |
+| 2 | #13 part 2 | Tenant in the token and scope; tenant set for every query of a request; background workers run per tenant. |
+| 3 | #13 part 3 | Application role subject to row-level security; RLS policies; cross-tenant isolation tests; setup changes. |
+| 4 | #13 part 4 | Repositories take the tenant explicitly. |
 
 **Exit criteria:** isolation tests prove that one tenant cannot read or change another's data,
 even with an application filter removed.
 **Possible pre-release:** `v2.0.0-alpha.1` (foundation complete) if a build goes to testers.
-
-## M5: Module migration
-
-One PR per module, each passing its existing tests unchanged (#21): auth, branch, config,
-location, catalog, inventory, customer, procurement, pos, returns, payments/installments,
-receivables, exchanges, financial transactions, notifications, audit logs, bank accounts. Then
-the reports service is split into read-model queries (#22).
-
-**Exit criteria:** no SQL outside repositories; no service over a few hundred lines; all
-modules tenant-scoped.
 
 ## M6: Web app (parallel from M3)
 
