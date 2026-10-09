@@ -1,9 +1,10 @@
 import { db } from '../../db/index.js';
+import { queryableOn } from '../../db/tx.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { validateSupplierForProcurement } from '../supplier/supplier.service.js';
 import { getPOApprovalThreshold } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
-import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
+import * as inventoryService from '../inventory/inventory.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1220,8 +1221,7 @@ export async function receivePO(
       // Cost recalculation (Inventory Valuation Policy). Previously omitted
       // here entirely, which meant procurement receipts never moved
       // inventory.average_cost regardless of what price was actually paid.
-      await invTxSvc.stockIn(
-        {
+      await inventoryService.receiveStock(queryableOn(client), {
           bookId,
           locationId: effectiveLocationId,
           quantity: item.quantityReceived,
@@ -1235,9 +1235,7 @@ export async function receivePO(
           // declared param type instead of widening it for one caller.
           notes: notes ?? undefined,
           staffCtx,
-        },
-        client,
-      );
+        });
     }
 
     // 4. Insert po_receipts

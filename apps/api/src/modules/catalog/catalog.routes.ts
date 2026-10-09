@@ -6,7 +6,8 @@ import * as catalogSearchService from './catalogSearch.service.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole, requirePermission } from '../../middleware/rbac.js';
 import { ValidationError } from '../../lib/errors.js';
-import { getBookAvailability } from '../inventory/inventoryTransaction.service.js';
+import { kysely } from '../../db/kysely.js';
+import { bookAvailability } from '../inventory/inventory.service.js';
 import { paramInt } from '../../lib/http.js';
 import type { LifecycleStatus } from '../../lib/lifecycle.js';
 
@@ -181,7 +182,7 @@ router.get(
       if (locationId && catalogResult.items.length > 0) {
         const bookIds = catalogResult.items.map(b => b.id);
         try {
-          const avail = await getBookAvailability(bookIds, locationId);
+          const avail = await bookAvailability(kysely, bookIds, locationId);
           for (const a of avail) {
             availabilityMap.set(a.bookId, {
               locationId:   a.locationId,

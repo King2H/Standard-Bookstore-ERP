@@ -44,7 +44,7 @@ export async function withTransaction<T>(
   try {
     // Kysely runs BEGIN/COMMIT/ROLLBACK on this connection, and its Transaction
     // refuses a nested transaction() instead of committing the outer one early.
-    const transaction = kyselyOn(client).transaction();
+    const transaction = queryableOn(client).transaction();
     return await (ctx.isolationLevel ? transaction.setIsolationLevel(ctx.isolationLevel) : transaction)
       .execute(async (tx) => {
         if (ctx.tenantId !== undefined) {
@@ -57,8 +57,14 @@ export async function withTransaction<T>(
   }
 }
 
-/** A Kysely instance whose every query runs on one already-checked-out connection. */
-function kyselyOn(client: PoolClient): Queryable {
+/**
+ * A Kysely instance whose every query runs on one already-checked-out
+ * connection, inside whatever transaction it has open. Besides
+ * withTransaction, only v1 services that open their own transaction on a pg
+ * PoolClient use it, to call v2 functions on that same transaction; it goes
+ * as each of them moves to v2 (#21 step 3).
+ */
+export function queryableOn(client: PoolClient): Queryable {
   return new Kysely<DB>({
     dialect: new PostgresDialect({
       pool: {

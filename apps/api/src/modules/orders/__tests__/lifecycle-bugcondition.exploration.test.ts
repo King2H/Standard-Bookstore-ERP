@@ -285,20 +285,19 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
     // Current model (order-payment-unification spec, 3.5): confirm() deducts
     // inventory.quantity immediately via stockOut() AND inserts a 'reserved'
     // row, in the same transaction. fulfill() calls fulfillReservation(),
-    // which writes a delta=0 audit row and transitions the reservation to
+    // which transitions the reservation to
     // 'deducted' -- it does NOT deduct again. So:
     //   qtyAfterFulfill === qtyAfterConfirm (no double-deduction at fulfill — correct)
     //   qtyBefore - qtyAfterFulfill === the order quantity (5), deducted once, at confirm
     expect(qtyAfterFulfill).toBe(qtyAfterConfirm);
     expect(qtyBefore - qtyAfterFulfill).toBe(5);
     
-    // Verify fulfillReservation() wrote an audit row with delta=0
+    // Fulfilment writes no stock history (#21); the deduction is on the confirm row.
     const fulfillHist = await db.query(
       `SELECT delta FROM inventory_history WHERE reference_id = $1 AND reference_type = 'order_fulfilled'`,
       [order.id],
     );
-    expect(fulfillHist.rows.length).toBeGreaterThan(0);
-    expect(Number(fulfillHist.rows[0].delta)).toBe(0);
+    expect(fulfillHist.rows).toHaveLength(0);
   });
 
   // ────────────────────────────────────────────────────────────────────────────

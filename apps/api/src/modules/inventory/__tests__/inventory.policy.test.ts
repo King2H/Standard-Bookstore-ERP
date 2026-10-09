@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { Money } from '@bms/shared';
 import {
+  averageCostAfterReceipt,
+  canIssue,
   checkAdjustmentDirection,
   checkVersion,
   isActiveFilter,
@@ -53,10 +56,39 @@ describe('checkAdjustmentDirection', () => {
 });
 
 describe('quantityAfterAdjustment', () => {
-  it('adds the change, down to zero but not below', () => {
-    expect(quantityAfterAdjustment(5, 2)).toBe(7);
-    expect(quantityAfterAdjustment(5, -5)).toBe(0);
-    expect(() => quantityAfterAdjustment(5, -6)).toThrow(expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }));
+  it('adds the change, down to zero but not below while negative stock is not allowed', () => {
+    expect(quantityAfterAdjustment(5, 2, false)).toBe(7);
+    expect(quantityAfterAdjustment(5, -5, false)).toBe(0);
+    expect(() => quantityAfterAdjustment(5, -6, false)).toThrow(expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }));
+  });
+
+  it('goes below zero when negative stock is allowed, instead of stopping at zero', () => {
+    expect(quantityAfterAdjustment(5, -6, true)).toBe(-1);
+  });
+});
+
+describe('canIssue', () => {
+  it('needs enough stock unless negative stock is allowed', () => {
+    expect(canIssue(3, 3, false)).toBe(true);
+    expect(canIssue(2, 3, false)).toBe(false);
+    expect(canIssue(2, 3, true)).toBe(true);
+  });
+});
+
+describe('averageCostAfterReceipt', () => {
+  it('weighs the stock on hand and the receipt by quantity', () => {
+    // 10 at 20.00 and 30 at 40.00 -> 1400 / 40 = 35.00
+    expect(averageCostAfterReceipt(10, Money.of('20'), 30, Money.of('40')).toFixed(4)).toBe('35.0000');
+  });
+
+  it('keeps four decimals', () => {
+    // 3 at 10.00 and 4 at 11.00 -> 74 / 7 = 10.571428...
+    expect(averageCostAfterReceipt(3, Money.of('10'), 4, Money.of('11')).toFixed(4)).toBe('10.5714');
+  });
+
+  it('takes the receipt\'s cost when the shelf is empty or below zero', () => {
+    expect(averageCostAfterReceipt(0, Money.of('20'), 5, Money.of('12.5')).toFixed(4)).toBe('12.5000');
+    expect(averageCostAfterReceipt(-3, Money.of('20'), 5, Money.of('12.5')).toFixed(4)).toBe('12.5000');
   });
 });
 

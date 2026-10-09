@@ -17,7 +17,8 @@ import { cleanTestStaff, cleanTestBranches } from '../../../tests/helpers/testDb
 import { createTestStaff, createTestBranch } from '../../../tests/helpers/seed.js';
 import { db } from '../../../db/index.js';
 import { computeOrderAllowedActions } from '../orders.service.js';
-import * as invTxSvc from '../../inventory/inventoryTransaction.service.js';
+import * as inventoryService from '../../inventory/inventory.service.js';
+import { withTransaction } from '../../../db/tx.js';
 import type { Permission } from '../../../lib/permissions.js';
 
 // ── Prefixes ──────────────────────────────────────────────────────────────────
@@ -112,7 +113,6 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
   let locationId: number;
   let bookId: number;
   let bookPrice: number;
-  let staffCtx: { staffId: number; role: string; branchId: number };
 
   // Full permissions for pure-function tests
   const fullPerms: Permission[] = ['CREATE_SALE', 'PROCESS_PAYMENT', 'MANAGE_INVENTORY', 'VIEW_REPORTS'];
@@ -129,10 +129,6 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
 
     const mgr = await createTestStaff({ username: `${STAFF_PREFIX}mgr`, role: 'Manager', branchId });
     managerToken = mgr.token;
-
-    // Get the staffId from DB for direct service calls
-    const staffRow = await db.query(`SELECT id FROM staff WHERE username = $1`, [`${STAFF_PREFIX}mgr`]);
-    staffCtx = { staffId: staffRow.rows[0].id as number, role: 'Manager', branchId };
 
     locationId = await getOrCreateLocation(branchId);
     const book = await getActiveBook();
@@ -197,44 +193,29 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     expect(actions).not.toContain('confirm');
   });
 
-  // ── 15.4: fulfillReservation() writes inventory_history with delta=0, reference_type='order_fulfilled'
-  it('15.4 fulfillReservation() writes inventory_history with delta=0 and reference_type=order_fulfilled', async () => {
-    const INITIAL_QTY = 10;
-    const RESERVE_QTY = 3;
+  // ── 15.4: fulfilling writes no stock history: the stock left at confirm ──
+  it('15.4 fulfillReservations() writes no inventory_history row (was: a zero-change stock_out row with reason "return")', async () => {
+    await setInventory(bookId, locationId, 10);
 
-    await setInventory(bookId, locationId, INITIAL_QTY);
-
-    // Create a real DRAFT order to get a numeric orderId
     const createRes = await request(getTestApp())
       .post('/api/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: RESERVE_QTY }] });
+      .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 3 }] });
     expect(createRes.status).toBe(201);
     const orderId = createRes.body.id as number;
 
-    await invTxSvc.fulfillReservation({
-      orderId,
-      locationId,
-      lineItems: [{ bookId, qtyReserved: RESERVE_QTY }],
-      staffCtx,
-    });
+    await withTransaction({}, (tx) => inventoryService.fulfillReservations(tx, orderId));
 
     const histRows = await db.query(
-      `SELECT reference_type, delta, movement_type
-       FROM inventory_history
-       WHERE reference_id = $1 AND book_id = $2 AND location_id = $3`,
-      [String(orderId), bookId, locationId],
+      `SELECT 1 FROM inventory_history WHERE reference_type = 'order_fulfilled' AND reference_id = $1`,
+      [String(orderId)],
     );
-    expect(histRows.rows.length).toBeGreaterThan(0);
-    const row = histRows.rows.find((r: Record<string, unknown>) => r.reference_type === 'order_fulfilled');
-    expect(row).toBeDefined();
-    expect(Number(row!.delta)).toBe(0);
-    expect(row!.movement_type).toBe('stock_out');
+    expect(histRows.rows).toHaveLength(0);
   });
 
-  // ── 15.5: fulfillReservation() sets inventory_reservations.status='deducted' ──
-  it('15.5 fulfillReservation() sets inventory_reservations.status to deducted', async () => {
+  // ── 15.5: fulfillReservations() sets inventory_reservations.status='deducted' ──
+  it('15.5 fulfillReservations() sets inventory_reservations.status to deducted', async () => {
     // Check if inventory_reservations table exists
     const hasResTable = await db.query(
       `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='inventory_reservations' LIMIT 1`,
@@ -260,12 +241,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
       [String(orderId), bookId, locationId],
     ).catch(() => {});
 
-    await invTxSvc.fulfillReservation({
-      orderId,
-      locationId,
-      lineItems: [{ bookId, qtyReserved: 3 }],
-      staffCtx,
-    });
+    await withTransaction({}, (tx) => inventoryService.fulfillReservations(tx, orderId));
 
     const resRow = await db.query(
       `SELECT status FROM inventory_reservations WHERE order_id = $1`,
@@ -277,8 +253,8 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     }
   });
 
-  // ── 15.6: fulfillReservation() does NOT modify inventory.quantity ─────────────
-  it('15.6 fulfillReservation() does NOT modify inventory.quantity', async () => {
+  // ── 15.6: fulfillReservations() does NOT modify inventory.quantity ─────────────
+  it('15.6 fulfillReservations() does NOT modify inventory.quantity', async () => {
     const INITIAL_QTY = 15;
     await setInventory(bookId, locationId, INITIAL_QTY);
 
@@ -291,18 +267,13 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     expect(createRes.status).toBe(201);
     const orderId = createRes.body.id as number;
 
-    await invTxSvc.fulfillReservation({
-      orderId,
-      locationId,
-      lineItems: [{ bookId, qtyReserved: 5 }],
-      staffCtx,
-    });
+    await withTransaction({}, (tx) => inventoryService.fulfillReservations(tx, orderId));
 
     const qtyAfter = await getInventoryQty(bookId, locationId);
     expect(qtyAfter).toBe(INITIAL_QTY); // unchanged
   });
 
-  // ── 15.7: cancel() on CONFIRMED order calls invTxSvc.stockIn() ───────────────
+  // ── 15.7: cancel() on CONFIRMED order calls inventoryService.receiveStock() ───────────────
   // Verified by checking inventory_history for an order_cancelled stockIn row
   it('15.7 cancel() on CONFIRMED order writes inventory_history with reference_type=order_cancelled', async () => {
     const INITIAL_QTY = 10;
@@ -352,7 +323,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     expect(await getInventoryQty(bookId, locationId)).toBe(INITIAL_QTY);
   });
 
-  // ── 15.8: cancel() on DRAFT order does NOT call invTxSvc.stockIn() ────────────
+  // ── 15.8: cancel() on DRAFT order does NOT call inventoryService.receiveStock() ────────────
   // Verified by checking no inventory_history row is written for the order
   it('15.8 cancel() on DRAFT order does NOT write any inventory_history row', async () => {
     await setInventory(bookId, locationId, 10);

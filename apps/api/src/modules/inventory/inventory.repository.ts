@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
 import {
   toStockLevelRecord,
@@ -7,19 +8,19 @@ import {
   type StockMovementRow,
 } from './inventory.mapper.js';
 import type {
+  BookAvailabilityRecord,
   LocationStockRecord,
   LockedLevel,
   StockLevelFilter,
   StockLevelRecord,
   StockMovementFilter,
   StockMovementRecord,
+  NewStockMovement,
 } from './inventory.types.js';
 
 // Stock is branch-owned through its location: every list takes the branch.
-// Single rows are addressed by (book, location); the routes check that the
-// location is in the session's branch before a change.
-// Stock movements themselves (stock in, stock out, transfer) are still written
-// by inventoryTransaction.service until part 2 of the move (#21).
+// Single rows are addressed by (book, location); the routes and the services
+// that move stock check that the location is in the session's branch first.
 
 type Page = { limit: number; offset: number };
 
@@ -135,18 +136,48 @@ export async function ensureLevel(q: Queryable, bookId: number, locationId: numb
 export async function lockLevel(q: Queryable, bookId: number, locationId: number): Promise<LockedLevel | undefined> {
   const row = await q
     .selectFrom('inventory')
-    .select(['quantity', 'version', 'reorder_point'])
+    .select(['quantity', 'version', 'reorder_point', 'average_cost'])
     .where('book_id', '=', bookId)
     .where('location_id', '=', locationId)
     .forUpdate()
     .executeTakeFirst();
-  return row && { quantity: row.quantity, version: row.version, reorderPoint: row.reorder_point };
+  return (
+    row && {
+      quantity: row.quantity,
+      version: row.version,
+      reorderPoint: row.reorder_point,
+      averageCost: Money.of(row.average_cost),
+    }
+  );
 }
 
-export async function setQuantity(q: Queryable, bookId: number, locationId: number, quantity: number): Promise<void> {
+/** Locks the rows of a book at several locations, in id order so two transfers cannot deadlock. */
+export async function lockLevels(q: Queryable, bookId: number, locationIds: number[]): Promise<void> {
+  await q
+    .selectFrom('inventory')
+    .select('location_id')
+    .where('book_id', '=', bookId)
+    .where('location_id', 'in', locationIds)
+    .orderBy('location_id')
+    .forUpdate()
+    .execute();
+}
+
+/** Sets the quantity (and the average cost, when given) and bumps the version. */
+export async function updateLevel(
+  q: Queryable,
+  bookId: number,
+  locationId: number,
+  level: { quantity: number; averageCost?: Money },
+): Promise<void> {
   await q
     .updateTable('inventory')
-    .set((eb) => ({ quantity, version: eb('version', '+', 1), updated_at: sql`now()` }))
+    .set((eb) => ({
+      quantity: level.quantity,
+      ...(level.averageCost && { average_cost: level.averageCost.toFixed(4) }),
+      version: eb('version', '+', 1),
+      updated_at: sql`now()`,
+    }))
     .where('book_id', '=', bookId)
     .where('location_id', '=', locationId)
     .execute();
@@ -168,21 +199,8 @@ export async function setReorderPoint(
   return result.numUpdatedRows > 0n;
 }
 
-export async function insertAdjustment(
-  q: Queryable,
-  movement: {
-    bookId: number;
-    locationId: number;
-    qtyBefore: number;
-    qtyAfter: number;
-    delta: number;
-    reasonCode: string;
-    referenceType: string | null;
-    referenceId: number | null;
-    notes: string | null;
-    staffId: number;
-  },
-): Promise<void> {
+export async function insertMovement(q: Queryable, movement: NewStockMovement): Promise<void> {
+  const units = Math.abs(movement.qtyAfter - movement.qtyBefore);
   await q
     .insertInto('inventory_history')
     .values({
@@ -190,15 +208,52 @@ export async function insertAdjustment(
       location_id: movement.locationId,
       qty_before: movement.qtyBefore,
       qty_after: movement.qtyAfter,
-      delta: movement.delta,
+      delta: movement.qtyAfter - movement.qtyBefore,
       reason_code: movement.reasonCode,
-      movement_type: 'adjustment',
+      movement_type: movement.movementType,
       reference_type: movement.referenceType,
       reference_id: movement.referenceId === null ? null : String(movement.referenceId),
       notes: movement.notes,
       staff_id: movement.staffId,
+      unit_cost: movement.unitCost?.toFixed(2) ?? null,
+      total_cost: movement.unitCost?.times(units).toFixed(2) ?? null,
     })
     .execute();
+}
+
+/** One id shared by the two rows of a transfer, from the history's own sequence. */
+export async function nextTransferId(q: Queryable): Promise<string> {
+  const { rows } = await sql<{ id: string }>`SELECT nextval('inventory_history_id_seq')::text AS id`.execute(q);
+  return rows[0].id;
+}
+
+/** Marks an order's reservations as fulfilled; its stock left when it was confirmed. */
+export async function deductReservations(q: Queryable, orderId: number | string): Promise<void> {
+  await q
+    .updateTable('inventory_reservations')
+    .set({ status: 'deducted', updated_at: sql`now()` })
+    .where('order_id', '=', String(orderId))
+    .where('status', '=', 'reserved')
+    .execute();
+}
+
+/** Stock of several books at one location, for the sale and exchange screens. */
+export async function availability(q: Queryable, bookIds: number[], locationId: number): Promise<BookAvailabilityRecord[]> {
+  if (bookIds.length === 0) return [];
+  const rows = await q
+    .selectFrom('inventory as i')
+    .innerJoin('locations as l', 'l.id', 'i.location_id')
+    .select(['i.book_id', 'i.location_id', 'l.name as location_name', 'i.quantity', reservedUnits.as('reserved')])
+    .where('i.book_id', 'in', bookIds)
+    .where('i.location_id', '=', locationId)
+    .execute();
+  return rows.map((r) => ({
+    bookId: r.book_id,
+    locationId: r.location_id,
+    locationName: r.location_name,
+    quantity: r.quantity,
+    reserved: Number(r.reserved),
+  }));
 }
 
 function filterMovements(q: Queryable, filter: StockMovementFilter) {

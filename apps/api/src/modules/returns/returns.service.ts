@@ -1,12 +1,13 @@
 // returns.service.ts — Slice 
 import { db } from '../../db/index.js';
+import { queryableOn } from '../../db/tx.js';
 import { BusinessError, ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import {
   getReturnWindowDays, getMaxReturnValueWithoutAuth, getRefundMethodAfterWindow,
   getLoyaltyAccrualRate, getLoyaltyMinTransactionAmount,
 } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
-import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
+import * as inventoryService from '../inventory/inventory.service.js';
 import { updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 
@@ -165,8 +166,7 @@ export async function createReturn(
         // unitCost = the original sale's persisted cost (see resolvedLines
         // above) — restores at the price it actually left at, not
         // whatever the moving average happens to be today.
-        await invTxSvc.stockIn(
-          {
+        await inventoryService.receiveStock(queryableOn(client), {
             bookId: line.bookId,
             locationId,
             quantity: line.quantity,
@@ -176,9 +176,7 @@ export async function createReturn(
             notes: `Return of ${line.quantity} unit(s)`,
             staffCtx,
             unitCost: line.unitCost != null && line.unitCost > 0 ? line.unitCost : undefined,
-          },
-          client,
-        );
+          });
       } else {
         // Task 10.2: DAMAGED — increment damaged_quantity, do NOT restore sellable stock
         const invRow = await client.query(

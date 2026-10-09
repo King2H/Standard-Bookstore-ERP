@@ -5,6 +5,10 @@ import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
 import { db } from '../db/index.js';
 
+// Unpaid Orders lists orders, POS sales and receivables together, each with
+// its own table's id, so a row is identified by its id and source type.
+type UnpaidRow = { id: string; sourceType: string };
+
 const STAFF_PREFIX = 'pay_test_';
 const BRANCH_PREFIX = 'Payments Test ';
 
@@ -388,7 +392,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
       .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
     expect(res.status).toBe(200);
-    const row = res.body.items.find((i: { id: string }) => i.id === orderRes.body.id);
+    const row = res.body.items.find((i: UnpaidRow) => i.id === orderRes.body.id && i.sourceType === 'order');
     expect(row).toBeDefined();
     expect(row.sourceType).toBe('order');
   });
@@ -404,7 +408,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     const res = await request(getTestApp())
       .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
-    const row = res.body.items.find((i: { id: string }) => i.id === txRes.body.id);
+    const row = res.body.items.find((i: UnpaidRow) => i.id === txRes.body.id && i.sourceType === 'pos');
     expect(row).toBeDefined();
     expect(row.sourceType).toBe('pos');
   });
@@ -432,7 +436,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     const res = await request(getTestApp())
       .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
-    const row = res.body.items.find((i: { id: string }) => i.id === receivableId);
+    const row = res.body.items.find((i: UnpaidRow) => i.id === receivableId && i.sourceType === 'exchange_difference');
     expect(row).toBeDefined();
     expect(row.sourceType).toBe('exchange_difference');
     expect(row.orderNumber).toBe(excRes.body.exchangeReference);
@@ -463,7 +467,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     const afterCollect = await request(getTestApp())
       .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
-    expect(afterCollect.body.items.some((i: { id: string }) => i.id === receivableId)).toBe(false);
+    expect(afterCollect.body.items.some((i: UnpaidRow) => i.id === receivableId && i.sourceType === 'exchange_difference')).toBe(false);
 
     const historyRes = await request(getTestApp())
       .get(`/api/payments?pageSize=100`)
@@ -505,7 +509,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     const res = await request(getTestApp())
       .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
-    const row = res.body.items.find((i: { id: string }) => i.id === receivableId);
+    const row = res.body.items.find((i: UnpaidRow) => i.id === receivableId && i.sourceType === 'exchange_difference');
     expect(row).toBeDefined();
     expect(row.paymentStatus).toBe('partial');
     expect(Number(row.outstanding)).toBeCloseTo(60, 2);

@@ -1,9 +1,11 @@
 import { db } from '../../db/index.js';
+import { kysely } from '../../db/kysely.js';
+import { queryableOn } from '../../db/tx.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { insertOutbox } from '../../lib/outbox.js';
 import type { Permission } from '../../lib/permissions.js';
 import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
-import * as invTxSvc from '../inventory/inventoryTransaction.service.js';
+import * as inventoryService from '../inventory/inventory.service.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; permissions?: string[]; }
 
@@ -323,7 +325,7 @@ export async function createExchange(
 
   // Location is mandatory: every exchange moves physical stock (incoming
   // items restore it, outgoing items deduct it), and both the availability
-  // check and the invTxSvc.stockIn()/stockOut() calls below are silently
+  // check and the inventoryService.receiveStock()/stockOut() calls below are silently
   // skipped without one -- that silent skip (location was previously
   // optional) is what let an exchange execute with no inventory effect and
   // no stock-availability enforcement at all.
@@ -376,15 +378,15 @@ export async function createExchange(
   }
 
   // Validate outgoing items have sufficient stock — via the centralized
-  // inventoryTransaction.service.ts, not a raw query (Module 2: this call
+  // inventory.service.ts, not a raw query (Module 2: this call
   // site was reading inventory.quantity directly, bypassing the single
-  // source of truth for "available" that invTxSvc.stockOut() itself uses a
+  // source of truth for "available" that inventoryService.issueStock() itself uses a
   // few lines below; a raw duplicate of that formula is exactly the class of
   // bug that caused the reservation double-counting fix earlier this sprint).
   const locationId: number = data.locationId as number;
   if (data.outgoingItems && data.outgoingItems.length > 0) {
     for (const item of data.outgoingItems) {
-      const stock = await invTxSvc.getAvailableStock(item.bookId, locationId);
+      const stock = await inventoryService.availableStock(kysely, item.bookId, locationId);
       if (stock.available < item.quantity) {
         throw new BusinessError('INSUFFICIENT_STOCK', 'Insufficient stock for book ' + item.bookId + '. Available: ' + stock.available + ', requested: ' + item.quantity, { available: stock.available, requested: item.quantity });
       }
@@ -456,10 +458,7 @@ export async function createExchange(
       // This also feeds the assessed valuation into the Weighted Average
       // Cost recalculation (Exchange Rule: incoming items require assessed
       // valuation, included in the moving-average).
-      await invTxSvc.stockIn(
-        { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'customer_exchange', referenceId: exchangeId, reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: item.unitPrice },
-        client,
-      );
+      await inventoryService.receiveStock(queryableOn(client), { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'customer_exchange', referenceId: exchangeId, reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: item.unitPrice });
     }
 
     // Outgoing items: post at current average cost (Exchange Rule), persist
@@ -467,10 +466,7 @@ export async function createExchange(
     // cost isn't known until it hands it back.
     for (const item of data.outgoingItems ?? []) {
       // Decrease stock via centralized service — reservation-aware (Requirements 2.1, 2.13)
-      const { unitCost } = await invTxSvc.stockOut(
-        { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_out', referenceId: exchangeId, reasonCode: 'loss', notes: 'Exchange outgoing', staffCtx },
-        client,
-      );
+      const { unitCost } = await inventoryService.issueStock(queryableOn(client), { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_out', referenceId: exchangeId, reasonCode: 'loss', notes: 'Exchange outgoing', staffCtx });
       const totalPrice = parseFloat((item.unitPrice * item.quantity).toFixed(2));
       await client.query(
         'INSERT INTO exchange_outgoing_items (exchange_id, book_id, quantity, selling_unit_price, total_price, unit_cost) VALUES ($1,$2,$3,$4,$5,$6)',
@@ -820,7 +816,7 @@ export async function approveExchange(exchangeId: string | number, staffCtx: Sta
   }
 
   // Module 2: validate available stock before confirmation. Previously the
-  // only check was deep inside settleExchange()'s call to invTxSvc.stockOut(),
+  // only check was deep inside settleExchange()'s call to inventoryService.issueStock(),
   // which runs after review AND approval -- a stock shortfall (e.g. sold via
   // POS between initiation and settlement) only surfaced as a failure at the
   // very last step, discarding the review/approval work. Outgoing ('new')
@@ -828,7 +824,7 @@ export async function approveExchange(exchangeId: string | number, staffCtx: Sta
   // checked here.
   if (exchange.locationId) {
     for (const item of exchange.outgoingItems ?? []) {
-      const stock = await invTxSvc.getAvailableStock(item.bookId, exchange.locationId);
+      const stock = await inventoryService.availableStock(kysely, item.bookId, exchange.locationId);
       if (stock.available < item.quantity) {
         throw new BusinessError(
           'INSUFFICIENT_STOCK',
@@ -954,10 +950,7 @@ export async function settleExchange(
             // Virtual Exchange Receiving: restore resellable stock via
             // centralized service (Requirement 2.12), tagged and cost-based
             // the same way createExchange() does (see there for rationale).
-            await invTxSvc.stockIn(
-              { bookId, locationId, quantity: qty, referenceType: 'customer_exchange', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: parseFloat(item.unit_price as string) },
-              client,
-            );
+            await inventoryService.receiveStock(queryableOn(client), { bookId, locationId, quantity: qty, referenceType: 'customer_exchange', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: parseFloat(item.unit_price as string) });
           } else if (condition === 'damaged') {
             // Damaged items — update damaged_quantity directly (not a sellable stock movement)
             const invRes = await client.query(
@@ -982,10 +975,7 @@ export async function settleExchange(
           // Deduct outgoing item via centralized service — reservation-aware (Requirement 2.13).
           // Exchange Rule: outgoing items post at current average cost,
           // persisted on the line item permanently.
-          const { unitCost } = await invTxSvc.stockOut(
-            { bookId, locationId, quantity: qty, referenceType: 'exchange_out', referenceId: String(exchangeId), reasonCode: 'loss', notes: 'Exchange new item issued', staffCtx },
-            client,
-          );
+          const { unitCost } = await inventoryService.issueStock(queryableOn(client), { bookId, locationId, quantity: qty, referenceType: 'exchange_out', referenceId: String(exchangeId), reasonCode: 'loss', notes: 'Exchange new item issued', staffCtx });
           await client.query('UPDATE exchange_items SET unit_cost = $1 WHERE id = $2', [unitCost.toFixed(2), item.id]);
         }
       }

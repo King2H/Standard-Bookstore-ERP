@@ -309,15 +309,13 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
       .set('X-Branch-Id', String(branchId));
     expect(orderCheck.body.status).toBe('COMPLETED');
 
-    // order_fulfilled row is fulfillReservation()'s zero-delta audit trail
-    // entry; the actual -4 deduction is on the order_confirmed row.
+    // Fulfilment writes no stock history (#21): the stock left at confirm,
+    // on the order_confirmed row.
     const hist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_fulfilled' AND reference_id = $1`,
       [order.id],
     );
-    expect(hist.rows.length).toBeGreaterThan(0);
-    expect(Number(hist.rows[0].delta)).toBe(0);
-    expect(hist.rows[0].movement_type).toBe('stock_out');
+    expect(hist.rows).toHaveLength(0);
 
     const confirmHist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_confirmed' AND reference_id = $1`,

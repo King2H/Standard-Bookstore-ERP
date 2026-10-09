@@ -15,8 +15,8 @@
  *               same transaction â€” both happen at confirm(), not one or the
  *               other. For cash_sale, payment_status is also set to 'paid'.
  *   PAID      â†’ financial state only (no inventory change)
- *   FULFILLED â†’ fulfillReservation() writes a zero-delta audit row and
- *               transitions the reservation to 'deducted'; it does NOT
+ *   FULFILLED â†’ fulfillReservations() transitions the reservation to
+ *               'deducted' and writes no stock history (#21); it does NOT
  *               deduct inventory.quantity again.
  *   COMPLETED â†’ auto after fulfill; operational close
  *   CANCELLED â†’ reservation released AND inventory.quantity restored via
@@ -314,15 +314,13 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore - 4);
     expect(fulfillRes.body.status).toBe('COMPLETED');
 
-    // order_fulfilled row is fulfillReservation()'s zero-delta audit trail
-    // entry; the actual -4 deduction is on the order_confirmed row.
+    // Fulfilment writes no stock history (#21): the stock left at confirm,
+    // on the order_confirmed row.
     const hist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_fulfilled' AND reference_id = $1`,
       [order.id],
     );
-    expect(hist.rows.length).toBeGreaterThan(0);
-    expect(Number(hist.rows[0].delta)).toBe(0);
-    expect(hist.rows[0].movement_type).toBe('stock_out');
+    expect(hist.rows).toHaveLength(0);
 
     const confirmHist = await db.query(
       `SELECT * FROM inventory_history WHERE reference_type = 'order_confirmed' AND reference_id = $1`,
@@ -516,13 +514,13 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     await fulfillOrder(managerToken, branchId, order.id);
     expect(await getInventoryQty(bookId, locationId)).toBe(qtyStart - 3); // fulfill doesn't deduct again
 
-    // Two stock_out rows exist: the -3 deduction at order_confirmed, and the
-    // zero-delta fulfillReservation() audit entry at order_fulfilled.
+    // One stock_out row: the -3 deduction at order_confirmed. Fulfilment
+    // writes no stock history (#21).
     const hist = await db.query(
       `SELECT COUNT(*) AS cnt FROM inventory_history WHERE reference_id = $1 AND movement_type = 'stock_out'`,
       [order.id],
     );
-    expect(Number(hist.rows[0].cnt)).toBe(2);
+    expect(Number(hist.rows[0].cnt)).toBe(1);
   });
 
   // â”€â”€ 15. Concurrent confirmations cannot oversell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -771,15 +769,13 @@ describe('Order Lifecycle — credit_sale paths', () => {
     expect(await qty()).toBe(qtyStart - 3); // fulfill doesn't deduct again -- already deducted at confirm
     expect(await reserved()).toBe(0);       // reservation consumed
 
-    // order_fulfilled row is fulfillReservation()'s zero-delta audit trail
-    // entry; the actual -3 deduction is on the order_confirmed row.
+    // Fulfilment writes no stock history (#21): the stock left at confirm,
+    // on the order_confirmed row.
     const hist = await db.query(
       `SELECT movement_type, delta FROM inventory_history WHERE reference_type = 'order_fulfilled' AND reference_id = $1`,
       [order.id],
     );
-    expect(hist.rows.length).toBeGreaterThan(0);
-    expect(hist.rows[0].movement_type).toBe('stock_out');
-    expect(Number(hist.rows[0].delta)).toBe(0);
+    expect(hist.rows).toHaveLength(0);
 
     const confirmHist = await db.query(
       `SELECT movement_type, delta FROM inventory_history WHERE reference_type = 'order_confirmed' AND reference_id = $1`,
@@ -925,14 +921,13 @@ describe('Order Lifecycle — credit_sale paths', () => {
     await confirm(order.id);
     await fulfill(order.id);
 
-    // Two stock_out rows exist: the -3 deduction at order_confirmed, and the
-    // zero-delta fulfillReservation() audit entry at order_fulfilled -- but
-    // the physical deduction happens exactly once (at confirm).
+    // One stock_out row: the deduction happens exactly once, at confirm, and
+    // fulfilment writes no stock history (#21).
     const hist = await db.query(
       `SELECT COUNT(*)::int AS cnt FROM inventory_history WHERE reference_id = $1 AND movement_type = 'stock_out'`,
       [order.id],
     );
-    expect(Number(hist.rows[0].cnt)).toBe(2);
+    expect(Number(hist.rows[0].cnt)).toBe(1);
 
     const nonZeroHist = await db.query(
       `SELECT COUNT(*)::int AS cnt FROM inventory_history WHERE reference_id = $1 AND movement_type = 'stock_out' AND delta <> 0`,

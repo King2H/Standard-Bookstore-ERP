@@ -7,6 +7,7 @@
  *   await insertOutbox(client, 'TransactionCompleted', { transactionId, customerId, subtotal });
  */
 import type { PoolClient } from 'pg';
+import type { Queryable } from '../db/tx.js';
 
 export type OutboxEventType =
   // ── Legacy / existing ────────────────────────────────────────────────────
@@ -103,4 +104,13 @@ export async function insertOutbox(
     }
     throw err;
   }
+}
+
+/** insertOutbox for v2 code: the event commits or rolls back with the caller's transaction. */
+export async function insertOutboxEvent(
+  q: Queryable,
+  eventType: OutboxEventType,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await q.insertInto('outbox').values({ event_type: eventType, payload: JSON.stringify(payload), status: 'pending' }).execute();
 }
