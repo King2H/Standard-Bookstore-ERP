@@ -1,285 +1,135 @@
-import { db } from '../../db/index.js';
-import { NotFoundError, ConflictError } from '../../lib/errors.js';
+import type { LocationAccessMode } from '@bms/shared';
+import { kysely } from '../../db/kysely.js';
+import { isUniqueViolation } from '../../db/errors.js';
+import { withTransaction, type Queryable } from '../../db/tx.js';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
+import { insertAuditEntry } from '../audit/audit.repository.js';
+import * as policy from './location.policy.js';
+import * as locations from './location.repository.js';
+import type { Actor, LocationRecord, StaffLocationRecord } from './location.types.js';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+/** Use cases of the Locations module (A4): one function each, owning its transaction. */
 
-export interface Location {
-  id: number;
-  branchId: number;
-  name: string;
-  isDefaultFulfillment: boolean;
-  createdAt: string;
+type Staff = Pick<Actor, 'staffId' | 'role' | 'branchId'>;
+
+function audit(q: Queryable, actor: Staff, action: string, entityType: string, entityId: number, branchId: number, meta: Record<string, unknown>) {
+  return insertAuditEntry(q, { staffId: actor.staffId, staffRole: actor.role, branchId, action, entityType, entityId, meta });
 }
 
-export interface StaffCtx {
-  staffId: number;
-  role: string;
-  branchId: number;
+async function getOrThrow(q: Queryable, branchId: number, id: number): Promise<LocationRecord> {
+  const location = await locations.findInBranch(q, branchId, id);
+  if (!location) throw new NotFoundError('Location');
+  return location;
 }
 
-// ── Row mapper ────────────────────────────────────────────────────────────────
-
-function mapRow(row: Record<string, unknown>): Location {
-  return {
-    id: row.id as number,
-    branchId: row.branch_id as number,
-    name: row.name as string,
-    isDefaultFulfillment: row.is_default_fulfillment as boolean,
-    createdAt: (row.created_at as Date).toISOString(),
-  };
+function duplicateName(err: unknown, name: string): never {
+  if (isUniqueViolation(err)) {
+    throw new ConflictError('DUPLICATE_LOCATION_NAME', `Location '${name}' already exists in this branch`);
+  }
+  throw err;
 }
 
-// ── List ──────────────────────────────────────────────────────────────────────
+// ── A branch's locations ──────────────────────────────────────────────────────
 
-export async function listLocations(branchId: number): Promise<Location[]> {
-  const result = await db.query(
-    `SELECT id, branch_id, name, is_default_fulfillment, created_at
-     FROM locations
-     WHERE branch_id = $1
-     ORDER BY is_default_fulfillment DESC, name ASC`,
-    [branchId],
-  );
-  return result.rows.map(mapRow);
-}
-
-// ── Create ────────────────────────────────────────────────────────────────────
-
-export async function createLocation(
+/**
+ * The branch's locations as the actor may use them: all of them for roles that
+ * manage locations and for staff without assignments; otherwise only the
+ * assigned ones.
+ */
+export async function listLocations(
+  actor: Staff,
   branchId: number,
-  name: string,
-  staffCtx: StaffCtx,
-): Promise<Location> {
-  // Validate branch is active
-  const branchCheck = await db.query(
-    `SELECT id FROM branches WHERE id = $1 AND is_active = true`,
-    [branchId],
-  );
-  if (branchCheck.rows.length === 0) {
-    throw new NotFoundError('Branch');
+): Promise<{ items: LocationRecord[]; accessMode: LocationAccessMode }> {
+  if (!policy.hasFullLocationAccess(actor.role)) {
+    const assigned = await locations.listAssignedInBranch(kysely, actor.staffId, branchId);
+    if (assigned.length > 0) return { items: assigned, accessMode: 'restricted' };
   }
+  return { items: await locations.listByBranch(kysely, branchId), accessMode: 'full' };
+}
 
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
+export async function createLocation(actor: Staff, branchId: number, name: string): Promise<LocationRecord> {
+  if (!(await locations.isBranchActive(kysely, branchId))) throw new NotFoundError('Branch');
 
-    let result;
-    try {
-      result = await client.query(
-        `INSERT INTO locations (branch_id, name, is_default_fulfillment)
-         VALUES ($1, $2, false)
-         RETURNING id, branch_id, name, is_default_fulfillment, created_at`,
-        [branchId, name],
-      );
-    } catch (err: unknown) {
-      if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('DUPLICATE_LOCATION_NAME', `Location '${name}' already exists in this branch`);
-      }
-      throw err;
-    }
-
-    const location = mapRow(result.rows[0]);
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1, $2, 'CREATE', 'location', $3, $4, $5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(location.id),
-        branchId,
-        JSON.stringify({ name }),
-      ],
-    );
-
-    await client.query('COMMIT');
+  return withTransaction({}, async (tx) => {
+    const location = await locations.insert(tx, branchId, name).catch((err) => duplicateName(err, name));
+    await audit(tx, actor, 'CREATE', 'location', location.id, branchId, { name });
     return location;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
+  });
+}
+
+export async function renameLocation(actor: Staff, branchId: number, id: number, name: string): Promise<LocationRecord> {
+  return withTransaction({}, async (tx) => {
+    const existing = await getOrThrow(tx, branchId, id);
+    const location = await locations.rename(tx, branchId, id, name).catch((err) => duplicateName(err, name));
+    await audit(tx, actor, 'UPDATE', 'location', id, branchId, { oldName: existing.name, newName: name });
+    return location;
+  });
+}
+
+export async function setDefaultLocation(actor: Staff, branchId: number, id: number): Promise<LocationRecord> {
+  return withTransaction({}, async (tx) => {
+    await getOrThrow(tx, branchId, id);
+    const location = await locations.makeDefault(tx, branchId, id);
+    await audit(tx, actor, 'UPDATE', 'location', id, branchId, { action: 'set_default' });
+    return location;
+  });
+}
+
+export async function deleteLocation(actor: Staff, branchId: number, id: number): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    const existing = await getOrThrow(tx, branchId, id);
+    policy.checkDeletable(await locations.countStockLines(tx, id), await locations.historyOf(tx, id));
+    await locations.remove(tx, branchId, id);
+    await audit(tx, actor, 'DELETE', 'location', id, branchId, { name: existing.name });
+  });
+}
+
+// ── Staff location restrictions ───────────────────────────────────────────────
+
+/** Locations the staff member may use in their session branch: their assigned ones, or all when they have none. */
+export async function getAccessibleLocations(staff: Staff): Promise<LocationRecord[]> {
+  const assigned = await locations.listAssignedInBranch(kysely, staff.staffId, staff.branchId);
+  return assigned.length > 0 ? assigned : locations.listByBranch(kysely, staff.branchId);
+}
+
+/**
+ * Throws unless the staff member may use the location: it must be in their
+ * session branch (403) and, if they have assignments there, one of them (403).
+ */
+export async function assertLocationAccess(locationId: number, staff: Staff): Promise<void> {
+  const branchId = (await locations.branchesOf(kysely, [locationId])).get(locationId);
+  if (branchId === undefined) throw new NotFoundError('Location');
+  if (branchId !== staff.branchId) throw new ForbiddenError('Location does not belong to your current branch');
+
+  const assigned = await locations.listAssignedInBranch(kysely, staff.staffId, branchId);
+  if (assigned.length > 0 && !assigned.some((l) => l.id === locationId)) {
+    throw new ForbiddenError('You do not have access to this location');
   }
 }
 
-// ── Rename ────────────────────────────────────────────────────────────────────
-
-export async function renameLocation(
-  id: number,
-  name: string,
-  staffCtx: StaffCtx,
-): Promise<Location> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    const existing = await client.query(
-      `SELECT id, branch_id, name FROM locations WHERE id = $1`,
-      [id],
-    );
-    if (existing.rows.length === 0) throw new NotFoundError('Location');
-
-    const branchId: number = existing.rows[0].branch_id;
-    const oldName: string = existing.rows[0].name;
-
-    let result;
-    try {
-      result = await client.query(
-        `UPDATE locations SET name = $1 WHERE id = $2
-         RETURNING id, branch_id, name, is_default_fulfillment, created_at`,
-        [name, id],
-      );
-    } catch (err: unknown) {
-      if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('DUPLICATE_LOCATION_NAME', `Location '${name}' already exists in this branch`);
-      }
-      throw err;
-    }
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1, $2, 'UPDATE', 'location', $3, $4, $5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(id),
-        branchId,
-        JSON.stringify({ oldName, newName: name }),
-      ],
-    );
-
-    await client.query('COMMIT');
-    return mapRow(result.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+/** The staff member's assignments in every branch; empty means no restrictions. */
+export async function getStaffLocations(actor: Actor, staffId: number): Promise<StaffLocationRecord[]> {
+  policy.checkCanManageStaff(actor, await locations.staffBranches(kysely, staffId));
+  return locations.listAssignments(kysely, staffId);
 }
 
-// ── Set Default ───────────────────────────────────────────────────────────────
-// Atomically clears all defaults for the branch, then sets the target as default.
-// The partial unique index enforces at most one default at the DB level.
+/**
+ * Replaces the staff member's assignments in the branches the actor manages;
+ * `[]` lifts them. Other branches' assignments must be sent back unchanged.
+ */
+export async function setStaffLocations(actor: Actor, staffId: number, locationIds: number[]): Promise<void> {
+  const targetBranches = await locations.staffBranches(kysely, staffId);
+  policy.checkCanManageStaff(actor, targetBranches);
 
-export async function setDefaultLocation(id: number, staffCtx: StaffCtx): Promise<Location> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
+  await withTransaction({}, async (tx) => {
+    const current = await locations.listAssignments(tx, staffId);
+    const locationBranch = await locations.branchesOf(tx, locationIds);
+    policy.checkStaffLocationChange(actor, locationIds, locationBranch, targetBranches, current);
 
-    const existing = await client.query(
-      `SELECT id, branch_id FROM locations WHERE id = $1`,
-      [id],
-    );
-    if (existing.rows.length === 0) throw new NotFoundError('Location');
-
-    const branchId: number = existing.rows[0].branch_id;
-
-    // Clear all defaults for this branch first
-    await client.query(
-      `UPDATE locations SET is_default_fulfillment = false WHERE branch_id = $1`,
-      [branchId],
-    );
-
-    // Set the target as default
-    const result = await client.query(
-      `UPDATE locations SET is_default_fulfillment = true WHERE id = $1
-       RETURNING id, branch_id, name, is_default_fulfillment, created_at`,
-      [id],
-    );
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1, $2, 'UPDATE', 'location', $3, $4, $5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(id),
-        branchId,
-        JSON.stringify({ action: 'set_default' }),
-      ],
-    );
-
-    await client.query('COMMIT');
-    return mapRow(result.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── Delete ────────────────────────────────────────────────────────────────────
-
-export async function deleteLocation(id: number, staffCtx: StaffCtx): Promise<void> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    const existing = await client.query(
-      `SELECT id, branch_id, name FROM locations WHERE id = $1`,
-      [id],
-    );
-    if (existing.rows.length === 0) throw new NotFoundError('Location');
-
-    const branchId: number = existing.rows[0].branch_id;
-    const name: string = existing.rows[0].name;
-
-    // Dependency check: inventory
-    const inventoryCheck = await client.query(
-      `SELECT COUNT(*) FROM inventory WHERE location_id = $1 AND quantity > 0`,
-      [id],
-    );
-    if (parseInt(inventoryCheck.rows[0].count, 10) > 0) {
-      throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: inventory items exist', {
-        blockingDependencies: [{ type: 'inventory', count: parseInt(inventoryCheck.rows[0].count, 10) }],
-      });
-    }
-
-    // Dependency check: history. These tables reference the location without
-    // ON DELETE, so the database refuses the delete while any such row exists,
-    // whatever its status. Report them as a 409 instead of failing with a 500.
-    const history = await client.query(
-      `SELECT type, count FROM (VALUES
-         ('orders',            (SELECT COUNT(*) FROM orders WHERE location_id = $1)),
-         ('pos_transactions',  (SELECT COUNT(*) FROM transactions WHERE location_id = $1)),
-         ('exchanges',         (SELECT COUNT(*) FROM exchanges WHERE location_id = $1)),
-         ('purchase_orders',   (SELECT COUNT(*) FROM purchase_orders WHERE receiving_location_id = $1)),
-         ('po_receipts',       (SELECT COUNT(*) FROM po_receipts WHERE location_id = $1)),
-         ('inventory_history', (SELECT COUNT(*) FROM inventory_history WHERE location_id = $1)),
-         ('reservations',      (SELECT COUNT(*) FROM inventory_reservations WHERE location_id = $1))
-       ) AS h(type, count)
-       WHERE count > 0`,
-      [id],
-    );
-    if (history.rows.length > 0) {
-      throw new ConflictError('DEPENDENCY_CONFLICT', 'Cannot delete location: it has transaction history', {
-        blockingDependencies: history.rows.map((r: { type: string; count: string }) => ({
-          type: r.type,
-          count: parseInt(r.count, 10),
-        })),
-      });
-    }
-
-    await client.query(`DELETE FROM locations WHERE id = $1`, [id]);
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1, $2, 'DELETE', 'location', $3, $4, $5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(id),
-        branchId,
-        JSON.stringify({ name }),
-      ],
-    );
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    await locations.replaceAssignments(tx, staffId, policy.manageableBranches(actor), locationIds);
+    await audit(tx, actor, 'UPDATE', 'staff_locations', staffId, actor.branchId, {
+      action: locationIds.length === 0 ? 'clear_location_restrictions' : 'set_location_restrictions',
+      locationIds,
+    });
+  });
 }

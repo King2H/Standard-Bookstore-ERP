@@ -163,7 +163,7 @@ describe('Location Access Control', () => {
     // Ensure no assignments
     await cleanStaffLocations(restrictedStaffId);
 
-    const { assertLocationAccess } = await import('../modules/location/locationAccess.service.js');
+    const { assertLocationAccess } = await import('../modules/location/location.service.js');
     const staffCtx = { staffId: restrictedStaffId, role: 'Stock_Clerk', branchId };
 
     // Both locations in the branch should be accessible
@@ -178,7 +178,7 @@ describe('Location Access Control', () => {
       [restrictedStaffId, locAId],
     );
 
-    const { assertLocationAccess } = await import('../modules/location/locationAccess.service.js');
+    const { assertLocationAccess } = await import('../modules/location/location.service.js');
     const staffCtx = { staffId: restrictedStaffId, role: 'Stock_Clerk', branchId };
 
     // locA — allowed
@@ -195,7 +195,7 @@ describe('Location Access Control', () => {
   });
 
   it('cross-branch location access is always blocked', async () => {
-    const { assertLocationAccess } = await import('../modules/location/locationAccess.service.js');
+    const { assertLocationAccess } = await import('../modules/location/location.service.js');
     const staffCtx = { staffId: restrictedStaffId, role: 'Stock_Clerk', branchId };
 
     await expect(assertLocationAccess(otherBranchLocId, staffCtx)).rejects.toMatchObject({
@@ -209,7 +209,7 @@ describe('Location Access Control', () => {
   it('getAccessibleLocations returns all branch locations in fallback mode', async () => {
     await cleanStaffLocations(restrictedStaffId);
 
-    const { getAccessibleLocations } = await import('../modules/location/locationAccess.service.js');
+    const { getAccessibleLocations } = await import('../modules/location/location.service.js');
     const staffCtx = { staffId: restrictedStaffId, role: 'Stock_Clerk', branchId };
 
     const locations = await getAccessibleLocations(staffCtx);
@@ -224,7 +224,7 @@ describe('Location Access Control', () => {
       [restrictedStaffId, locAId],
     );
 
-    const { getAccessibleLocations } = await import('../modules/location/locationAccess.service.js');
+    const { getAccessibleLocations } = await import('../modules/location/location.service.js');
     const staffCtx = { staffId: restrictedStaffId, role: 'Stock_Clerk', branchId };
 
     const locations = await getAccessibleLocations(staffCtx);

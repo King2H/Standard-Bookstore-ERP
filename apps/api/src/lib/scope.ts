@@ -1,5 +1,6 @@
 import type { Request } from 'express';
-import { db } from '../db/index.js';
+import { kysely } from '../db/kysely.js';
+import { branchesOf } from '../modules/location/location.repository.js';
 import { BranchAccessError, NotFoundError } from './errors.js';
 
 /**
@@ -87,9 +88,9 @@ export function checkRecordBranch(req: Request, branches: number[], access: Reco
 export async function assertLocationInBranch(req: Request, locationId: number | null | undefined): Promise<void> {
   if (locationId === null || locationId === undefined) return;
   const scope = scopeOf(req);
-  const { rows } = await db.query<{ branch_id: number }>('SELECT branch_id FROM locations WHERE id = $1', [locationId]);
-  if (!rows.length) throw new NotFoundError('Location');
-  if (rows[0].branch_id !== scope.branchId) throw new BranchAccessError(rows[0].branch_id);
+  const branchId = (await branchesOf(kysely, [locationId])).get(locationId);
+  if (branchId === undefined) throw new NotFoundError('Location');
+  if (branchId !== scope.branchId) throw new BranchAccessError(branchId);
 }
 
 /**
