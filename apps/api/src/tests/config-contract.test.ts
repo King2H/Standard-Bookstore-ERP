@@ -28,7 +28,10 @@ describe('Configuration on the shared contracts', () => {
     await cleanTestStaff(STAFF_PREFIX);
     await cleanTestBranches(BRANCH_PREFIX);
     branchId = (await createTestBranch({ name: `${BRANCH_PREFIX}Branch` })).branchId;
-    superAdmin = (await createTestStaff({ username: `${STAFF_PREFIX}sa`, role: 'Super_Admin', branchId })).token;
+    const sa = await createTestStaff({ username: `${STAFF_PREFIX}sa`, role: 'Super_Admin', branchId });
+    // Access to all branches, so a branch that does not exist gets past the scope check (#77) to 404.
+    await db.query(`UPDATE staff SET is_all_branches = true WHERE id = $1`, [sa.staffId]);
+    superAdmin = sa.token;
   });
 
   afterAll(async () => {
