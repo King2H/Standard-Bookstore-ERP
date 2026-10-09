@@ -24,6 +24,10 @@ export default async function setup(): Promise<void> {
     await admin.end();
   }
 
+  // Migrations that encrypt data (1700000052) need the key the tests use;
+  // vitest.config.ts gives the workers the same default.
+  process.env.COLUMN_ENCRYPTION_KEY ||= '0000000000000000000000000000000000000000000000000000000000000001';
+
   await runner({
     databaseUrl: testUrl,
     dir: resolve(__dirname, '../db/migrations'),

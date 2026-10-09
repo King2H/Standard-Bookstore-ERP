@@ -42,15 +42,15 @@ function audit(q: Queryable, actor: Actor, action: string, entityType: string, e
   });
 }
 
-/** How a phone or email is stored: plain (until #90), encrypted, and as a lookup hash. */
+/** How a phone or email is stored: encrypted, with a lookup hash; never in plain text (#90). */
 function stored(value: string | null | undefined): StoredContact {
   const plain = value?.trim() || null;
-  return { plain, encrypted: encryptPii(plain), lookup: piiLookupHash(plain) };
+  return { encrypted: encryptPii(plain), lookup: piiLookupHash(plain) };
 }
 
 async function checkContactFree(q: Queryable, field: 'phone' | 'email', contact: StoredContact, exceptId?: number) {
-  if (!contact.plain) return;
-  if (await customers.findContactOwner(q, field, { plain: contact.plain, lookup: contact.lookup }, exceptId)) {
+  if (!contact.lookup) return;
+  if (await customers.findContactOwner(q, field, contact.lookup, exceptId)) {
     throw new ConflictError('DUPLICATE_CONTACT', `${field === 'phone' ? 'Phone number' : 'Email address'} already in use`, {
       field,
     });
@@ -132,7 +132,7 @@ export async function updateCustomer(actor: Actor, id: number, dto: UpdateCustom
       branchId: dto.branchId,
       updatedBy: actor.staffId,
     });
-    // Field names only: phone and email must not reach the audit log in plain text (#90).
+    // Field names only: phone and email never reach the audit log in plain text (#90).
     await audit(tx, actor, 'UPDATE', 'customer', id, { fields: Object.keys(dto) });
     return getOrThrow(tx, id);
   });

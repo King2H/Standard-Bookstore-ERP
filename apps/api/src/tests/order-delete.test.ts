@@ -49,8 +49,8 @@ describe('Order delete (Module 9)', () => {
     );
 
     const custRes = await db.query(
-      `INSERT INTO customers (branch_id, customer_code, full_name, phone, is_active, created_at)
-       VALUES ($1, 'DELCUS-001', 'Delete Test Customer', '555-7777', true, now())
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
+       VALUES ($1, 'DELCUS-001', 'Delete Test Customer', true, now())
        ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [branchId],

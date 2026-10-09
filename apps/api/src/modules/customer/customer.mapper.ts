@@ -19,9 +19,7 @@ export interface CustomerRow {
   branch_id: number | null;
   customer_code: string;
   full_name: string;
-  phone: string | null;
   phone_encrypted: string | null;
-  email: string | null;
   email_encrypted: string | null;
   gender: string | null;
   date_of_birth: Date | string | null;
@@ -42,15 +40,14 @@ function dateOnly(value: Date | string | null): string | null {
   return value instanceof Date ? value.toISOString().split('T')[0] : String(value);
 }
 
-// The decrypted copy wins over the plain column, which goes away with #90.
 export function toCustomerRecord(row: CustomerRow, groups: CustomerGroupRef[]): CustomerRecord {
   return {
     id: row.id,
     branchId: row.branch_id,
     customerCode: row.customer_code,
     fullName: row.full_name,
-    phone: row.phone_encrypted ? decryptPii(row.phone_encrypted) : row.phone,
-    email: row.email_encrypted ? decryptPii(row.email_encrypted) : row.email,
+    phone: decryptPii(row.phone_encrypted),
+    email: decryptPii(row.email_encrypted),
     gender: row.gender,
     dateOfBirth: dateOnly(row.date_of_birth),
     address: row.address,

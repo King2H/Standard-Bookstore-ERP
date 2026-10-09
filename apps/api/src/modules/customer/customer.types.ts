@@ -45,9 +45,8 @@ export interface CustomerFilter {
   groupId?: number;
 }
 
-/** Contact details as stored: the plain value (until #90), its encrypted copy and its lookup hash. */
+/** A phone or email as stored: encrypted, with a lookup hash for exact search (#90). */
 export interface StoredContact {
-  plain: string | null;
   encrypted: string | null;
   lookup: string | null;
 }

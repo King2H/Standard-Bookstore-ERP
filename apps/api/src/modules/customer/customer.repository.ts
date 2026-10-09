@@ -27,9 +27,7 @@ function selectCustomers(q: Queryable) {
       'c.branch_id',
       'c.customer_code',
       'c.full_name',
-      'c.phone',
       'c.phone_encrypted',
-      'c.email',
       'c.email_encrypted',
       'c.gender',
       'c.date_of_birth',
@@ -93,12 +91,12 @@ export async function list(
 ): Promise<{ items: CustomerRecord[]; total: number }> {
   let query = selectCustomers(q);
   if (filter.q) {
+    // Name and code match in part; phone and email are encrypted, so they
+    // match only exactly, through their lookup hash (#90).
     const like = `%${filter.q}%`;
     query = query.where((eb) =>
       eb.or([
         eb('c.full_name', 'ilike', like),
-        eb('c.phone', 'ilike', like),
-        eb('c.email', 'ilike', like),
         eb('c.customer_code', 'ilike', like),
         ...(filter.qLookup ? [eb('c.phone_lookup', '=', filter.qLookup), eb('c.email_lookup', '=', filter.qLookup)] : []),
       ]),
@@ -127,23 +125,17 @@ export async function list(
   return { items: await withGroups(q, rows as CustomerRow[]), total: Number(count.count) };
 }
 
-/** Another customer already using this phone or email (by lookup hash, or plain value until #90). */
+/** Another customer already using this phone or email, found by its lookup hash. */
 export async function findContactOwner(
   q: Queryable,
   field: 'phone' | 'email',
-  contact: { plain: string; lookup: string | null },
+  lookup: string,
   exceptId?: number,
 ): Promise<number | undefined> {
-  const lookupColumn = field === 'phone' ? 'phone_lookup' : 'email_lookup';
   let query = q
     .selectFrom('customers')
     .select('id')
-    .where((eb) =>
-      eb.or([
-        ...(contact.lookup ? [eb(lookupColumn, '=', contact.lookup)] : []),
-        eb(field, '=', contact.plain),
-      ]),
-    );
+    .where(field === 'phone' ? 'phone_lookup' : 'email_lookup', '=', lookup);
   if (exceptId !== undefined) query = query.where('id', '!=', exceptId);
   return (await query.executeTakeFirst())?.id;
 }
@@ -166,10 +158,8 @@ export async function insert(q: Queryable, c: NewCustomer): Promise<number> {
       branch_id: c.branchId,
       customer_code: c.customerCode,
       full_name: c.fullName,
-      phone: c.phone.plain,
       phone_encrypted: c.phone.encrypted,
       phone_lookup: c.phone.lookup,
-      email: c.email.plain,
       email_encrypted: c.email.encrypted,
       email_lookup: c.email.lookup,
       gender: c.gender,
@@ -192,12 +182,10 @@ export async function update(q: Queryable, id: number, ch: CustomerChanges): Pro
     .set({
       ...(ch.fullName !== undefined && { full_name: ch.fullName }),
       ...(ch.phone !== undefined && {
-        phone: ch.phone.plain,
         phone_encrypted: ch.phone.encrypted,
         phone_lookup: ch.phone.lookup,
       }),
       ...(ch.email !== undefined && {
-        email: ch.email.plain,
         email_encrypted: ch.email.encrypted,
         email_lookup: ch.email.lookup,
       }),
