@@ -88,7 +88,7 @@ describe('Inventory', () => {
 
   it('Any authenticated role can list inventory', async () => {
     const res = await request(getTestApp())
-      .get('/api/inventory')
+      .get('/api/v1/inventory')
       .set('Authorization', `Bearer ${salesToken}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.items)).toBe(true);
@@ -96,13 +96,13 @@ describe('Inventory', () => {
   });
 
   it('Unauthenticated request returns 401', async () => {
-    const res = await request(getTestApp()).get('/api/inventory');
+    const res = await request(getTestApp()).get('/api/v1/inventory');
     expect(res.status).toBe(401);
   });
 
   it('Filter by locationId returns only that location', async () => {
     const res = await request(getTestApp())
-      .get(`/api/inventory?locationId=${locationId}`)
+      .get(`/api/v1/inventory?locationId=${locationId}`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     res.body.items.forEach((item: { locationId: number }) => {
@@ -125,21 +125,21 @@ describe('Inventory', () => {
     try {
       // Default (no is_active param) — same as is_active=true — excludes it.
       const byDefault = await request(getTestApp())
-        .get(`/api/inventory?locationId=${locationId}&pageSize=100`)
+        .get(`/api/v1/inventory?locationId=${locationId}&pageSize=100`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(byDefault.status).toBe(200);
       expect(byDefault.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
 
       // Explicit is_active=true — same exclusion.
       const explicitActive = await request(getTestApp())
-        .get(`/api/inventory?locationId=${locationId}&pageSize=100&is_active=true`)
+        .get(`/api/v1/inventory?locationId=${locationId}&pageSize=100&is_active=true`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(explicitActive.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
 
       // is_active=all — bug regression: must actually include it, not silently
       // fall back to active-only the way an omitted param does.
       const all = await request(getTestApp())
-        .get(`/api/inventory?locationId=${locationId}&pageSize=100&is_active=all`)
+        .get(`/api/v1/inventory?locationId=${locationId}&pageSize=100&is_active=all`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(all.status).toBe(200);
       const row = all.body.items.find((i: { bookId: number }) => i.bookId === inactiveBookId);
@@ -149,7 +149,7 @@ describe('Inventory', () => {
       // is_active=false — inactive-only; our still-active seeded book must
       // not leak into this view.
       const inactiveOnly = await request(getTestApp())
-        .get(`/api/inventory?locationId=${locationId}&pageSize=100&is_active=false`)
+        .get(`/api/v1/inventory?locationId=${locationId}&pageSize=100&is_active=false`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(inactiveOnly.status).toBe(200);
       expect(inactiveOnly.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(true);
@@ -162,7 +162,7 @@ describe('Inventory', () => {
 
   it('sortBy=updatedAt sorts inventory rows by their updated_at timestamp', async () => {
     const asc = await request(getTestApp())
-      .get(`/api/inventory?locationId=${locationId}&pageSize=100&sortBy=updatedAt&sortDir=asc`)
+      .get(`/api/v1/inventory?locationId=${locationId}&pageSize=100&sortBy=updatedAt&sortDir=asc`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(asc.status).toBe(200);
     const ascTimestamps = asc.body.items.map((i: { updatedAt: string }) => new Date(i.updatedAt).getTime());
@@ -171,7 +171,7 @@ describe('Inventory', () => {
     }
 
     const desc = await request(getTestApp())
-      .get(`/api/inventory?locationId=${locationId}&pageSize=100&sortBy=updatedAt&sortDir=desc`)
+      .get(`/api/v1/inventory?locationId=${locationId}&pageSize=100&sortBy=updatedAt&sortDir=desc`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(desc.status).toBe(200);
     const descTimestamps = desc.body.items.map((i: { updatedAt: string }) => new Date(i.updatedAt).getTime());
@@ -184,7 +184,7 @@ describe('Inventory', () => {
 
   it('Admin can adjust stock upward (correction)', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/adjust')
+      .post('/api/v1/inventory/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, delta: 5, reasonCode: 'correction', version: 0 });
     expect(res.status).toBe(200);
@@ -194,7 +194,7 @@ describe('Inventory', () => {
 
   it('Stock_Clerk can adjust stock (damage)', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/adjust')
+      .post('/api/v1/inventory/adjust')
       .set('Authorization', `Bearer ${stockClerkToken}`)
       .send({ bookId, locationId, delta: -2, reasonCode: 'damage', version: 1 });
     expect(res.status).toBe(200);
@@ -203,7 +203,7 @@ describe('Inventory', () => {
 
   it('Sales role cannot adjust stock (403)', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/adjust')
+      .post('/api/v1/inventory/adjust')
       .set('Authorization', `Bearer ${salesToken}`)
       .send({ bookId, locationId, delta: 1, reasonCode: 'correction', version: 2 });
     expect(res.status).toBe(403);
@@ -211,7 +211,7 @@ describe('Inventory', () => {
 
   it('VERSION_CONFLICT returned on stale version', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/adjust')
+      .post('/api/v1/inventory/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, delta: 1, reasonCode: 'correction', version: 0 }); // stale
     expect(res.status).toBe(409);
@@ -220,7 +220,7 @@ describe('Inventory', () => {
 
   it('Invalid reason code returns 400', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/adjust')
+      .post('/api/v1/inventory/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, delta: 1, reasonCode: 'theft', version: 2 });
     expect(res.status).toBe(400);
@@ -228,7 +228,7 @@ describe('Inventory', () => {
 
   it('Zero delta returns 400', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/adjust')
+      .post('/api/v1/inventory/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, delta: 0, reasonCode: 'correction', version: 2 });
     expect(res.status).toBe(400);
@@ -260,7 +260,7 @@ describe('Inventory', () => {
     const currentVersion = src.rows[0].version as number;
 
     const res = await request(getTestApp())
-      .post('/api/inventory/transfer')
+      .post('/api/v1/inventory/transfer')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, fromLocationId: locationId, toLocationId: locationId2, quantity: 3, fromVersion: currentVersion });
 
@@ -288,7 +288,7 @@ describe('Inventory', () => {
     const locationId2 = loc2.rows[0].id as number;
 
     const res = await request(getTestApp())
-      .post('/api/inventory/transfer')
+      .post('/api/v1/inventory/transfer')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, fromLocationId: locationId, toLocationId: locationId2, quantity: quantity + 100, fromVersion: version });
 
@@ -309,7 +309,7 @@ describe('Inventory', () => {
     );
 
     const res = await request(getTestApp())
-      .get('/api/inventory/low-stock')
+      .get('/api/v1/inventory/low-stock')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -335,7 +335,7 @@ describe('Inventory', () => {
 
     try {
       const res = await request(getTestApp())
-        .get('/api/inventory/low-stock?pageSize=100')
+        .get('/api/v1/inventory/low-stock?pageSize=100')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.items.some((i: { bookId: number }) => i.bookId === inactiveBookId)).toBe(false);
@@ -349,7 +349,7 @@ describe('Inventory', () => {
 
   it('History endpoint returns movement log', async () => {
     const res = await request(getTestApp())
-      .get('/api/inventory/history')
+      .get('/api/v1/inventory/history')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.items)).toBe(true);
@@ -358,7 +358,7 @@ describe('Inventory', () => {
 
   it('History can be filtered by reasonCode', async () => {
     const res = await request(getTestApp())
-      .get('/api/inventory/history?reasonCode=damage')
+      .get('/api/v1/inventory/history?reasonCode=damage')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     res.body.items.forEach((h: { reasonCode: string }) => {
@@ -370,7 +370,7 @@ describe('Inventory', () => {
 
   it('Admin can update reorder point', async () => {
     const res = await request(getTestApp())
-      .put('/api/inventory/reorder-point')
+      .put('/api/v1/inventory/reorder-point')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, reorderPoint: 10 });
     expect(res.status).toBe(200);
@@ -379,7 +379,7 @@ describe('Inventory', () => {
 
   it('Stock_Clerk cannot update reorder point (403)', async () => {
     const res = await request(getTestApp())
-      .put('/api/inventory/reorder-point')
+      .put('/api/v1/inventory/reorder-point')
       .set('Authorization', `Bearer ${stockClerkToken}`)
       .send({ bookId, locationId, reorderPoint: 5 });
     expect(res.status).toBe(403);
@@ -454,7 +454,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('Manager can stock in', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-in')
+      .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ bookId, locationId, quantity: 10, version: 0 });
     expect(res.status).toBe(200);
@@ -464,7 +464,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('Stock-in with referenceType and referenceId', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-in')
+      .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, quantity: 5, version: 1, referenceType: 'purchase_order', referenceId: 42 });
     expect(res.status).toBe(200);
@@ -473,7 +473,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('Purchasor cannot stock in (403)', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-in')
+      .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${purchasorToken}`)
       .send({ bookId, locationId, quantity: 1, version: 2 });
     expect(res.status).toBe(403);
@@ -481,7 +481,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('Stock-in VERSION_CONFLICT returns 409', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-in')
+      .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, quantity: 1, version: 0 }); // stale
     expect(res.status).toBe(409);
@@ -490,7 +490,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('Stock-in zero quantity returns 400', async () => {
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-in')
+      .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, quantity: 0, version: 2 });
     expect(res.status).toBe(400);
@@ -498,16 +498,24 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   // ── POST /api/inventory/stock-out ─────────────────────────────────────────
 
-  it('Sales can stock out', async () => {
+  it('Manager can stock out', async () => {
     const src = await db.query(`SELECT quantity, version FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
     const { quantity, version } = src.rows[0] as { quantity: number; version: number };
 
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-out')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .post('/api/v1/inventory/stock-out')
+      .set('Authorization', `Bearer ${managerToken}`)
       .send({ bookId, locationId, quantity: 3, version });
     expect(res.status).toBe(200);
     expect(res.body.quantity).toBe(quantity - 3);
+  });
+
+  it('Sales cannot stock out by hand (403); sales go through POS and orders', async () => {
+    const res = await request(getTestApp())
+      .post('/api/v1/inventory/stock-out')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .send({ bookId, locationId, quantity: 1, version: 0 });
+    expect(res.status).toBe(403);
   });
 
   it('Stock-out with referenceType', async () => {
@@ -515,7 +523,7 @@ describe('Inventory — Stock In / Stock Out', () => {
     const { quantity, version } = src.rows[0] as { quantity: number; version: number };
 
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-out')
+      .post('/api/v1/inventory/stock-out')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, quantity: 2, version, referenceType: 'sale', referenceId: 99 });
     expect(res.status).toBe(200);
@@ -527,7 +535,7 @@ describe('Inventory — Stock In / Stock Out', () => {
     const version = src.rows[0].version as number;
 
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-out')
+      .post('/api/v1/inventory/stock-out')
       .set('Authorization', `Bearer ${purchasorToken}`)
       .send({ bookId, locationId, quantity: 1, version });
     expect(res.status).toBe(403);
@@ -539,7 +547,7 @@ describe('Inventory — Stock In / Stock Out', () => {
     const { quantity, version } = src.rows[0] as { quantity: number; version: number };
 
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-out')
+      .post('/api/v1/inventory/stock-out')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, quantity: quantity + 100, version });
     expect(res.status).toBe(422);
@@ -550,7 +558,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('History filtered by movementType=stock_in returns only stock_in rows', async () => {
     const res = await request(getTestApp())
-      .get('/api/inventory/history?movementType=stock_in')
+      .get('/api/v1/inventory/history?movementType=stock_in')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     res.body.items.forEach((h: { movementType: string }) => {
@@ -560,7 +568,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('History filtered by movementType=stock_out returns only stock_out rows', async () => {
     const res = await request(getTestApp())
-      .get('/api/inventory/history?movementType=stock_out')
+      .get('/api/v1/inventory/history?movementType=stock_out')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     res.body.items.forEach((h: { movementType: string }) => {
@@ -570,7 +578,7 @@ describe('Inventory — Stock In / Stock Out', () => {
 
   it('History rows include movementType, referenceType, referenceId', async () => {
     const res = await request(getTestApp())
-      .get('/api/inventory/history?movementType=stock_in')
+      .get('/api/v1/inventory/history?movementType=stock_in')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.items.length).toBeGreaterThan(0);

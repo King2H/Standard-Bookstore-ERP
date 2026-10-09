@@ -27,9 +27,12 @@ import { db } from '../../db/index.js';
 import { BusinessError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { isNegativeStockAllowed } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
-import type { StaffCtx, ReasonCode } from './inventory.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface StaffCtx { staffId: number; role: string; branchId: number; }
+
+export type ReasonCode = 'damage' | 'loss' | 'return' | 'correction' | 'transfer_in' | 'transfer_out' | 'initial';
 
 export interface AvailableStock {
   quantity: number;   // raw inventory.quantity
@@ -68,13 +71,6 @@ export interface StockOutParams extends BaseParams {
   /** Optional version for optimistic locking. When omitted, SELECT FOR UPDATE is used. */
   version?: number;
   reasonCode?: ReasonCode;
-}
-
-export interface AdjustParams extends BaseParams {
-  delta: number;
-  reasonCode: ReasonCode;
-  /** Optimistic lock — required for adjust */
-  version: number;
 }
 
 export interface TransferParams {
@@ -134,42 +130,6 @@ export async function getAvailableStock(
     reserved: Number(row.reserved),
     available: Math.max(0, Number(row.available)),
   };
-}
-
-/**
- * Get available stock for a list of books, optionally scoped to a location or branch.
- * Returns a map of bookId -> available (== quantity; see getAvailableStock()
- * above for why reservations are no longer subtracted).
- */
-export async function getStockQuantities(
-  bookIds: number[],
-  locationId?: number | null,
-  branchId?: number | null,
-  client?: PoolClient,
-): Promise<Record<number, number>> {
-  const q = client ?? db;
-  if (!bookIds || bookIds.length === 0) return {};
-
-  const result = await q.query(
-    `SELECT inv.book_id,
-            COALESCE(SUM(inv.quantity), 0) AS available
-     FROM inventory inv
-     WHERE inv.book_id = ANY($1)
-       AND (
-         ($2::integer IS NOT NULL AND inv.location_id = $2::integer) OR
-         ($2::integer IS NULL AND $3::integer IS NOT NULL AND inv.location_id IN (SELECT id FROM locations WHERE branch_id = $3::integer)) OR
-         ($2::integer IS NULL AND $3::integer IS NULL)
-       )
-     GROUP BY inv.book_id`,
-    [bookIds, locationId ?? null, branchId ?? null],
-  );
-  const map: Record<number, number> = {};
-  for (const r of result.rows) {
-    map[Number(r.book_id)] = Math.max(0, Number(r.available ?? 0));
-  }
-  // ensure all requested ids exist in map
-  for (const id of bookIds) if (map[id] == null) map[id] = 0;
-  return map;
 }
 
 // ── Internal helper: emit low-stock / out-of-stock notifications ──────────────
@@ -474,94 +434,6 @@ export async function stockOut(
     }
 
     return { unitCost: averageCost };
-  } catch (err) {
-    if (!useExternal) await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    if (!useExternal) client.release();
-  }
-}
-
-// ── adjust ────────────────────────────────────────────────────────────────────
-/**
- * Manual inventory adjustment with optimistic locking.
- * Accepts optional referenceType/referenceId for traceability.
- *
- * Requirements: 2.1, 2.14, 2.21, 3.4, 3.15
- */
-export async function adjust(
-  params: AdjustParams,
-  externalClient?: PoolClient,
-): Promise<void> {
-  const { bookId, locationId, delta, reasonCode, version, referenceType, referenceId, notes, staffCtx } = params;
-
-  if (delta === 0) throw new ValidationError('Adjustment delta cannot be zero');
-
-  const allowNeg = await isNegativeStockAllowed();
-
-  const useExternal = !!externalClient;
-  const client = externalClient ?? await db.connect();
-
-  try {
-    if (!useExternal) await client.query('BEGIN');
-
-    const current = await client.query(
-      `SELECT quantity, version FROM inventory
-       WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
-      [bookId, locationId],
-    );
-    if (!current.rows.length) throw new NotFoundError(`Inventory record for book ${bookId} at location ${locationId}`);
-
-    const currentVersion = Number(current.rows[0].version);
-    const qtyBefore = Number(current.rows[0].quantity);
-
-    // Optimistic lock check (Requirement 2.18, 3.15)
-    if (currentVersion !== version) {
-      throw new ConflictError(
-        'VERSION_CONFLICT',
-        'Inventory was modified by another operation. Please refresh and retry.',
-        { currentVersion, providedVersion: version },
-      );
-    }
-
-    const qtyAfter = qtyBefore + delta;
-    if (!allowNeg && qtyAfter < 0) {
-      throw new BusinessError('INSUFFICIENT_STOCK', `Cannot reduce stock below 0. Current: ${qtyBefore}, Delta: ${delta}`);
-    }
-
-    const updated = await client.query(
-      `UPDATE inventory SET quantity = $1, version = version + 1, updated_at = now()
-       WHERE book_id = $2 AND location_id = $3 AND version = $4
-       RETURNING quantity`,
-      [Math.max(0, qtyAfter), bookId, locationId, version],
-    );
-    if (!updated.rows.length) {
-      throw new ConflictError('VERSION_CONFLICT', 'Concurrent modification detected. Please retry.');
-    }
-
-    const finalQty = Number(updated.rows[0].quantity);
-
-    await client.query(
-      `INSERT INTO inventory_history
-         (book_id, location_id, qty_before, qty_after, delta,
-          reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-       VALUES ($1, $2, $3, $4, $5, $6, 'adjustment', $7, $8, $9, $10)`,
-      [
-        bookId, locationId, qtyBefore, finalQty, delta,
-        reasonCode,
-        referenceType ?? null,
-        referenceId != null ? String(referenceId) : null,
-        notes ?? null,
-        staffCtx.staffId,
-      ],
-    );
-
-    if (!useExternal) await client.query('COMMIT');
-
-    if (!useExternal) {
-      const meta = await fetchMeta(bookId, locationId);
-      await emitStockNotifications(bookId, locationId, finalQty, meta.bookTitle, meta.locationName, meta.branchId);
-    }
   } catch (err) {
     if (!useExternal) await client.query('ROLLBACK');
     throw err;

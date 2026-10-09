@@ -22,7 +22,7 @@ describe('Location restrictions on sales and stock', () => {
   let bookId: number;
   let sales: string;
   let clerk: string;
-  let freeSales: string;
+  let freeClerk: string;
   let manager: string;
   let adminStaff: { staffId: number; role: string; branchId: number };
   let poId: number;
@@ -73,7 +73,7 @@ describe('Location restrictions on sales and stock', () => {
     sales = await restricted('sales', 'Sales');
     clerk = await restricted('clerk', 'Stock_Clerk');
     manager = await restricted('mgr', 'Manager');
-    freeSales = (await createTestStaff({ username: `${STAFF_PREFIX}free`, role: 'Sales', branchId })).token;
+    freeClerk = (await createTestStaff({ username: `${STAFF_PREFIX}free`, role: 'Stock_Clerk', branchId })).token;
     const admin = await createTestStaff({ username: `${STAFF_PREFIX}admin`, role: 'Admin', branchId });
     adminStaff = { staffId: admin.staffId, role: 'Admin', branchId };
 
@@ -93,7 +93,7 @@ describe('Location restrictions on sales and stock', () => {
 
   it('refuses stock in, stock out and adjustments at a location not assigned', async () => {
     expectRefused(await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId: locB, quantity: 1, version: 0 }));
-    expectRefused(await as(api().post('/api/v1/inventory/stock-out'), sales).send({ bookId, locationId: locB, quantity: 1, version: 0 }));
+    expectRefused(await as(api().post('/api/v1/inventory/stock-out'), clerk).send({ bookId, locationId: locB, quantity: 1, version: 0 }));
     expectRefused(await as(api().post('/api/v1/inventory/adjust'), clerk).send({ bookId, locationId: locB, delta: -1, reasonCode: 'damage', version: 0 }));
   });
 
@@ -141,7 +141,7 @@ describe('Location restrictions on sales and stock', () => {
   });
 
   it('does not limit staff without assignments, nor Managers', async () => {
-    const free = await as(api().post('/api/v1/inventory/stock-out'), freeSales).send({ bookId, locationId: locB, quantity: 1, version: await version(locB) });
+    const free = await as(api().post('/api/v1/inventory/stock-out'), freeClerk).send({ bookId, locationId: locB, quantity: 1, version: await version(locB) });
     expect(free.status).toBeLessThan(300);
     const mgr = await as(api().post('/api/v1/inventory/stock-in'), manager).send({ bookId, locationId: locB, quantity: 1, version: await version(locB) });
     expect(mgr.status).toBeLessThan(300);
