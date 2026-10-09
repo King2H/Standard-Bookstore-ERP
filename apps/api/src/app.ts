@@ -5,7 +5,7 @@ import { requestIdMiddleware } from './middleware/requestId.js';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import healthRouter from './routes/health.js';
-import auditLogsRouter from './routes/auditLogs.js';
+import auditLogsRouter from './modules/audit/audit.routes.js';
 import authRouter from './modules/auth/auth.routes.js';
 import branchRouter from './modules/branch/branch.routes.js';
 import configRouter from './modules/config/config.routes.js';
