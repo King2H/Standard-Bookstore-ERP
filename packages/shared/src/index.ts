@@ -27,6 +27,7 @@ export * from './config.js';
 export * from './customer.js';
 export * from './financialTransaction.js';
 export * from './health.js';
+export * from './inventory.js';
 export * from './location.js';
 export * from './notification.js';
 export * from './order.js';

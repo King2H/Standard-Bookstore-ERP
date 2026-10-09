@@ -49,9 +49,10 @@ const canWrite = (role: Role | undefined, perms?: string[]) =>
 const canManage = (role: Role | undefined, perms?: string[]) =>
   (perms && (perms.includes('MANAGE_STAFF') || perms.includes('MANAGE_BRANCH'))) ||
   role === 'Admin' || role === 'Manager';
-const canStockOut = (role: Role | undefined, perms?: string[]) =>
-  (perms && (perms.includes('MANAGE_INVENTORY') || perms.includes('CREATE_SALE'))) ||
-  role === 'Admin' || role === 'Manager' || role === 'Stock_Clerk' || role === 'Sales';
+
+// Damage and loss take stock away and a return puts it back; a correction goes either way.
+type AdjustReason = 'damage' | 'loss' | 'return' | 'correction';
+const FIXED_DIRECTION: Partial<Record<AdjustReason, 'add' | 'remove'>> = { damage: 'remove', loss: 'remove', return: 'add' };
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -300,7 +301,15 @@ function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermiss
   const [bookSearch, setBookSearch] = useState('');
   const [selectedBook, setSelectedBook] = useState<InventoryRow | null>(null);
   const [delta, setDelta] = useState('');
-  const [reasonCode, setReasonCode] = useState<'damage' | 'loss' | 'return' | 'correction'>('correction');
+  const [reasonCode, setReasonCode] = useState<AdjustReason>('correction');
+  const fixedDirection = FIXED_DIRECTION[reasonCode];
+
+  function chooseReason(reason: AdjustReason) {
+    setReasonCode(reason);
+    const direction = FIXED_DIRECTION[reason];
+    if (direction === 'remove') setDelta(d => d.startsWith('-') ? d : `-${d}`);
+    if (direction === 'add') setDelta(d => d.replace('-', ''));
+  }
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -398,8 +407,8 @@ function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermiss
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity Change *</label>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setDelta(d => d.startsWith('-') ? d.slice(1) : d ? `-${d}` : '-')}
-                  className={`px-3 py-2 text-sm border rounded-lg transition-colors ${delta.startsWith('-') ? 'bg-red-100 border-red-300 text-red-700 dark:bg-red-950 dark:border-red-700 dark:text-red-400' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                <button type="button" disabled={fixedDirection !== undefined} onClick={() => setDelta(d => d.startsWith('-') ? d.slice(1) : d ? `-${d}` : '-')}
+                  className={`px-3 py-2 text-sm border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${delta.startsWith('-') ? 'bg-red-100 border-red-300 text-red-700 dark:bg-red-950 dark:border-red-700 dark:text-red-400' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                   {delta.startsWith('-') ? '− Remove' : '+ Add'}
                 </button>
                 <input type="number" value={delta.replace('-', '')} onChange={e => setDelta(delta.startsWith('-') ? `-${e.target.value}` : e.target.value)}
@@ -415,7 +424,7 @@ function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermiss
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason *</label>
-              <select value={reasonCode} onChange={e => setReasonCode(e.target.value as typeof reasonCode)}
+              <select value={reasonCode} onChange={e => chooseReason(e.target.value as AdjustReason)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="correction">Correction (count discrepancy)</option>
                 <option value="damage">Damage</option>
@@ -1014,7 +1023,8 @@ function StockOutTab({ userRole, userPermissions }: { userRole?: Role; userPermi
     enabled: bookSearch.length > 1,
   });
 
-  if (!canStockOut(userRole, userPermissions)) return <AccessDenied />;
+  // Sales take stock out through POS and orders.
+  if (!canWrite(userRole, userPermissions)) return <AccessDenied />;
 
   const qty = parseInt(quantity, 10);
   const wouldGoNegative = selectedRow && !isNaN(qty) && qty > 0 && selectedRow.quantity - qty < 0;
