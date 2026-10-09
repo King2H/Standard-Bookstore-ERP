@@ -26,6 +26,7 @@ export * from './common.js';
 export * from './config.js';
 export * from './health.js';
 export * from './location.js';
+export * from './notification.js';
 export * from './order.js';
 export * from './supplier.js';
 export { Money } from './money.js';

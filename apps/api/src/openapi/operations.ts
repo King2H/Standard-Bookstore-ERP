@@ -1,5 +1,11 @@
 import type { z } from 'zod';
 import {
+  MarkAllReadResponseSchema,
+  MarkReadResponseSchema,
+  NotificationIdParamsSchema,
+  NotificationListQuerySchema,
+  NotificationListResponseSchema,
+  UnreadCountResponseSchema,
   AuditLogListQuerySchema,
   AuditLogListResponseSchema,
   BranchListQuerySchema,
@@ -93,6 +99,7 @@ export const operations: ApiOperation[] = [
   ...branchOperations(),
   ...configOperations(),
   ...locationOperations(),
+  ...notificationOperations(),
   ...supplierOperations(),
   ...orderOperations(),
 ];
@@ -338,6 +345,49 @@ function locationOperations(): ApiOperation[] {
       tag,
       request: { params: IdParamsSchema, body: SetStaffLocationsRequestSchema },
       responses: { 200: { description: 'Saved', schema: MessageResponseSchema } },
+    },
+  ];
+}
+
+function notificationOperations(): ApiOperation[] {
+  const tag = 'Notifications';
+  const scope = 'addressed to the caller, or to their role in the session branch or system-wide; staff with access to all branches see every branch';
+  return [
+    {
+      operationId: 'listNotifications',
+      method: 'get',
+      path: '/notifications',
+      summary: `The caller's notifications, newest first (${scope})`,
+      tag,
+      request: { query: NotificationListQuerySchema },
+      responses: { 200: { description: 'One page of notifications', schema: NotificationListResponseSchema } },
+    },
+    {
+      operationId: 'countUnreadNotifications',
+      method: 'get',
+      path: '/notifications/unread-count',
+      summary: 'How many of the caller\'s notifications are unread',
+      tag,
+      responses: { 200: { description: 'The unread count', schema: UnreadCountResponseSchema } },
+      errors: [401, 403, 500],
+    },
+    {
+      operationId: 'markNotificationRead',
+      method: 'put',
+      path: '/notifications/{id}/read',
+      summary: 'Mark one of the caller\'s notifications as read (a notification they cannot see is left alone)',
+      tag,
+      request: { params: NotificationIdParamsSchema },
+      responses: { 200: { description: 'Done', schema: MarkReadResponseSchema } },
+    },
+    {
+      operationId: 'markAllNotificationsRead',
+      method: 'put',
+      path: '/notifications/read-all',
+      summary: 'Mark all of the caller\'s unread notifications as read',
+      tag,
+      responses: { 200: { description: 'How many were marked', schema: MarkAllReadResponseSchema } },
+      errors: [401, 403, 500],
     },
   ];
 }

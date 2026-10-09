@@ -13,7 +13,7 @@
  * IMPORTANT: This worker must NEVER throw — errors are logged and swallowed
  * so that a notification failure never blocks the outbox poller.
  */
-import { db } from '../db/index.js';
+import { createNotification } from '../modules/notifications/notifications.service.js';
 import { sseManager, type NotificationPayload } from '../lib/sseManager.js';
 
 interface NotificationSpec {
@@ -413,27 +413,19 @@ export async function handleNotification(payload: Record<string, unknown>): Prom
   const branchId = (payload.branchId as number | null) ?? null;
 
   try {
-    // INSERT notification row
-    const result = await db.query(
-      `INSERT INTO notifications
-         (branch_id, target_roles, event_type, title, body, entity_type, entity_id, severity)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, created_at`,
-      [
-        branchId,
-        spec.targetRoles,
-        eventType,
-        spec.title,
-        spec.body,
-        spec.entityType,
-        spec.entityId,
-        spec.severity,
-      ],
-    );
+    const row = await createNotification({
+      branchId,
+      targetRoles: spec.targetRoles,
+      eventType,
+      title: spec.title,
+      body: spec.body,
+      entityType: spec.entityType,
+      entityId: spec.entityId,
+      severity: spec.severity,
+    });
 
-    const row = result.rows[0];
     const notification: NotificationPayload = {
-      id: row.id as number,
+      id: row.id,
       eventType,
       title: spec.title,
       body: spec.body,
@@ -441,7 +433,7 @@ export async function handleNotification(payload: Record<string, unknown>): Prom
       entityType: spec.entityType,
       entityId: spec.entityId,
       isRead: false,
-      createdAt: (row.created_at as Date).toISOString(),
+      createdAt: row.createdAt.toISOString(),
     };
 
     // Broadcast to active SSE connections

@@ -28,7 +28,7 @@ a test fails if one is missing.
 | Status | Code | Meaning |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | The request does not match its schema; see `details.issues`. |
-| 400 | `INVALID_ID` | A route parameter is not a valid id. |
+| 400 | `INVALID_ID` | Retired: no longer sent since the module migration (#21); an invalid id now answers `VALIDATION_ERROR`. Listed so the code is never reused. |
 | 401 | see "Authentication" | Not signed in, or the session is no longer valid. |
 | 403 | `FORBIDDEN` | Signed in, but not allowed to do this. |
 | 403 | `PERMISSION_DENIED` | The role lacks a required permission; `details.missing` lists it. |

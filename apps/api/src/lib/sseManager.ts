@@ -10,7 +10,8 @@
 import type { Response } from 'express';
 
 export interface NotificationPayload {
-  id: number;
+  /** A bigint, sent as a string (as the REST list sends it). */
+  id: string;
   eventType: string;
   title: string;
   body: string;
