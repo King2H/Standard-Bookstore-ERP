@@ -330,7 +330,7 @@
     "/config/branches/{branchId}": {
       "get": {
         "operationId": "listBranchConfig",
-        "summary": "A branch's effective settings, each marked branch or system (Super_Admin, Admin, Manager)",
+        "summary": "A branch's effective settings, each marked branch or system (Super_Admin, Admin, Manager; the session branch, or any branch with access to all branches)",
         "tags": [
           "Configuration"
         ],
@@ -450,7 +450,7 @@
     "/config/branches/{branchId}/{key}": {
       "put": {
         "operationId": "setBranchConfig",
-        "summary": "Override a setting for a branch (Super_Admin, Admin, Manager)",
+        "summary": "Override a setting for a branch (Super_Admin, Admin, Manager; the session branch, or any branch with access to all branches)",
         "tags": [
           "Configuration"
         ],
@@ -577,7 +577,7 @@
       },
       "delete": {
         "operationId": "removeBranchConfig",
-        "summary": "Remove a branch override, so the system default applies again (Super_Admin, Admin)",
+        "summary": "Remove a branch override, so the system default applies again (Super_Admin, Admin; the session branch, or any branch with access to all branches)",
         "tags": [
           "Configuration"
         ],
