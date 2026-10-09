@@ -176,9 +176,14 @@ describe('Notification System', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
-    const check = await db.query(`SELECT is_read, read_at FROM notifications WHERE id = $1`, [notifId]);
-    expect(check.rows[0].is_read).toBe(true);
-    expect(check.rows[0].read_at).not.toBeNull();
+    // Read state is per person (#85): read for this Manager, as they see it.
+    const list = await request(getTestApp())
+      .get('/api/notifications?pageSize=100')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    const mine = list.body.data.find((n: { id: string }) => n.id === String(notifId));
+    expect(mine.isRead).toBe(true);
+    expect(mine.readAt).not.toBeNull();
   });
 
   // ── Test 5: PUT /api/notifications/read-all ───────────────────────────────
@@ -199,13 +204,12 @@ describe('Notification System', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
-    // Verify all Manager notifications in this branch are now read
-    const check = await db.query(
-      `SELECT COUNT(*) FROM notifications
-       WHERE branch_id = $1 AND $2 = ANY(target_roles) AND is_read = false`,
-      [branchId, 'Manager'],
-    );
-    expect(parseInt(check.rows[0].count as string, 10)).toBe(0);
+    // Read state is per person (#85): nothing is left unread for this Manager.
+    const count = await request(getTestApp())
+      .get('/api/notifications/unread-count')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(200);
+    expect(count.body.count).toBe(0);
   });
 
   // ── Test 6: GET /api/notifications/unread-count ───────────────────────────
