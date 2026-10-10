@@ -79,6 +79,7 @@ export interface ReceiptItemRecord {
 
 export interface SupplierPaymentRecord {
   id: string;
+  paymentNumber: string | null;
   poId: string;
   amount: Money;
   paymentMethod: string;
@@ -86,10 +87,14 @@ export interface SupplierPaymentRecord {
   notes: string | null;
   createdBy: number;
   createdAt: Date;
+  reversedAt: Date | null;
+  reversedBy: number | null;
+  reversalReason: string | null;
 }
 
 export interface CreditNoteRecord {
   id: string;
+  creditNoteNumber: string | null;
   poId: string;
   supplierId: number;
   amount: Money;

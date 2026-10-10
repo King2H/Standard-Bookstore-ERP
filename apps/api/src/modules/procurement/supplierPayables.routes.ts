@@ -1,94 +1,32 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import * as payables from './supplierPayables.service.js';
+import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { paramInt } from '../../lib/http.js';
-import { buildCsv, sendCsv, SUPPLIER_LEDGER_COLUMNS } from '../../lib/csvBuilder.js';
 import { recordInBranch } from '../../middleware/recordScope.js';
-import { toPurchaseOrderResponse } from './procurement.mapper.js';
+import { validate } from '../../middleware/validate.js';
+import * as payables from './supplierPayables.controller.js';
 
-// Supplier payables, still in their v1 shape until procurement part 2 (#21).
+// URL -> middleware -> controller (A2). Request and response contracts are in
+// @bms/shared (purchaseOrder.ts) and listed in src/openapi/operations.ts.
+// Only the ordering branch pays (procurement.policy, owner decision 1a).
 
 const router = Router();
+const { schemas } = payables;
 
-const qs = (v: unknown): string | undefined => (typeof v === 'string' ? v : Array.isArray(v) ? (v[0] as string | undefined) : undefined);
-const pi = paramInt;
+const finance = requireRole('Admin', 'Manager', 'Finance_Officer');
+const ledgerReaders = requireRole('Admin', 'Manager', 'Finance_Officer', 'Purchasor');
+const inBranch = recordInBranch('purchaseOrder');
 
-// ── POST /api/purchase-orders/:id/payments ────────────────────────────────────
-// A manual supplier payment against a PO. financial_status is derived from the
-// sum of these rows (plus any auto-settled cash-terms receipt payments).
-
+router.post('/purchase-orders/:id/payments', authenticate, inBranch, finance, validate(schemas.payment), payables.recordPayment);
 router.post(
-  '/purchase-orders/:id/payments',
+  '/purchase-orders/:id/payments/:paymentId/reverse',
   authenticate,
-  recordInBranch('purchaseOrder'),
-  requireRole('Admin', 'Manager', 'Finance_Officer'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { amount, paymentMethod, notes } = req.body as {
-        amount: number;
-        paymentMethod?: string;
-        notes?: string | null;
-      };
-      const po = await payables.createSupplierPayment(pi(req.params.id), { amount, paymentMethod, notes }, req.staff!);
-      res.status(201).json(toPurchaseOrderResponse(po));
-    } catch (err) { next(err); }
-  },
+  inBranch,
+  finance,
+  validate(schemas.reverse),
+  payables.reversePayment,
 );
-
-// ── POST /api/purchase-orders/:id/credit-notes ─────────────────────────────────
-// Correcting a PO's economics after receipt (damaged goods, an overcharge).
-
-router.post(
-  '/purchase-orders/:id/credit-notes',
-  authenticate,
-  recordInBranch('purchaseOrder'),
-  requireRole('Admin', 'Manager', 'Finance_Officer'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { amount, reason } = req.body as { amount: number; reason: string };
-      const po = await payables.createSupplierCreditNote(pi(req.params.id), { amount, reason }, req.staff!);
-      res.status(201).json(toPurchaseOrderResponse(po));
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/suppliers/:id/ledger ───────────────────────────────────────────
-// Running-balance ledger (PO / Goods Receipt / Payment / Credit Note / Balance).
-
-router.get(
-  '/suppliers/:id/ledger',
-  authenticate,
-  requireRole('Admin', 'Manager', 'Finance_Officer', 'Purchasor'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await payables.getSupplierLedger(pi(req.params.id), {
-        dateFrom: qs(req.query.dateFrom),
-        dateTo: qs(req.query.dateTo),
-      });
-      res.json(result);
-    } catch (err) { next(err); }
-  },
-);
-
-router.get(
-  '/suppliers/:id/ledger/export',
-  authenticate,
-  requireRole('Admin', 'Manager', 'Finance_Officer', 'Purchasor'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { entries } = await payables.getSupplierLedger(pi(req.params.id), {
-        dateFrom: qs(req.query.dateFrom),
-        dateTo: qs(req.query.dateTo),
-      });
-      const csvRows = entries.map(e => ({
-        date: e.date, type: e.type, reference: e.reference, description: e.description,
-        amount: e.amount, balance: e.balance,
-      }));
-      const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `supplier-ledger-${today}.csv`, buildCsv(csvRows, SUPPLIER_LEDGER_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
+router.post('/purchase-orders/:id/credit-notes', authenticate, inBranch, finance, validate(schemas.creditNote), payables.recordCreditNote);
+router.get('/suppliers/:id/ledger', authenticate, ledgerReaders, validate(schemas.ledger), payables.ledger);
+router.get('/suppliers/:id/ledger/export', authenticate, ledgerReaders, validate(schemas.ledger), payables.exportLedger);
 
 export default router;

@@ -23104,6 +23104,12 @@
                                 "id": {
                                   "type": "string"
                                 },
+                                "paymentNumber": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
                                 "poId": {
                                   "type": "string"
                                 },
@@ -23133,17 +23139,45 @@
                                 },
                                 "createdAt": {
                                   "type": "string"
+                                },
+                                "reversedAt": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "reversedBy": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "reversalReason": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
                                 }
                               },
                               "required": [
                                 "id",
+                                "paymentNumber",
                                 "poId",
                                 "amount",
                                 "paymentMethod",
                                 "source",
                                 "notes",
                                 "createdBy",
-                                "createdAt"
+                                "createdAt",
+                                "reversedAt",
+                                "reversedBy",
+                                "reversalReason"
                               ],
                               "additionalProperties": false
                             }
@@ -23155,6 +23189,12 @@
                               "properties": {
                                 "id": {
                                   "type": "string"
+                                },
+                                "creditNoteNumber": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
                                 },
                                 "poId": {
                                   "type": "string"
@@ -23181,6 +23221,7 @@
                               },
                               "required": [
                                 "id",
+                                "creditNoteNumber",
                                 "poId",
                                 "supplierId",
                                 "amount",
@@ -23778,6 +23819,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -23807,17 +23854,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -23829,6 +23904,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -23855,6 +23936,7 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -24327,6 +24409,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -24356,17 +24444,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -24378,6 +24494,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -24404,6 +24526,7 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -24987,6 +25110,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -25016,17 +25145,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -25038,6 +25195,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -25064,6 +25227,7 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -25536,6 +25700,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -25565,17 +25735,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -25587,6 +25785,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -25613,6 +25817,7 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -26085,6 +26290,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -26114,17 +26325,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -26136,6 +26375,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -26162,6 +26407,7 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -26652,6 +26898,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -26681,17 +26933,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -26703,6 +26983,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -26729,6 +27015,629 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
+                          "poId",
+                          "supplierId",
+                          "amount",
+                          "reason",
+                          "createdBy",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "poNumber",
+                    "branchId",
+                    "supplierId",
+                    "supplierName",
+                    "status",
+                    "totalAmount",
+                    "currency",
+                    "expectedDeliveryDate",
+                    "notes",
+                    "receivingBranchId",
+                    "receivingLocationId",
+                    "receivingLocationName",
+                    "financialStatus",
+                    "paymentTerms",
+                    "createdBy",
+                    "approvedBy",
+                    "closedReason",
+                    "closedBy",
+                    "closedAt",
+                    "createdAt",
+                    "updatedAt",
+                    "receivedValue",
+                    "amountPaid",
+                    "creditNotesTotal",
+                    "outstandingAmount",
+                    "orderedQuantityTotal",
+                    "receivedQuantityTotal"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchase-orders/{id}/credit-notes": {
+      "post": {
+        "operationId": "recordSupplierCreditNote",
+        "summary": "The supplier's credit against an order: damaged goods, an overcharge (Admin, Manager, Finance_Officer; the ordering branch)",
+        "tags": [
+          "Supplier payables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "amount",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The order with the credit note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "poNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "pending_approval",
+                        "approved",
+                        "ordered",
+                        "partially_received",
+                        "received",
+                        "closed",
+                        "cancelled"
+                      ]
+                    },
+                    "totalAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "expectedDeliveryDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "receivingBranchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivingLocationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "receivingLocationName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "financialStatus": {
+                      "type": "string",
+                      "enum": [
+                        "unpaid",
+                        "partial",
+                        "paid"
+                      ]
+                    },
+                    "paymentTerms": {
+                      "type": "string",
+                      "enum": [
+                        "cash",
+                        "credit"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "approvedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "closedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "closedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "closedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "receivedValue": {
+                      "type": "number"
+                    },
+                    "amountPaid": {
+                      "type": "number"
+                    },
+                    "creditNotesTotal": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "orderedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lineItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "bookIsbn": {
+                            "type": "string"
+                          },
+                          "formatId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "editionId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitCost": {
+                            "type": "number"
+                          },
+                          "receivedQuantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "remaining": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "bookId",
+                          "bookTitle",
+                          "bookIsbn",
+                          "formatId",
+                          "editionId",
+                          "quantity",
+                          "unitCost",
+                          "receivedQuantity",
+                          "remaining"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "locationId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationName": {
+                            "type": "string"
+                          },
+                          "receivedBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "receivedAt": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "receiptId": {
+                                  "type": "string"
+                                },
+                                "poLineItemId": {
+                                  "type": "string"
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantityReceived": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "receiptId",
+                                "poLineItemId",
+                                "bookTitle",
+                                "quantityReceived"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "locationId",
+                          "locationName",
+                          "receivedBy",
+                          "receivedAt",
+                          "notes",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "payments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "paymentMethod": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "manual",
+                              "auto_on_receipt"
+                            ]
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "paymentNumber",
+                          "poId",
+                          "amount",
+                          "paymentMethod",
+                          "source",
+                          "notes",
+                          "createdBy",
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "creditNotes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "supplierId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -27201,6 +28110,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -27230,17 +28145,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -27252,6 +28195,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -27278,6 +28227,1264 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
+                          "poId",
+                          "supplierId",
+                          "amount",
+                          "reason",
+                          "createdBy",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "poNumber",
+                    "branchId",
+                    "supplierId",
+                    "supplierName",
+                    "status",
+                    "totalAmount",
+                    "currency",
+                    "expectedDeliveryDate",
+                    "notes",
+                    "receivingBranchId",
+                    "receivingLocationId",
+                    "receivingLocationName",
+                    "financialStatus",
+                    "paymentTerms",
+                    "createdBy",
+                    "approvedBy",
+                    "closedReason",
+                    "closedBy",
+                    "closedAt",
+                    "createdAt",
+                    "updatedAt",
+                    "receivedValue",
+                    "amountPaid",
+                    "creditNotesTotal",
+                    "outstandingAmount",
+                    "orderedQuantityTotal",
+                    "receivedQuantityTotal"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchase-orders/{id}/payments": {
+      "post": {
+        "operationId": "recordSupplierPayment",
+        "summary": "Pay the supplier for an approved order; payments and credit notes stay within the ordered total (Admin, Manager, Finance_Officer; the ordering branch)",
+        "tags": [
+          "Supplier payables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                      }
+                    ]
+                  },
+                  "paymentMethod": {
+                    "default": "cash",
+                    "type": "string",
+                    "enum": [
+                      "cash",
+                      "bank",
+                      "mobile",
+                      "cheque"
+                    ]
+                  },
+                  "notes": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "amount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The order with the payment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "poNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "pending_approval",
+                        "approved",
+                        "ordered",
+                        "partially_received",
+                        "received",
+                        "closed",
+                        "cancelled"
+                      ]
+                    },
+                    "totalAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "expectedDeliveryDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "receivingBranchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivingLocationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "receivingLocationName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "financialStatus": {
+                      "type": "string",
+                      "enum": [
+                        "unpaid",
+                        "partial",
+                        "paid"
+                      ]
+                    },
+                    "paymentTerms": {
+                      "type": "string",
+                      "enum": [
+                        "cash",
+                        "credit"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "approvedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "closedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "closedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "closedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "receivedValue": {
+                      "type": "number"
+                    },
+                    "amountPaid": {
+                      "type": "number"
+                    },
+                    "creditNotesTotal": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "orderedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lineItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "bookIsbn": {
+                            "type": "string"
+                          },
+                          "formatId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "editionId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitCost": {
+                            "type": "number"
+                          },
+                          "receivedQuantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "remaining": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "bookId",
+                          "bookTitle",
+                          "bookIsbn",
+                          "formatId",
+                          "editionId",
+                          "quantity",
+                          "unitCost",
+                          "receivedQuantity",
+                          "remaining"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "locationId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationName": {
+                            "type": "string"
+                          },
+                          "receivedBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "receivedAt": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "receiptId": {
+                                  "type": "string"
+                                },
+                                "poLineItemId": {
+                                  "type": "string"
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantityReceived": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "receiptId",
+                                "poLineItemId",
+                                "bookTitle",
+                                "quantityReceived"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "locationId",
+                          "locationName",
+                          "receivedBy",
+                          "receivedAt",
+                          "notes",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "payments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "paymentMethod": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "manual",
+                              "auto_on_receipt"
+                            ]
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "paymentNumber",
+                          "poId",
+                          "amount",
+                          "paymentMethod",
+                          "source",
+                          "notes",
+                          "createdBy",
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "creditNotes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "supplierId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "creditNoteNumber",
+                          "poId",
+                          "supplierId",
+                          "amount",
+                          "reason",
+                          "createdBy",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "poNumber",
+                    "branchId",
+                    "supplierId",
+                    "supplierName",
+                    "status",
+                    "totalAmount",
+                    "currency",
+                    "expectedDeliveryDate",
+                    "notes",
+                    "receivingBranchId",
+                    "receivingLocationId",
+                    "receivingLocationName",
+                    "financialStatus",
+                    "paymentTerms",
+                    "createdBy",
+                    "approvedBy",
+                    "closedReason",
+                    "closedBy",
+                    "closedAt",
+                    "createdAt",
+                    "updatedAt",
+                    "receivedValue",
+                    "amountPaid",
+                    "creditNotesTotal",
+                    "outstandingAmount",
+                    "orderedQuantityTotal",
+                    "receivedQuantityTotal"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchase-orders/{id}/payments/{paymentId}/reverse": {
+      "post": {
+        "operationId": "reverseSupplierPayment",
+        "summary": "Reverse a payment recorded by mistake, with a reason; it stays on record (Admin, Manager, Finance_Officer; the ordering branch)",
+        "tags": [
+          "Supplier payables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order with the reversed payment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "poNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "pending_approval",
+                        "approved",
+                        "ordered",
+                        "partially_received",
+                        "received",
+                        "closed",
+                        "cancelled"
+                      ]
+                    },
+                    "totalAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "expectedDeliveryDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "receivingBranchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivingLocationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "receivingLocationName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "financialStatus": {
+                      "type": "string",
+                      "enum": [
+                        "unpaid",
+                        "partial",
+                        "paid"
+                      ]
+                    },
+                    "paymentTerms": {
+                      "type": "string",
+                      "enum": [
+                        "cash",
+                        "credit"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "approvedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "closedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "closedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "closedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "receivedValue": {
+                      "type": "number"
+                    },
+                    "amountPaid": {
+                      "type": "number"
+                    },
+                    "creditNotesTotal": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "orderedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lineItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "bookIsbn": {
+                            "type": "string"
+                          },
+                          "formatId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "editionId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitCost": {
+                            "type": "number"
+                          },
+                          "receivedQuantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "remaining": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "bookId",
+                          "bookTitle",
+                          "bookIsbn",
+                          "formatId",
+                          "editionId",
+                          "quantity",
+                          "unitCost",
+                          "receivedQuantity",
+                          "remaining"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "locationId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationName": {
+                            "type": "string"
+                          },
+                          "receivedBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "receivedAt": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "receiptId": {
+                                  "type": "string"
+                                },
+                                "poLineItemId": {
+                                  "type": "string"
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantityReceived": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "receiptId",
+                                "poLineItemId",
+                                "bookTitle",
+                                "quantityReceived"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "locationId",
+                          "locationName",
+                          "receivedBy",
+                          "receivedAt",
+                          "notes",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "payments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "paymentMethod": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "manual",
+                              "auto_on_receipt"
+                            ]
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "paymentNumber",
+                          "poId",
+                          "amount",
+                          "paymentMethod",
+                          "source",
+                          "notes",
+                          "createdBy",
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "creditNotes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "supplierId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -27811,6 +30018,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -27840,17 +30053,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -27862,6 +30103,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -27888,6 +30135,7 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -28360,6 +30608,12 @@
                           "id": {
                             "type": "string"
                           },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -28389,17 +30643,45 @@
                           },
                           "createdAt": {
                             "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "paymentNumber",
                           "poId",
                           "amount",
                           "paymentMethod",
                           "source",
                           "notes",
                           "createdBy",
-                          "createdAt"
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
                         ],
                         "additionalProperties": false
                       }
@@ -28411,6 +30693,12 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "poId": {
                             "type": "string"
@@ -28437,6 +30725,7 @@
                         },
                         "required": [
                           "id",
+                          "creditNoteNumber",
                           "poId",
                           "supplierId",
                           "amount",
@@ -32639,6 +34928,270 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppliers/{id}/ledger": {
+      "get": {
+        "operationId": "getSupplierLedger",
+        "summary": "What is owed to a supplier, entry by entry, for the session branch's orders (Admin, Manager, Finance_Officer, Purchasor; all branches with access to all)",
+        "tags": [
+          "Supplier payables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The ledger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "PO",
+                              "GOODS_RECEIPT",
+                              "PAYMENT",
+                              "PAYMENT_REVERSAL",
+                              "CREDIT_NOTE"
+                            ]
+                          },
+                          "reference": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "balance": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "type",
+                          "reference",
+                          "description",
+                          "amount",
+                          "balance"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "currentBalance": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "entries",
+                    "currentBalance"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppliers/{id}/ledger/export": {
+      "get": {
+        "operationId": "exportSupplierLedger",
+        "summary": "The supplier ledger as CSV (Admin, Manager, Finance_Officer, Purchasor)",
+        "tags": [
+          "Supplier payables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
           "400": {
             "description": "Invalid request (`VALIDATION_ERROR`)",
             "content": {

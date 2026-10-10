@@ -180,7 +180,7 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
       .post(`/api/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ amount: 60, paymentMethod: 'bank_transfer' });
+      .send({ amount: 60, paymentMethod: 'bank' });
 
     const ledgerRes = await request(getTestApp())
       .get(`/api/suppliers/${ledgerSupplierId}/ledger`)

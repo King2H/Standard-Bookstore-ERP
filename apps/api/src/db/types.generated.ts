@@ -702,6 +702,7 @@ export interface SupplierCreditNotes {
   branch_id: number;
   created_at: Generated<Timestamp>;
   created_by: number;
+  credit_note_number: string | null;
   id: Generated<number>;
   po_id: Int8;
   reason: string;
@@ -716,7 +717,11 @@ export interface SupplierPayments {
   id: Generated<Int8>;
   notes: string | null;
   payment_method: Generated<string>;
+  payment_number: string | null;
   po_id: Int8;
+  reversal_reason: string | null;
+  reversed_at: Timestamp | null;
+  reversed_by: number | null;
   source: Generated<string>;
   supplier_id: number;
 }
