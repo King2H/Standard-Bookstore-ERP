@@ -26,4 +26,10 @@ router.get('/payments/:id/refunds', authenticate, recordInBranch('payment'), can
 router.get('/orders/:id/payments', authenticate, recordInBranch('order'), canTake, byId, payments.listByOrder);
 router.get('/orders/:id/balance', authenticate, recordInBranch('order'), canTake, byId, payments.orderBalance);
 
+// Installment plans: retired.
+router.post('/orders/:id/installment-plan', authenticate, payments.installmentsRetired);
+router.get('/orders/:id/installment-plan', authenticate, payments.installmentsRetired);
+router.get('/installment-plans/:id', authenticate, payments.installmentsRetired);
+router.post('/installments/:id/pay', authenticate, payments.installmentsRetired);
+
 export default router;

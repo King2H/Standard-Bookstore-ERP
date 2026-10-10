@@ -4,7 +4,6 @@ import { assertEnvironment } from './lib/env.js';
 import { checkDbConnection } from './db/index.js';
 import { ensureSeedData } from './db/seed.js';
 import { startOutboxPoller, stopOutboxPoller } from './workers/outboxPoller.js';
-import { startInstallmentChecker, stopInstallmentChecker } from './workers/installmentChecker.js';
 import { markOverdueReceivables } from './modules/receivables/receivables.service.js';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -34,7 +33,6 @@ async function start() {
 
   // Start background workers
   startOutboxPoller();
-  startInstallmentChecker();
 
   // ── Overdue receivables job — runs daily at midnight ──────────────────────────
   // Marks Pending/PartiallyPaid receivables as Overdue when their due_date has passed.
@@ -57,7 +55,6 @@ async function start() {
   const shutdown = () => {
     console.log(JSON.stringify({ level: 'info', msg: 'Shutting down...' }));
     stopOutboxPoller();
-    stopInstallmentChecker();
     clearInterval(overdueJobInterval);
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 10_000).unref();

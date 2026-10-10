@@ -10,14 +10,6 @@ const BRANCH_OF = {
     entity: 'Payment',
     sql: 'SELECT o.branch_id FROM order_payments p JOIN orders o ON o.id = p.order_id WHERE p.id = $1',
   },
-  installmentPlan: {
-    entity: 'Installment plan',
-    sql: 'SELECT o.branch_id FROM installment_plans ip JOIN orders o ON o.id = ip.order_id WHERE ip.id = $1',
-  },
-  installment: {
-    entity: 'Installment',
-    sql: 'SELECT o.branch_id FROM installments i JOIN orders o ON o.id = i.order_id WHERE i.id = $1',
-  },
   posTransaction: { entity: 'Transaction', sql: 'SELECT branch_id FROM transactions WHERE id = $1' },
   return: { entity: 'Return', sql: 'SELECT branch_id FROM returns WHERE id = $1' },
   exchange: { entity: 'Exchange', sql: 'SELECT branch_id FROM exchanges WHERE id = $1' },

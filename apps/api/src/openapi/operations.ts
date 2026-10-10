@@ -1394,6 +1394,20 @@ function paymentOperations(): ApiOperation[] {
       responses: { 200: { description: 'The payments', schema: OrderPaymentListResponseSchema } },
       errors: [400, 401, 403, 404, 500],
     },
+    ...[
+      ['post', '/orders/{id}/installment-plan', 'createInstallmentPlan'],
+      ['get', '/orders/{id}/installment-plan', 'getOrderInstallmentPlan'],
+      ['get', '/installment-plans/{id}', 'getInstallmentPlan'],
+      ['post', '/installments/{id}/pay', 'payInstallment'],
+    ].map(([method, path, operationId]): ApiOperation => ({
+      operationId,
+      method: method as ApiOperation['method'],
+      path,
+      summary: 'Retired: installment plans are no longer supported; take payments on the order',
+      tag,
+      responses: {},
+      errors: [401, 410],
+    })),
     {
       operationId: 'getOrderBalance',
       method: 'get',

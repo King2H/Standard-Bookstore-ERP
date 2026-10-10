@@ -1,6 +1,6 @@
 /**
  * Post-MVP Hardening Tests
- * Covers: idempotency, bank transfer validation, PII encryption, installment plans
+ * Covers: idempotency, bank transfer validation, PII encryption, retired installment plans
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
@@ -282,105 +282,24 @@ describe('Post-MVP Hardening', () => {
     });
   });
 
-  // ── Installment Plans ───────────────────────────────────────────────────────
+  // ── Installment Plans (retired) ─────────────────────────────────────────────
+  // Plans were retired (#21, owner decision 2026-10-10): staged payments, if
+  // ever needed, become a payment schedule on the receivable.
 
-  describe('Installment Plans', () => {
-    it('11. Create installment plan for an order', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
-
-      const res = await request(getTestApp())
-        .post(`/api/orders/${orderId}/installment-plan`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ numInstallments: 3 });
-
-      expect(res.status).toBe(201);
-      expect(res.body.orderId).toBe(String(orderId));
-      expect(res.body.numInstallments).toBe(3);
-      expect(res.body.installments).toHaveLength(3);
-      expect(res.body.currency).toBe('ETB');
-    });
-
-    it('12. Cannot create duplicate plan for same order', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
-
-      await request(getTestApp())
-        .post(`/api/orders/${orderId}/installment-plan`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ numInstallments: 2 });
-
-      const res2 = await request(getTestApp())
-        .post(`/api/orders/${orderId}/installment-plan`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ numInstallments: 2 });
-
-      expect(res2.status).toBe(422);
-      expect(res2.body.error).toBe('PLAN_EXISTS');
-    });
-
-    it('13. GET installment plan by order', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
-
-      await request(getTestApp())
-        .post(`/api/orders/${orderId}/installment-plan`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ numInstallments: 2 });
-
-      const res = await request(getTestApp())
-        .get(`/api/orders/${orderId}/installment-plan`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId));
-
-      expect(res.status).toBe(200);
-      expect(res.body.installments).toHaveLength(2);
-    });
-
-    it('14. Record installment payment → status updates', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
-
-      const planRes = await request(getTestApp())
-        .post(`/api/orders/${orderId}/installment-plan`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ numInstallments: 2 });
-
-      const installmentId = planRes.body.installments[0].id;
-      const installmentAmount = planRes.body.installments[0].amount;
-
-      const payRes = await request(getTestApp())
-        .post(`/api/installments/${installmentId}/pay`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ amount: installmentAmount });
-
-      expect(payRes.status).toBe(200);
-      expect(payRes.body.status).toBe('paid');
-      expect(payRes.body.paidAmount).toBeCloseTo(installmentAmount, 2);
-    });
-
-    it('15. Installment payment exceeding amount → 422', async () => {
-      const orderId = await createTestOrder(adminToken, branchId, bookId);
-
-      const planRes = await request(getTestApp())
-        .post(`/api/orders/${orderId}/installment-plan`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ numInstallments: 2 });
-
-      const installmentId = planRes.body.installments[0].id;
-      const installmentAmount = planRes.body.installments[0].amount;
-
-      const payRes = await request(getTestApp())
-        .post(`/api/installments/${installmentId}/pay`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('X-Branch-Id', String(branchId))
-        .send({ amount: installmentAmount * 10 });
-
-      expect(payRes.status).toBe(422);
-      expect(payRes.body.error).toBe('EXCEEDS_INSTALLMENT_AMOUNT');
-    });
+  it('11. Every installment plan endpoint answers 410', async () => {
+    const orderId = await createTestOrder(adminToken, branchId, bookId);
+    const calls = [
+      request(getTestApp()).post(`/api/v1/orders/${orderId}/installment-plan`).send({ numInstallments: 3 }),
+      request(getTestApp()).get(`/api/v1/orders/${orderId}/installment-plan`),
+      request(getTestApp()).get('/api/v1/installment-plans/1'),
+      request(getTestApp()).post('/api/v1/installments/1/pay').send({ amount: 10 }),
+    ];
+    for (const call of calls) {
+      const res = await call.set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+      expect(res.status).toBe(410);
+      expect(res.body.error).toBe('DEPRECATED');
+    }
+    const plans = await db.query(`SELECT COUNT(*)::int AS n FROM installment_plans WHERE order_id = $1`, [orderId]);
+    expect(plans.rows[0].n).toBe(0);
   });
 });

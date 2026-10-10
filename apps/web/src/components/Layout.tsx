@@ -6,8 +6,8 @@
  *   Sales      → POS, Orders, Returns, Exchanges, Customers
  *   Stock      → Inventory, Procurement, Suppliers, Catalog
  *   Finance    → Payments, Receivables
- *     (Installments and Bank Accounts are not active modules for this
- *      version — hidden from the nav, routes/pages left intact.)
+ *     (Bank Accounts is not an active module for this version: hidden
+ *      from the nav, route/page left intact.)
  *   Organization → Branches, Locations, Staff
  *   System     → Settings, Audit Log
  *
@@ -25,7 +25,7 @@ type Page =
   | 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings'
   | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers'
   | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments'
-  | 'installments' | 'exchanges' | 'profile' | 'receivables';
+  | 'exchanges' | 'profile' | 'receivables';
 
 type Role = string;
 
@@ -82,9 +82,9 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'payments',      label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND'] },
       { id: 'receivables',   label: 'Receivables',   icon: '🧾', roles: ['Admin', 'Manager', 'Finance_Officer'],             permissions: ['PROCESS_PAYMENT'] },
-      // 'installments' and 'bank-accounts' intentionally omitted — not
-      // active modules for this version. Pages/routes still exist; only
-      // the nav entries are hidden.
+      // 'bank-accounts' intentionally omitted — not an active module for
+      // this version. The page/route still exists; only the nav entry is
+      // hidden. (Installments were retired.)
     ],
   },
   {

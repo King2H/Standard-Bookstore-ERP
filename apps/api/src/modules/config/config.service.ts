@@ -192,18 +192,6 @@ export async function getRefundMethodAfterWindow(): Promise<'any' | 'store_credi
   return ((await systemValue('refund_method_after_window')) ?? 'any') as 'any' | 'store_credit_only';
 }
 
-export async function getMinDepositPct(branchId: number): Promise<number> {
-  return Number(await getEffectiveConfig(branchId, 'min_deposit_pct'));
-}
-
-export async function getMaxInstallments(): Promise<number> {
-  return Number((await systemValue('max_installments')) ?? 12);
-}
-
-export async function getInstallmentGracePeriodDays(): Promise<number> {
-  return Number((await systemValue('installment_grace_period_days')) ?? 0);
-}
-
 export async function getAllowedPaymentMethods(branchId: number): Promise<string[]> {
   try {
     const val = await getEffectiveConfig(branchId, 'allowed_payment_methods');

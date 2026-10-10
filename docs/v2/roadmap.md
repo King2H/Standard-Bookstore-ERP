@@ -102,7 +102,7 @@ so each one builds on modules already migrated (owner decision, 2026-10-08):
 |---|---|
 | 1 | config, location, branch, audit logs, notifications, financial transactions |
 | 2 | customer, inventory, catalog |
-| 3 | receivables, payments/installments, pos, returns, procurement, exchanges |
+| 3 | receivables, payments (installment plans retired), pos, returns, procurement, exchanges |
 | 4 | auth, bank accounts |
 
 Issues found earlier get their own small PR right after the module they belong to: #72 after

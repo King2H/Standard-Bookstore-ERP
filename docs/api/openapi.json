@@ -12084,6 +12084,70 @@
         }
       }
     },
+    "/installment-plans/{id}": {
+      "get": {
+        "operationId": "getInstallmentPlan",
+        "summary": "Retired: installment plans are no longer supported; take payments on the order",
+        "tags": [
+          "Payments"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/installments/{id}/pay": {
+      "post": {
+        "operationId": "payInstallment",
+        "summary": "Retired: installment plans are no longer supported; take payments on the order",
+        "tags": [
+          "Payments"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/inventory": {
       "get": {
         "operationId": "listStockLevels",
@@ -17518,6 +17582,68 @@
           },
           "500": {
             "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{id}/installment-plan": {
+      "post": {
+        "operationId": "createInstallmentPlan",
+        "summary": "Retired: installment plans are no longer supported; take payments on the order",
+        "tags": [
+          "Payments"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getOrderInstallmentPlan",
+        "summary": "Retired: installment plans are no longer supported; take payments on the order",
+        "tags": [
+          "Payments"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
             "content": {
               "application/json": {
                 "schema": {
