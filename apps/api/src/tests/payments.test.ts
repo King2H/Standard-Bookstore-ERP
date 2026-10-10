@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
-import { createTestStaff, createTestBranch } from './helpers/seed.js';
+import { createTestStaff, createTestBranch, setBranchPrice } from './helpers/seed.js';
 import { db } from '../db/index.js';
 
 // Unpaid Orders lists orders, POS sales and receivables together, each with
@@ -414,6 +414,8 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
   });
 
   it('11. Unpaid Orders includes an exchange_difference receivable, sourceType=exchange_difference, id=receivable id', async () => {
+    await setBranchPrice(book1.id, branchId, 50);
+    await setBranchPrice(book2.id, branchId, 150);
     const excRes = await request(getTestApp())
       .post('/api/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
@@ -421,7 +423,8 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
       .send({
         locationId, customerId,
         incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 50 }],
-        outgoingItems: [{ bookId: book2.id, quantity: 1, unitPrice: 150 }],
+        outgoingItems: [{ bookId: book2.id, quantity: 1 }],
+        allowCredit: true,
       });
     expect(excRes.status).toBe(201);
     expect(excRes.body.settlementType).toBe('Customer_Pays');
@@ -480,6 +483,8 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
   });
 
   it('12. Partial collection against an exchange_difference receivable → PartiallyPaid, still listed with reduced outstanding', async () => {
+    await setBranchPrice(book1.id, branchId, 20);
+    await setBranchPrice(book2.id, branchId, 120);
     const excRes = await request(getTestApp())
       .post('/api/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
@@ -487,7 +492,8 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
       .send({
         locationId, customerId,
         incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 20 }],
-        outgoingItems: [{ bookId: book2.id, quantity: 1, unitPrice: 120 }],
+        outgoingItems: [{ bookId: book2.id, quantity: 1 }],
+        allowCredit: true,
       });
     expect(excRes.status).toBe(201);
 

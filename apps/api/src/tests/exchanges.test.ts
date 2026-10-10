@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
-import { createTestStaff, createTestBranch } from './helpers/seed.js';
+import { createTestStaff, createTestBranch, setBranchPrice } from './helpers/seed.js';
 import { db } from '../db/index.js';
 
 const STAFF_PREFIX = 'exc_test_';
@@ -104,7 +104,9 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
 
   // ── 2. Customer pays (outgoing > incoming) ─────────────────────────────────
 
-  it('2. Customer pays exchange → settlementType=Customer_Pays, opens a receivable', async () => {
+  it('2. Customer pays exchange left on credit → settlementType=Customer_Pays, opens a receivable', async () => {
+    await setBranchPrice(book1.id, branchId, 100);
+    await setBranchPrice(book2.id, branchId, 200);
     await ensureInventory(book1.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
 
@@ -116,7 +118,8 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
         locationId,
         customerId,
         incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 100 }],
-        outgoingItems:  [{ bookId: book2.id, quantity: 1, unitPrice: 200 }],
+        outgoingItems:  [{ bookId: book2.id, quantity: 1 }],
+        allowCredit: true,
       });
 
     expect(res.status).toBe(201);
@@ -137,7 +140,9 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
 
   // ── 2b. Non-Even exchange without a customer is rejected ──────────────────
 
-  it('2b. Customer pays exchange without a customer → 422 CUSTOMER_REQUIRED_FOR_SETTLEMENT', async () => {
+  it('2b. Customer pays exchange on credit without a customer → 422 CREDIT_REQUIRES_CUSTOMER', async () => {
+    await setBranchPrice(book1.id, branchId, 100);
+    await setBranchPrice(book2.id, branchId, 200);
     await ensureInventory(book1.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
 
@@ -148,16 +153,19 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
       .send({
         locationId,
         incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 100 }],
-        outgoingItems:  [{ bookId: book2.id, quantity: 1, unitPrice: 200 }],
+        outgoingItems:  [{ bookId: book2.id, quantity: 1 }],
+        allowCredit: true,
       });
 
     expect(res.status).toBe(422);
-    expect(res.body.error).toBe('CUSTOMER_REQUIRED_FOR_SETTLEMENT');
+    expect(res.body.error).toBe('CREDIT_REQUIRES_CUSTOMER');
   });
 
   // ── 3. Store refunds (incoming > outgoing) ─────────────────────────────────
 
   it('3. Store refunds exchange → settlementType=Store_Refunds, credits store credit', async () => {
+    await setBranchPrice(book1.id, branchId, 300);
+    await setBranchPrice(book2.id, branchId, 100);
     await ensureInventory(book1.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
     const balBefore = await db.query(`SELECT balance FROM store_credit_accounts WHERE customer_id = $1`, [customerId]);
@@ -171,7 +179,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
         locationId,
         customerId,
         incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 300 }],
-        outgoingItems:  [{ bookId: book2.id, quantity: 1, unitPrice: 100 }],
+        outgoingItems:  [{ bookId: book2.id, quantity: 1 }],
       });
 
     expect(res.status).toBe(201);
@@ -186,6 +194,8 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
   // ── 4. Inventory updated correctly ─────────────────────────────────────────
 
   it('4. Inventory updated: incoming +qty, outgoing -qty', async () => {
+    await setBranchPrice(book1.id, branchId, 100);
+    await setBranchPrice(book2.id, branchId, 100);
     await ensureInventory(book1.id, locationId, 10);
     await ensureInventory(book2.id, locationId, 10);
 
@@ -202,7 +212,8 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
         locationId,
         customerId,
         incomingItems: [{ bookId: book1.id, quantity: 2, unitPrice: 100 }],
-        outgoingItems:  [{ bookId: book2.id, quantity: 3, unitPrice: 100 }],
+        outgoingItems:  [{ bookId: book2.id, quantity: 3 }],
+        payments: [{ method: 'cash', amount: 100 }],
       });
 
     const inv1After = await db.query(`SELECT quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [book1.id, locationId]);
@@ -215,6 +226,8 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
   // ── 5. Insufficient stock for outgoing → 422 ───────────────────────────────
 
   it('5. Insufficient stock for outgoing → 422 INSUFFICIENT_STOCK', async () => {
+    await setBranchPrice(book1.id, branchId, 100);
+    await setBranchPrice(book2.id, branchId, 100);
     await db.query(`UPDATE inventory SET quantity = 0 WHERE book_id = $1 AND location_id = $2`, [book2.id, locationId]);
 
     const res = await request(getTestApp())
@@ -224,7 +237,8 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
       .send({
         locationId,
         incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 100 }],
-        outgoingItems:  [{ bookId: book2.id, quantity: 5, unitPrice: 100 }],
+        outgoingItems:  [{ bookId: book2.id, quantity: 5 }],
+        payments: [{ method: 'cash', amount: 400 }],
       });
 
     expect(res.status).toBe(422);
@@ -257,28 +271,21 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     expect(res.status).toBe(400);
   });
 
-  // ── 7. Cancel exchange ──────────────────────────────────────────────────────
+  // ── 7. Cancel retired ───────────────────────────────────────────────────────
 
-  it('7. Cancel Initiated exchange → status=Cancelled', async () => {
-    // Create an exchange and immediately cancel it via direct DB manipulation to test cancel
+  it('7. Cancel answers 410: an exchange is completed at once and undone by a same-day void', async () => {
     const createRes = await request(getTestApp())
       .post('/api/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, customerId, incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 50 }], outgoingItems: [] });
     expect(createRes.status).toBe(201);
-    const excId = createRes.body.id;
-
-    // Reset to Initiated so we can cancel
-    await db.query(`UPDATE exchanges SET status = 'Initiated' WHERE id = $1`, [excId]);
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/exchanges/${excId}/cancel`)
+      .post(`/api/exchanges/${createRes.body.id}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
-
-    expect(cancelRes.status).toBe(200);
-    expect(cancelRes.body.status).toBe('Cancelled');
+    expect(cancelRes.status).toBe(410);
   });
 
   // ── 8. GET /api/exchanges list ──────────────────────────────────────────────

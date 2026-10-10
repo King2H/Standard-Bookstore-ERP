@@ -193,6 +193,19 @@ export async function addDamaged(q: Queryable, bookId: number, locationId: numbe
     .execute();
 }
 
+/** Takes damaged units out; false when fewer than `quantity` are counted damaged. */
+export async function removeDamaged(q: Queryable, bookId: number, locationId: number, quantity: number): Promise<boolean> {
+  const row = await q
+    .updateTable('inventory')
+    .set((eb) => ({ damaged_quantity: eb('damaged_quantity', '-', quantity), updated_at: sql`now()` }))
+    .where('book_id', '=', bookId)
+    .where('location_id', '=', locationId)
+    .where('damaged_quantity', '>=', quantity)
+    .returning('book_id')
+    .executeTakeFirst();
+  return row !== undefined;
+}
+
 /** False when there is no stock row for the book at the location. */
 export async function setReorderPoint(
   q: Queryable,

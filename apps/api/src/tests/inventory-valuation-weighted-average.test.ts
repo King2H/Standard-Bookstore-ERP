@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
-import { createTestStaff, createTestBranch } from './helpers/seed.js';
+import { createTestStaff, createTestBranch, setBranchPrice } from './helpers/seed.js';
 import { db } from '../db/index.js';
 import { computeNetProfit } from '../lib/profit.service.js';
 
@@ -297,6 +297,8 @@ describe('Inventory Valuation, Returns, Exchanges & Procurement Accounting Stand
   it('4. An exchange incoming item posts at its assessed valuation and blends into the average', async () => {
     const bookId = await createBook(`${BOOK_PREFIX}ExchangeValuation`);
     await createAndReceivePO(bookId, 10, 20); // baseline average = 20
+    // A trade-in is worth at most the book's selling price (owner decision 4a).
+    await setBranchPrice(bookId, branchId, 80);
 
     const exchangeRes = await request(getTestApp())
       .post('/api/exchanges')

@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
-import { createTestStaff, createTestBranch } from './helpers/seed.js';
+import { createTestStaff, createTestBranch, setBranchPrice } from './helpers/seed.js';
 import { db } from '../db/index.js';
 
 const STAFF_PREFIX = 'recv_test_';
@@ -182,6 +182,9 @@ describe('Receivables — unified payment collection (Module 3)', () => {
   // ── 3-7: exchange_difference — the previously-missing pipeline ────────────
 
   async function createCustomerPaysExchange(): Promise<{ receivableId: string; netBalance: number }> {
+    // Outgoing books are priced from the catalog; trade-ins are worth at most their price.
+    await setBranchPrice(book.id, branchId, 50);
+    await setBranchPrice(book2.id, branchId, 150);
     await ensureInventory(book.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
     const res = await request(getTestApp())
@@ -191,7 +194,8 @@ describe('Receivables — unified payment collection (Module 3)', () => {
       .send({
         locationId, customerId,
         incomingItems: [{ bookId: book.id, quantity: 1, unitPrice: 50 }],
-        outgoingItems: [{ bookId: book2.id, quantity: 1, unitPrice: 150 }],
+        outgoingItems: [{ bookId: book2.id, quantity: 1 }],
+        allowCredit: true,
       });
     expect(res.status).toBe(201);
     expect(res.body.settlementType).toBe('Customer_Pays');

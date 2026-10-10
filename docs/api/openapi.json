@@ -11709,6 +11709,1970 @@
         }
       }
     },
+    "/exchanges": {
+      "post": {
+        "operationId": "createExchange",
+        "summary": "Books in for books out at the counter, settled at once: the customer pays the difference (or leaves it on credit), or the store gives it back as store credit or cash (CREATE_SALE; trade-ins above the approval limit: Manager, Admin)",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "locationId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "customerId": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "incomingItems": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "bookId": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unitPrice": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                            }
+                          ]
+                        },
+                        "condition": {
+                          "default": "resellable",
+                          "type": "string",
+                          "enum": [
+                            "resellable",
+                            "damaged"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "bookId",
+                        "quantity",
+                        "unitPrice"
+                      ]
+                    }
+                  },
+                  "outgoingItems": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "bookId": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "bookId",
+                        "quantity"
+                      ]
+                    }
+                  },
+                  "payments": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "type": "string",
+                          "enum": [
+                            "cash",
+                            "bank",
+                            "mobile",
+                            "store_credit",
+                            "loyalty_points"
+                          ]
+                        },
+                        "amount": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                            }
+                          ]
+                        },
+                        "reference": {
+                          "type": "string",
+                          "maxLength": 200
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "amount"
+                      ]
+                    }
+                  },
+                  "allowCredit": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "dueDate": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "refundMethod": {
+                    "default": "store_credit",
+                    "type": "string",
+                    "enum": [
+                      "store_credit",
+                      "cash"
+                    ]
+                  }
+                },
+                "required": [
+                  "locationId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The exchange",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "exchangeReference": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "customerId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "lifecycleStatus": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "totalIncomingValue": {
+                      "type": "number"
+                    },
+                    "totalOutgoingValue": {
+                      "type": "number"
+                    },
+                    "netBalance": {
+                      "type": "number"
+                    },
+                    "settlementType": {
+                      "type": "string",
+                      "enum": [
+                        "Even",
+                        "Customer_Pays",
+                        "Store_Refunds"
+                      ]
+                    },
+                    "refundMethod": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "store_credit",
+                            "cash"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "settlementStatus": {
+                      "type": "string"
+                    },
+                    "voidable": {
+                      "type": "boolean"
+                    },
+                    "voidedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voidedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "voidReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "incomingItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "exchangeId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "condition": {
+                            "type": "string",
+                            "enum": [
+                              "resellable",
+                              "damaged"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "exchangeId",
+                          "bookId",
+                          "bookTitle",
+                          "quantity",
+                          "unitPrice",
+                          "totalPrice"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "outgoingItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "exchangeId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "condition": {
+                            "type": "string",
+                            "enum": [
+                              "resellable",
+                              "damaged"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "exchangeId",
+                          "bookId",
+                          "bookTitle",
+                          "quantity",
+                          "unitPrice",
+                          "totalPrice"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "settlementEntries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "entryType": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "method": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "entryType",
+                          "amount",
+                          "method",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "exchangeReference",
+                    "branchId",
+                    "locationId",
+                    "customerId",
+                    "status",
+                    "lifecycleStatus",
+                    "totalIncomingValue",
+                    "totalOutgoingValue",
+                    "netBalance",
+                    "settlementType",
+                    "refundMethod",
+                    "currency",
+                    "notes",
+                    "createdBy",
+                    "createdAt",
+                    "updatedAt",
+                    "outstandingAmount",
+                    "dueDate",
+                    "settlementStatus",
+                    "voidable",
+                    "voidedAt",
+                    "voidedBy",
+                    "voidReason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listExchanges",
+        "summary": "Exchanges of the session branch, newest first (Sales, Manager, Admin, Finance_Officer; ?branchId= another branch needs access to all branches)",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Completed",
+                "Cancelled",
+                "Initiated",
+                "Evaluated"
+              ]
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of exchanges",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "exchangeReference": {
+                            "type": "string"
+                          },
+                          "branchId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "customerId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "lifecycleStatus": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "totalIncomingValue": {
+                            "type": "number"
+                          },
+                          "totalOutgoingValue": {
+                            "type": "number"
+                          },
+                          "netBalance": {
+                            "type": "number"
+                          },
+                          "settlementType": {
+                            "type": "string",
+                            "enum": [
+                              "Even",
+                              "Customer_Pays",
+                              "Store_Refunds"
+                            ]
+                          },
+                          "refundMethod": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "store_credit",
+                                  "cash"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "currency": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          },
+                          "outstandingAmount": {
+                            "type": "number"
+                          },
+                          "dueDate": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "settlementStatus": {
+                            "type": "string"
+                          },
+                          "voidable": {
+                            "type": "boolean"
+                          },
+                          "voidedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "voidedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "voidReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "incomingItems": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "exchangeId": {
+                                  "type": "string"
+                                },
+                                "bookId": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "unitPrice": {
+                                  "type": "number"
+                                },
+                                "totalPrice": {
+                                  "type": "number"
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": [
+                                    "resellable",
+                                    "damaged"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "exchangeId",
+                                "bookId",
+                                "bookTitle",
+                                "quantity",
+                                "unitPrice",
+                                "totalPrice"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "outgoingItems": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "exchangeId": {
+                                  "type": "string"
+                                },
+                                "bookId": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "unitPrice": {
+                                  "type": "number"
+                                },
+                                "totalPrice": {
+                                  "type": "number"
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": [
+                                    "resellable",
+                                    "damaged"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "exchangeId",
+                                "bookId",
+                                "bookTitle",
+                                "quantity",
+                                "unitPrice",
+                                "totalPrice"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "settlementEntries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "entryType": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "number"
+                                },
+                                "method": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "entryType",
+                                "amount",
+                                "method",
+                                "createdAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "exchangeReference",
+                          "branchId",
+                          "locationId",
+                          "customerId",
+                          "status",
+                          "lifecycleStatus",
+                          "totalIncomingValue",
+                          "totalOutgoingValue",
+                          "netBalance",
+                          "settlementType",
+                          "refundMethod",
+                          "currency",
+                          "notes",
+                          "createdBy",
+                          "createdAt",
+                          "updatedAt",
+                          "outstandingAmount",
+                          "dueDate",
+                          "settlementStatus",
+                          "voidable",
+                          "voidedAt",
+                          "voidedBy",
+                          "voidReason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "totalPages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exchanges/{id}": {
+      "get": {
+        "operationId": "getExchange",
+        "summary": "One exchange with its books and settlement (Sales, Manager, Admin, Finance_Officer)",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The exchange",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "exchangeReference": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "customerId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "lifecycleStatus": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "totalIncomingValue": {
+                      "type": "number"
+                    },
+                    "totalOutgoingValue": {
+                      "type": "number"
+                    },
+                    "netBalance": {
+                      "type": "number"
+                    },
+                    "settlementType": {
+                      "type": "string",
+                      "enum": [
+                        "Even",
+                        "Customer_Pays",
+                        "Store_Refunds"
+                      ]
+                    },
+                    "refundMethod": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "store_credit",
+                            "cash"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "settlementStatus": {
+                      "type": "string"
+                    },
+                    "voidable": {
+                      "type": "boolean"
+                    },
+                    "voidedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voidedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "voidReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "incomingItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "exchangeId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "condition": {
+                            "type": "string",
+                            "enum": [
+                              "resellable",
+                              "damaged"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "exchangeId",
+                          "bookId",
+                          "bookTitle",
+                          "quantity",
+                          "unitPrice",
+                          "totalPrice"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "outgoingItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "exchangeId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "condition": {
+                            "type": "string",
+                            "enum": [
+                              "resellable",
+                              "damaged"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "exchangeId",
+                          "bookId",
+                          "bookTitle",
+                          "quantity",
+                          "unitPrice",
+                          "totalPrice"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "settlementEntries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "entryType": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "method": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "entryType",
+                          "amount",
+                          "method",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "exchangeReference",
+                    "branchId",
+                    "locationId",
+                    "customerId",
+                    "status",
+                    "lifecycleStatus",
+                    "totalIncomingValue",
+                    "totalOutgoingValue",
+                    "netBalance",
+                    "settlementType",
+                    "refundMethod",
+                    "currency",
+                    "notes",
+                    "createdBy",
+                    "createdAt",
+                    "updatedAt",
+                    "outstandingAmount",
+                    "dueDate",
+                    "settlementStatus",
+                    "voidable",
+                    "voidedAt",
+                    "voidedBy",
+                    "voidReason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exchanges/{id}/approve": {
+      "post": {
+        "operationId": "approveExchange",
+        "summary": "Retired: exchanges are made in one step with POST /exchanges and undone with POST /exchanges/{id}/void",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exchanges/{id}/cancel": {
+      "post": {
+        "operationId": "cancelExchange",
+        "summary": "Retired: exchanges are made in one step with POST /exchanges and undone with POST /exchanges/{id}/void",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exchanges/{id}/review": {
+      "post": {
+        "operationId": "reviewExchange",
+        "summary": "Retired: exchanges are made in one step with POST /exchanges and undone with POST /exchanges/{id}/void",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exchanges/{id}/settle": {
+      "post": {
+        "operationId": "settleExchange",
+        "summary": "Retired: exchanges are made in one step with POST /exchanges and undone with POST /exchanges/{id}/void",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exchanges/{id}/void": {
+      "post": {
+        "operationId": "voidExchange",
+        "summary": "Undo an exchange on its day, with a reason: stock back both ways, money and store credit back (Manager, Admin)",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The voided exchange",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "exchangeReference": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "customerId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "lifecycleStatus": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "totalIncomingValue": {
+                      "type": "number"
+                    },
+                    "totalOutgoingValue": {
+                      "type": "number"
+                    },
+                    "netBalance": {
+                      "type": "number"
+                    },
+                    "settlementType": {
+                      "type": "string",
+                      "enum": [
+                        "Even",
+                        "Customer_Pays",
+                        "Store_Refunds"
+                      ]
+                    },
+                    "refundMethod": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "store_credit",
+                            "cash"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "settlementStatus": {
+                      "type": "string"
+                    },
+                    "voidable": {
+                      "type": "boolean"
+                    },
+                    "voidedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voidedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "voidReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "incomingItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "exchangeId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "condition": {
+                            "type": "string",
+                            "enum": [
+                              "resellable",
+                              "damaged"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "exchangeId",
+                          "bookId",
+                          "bookTitle",
+                          "quantity",
+                          "unitPrice",
+                          "totalPrice"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "outgoingItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "exchangeId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "condition": {
+                            "type": "string",
+                            "enum": [
+                              "resellable",
+                              "damaged"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "exchangeId",
+                          "bookId",
+                          "bookTitle",
+                          "quantity",
+                          "unitPrice",
+                          "totalPrice"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "settlementEntries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "entryType": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "method": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "entryType",
+                          "amount",
+                          "method",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "exchangeReference",
+                    "branchId",
+                    "locationId",
+                    "customerId",
+                    "status",
+                    "lifecycleStatus",
+                    "totalIncomingValue",
+                    "totalOutgoingValue",
+                    "netBalance",
+                    "settlementType",
+                    "refundMethod",
+                    "currency",
+                    "notes",
+                    "createdBy",
+                    "createdAt",
+                    "updatedAt",
+                    "outstandingAmount",
+                    "dueDate",
+                    "settlementStatus",
+                    "voidable",
+                    "voidedAt",
+                    "voidedBy",
+                    "voidReason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exchanges/initiate": {
+      "post": {
+        "operationId": "initiateExchange",
+        "summary": "Retired: exchanges are made in one step with POST /exchanges and undone with POST /exchanges/{id}/void",
+        "tags": [
+          "Exchanges"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/financial-transactions": {
       "get": {
         "operationId": "listFinancialTransactions",

@@ -63,3 +63,16 @@ export async function createTestBranch(opts?: { name?: string }): Promise<{ bran
 
   return { branchId: result.rows[0].id };
 }
+
+/**
+ * Sets a book's price in one branch. Exchanges and POS sales price books from
+ * the catalog, so a test that needs a known amount sets it in its own branch
+ * (removed with the branch).
+ */
+export async function setBranchPrice(bookId: number, branchId: number, price: number): Promise<void> {
+  await db.query(
+    `INSERT INTO book_branch_prices (book_id, branch_id, price) VALUES ($1, $2, $3)
+     ON CONFLICT (book_id, branch_id, format_id, edition_id) DO UPDATE SET price = EXCLUDED.price`,
+    [bookId, branchId, price],
+  );
+}

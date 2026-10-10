@@ -184,11 +184,12 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     // Confirmed never procured — no po_line_items row exists for this brand-new book.
     const poCheck = await db.query(`SELECT 1 FROM po_line_items WHERE book_id = $1`, [bookId]);
     expect(poCheck.rows.length).toBe(0);
+    // The book was just registered and has no price yet, so a Manager values it (owner decision 4a).
 
     const ALLOWANCE = 12.5;
     const res = await request(getTestApp())
       .post('/api/exchanges')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, customerId, incomingItems: [{ bookId, quantity: 3, unitPrice: ALLOWANCE }], outgoingItems: [] });
 
@@ -342,36 +343,18 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     const bookId = regRes.body.id as number;
 
     const ALLOWANCE = 6;
-    // The initiate → review → approve → settle exchange_items lifecycle is
-    // what supports a 'damaged' condition — Quick Exchange (used by tests
-    // 6-7b) has no damaged concept, always resellable. Manager holds
-    // APPROVE_EXCHANGE for the review/approve/settle steps.
-    const initRes = await request(getTestApp())
-      .post('/api/exchanges/initiate')
+    // Quick Exchange marks an incoming book damaged (owner decision 1a); the
+    // book has no price yet, so a Manager values it, and the store pays cash.
+    const res = await request(getTestApp())
+      .post('/api/exchanges')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ locationId, customerId, items: [{ bookId, quantity: 1, unitPrice: ALLOWANCE, type: 'returned', condition: 'damaged' }] });
-    expect(initRes.status).toBe(201);
-    const exchangeId = initRes.body.id as string;
-
-    const reviewRes = await request(getTestApp())
-      .post(`/api/exchanges/${exchangeId}/review`)
-      .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId));
-    expect(reviewRes.status).toBe(200);
-
-    const approveRes = await request(getTestApp())
-      .post(`/api/exchanges/${exchangeId}/approve`)
-      .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId));
-    expect(approveRes.status).toBe(200);
-
-    const settleRes = await request(getTestApp())
-      .post(`/api/exchanges/${exchangeId}/settle`)
-      .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId))
-      .send({ entries: [{ entryType: 'cash_refund', amount: ALLOWANCE, method: 'cash' }], idempotencyKey: `test-7c-${exchangeId}` });
-    expect(settleRes.status).toBe(200);
+      .send({
+        locationId, customerId, refundMethod: 'cash',
+        incomingItems: [{ bookId, quantity: 1, unitPrice: ALLOWANCE, condition: 'damaged' }],
+        outgoingItems: [],
+      });
+    expect(res.status).toBe(201);
 
     // Damaged stock never enters sellable inventory / average_cost.
     const invRes = await db.query(`SELECT quantity, damaged_quantity FROM inventory WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);

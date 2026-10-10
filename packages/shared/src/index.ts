@@ -27,6 +27,7 @@ export * from './catalogReference.js';
 export * from './common.js';
 export * from './config.js';
 export * from './customer.js';
+export * from './exchange.js';
 export * from './financialTransaction.js';
 export * from './health.js';
 export * from './inventory.js';

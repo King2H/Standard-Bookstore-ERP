@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
-import { createTestBranch, createTestStaff } from './helpers/seed.js';
+import { createTestBranch, createTestStaff, setBranchPrice } from './helpers/seed.js';
 import { db } from '../db/index.js';
 import { getReceivablesExportRows } from '../modules/reports/reports.service.js';
 
@@ -42,11 +42,15 @@ describe('Receivables', () => {
 
   /** A Customer_Pays exchange: the customer owes 100. */
   async function exchangeDebt(): Promise<{ id: string; owed: number }> {
+    // Outgoing books are priced from the catalog; trade-ins are worth at most their price.
+    await setBranchPrice(book.id, branchId, 50);
+    await setBranchPrice(book2.id, branchId, 150);
     const res = await as(api().post('/api/v1/exchanges'), sales).send({
       locationId,
       customerId,
       incomingItems: [{ bookId: book.id, quantity: 1, unitPrice: 50 }],
-      outgoingItems: [{ bookId: book2.id, quantity: 1, unitPrice: 150 }],
+      outgoingItems: [{ bookId: book2.id, quantity: 1 }],
+      allowCredit: true,
     });
     expect(res.status).toBe(201);
     return { id: await receivableOf('exchange_difference', res.body.id), owed: Number(res.body.netBalance) };

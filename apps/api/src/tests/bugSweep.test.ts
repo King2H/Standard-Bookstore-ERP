@@ -192,7 +192,14 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   // ── 4. Exchange outgoing (resale) unitPrice must be positive ──────────────
 
-  it('4. POST /api/exchanges with a zero outgoing unitPrice returns 400', async () => {
+  it('4. POST /api/exchanges prices outgoing books from the catalog; a unitPrice sent is ignored (was: 0 accepted)', async () => {
+    const { rows } = await db.query(`SELECT default_price FROM books WHERE id = $1`, [bookId]);
+    const price = Number(rows[0].default_price);
+    await db.query(
+      `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1, $2, 10, 5, 0)
+       ON CONFLICT (book_id, location_id) DO UPDATE SET quantity = GREATEST(inventory.quantity, 10)`,
+      [bookId, locationId],
+    );
     const res = await request(getTestApp())
       .post('/api/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
@@ -200,9 +207,10 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
       .send({
         locationId,
         outgoingItems: [{ bookId, quantity: 1, unitPrice: 0 }],
+        payments: [{ method: 'cash', amount: price }],
       });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(201);
+    expect(res.body.totalOutgoingValue).toBe(price);
   });
 });

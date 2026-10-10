@@ -481,7 +481,7 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
          e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
          COALESCE(c.full_name, 'Walk-in') AS customer_name,
          b.title AS book_title, b.isbn AS book_isbn,
-         ei.quantity, ei.evaluated_unit_price AS unit_price, ei.total_price,
+         ei.quantity, ei.evaluated_unit_price AS unit_price, ei.total_price, ei.condition,
          pay.method AS payment_method, rec.status AS receivable_status,
          ecash.net_cash AS cash_collected, erec.outstanding_amount AS receivable_balance,
          s.username AS staff_username
@@ -546,14 +546,13 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
     if (direction === 'outgoing') {
       costAmount = parseFloat((parseFloat((row.resolved_unit_cost as string | number | null) as string ?? '0') * quantity).toFixed(2));
     } else if (row.condition === 'damaged') {
-      // Damaged trade-in: it never becomes sellable inventory (exchanges.service.ts
-      // updates damaged_quantity directly, bypassing stockIn()/average_cost
-      // entirely), so there's no future resale to recover the allowance —
+      // Damaged trade-in: it never becomes sellable inventory (it is counted in
+      // damaged_quantity, outside average_cost), so there's no future resale
+      // to recover the allowance —
       // the full allowance is a real, permanent loss and must hit profit now.
       costAmount = 0;
     } else {
-      // Resellable trade-in (or a legacy Quick Exchange incoming row, which
-      // has no damaged concept at all — always resellable): the allowance
+      // Resellable trade-in: the allowance
       // becomes the item's real cost basis in inventory (average_cost, via
       // stockIn()'s unitCost) instead of an expense. costAmount = netAmount
       // makes this leg's grossProfit exactly 0 — matching the RETURN leg's

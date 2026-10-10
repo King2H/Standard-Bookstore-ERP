@@ -287,6 +287,10 @@ export async function moveStoreCredit(
   entry: { direction: 'credit' | 'debit'; refType: string | null; refId: string | null },
 ): Promise<void> {
   const value = amount.toFixed(2);
+  // A customer from before accounts were opened with every customer may have none yet.
+  if (entry.direction === 'credit') {
+    await q.insertInto('store_credit_accounts').values({ customer_id: customerId, balance: '0' }).onConflict((oc) => oc.column('customer_id').doNothing()).execute();
+  }
   await q
     .updateTable('store_credit_accounts')
     .set((eb) => ({ balance: eb('balance', entry.direction === 'credit' ? '+' : '-', value) }))
