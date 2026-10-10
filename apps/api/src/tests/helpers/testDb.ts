@@ -113,6 +113,12 @@ export async function cleanTestBranches(namePrefix: string): Promise<void> {
      )`,
     [`${namePrefix}%`],
   );
+  // Exchanges, with their items and settlement entries.
+  const exchanges = `SELECT id FROM exchanges WHERE branch_id IN (SELECT id FROM branches WHERE name LIKE $1)`;
+  for (const table of ['exchange_settlement_entries', 'exchange_incoming_items', 'exchange_outgoing_items', 'exchange_items', 'financial_transactions']) {
+    await db.query(`DELETE FROM ${table} WHERE exchange_id IN (${exchanges})`, [`${namePrefix}%`]);
+  }
+  await db.query(`DELETE FROM exchanges WHERE id IN (${exchanges})`, [`${namePrefix}%`]);
   // Remove locations in these branches
   await db.query(
     `DELETE FROM locations WHERE branch_id IN (

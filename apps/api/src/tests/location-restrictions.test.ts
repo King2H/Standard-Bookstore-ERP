@@ -118,7 +118,7 @@ describe('Location restrictions on sales and stock', () => {
     }));
     expectRefused(await as(api().post('/api/v1/orders'), sales).send({ locationId: locB, items: [{ bookId, quantity: 1 }] }));
     expectRefused(await as(api().post('/api/v1/exchanges'), sales).send({
-      locationId: locB, incomingItems: [{ bookId, quantity: 1 }], outgoingItems: [],
+      locationId: locB, incomingItems: [{ bookId, quantity: 1, unitPrice: 1 }], outgoingItems: [],
     }));
   });
 

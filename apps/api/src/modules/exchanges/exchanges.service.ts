@@ -1,1088 +1,292 @@
-import { db } from '../../db/index.js';
+import { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
-import { queryableOn } from '../../db/tx.js';
-import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
-import { insertOutbox } from '../../lib/outbox.js';
-import type { Permission } from '../../lib/permissions.js';
-import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import { withTransaction, type Queryable } from '../../db/tx.js';
+import { nextDailyNumber } from '../../lib/documentNumber.js';
+import { AppError, BusinessError, NotFoundError } from '../../lib/errors.js';
+import { insertOutboxEvent } from '../../lib/outbox.js';
+import { insertAuditEntry } from '../audit/audit.repository.js';
+import { getMaxReturnValueWithoutAuth } from '../config/config.service.js';
+import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
+import { checkTender } from '../pos/pos.policy.js';
+import { cancelReceivable, createReceivable } from '../receivables/receivables.service.js';
+import * as policy from './exchanges.policy.js';
+import * as exchanges from './exchanges.repository.js';
+import type { Actor, ExchangeFilter, ExchangeRecord, NewExchange, Paging, PaymentLine } from './exchanges.types.js';
 
-export interface StaffCtx { staffId: number; role: string; branchId: number; permissions?: string[]; }
+/**
+ * Use cases of exchanges (A4): books brought in for books taken out, settled
+ * at the counter in one step (owner decision 1a), and a same-day void. One
+ * function each, owning its transaction.
+ */
 
-export interface ExchangeItemInput {
-  bookId: number;
-  quantity: number;
-  unitPrice: number;
+function found(e: ExchangeRecord | undefined): ExchangeRecord {
+  if (e === undefined) throw new NotFoundError('Exchange');
+  return e;
 }
 
-export interface ExchangeRow {
-  id: string;
-  exchangeReference: string;
-  branchId: number;
-  locationId: number | null;
-  customerId: number | null;
-  status: string;
-  lifecycleStatus?: string | null;
-  totalIncomingValue: number;
-  totalOutgoingValue: number;
-  netBalance: number;
-  settlementType: string;
-  currency: string;
-  notes: string | null;
-  relatedPaymentId: string | null;
-  originalOrderId: number | null;
-  createdBy: number;
-  createdAt: string;
-  updatedAt: string;
-  incomingItems?: ExchangeItemRow[];
-  outgoingItems?: ExchangeItemRow[];
-  allowedActions?: string[];
-  outstandingAmount?: number;
-  dueDate?: string | null;
-  settlementStatus?: string;
+function audit(q: Queryable, actor: Actor, action: string, id: string, meta: Record<string, unknown>) {
+  return insertAuditEntry(q, {
+    staffId: actor.staffId,
+    staffRole: actor.role,
+    branchId: actor.branchId,
+    action,
+    entityType: 'exchange',
+    entityId: id,
+    meta,
+  });
 }
 
-export interface ExchangeItemInput2 {
-  bookId: number;
-  quantity: number;
-  unitPrice: number;
-  type: 'returned' | 'new';
-  condition?: 'resellable' | 'damaged'; // only for returned items
+// ── Reads ─────────────────────────────────────────────────────────────────────
+
+export async function getById(id: string): Promise<ExchangeRecord> {
+  const e = found(await exchanges.findExchange(kysely, id));
+  const [{ incoming, outgoing }, settlementEntries] = await Promise.all([exchanges.items(kysely, id), exchanges.settlementEntries(kysely, id)]);
+  return { ...e, incomingItems: incoming, outgoingItems: outgoing, settlementEntries };
 }
 
-export interface SettlementEntry {
-  entryType: 'cash_payment' | 'cash_refund' | 'item_value_adjustment';
-  amount: number;
-  currency?: string;
-  method?: string;
-  note?: string;
-  overrideReason?: string;
+export function list(filter: ExchangeFilter, paging: Paging): Promise<{ items: ExchangeRecord[]; total: number }> {
+  return exchanges.list(kysely, filter, { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize });
 }
 
-export interface ExchangeItemRow {
-  id: string;
-  exchangeId: string;
-  bookId: number;
-  bookTitle: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
+// ── Making an exchange ────────────────────────────────────────────────────────
+
+async function priceOf(q: Queryable, bookId: number, branchId: number): Promise<Money | null> {
+  const book = await exchanges.bookPrice(q, bookId, branchId);
+  if (!book) throw new NotFoundError(`Book ${bookId}`);
+  if (!book.isActive) throw new BusinessError('BOOK_INACTIVE', `Book ${bookId} is not active`);
+  return book.price;
 }
 
-function mapExchangeRow(row: Record<string, unknown>): ExchangeRow {
-  return {
-    id: String(row.id),
-    exchangeReference: row.exchange_reference as string,
-    branchId: row.branch_id as number,
-    locationId: (row.location_id as number | null) ?? null,
-    customerId: (row.customer_id as number | null) ?? null,
-    status: row.status as string,
-    lifecycleStatus: (row.lifecycle_status as string | null) ?? null,
-    totalIncomingValue: parseFloat(row.total_incoming_value as string),
-    totalOutgoingValue: parseFloat(row.total_outgoing_value as string),
-    netBalance: parseFloat(row.net_balance as string),
-    settlementType: row.settlement_type as string,
-    currency: row.currency as string,
-    notes: (row.notes as string | null) ?? null,
-    relatedPaymentId: row.related_payment_id != null ? String(row.related_payment_id) : null,
-    originalOrderId: row.original_order_id != null ? Number(row.original_order_id) : null,
-    createdBy: row.created_by as number,
-    createdAt: (row.created_at as Date).toISOString(),
-    updatedAt: (row.updated_at as Date).toISOString(),
-    outstandingAmount: row.outstanding_amount != null
-      ? parseFloat(row.outstanding_amount as string)
-      : (row.settlement_type === 'Customer_Pays' && !['COMPLETED', 'SETTLED', 'Completed', 'Cancelled', 'CANCELLED'].includes(row.lifecycle_status as string || row.status as string)
-          ? parseFloat(row.net_balance as string)
-          : 0),
-    dueDate: row.due_date
-      ? (row.due_date instanceof Date
-          ? new Date(row.due_date.getTime() - row.due_date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-          : String(row.due_date))
-      : null,
-    settlementStatus: (row.receivable_status as string) ?? (
-      ['COMPLETED', 'SETTLED', 'Completed'].includes(row.lifecycle_status as string || row.status as string)
-        ? 'Settled'
-        : 'Pending'
-    ),
-  };
-}
-
-function mapItemRow(row: Record<string, unknown>, priceField: string): ExchangeItemRow {
-  return {
-    id: String(row.id),
-    exchangeId: String(row.exchange_id),
-    bookId: row.book_id as number,
-    bookTitle: (row.book_title as string) ?? '',
-    quantity: row.quantity as number,
-    unitPrice: parseFloat(row[priceField] as string),
-    totalPrice: parseFloat(row.total_price as string),
-  };
-}
-
-async function fetchItems(exchangeId: string): Promise<{ incoming: ExchangeItemRow[]; outgoing: ExchangeItemRow[] }> {
-  // Module 2 fix: initiateExchange() (the draft -> confirmed -> settled/cancelled
-  // lifecycle) writes items to the unified exchange_items table, not to the
-  // legacy exchange_incoming_items/exchange_outgoing_items pair that
-  // createExchange() (the older single-step path) uses. This function only
-  // ever queried the legacy tables, so every exchange created via initiate
-  // came back from getById()/list() with empty incomingItems/outgoingItems --
-  // the items were correctly stored and correctly drove inventory at
-  // settlement, but never surfaced to any caller (API response, frontend
-  // detail view, review/approve screens). An exchange only ever has rows in
-  // one of the two storage shapes, so check the unified table first.
-  const unifiedRes = await db.query(
-    'SELECT ei.*, b.title AS book_title FROM exchange_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = $1 ORDER BY ei.id',
-    [exchangeId],
-  );
-  if (unifiedRes.rows.length) {
-    return {
-      incoming: unifiedRes.rows.filter((r: Record<string, unknown>) => r.type === 'returned').map(r => mapItemRow(r, 'unit_price')),
-      outgoing: unifiedRes.rows.filter((r: Record<string, unknown>) => r.type === 'new').map(r => mapItemRow(r, 'unit_price')),
-    };
-  }
-
-  const [inRes, outRes] = await Promise.all([
-    db.query('SELECT ei.*, b.title AS book_title FROM exchange_incoming_items ei JOIN books b ON b.id = ei.book_id WHERE ei.exchange_id = $1 ORDER BY ei.id', [exchangeId]),
-    db.query('SELECT eo.*, b.title AS book_title FROM exchange_outgoing_items eo JOIN books b ON b.id = eo.book_id WHERE eo.exchange_id = $1 ORDER BY eo.id', [exchangeId]),
-  ]);
-  return {
-    incoming: inRes.rows.map(r => mapItemRow(r, 'evaluated_unit_price')),
-    outgoing: outRes.rows.map(r => mapItemRow(r, 'selling_unit_price')),
-  };
-}
-
-export async function getById(id: string | number): Promise<ExchangeRow> {
-  const res = await db.query(
-    `SELECT e.*, r.outstanding_amount, r.due_date, r.status AS receivable_status
-     FROM exchanges e
-     LEFT JOIN receivables r ON r.source_type = 'exchange_difference' AND r.source_entity_id = e.id
-     WHERE e.id = $1`,
-    [id],
-  );
-  if (!res.rows.length) throw new NotFoundError('Exchange');
-  const exchange = mapExchangeRow(res.rows[0]);
-  const items = await fetchItems(exchange.id);
-  exchange.incomingItems = items.incoming;
-  exchange.outgoingItems = items.outgoing;
-  exchange.allowedActions = [];
-  return exchange;
-}
-
-export async function list(opts: {
-  branchId?: number;
-  customerId?: number;
-  status?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<{ items: ExchangeRow[]; total: number; page: number; totalPages: number }> {
-  const page = Math.max(1, opts.page ?? 1);
-  const pageSize = Math.min(100, opts.pageSize ?? 25);
-  const offset = (page - 1) * pageSize;
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-
-  if (opts.branchId)   { params.push(opts.branchId);   conditions.push('e.branch_id = $' + params.length); }
-  if (opts.customerId) { params.push(opts.customerId); conditions.push('e.customer_id = $' + params.length); }
-  if (opts.status)     { params.push(opts.status);     conditions.push('e.status = $' + params.length); }
-  if (opts.dateFrom)   { params.push(opts.dateFrom);   conditions.push('e.created_at >= $' + params.length); }
-  if (opts.dateTo)     { params.push(opts.dateTo);     conditions.push('e.created_at <= $' + params.length); }
-
-  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-  const li = params.length + 1;
-  const oi = params.length + 2;
-
-  const [countRes, dataRes] = await Promise.all([
-    db.query('SELECT COUNT(*) FROM exchanges e ' + where, params),
-    db.query(
-      `SELECT e.*, r.outstanding_amount, r.due_date, r.status AS receivable_status
-       FROM exchanges e
-       LEFT JOIN receivables r ON r.source_type = 'exchange_difference' AND r.source_entity_id = e.id
-       ${where}
-       ORDER BY e.created_at DESC LIMIT $${li} OFFSET $${oi}`,
-      [...params, pageSize, offset],
-    ),
-  ]);
-
-  return {
-    items: dataRes.rows.map(mapExchangeRow),
-    total: parseInt(countRes.rows[0].count as string, 10),
-    page,
-    totalPages: Math.ceil(parseInt(countRes.rows[0].count as string, 10) / pageSize),
-  };
-}
-
-// ── applyExchangeSettlementEffects ──────────────────────────────────────────────
-// Shared financial-effects hook, extracted so createExchange() (Quick Exchange,
-// the sole exchange creation path per operator decision -- Initiate Exchange
-// is UI-disabled) and settleExchange() (kept for API completeness) apply the
-// identical logic instead of two divergent copies. Runs once an exchange's
-// net balance is locked in:
-//   - Store_Refunds: credits the customer's store credit account, and (if
-//     the exchange is tied to an original credit-sale order) reduces that
-//     order's open receivable by the refund amount.
-//   - Customer_Pays: opens a receivable for the difference -- this is the
-//     ONLY place the money the customer now owes is tracked anywhere; skip
-//     it and the debt is simply lost.
-// A customerId is required for any non-Even settlement (enforced by callers
-// before this runs) -- there is no ledger to post a Customer_Pays/
-// Store_Refunds balance against otherwise. Never throws: a hook failure
-// must not roll back the exchange itself (matches the pre-existing
-// non-fatal try/catch pattern for these hooks).
-async function applyExchangeSettlementEffects(
-  params: {
-    exchangeId: string;
-    exchangeReference: string;
-    branchId: number;
-    customerId: number | null;
-    settlementType: string;
-    netBalance: number;
-    originalOrderId: number | null;
-    dueDate?: string | null;
-  },
-  client: import('pg').PoolClient,
-): Promise<void> {
-  const { exchangeId, exchangeReference, branchId, customerId, settlementType, netBalance, originalOrderId, dueDate } = params;
-  if (!customerId || settlementType === 'Even') return;
-  const absBalance = Math.abs(netBalance);
-  if (absBalance <= 0.01) return;
-
-  // Store credit ledger — informational for Customer_Pays, a real credit for Store_Refunds
-  await client.query(
-    `INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0) ON CONFLICT (customer_id) DO NOTHING`,
-    [customerId],
-  );
-  if (settlementType === 'Store_Refunds') {
-    await client.query(`UPDATE store_credit_accounts SET balance = balance + $1 WHERE customer_id = $2`, [absBalance.toFixed(2), customerId]);
-    await client.query(
-      `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction) VALUES ($1, 'exchange_refund', $2, $3, 'credit')`,
-      [customerId, exchangeReference, absBalance.toFixed(2)],
-    );
-  } else if (settlementType === 'Customer_Pays') {
-    await client.query(
-      `INSERT INTO store_credit_history (customer_id, ref_type, ref_id, amount, direction) VALUES ($1, 'exchange_payment', $2, $3, 'debit')`,
-      [customerId, exchangeReference, absBalance.toFixed(2)],
-    );
-  }
-
-  // Reduce an open credit-sale receivable tied to the original order (Store_Refunds only)
-  if (originalOrderId && settlementType === 'Store_Refunds') {
-    try {
-      const origOrderRes = await client.query(`SELECT o.id, o.sale_type FROM orders o WHERE o.id = $1`, [originalOrderId]);
-      if (origOrderRes.rows.length && origOrderRes.rows[0].sale_type === 'credit_sale') {
-        const openRecRes = await client.query(
-          `SELECT r.id, r.outstanding_amount FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = $1 AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue') LIMIT 1`,
-          [originalOrderId],
-        );
-        if (openRecRes.rows.length) {
-          const currentOutstanding = parseFloat(openRecRes.rows[0].outstanding_amount as string);
-          const newOutstanding = Math.max(0, parseFloat((currentOutstanding - netBalance).toFixed(2)));
-          await updateReceivableOnPayment(
-            queryableOn(client),
-            { sourceType: 'order_credit_sale', sourceEntityId: originalOrderId, newOutstandingAmount: newOutstanding, isFullySettled: newOutstanding <= 0.01 },
-          );
-        }
+/** Store credit and loyalty points the customer pays with, each checked under lock. */
+async function spendFromAccounts(q: Queryable, customerId: number | null, payments: PaymentLine[], ref: string): Promise<void> {
+  if (customerId === null) return;
+  for (const p of payments) {
+    if (p.method === 'store_credit') {
+      const available = (await customers.lockStoreCredit(q, customerId)) ?? Money.ZERO;
+      if (available.lessThan(p.amount)) {
+        throw new BusinessError('INSUFFICIENT_STORE_CREDIT', 'Insufficient store credit balance', {
+          available: available.toNumber(),
+          requested: p.amount.toNumber(),
+        });
       }
-    } catch (recErr) {
-      console.error('[exchange.settle] CREDIT receivable adjustment failed (non-fatal):', recErr);
+      await customers.moveStoreCredit(q, customerId, p.amount, { direction: 'debit', refType: 'exchange_payment', refId: ref });
     }
-  }
-
-  // Open a receivable for Customer_Pays -- the only record of this debt anywhere
-  if (settlementType === 'Customer_Pays') {
-    try {
-      await client.query('SAVEPOINT before_exchange_receivable');
-      await createReceivable(
-        queryableOn(client),
-        { sourceType: 'exchange_difference', sourceRefId: exchangeReference, sourceEntityId: parseInt(exchangeId, 10), customerId, branchId, originalAmount: netBalance, dueDate: dueDate ?? null },
-      );
-      await client.query('RELEASE SAVEPOINT before_exchange_receivable');
-    } catch (hookErr) {
-      await client.query('ROLLBACK TO SAVEPOINT before_exchange_receivable').catch(() => null);
-      console.error('[receivable hook] createReceivable (exchange) failed (non-fatal):', hookErr);
+    if (p.method === 'loyalty_points') {
+      const available = (await customers.lockPoints(q, customerId)) ?? 0;
+      if (Money.of(available).lessThan(p.amount)) {
+        throw new BusinessError('INSUFFICIENT_LOYALTY_POINTS', 'Insufficient loyalty points balance', {
+          available,
+          requested: p.amount.toNumber(),
+        });
+      }
+      await customers.addPoints(q, customerId, -p.amount.toNumber(), { reason: 'REDEMPTION', transactionRef: ref });
     }
   }
 }
 
-// ── createExchange ────────────────────────────────────────────────────────────
-// Single-step atomic exchange: validates items, updates inventory, settles.
-
-export async function createExchange(
-  data: {
-    locationId?: number | null;
-    customerId?: number | null;
-    notes?: string;
-    incomingItems: ExchangeItemInput[];
-    outgoingItems: ExchangeItemInput[];
-  },
-  staffCtx: StaffCtx,
-): Promise<ExchangeRow> {
-  if ((!data.incomingItems || data.incomingItems.length === 0) &&
-      (!data.outgoingItems || data.outgoingItems.length === 0)) {
-    throw new ValidationError('Exchange must have at least one incoming or outgoing item');
-  }
-
-  // Location is mandatory: every exchange moves physical stock (incoming
-  // items restore it, outgoing items deduct it), and both the availability
-  // check and the inventoryService.receiveStock()/stockOut() calls below are silently
-  // skipped without one -- that silent skip (location was previously
-  // optional) is what let an exchange execute with no inventory effect and
-  // no stock-availability enforcement at all.
-  if (!data.locationId) {
-    throw new ValidationError('locationId is required for an exchange');
-  }
-
-  // Bug Sweep: quantity had no application-level bound on either side — a
-  // zero/negative value fell through to exchange_incoming_items'/
-  // exchange_outgoing_items' CHECK (quantity > 0), surfacing as a raw 500
-  // instead of a clean 400.
-  for (const item of [...(data.incomingItems ?? []), ...(data.outgoingItems ?? [])]) {
-    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-      throw new ValidationError(`Quantity for book ${item.bookId} must be a positive integer`);
-    }
-  }
-
-  // Validate all books exist and are active
-  const allBookIds = [
-    ...(data.incomingItems ?? []).map(i => i.bookId),
-    ...(data.outgoingItems ?? []).map(i => i.bookId),
-  ];
-  for (const bookId of allBookIds) {
-    const bookRes = await db.query('SELECT id, is_active FROM books WHERE id = $1', [bookId]);
-    if (!bookRes.rows.length) throw new NotFoundError('Book ' + bookId);
-    if (!bookRes.rows[0].is_active) throw new BusinessError('BOOK_INACTIVE', 'Book ' + bookId + ' is not active');
-  }
-
-  // Acquisition Allowance Capture / Valuation Integrity: every incoming item's
-  // unitPrice IS the Customer Allowance Value — the trade-in credit granted
-  // to the customer, which becomes that unit's cost basis in inventory below
-  // (Virtual Exchange Receiving). A zero/blank allowance would receive stock
-  // with no real cost basis, corrupting COGS for every future sale of that
-  // book (see costBasis.ts) — reject it up front instead of silently letting
-  // it through.
-  for (const item of data.incomingItems ?? []) {
-    if (!(item.unitPrice > 0)) {
-      throw new ValidationError(`Customer allowance value is required for incoming book ${item.bookId} and must be greater than zero`);
-    }
-  }
-
-  // Bug Sweep: the same boundary check as above was missing on the outgoing
-  // (resale) side — a zero/negative unitPrice would corrupt totalOutgoing
-  // and could flip settlement_type in the customer's favor (understating
-  // what they owe, or overstating a store refund).
-  for (const item of data.outgoingItems ?? []) {
-    if (!(item.unitPrice > 0)) {
-      throw new ValidationError(`Selling price is required for outgoing book ${item.bookId} and must be greater than zero`);
-    }
-  }
-
-  // Validate outgoing items have sufficient stock — via the centralized
-  // inventory.service.ts, not a raw query (Module 2: this call
-  // site was reading inventory.quantity directly, bypassing the single
-  // source of truth for "available" that inventoryService.issueStock() itself uses a
-  // few lines below; a raw duplicate of that formula is exactly the class of
-  // bug that caused the reservation double-counting fix earlier this sprint).
-  const locationId: number = data.locationId as number;
-  if (data.outgoingItems && data.outgoingItems.length > 0) {
-    for (const item of data.outgoingItems) {
-      const stock = await inventoryService.availableStock(kysely, item.bookId, locationId);
-      if (stock.available < item.quantity) {
-        throw new BusinessError('INSUFFICIENT_STOCK', 'Insufficient stock for book ' + item.bookId + '. Available: ' + stock.available + ', requested: ' + item.quantity, { available: stock.available, requested: item.quantity });
-      }
-    }
-  }
-
-  // Compute values
-  const totalIncoming = parseFloat(
-    (data.incomingItems ?? []).reduce((s, i) => s + i.unitPrice * i.quantity, 0).toFixed(2)
+/**
+ * An exchange at the counter: the books brought in are valued (at most their
+ * selling price) and go to stock at that value, damaged ones kept apart; the
+ * books taken out are priced from the catalog and leave stock at their
+ * average cost. The difference is settled now: the customer pays it, or
+ * leaves the rest on credit; or the store gives it back as store credit or
+ * cash. All in one transaction: an exchange that cannot record its debt does
+ * not happen.
+ */
+export async function createExchange(actor: Actor, input: NewExchange): Promise<ExchangeRecord> {
+  checkTender(
+    input.payments.map((p) => ({ method: p.method, amount: p.amount, reference: p.reference })),
+    input.customerId,
   );
-  const totalOutgoing = parseFloat(
-    (data.outgoingItems ?? []).reduce((s, i) => s + i.unitPrice * i.quantity, 0).toFixed(2)
-  );
-  const netBalance = parseFloat((totalOutgoing - totalIncoming).toFixed(2));
 
-  let settlementType: 'Even' | 'Customer_Pays' | 'Store_Refunds';
-  if (Math.abs(netBalance) < 0.01) settlementType = 'Even';
-  else if (netBalance > 0) settlementType = 'Customer_Pays';
-  else settlementType = 'Store_Refunds';
-
-  // A non-Even exchange creates a real financial obligation (a receivable
-  // the customer owes, or store credit the store owes them) that has to be
-  // posted against someone -- without a customer there is nowhere to record
-  // it, and it would be silently dropped (see applyExchangeSettlementEffects).
-  if (settlementType !== 'Even' && !data.customerId) {
-    throw new BusinessError(
-      'CUSTOMER_REQUIRED_FOR_SETTLEMENT',
-      `A customer is required for a ${settlementType === 'Customer_Pays' ? 'Customer Pays' : 'Store Refunds'} exchange so the ${netBalance > 0 ? 'amount owed' : 'refund'} can be tracked.`,
-    );
-  }
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Generate exchange reference
-    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
-    // orders.service.ts confirm() for the full rationale).
-    const cntRes = await client.query(
-      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM exchanges WHERE DATE(created_at) = CURRENT_DATE`,
-    );
-    const dateStr = cntRes.rows[0].date_str as string;
-    const exchangeReference = 'EXC-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
-
-    // INSERT exchange
-    const excRes = await client.query(
-      "INSERT INTO exchanges (exchange_reference, branch_id, location_id, customer_id, status, total_incoming_value, total_outgoing_value, net_balance, settlement_type, currency, notes, created_by) VALUES ($1,$2,$3,$4,'Evaluated',$5,$6,$7,$8,'ETB',$9,$10) RETURNING id",
-      [exchangeReference, staffCtx.branchId, locationId, data.customerId ?? null,
-       totalIncoming.toFixed(2), totalOutgoing.toFixed(2), netBalance.toFixed(2),
-       settlementType, data.notes ?? null, staffCtx.staffId],
-    );
-    const exchangeId = String(excRes.rows[0].id);
-
-    // INSERT incoming items
-    for (const item of data.incomingItems ?? []) {
-      const totalPrice = parseFloat((item.unitPrice * item.quantity).toFixed(2));
-      await client.query('INSERT INTO exchange_incoming_items (exchange_id, book_id, quantity, evaluated_unit_price, total_price) VALUES ($1,$2,$3,$4,$5)', [exchangeId, item.bookId, item.quantity, item.unitPrice.toFixed(2), totalPrice.toFixed(2)]);
+  const id = await withTransaction({}, async (tx) => {
+    if (input.customerId !== null && !(await exchanges.isCustomerActive(tx, input.customerId))) {
+      throw new BusinessError('CUSTOMER_INACTIVE', 'This customer account is inactive');
     }
 
-    // Update inventory via centralized service — incoming items increase stock, outgoing decrease
-    for (const item of data.incomingItems ?? []) {
-      await client.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [item.bookId, locationId]);
-      // Virtual Exchange Receiving: increase stock via centralized service
-      // (Requirements 2.1, 2.12), tagged with the 'customer_exchange' SOURCE
-      // and the Customer Allowance Value as this stock-in event's unit cost
-      // basis — the whole point of this feature is that a book that was
-      // never procured through Procurement still gets a real, non-zero cost
-      // (see costBasis.ts) instead of silently costing $0 in COGS/profit.
-      // This also feeds the assessed valuation into the Weighted Average
-      // Cost recalculation (Exchange Rule: incoming items require assessed
-      // valuation, included in the moving-average).
-      await inventoryService.receiveStock(queryableOn(client), { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'customer_exchange', referenceId: exchangeId, reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: item.unitPrice });
+    const incoming = [];
+    for (const i of input.incoming) {
+      policy.checkTradeInValue(i.bookId, i.unitValue, await priceOf(tx, i.bookId, input.branchId), actor.role);
+      incoming.push(i);
+    }
+    const outgoing = [];
+    for (const o of input.outgoing) {
+      const price = await priceOf(tx, o.bookId, input.branchId);
+      if (price === null) throw new BusinessError('PRICE_NOT_SET', `Price not set for book ${o.bookId}`);
+      outgoing.push({ ...o, price });
     }
 
-    // Outgoing items: post at current average cost (Exchange Rule), persist
-    // it on the line item, THEN insert — stockOut must run first since the
-    // cost isn't known until it hands it back.
-    for (const item of data.outgoingItems ?? []) {
-      // Decrease stock via centralized service — reservation-aware (Requirements 2.1, 2.13)
-      const { unitCost } = await inventoryService.issueStock(queryableOn(client), { bookId: item.bookId, locationId, quantity: item.quantity, referenceType: 'exchange_out', referenceId: exchangeId, reasonCode: 'loss', notes: 'Exchange outgoing', staffCtx });
-      const totalPrice = parseFloat((item.unitPrice * item.quantity).toFixed(2));
-      await client.query(
-        'INSERT INTO exchange_outgoing_items (exchange_id, book_id, quantity, selling_unit_price, total_price, unit_cost) VALUES ($1,$2,$3,$4,$5,$6)',
-        [exchangeId, item.bookId, item.quantity, item.unitPrice.toFixed(2), totalPrice.toFixed(2), unitCost.toFixed(2)],
-      );
-    }
+    const totalIncoming = Money.sum(incoming.map((i) => i.unitValue.times(i.quantity))).round(2);
+    const totalOutgoing = Money.sum(outgoing.map((o) => o.price.times(o.quantity))).round(2);
+    policy.checkApproval(totalIncoming, Money.of(await getMaxReturnValueWithoutAuth()), actor.role);
 
-    // Mark as Completed
-    await client.query("UPDATE exchanges SET status = 'Completed', updated_at = now() WHERE id = $1", [exchangeId]);
-
-    // Post the financial effect of a non-Even settlement (receivable /
-    // store credit) now, in the same transaction as the inventory move --
-    // Quick Exchange has no separate settle step, so this IS confirmation.
-    await applyExchangeSettlementEffects(
-      {
-        exchangeId, exchangeReference, branchId: staffCtx.branchId,
-        customerId: data.customerId ?? null, settlementType, netBalance,
-        originalOrderId: null, dueDate: null,
-      },
-      client,
+    const net = totalOutgoing.minus(totalIncoming);
+    const type = policy.settlementType(net);
+    const paid = Money.sum(input.payments.map((p) => p.amount));
+    policy.checkSettlement(
+      { net, paid, allowCredit: input.allowCredit, customerId: input.customerId, dueDate: input.dueDate, refundMethod: input.refundMethod },
+      await exchanges.today(tx),
     );
 
-    await client.query("INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'CREATE','exchange',$3,$4,$5)", [staffCtx.staffId, staffCtx.role, exchangeId, staffCtx.branchId, JSON.stringify({ exchangeReference, totalIncoming, totalOutgoing, netBalance, settlementType })]);
-
-    // Emit exchange notifications
-    await insertOutbox(client, 'exchange.completed', {
-      exchangeId, exchangeRef: exchangeReference, settlementType, netBalance, branchId: staffCtx.branchId,
+    const reference = await nextDailyNumber(tx, 'EXC');
+    const id = await exchanges.insertExchange(tx, {
+      reference,
+      branchId: input.branchId,
+      locationId: input.locationId,
+      customerId: input.customerId,
+      totalIncoming,
+      totalOutgoing,
+      net,
+      settlementType: type,
+      refundMethod: type === 'Store_Refunds' ? input.refundMethod : null,
+      notes: input.notes,
+      createdBy: actor.staffId,
     });
-    if (settlementType === 'Store_Refunds') {
-      await insertOutbox(client, 'exchange.store_refund_due', {
-        exchangeId, exchangeRef: exchangeReference, amount: Math.abs(netBalance), branchId: staffCtx.branchId,
+
+    for (const i of incoming) {
+      const change = { bookId: i.bookId, locationId: input.locationId, quantity: i.quantity, referenceId: id, staffCtx: actor };
+      if (i.condition === 'damaged') {
+        await inventoryService.receiveDamaged(tx, { ...change, referenceType: 'exchange_damaged', notes: 'Customer exchange: damaged trade-in' });
+      } else {
+        // The value given for the book is its cost in stock.
+        await inventoryService.receiveStock(tx, {
+          ...change, referenceType: 'customer_exchange', reasonCode: 'return', notes: 'Customer exchange: trade-in', unitCost: i.unitValue,
+        });
+      }
+      await exchanges.insertIncoming(tx, id, i);
+    }
+    for (const o of outgoing) {
+      const { unitCost } = await inventoryService.issueStock(tx, {
+        bookId: o.bookId, locationId: input.locationId, quantity: o.quantity, referenceType: 'exchange_out', referenceId: id,
+        reasonCode: 'sale', staffCtx: actor,
       });
+      await exchanges.insertOutgoing(tx, id, { ...o, unitCost });
     }
 
-    await client.query('COMMIT');
-    return getById(exchangeId);
-  } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
-}
-
-export async function cancelExchange(id: string | number, staffCtx: StaffCtx): Promise<ExchangeRow> {
-  const exchange = await getById(id);
-  if (exchange.status === 'Completed') throw new BusinessError('ALREADY_COMPLETED', 'Cannot cancel a completed exchange');
-  if (exchange.status === 'Cancelled') throw new BusinessError('ALREADY_CANCELLED', 'Exchange is already cancelled');
-  // Check lifecycle_status for new-style exchanges
-  if (exchange.lifecycleStatus === 'SETTLED' || exchange.lifecycleStatus === 'COMPLETED') {
-    throw new BusinessError('EXCHANGE_NOT_CANCELLABLE', 'Cannot cancel a settled or completed exchange');
-  }
-  if (exchange.lifecycleStatus === 'CANCELLED') {
-    throw new BusinessError('ALREADY_CANCELLED', 'Exchange is already cancelled');
-  }
-  await db.query("UPDATE exchanges SET status = 'Cancelled', lifecycle_status = 'CANCELLED', updated_at = now() WHERE id = $1", [id]);
-  await db.query("INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta) VALUES ($1,$2,'UPDATE','exchange',$3,$4,$5)", [staffCtx.staffId, staffCtx.role, String(id), staffCtx.branchId, JSON.stringify({ action: 'cancel' })]);
-
-  try {
-    const notifClient = await db.connect();
-    try {
-      await notifClient.query('BEGIN');
-      await insertOutbox(notifClient, 'exchange.cancelled', {
-        exchangeId: String(id), exchangeRef: exchange.exchangeReference, branchId: staffCtx.branchId,
+    await spendFromAccounts(tx, input.customerId, input.payments, reference);
+    for (const p of input.payments) {
+      await exchanges.insertEntry(tx, { exchangeId: id, entryType: 'cash_payment', amount: p.amount, method: p.method, note: p.reference, by: actor.staffId });
+    }
+    const credit = type === 'Customer_Pays' ? net.minus(paid) : Money.ZERO;
+    if (credit.greaterThan(0) && input.customerId !== null) {
+      await createReceivable(tx, {
+        sourceType: 'exchange_difference',
+        sourceRefId: reference,
+        sourceEntityId: Number(id),
+        customerId: input.customerId,
+        branchId: input.branchId,
+        originalAmount: credit.toFixed(2),
+        dueDate: input.dueDate,
       });
-      await notifClient.query('COMMIT');
-    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
-  } catch { /* non-fatal */ }
+    }
+    if (type === 'Store_Refunds') {
+      const refund = net.negate();
+      if (input.refundMethod === 'store_credit' && input.customerId !== null) {
+        await customers.moveStoreCredit(tx, input.customerId, refund, { direction: 'credit', refType: 'exchange_refund', refId: reference });
+      } else {
+        await exchanges.insertEntry(tx, { exchangeId: id, entryType: 'cash_refund', amount: refund, method: 'cash', note: null, by: actor.staffId });
+      }
+    }
 
+    await audit(tx, actor, 'CREATE', id, {
+      exchangeReference: reference,
+      totalIncoming: totalIncoming.toNumber(),
+      totalOutgoing: totalOutgoing.toNumber(),
+      netBalance: net.toNumber(),
+      settlementType: type,
+      paid: paid.toNumber(),
+      onCredit: credit.toNumber(),
+      refundMethod: type === 'Store_Refunds' ? input.refundMethod : null,
+    });
+    await insertOutboxEvent(tx, 'exchange.completed', {
+      exchangeId: id, exchangeRef: reference, settlementType: type, netBalance: net.toNumber(), branchId: input.branchId,
+    });
+    if (type === 'Store_Refunds' && input.refundMethod === 'store_credit') {
+      await insertOutboxEvent(tx, 'exchange.store_refund_due', {
+        exchangeId: id, exchangeRef: reference, amount: net.negate().toNumber(), branchId: input.branchId,
+      });
+    }
+    return id;
+  });
   return getById(id);
 }
 
-// ── computeExchangeAllowedActions ─────────────────────────────────────────────
+// ── Voiding an exchange ───────────────────────────────────────────────────────
 
-export function computeExchangeAllowedActions(
-  lifecycleStatus: string | null,
-  status: string,
-  permissions: Permission[],
-): string[] {
-  const can = (p: Permission) => permissions.includes(p);
-  const ls = lifecycleStatus ?? status; // fall back to legacy status
-  switch (ls) {
-    case 'INITIATED':
-      return [
-        ...(can('APPROVE_EXCHANGE') ? ['review'] : []),
-        ...(can('APPROVE_EXCHANGE') || can('CREATE_SALE') ? ['cancel'] : []),
-      ];
-    case 'REVIEWED':
-      return [...(can('APPROVE_EXCHANGE') ? ['approve', 'cancel'] : [])];
-    case 'APPROVED':
-      return [...(can('APPROVE_EXCHANGE') ? ['settle', 'cancel'] : [])];
-    case 'SETTLED':
-      return [];
-    case 'COMPLETED':
-      return ['print'];
-    case 'CANCELLED':
-      return [];
-    // Legacy status values
-    case 'Initiated':
-      return [...(can('APPROVE_EXCHANGE') || can('CREATE_SALE') ? ['cancel'] : [])];
-    case 'Evaluated':
-      return [...(can('APPROVE_EXCHANGE') ? ['cancel'] : [])];
-    case 'Completed':
-      return ['print'];
-    case 'Cancelled':
-      return [];
-    default:
-      return [];
-  }
-}
+/**
+ * Undoes an exchange on the day it was made (owner decision 5a): the books go
+ * back both ways, store credit and points the customer paid with go back to
+ * the account, money paid otherwise is handed back (recorded in the audit
+ * entry), store credit the exchange gave is taken back while unspent, and a
+ * receivable is cancelled. The exchange is locked, so two voids cannot both
+ * move its stock.
+ */
+export async function voidExchange(actor: Actor, id: string, reason: string): Promise<ExchangeRecord> {
+  await withTransaction({}, async (tx) => {
+    const e = found(await exchanges.findExchange(tx, id, { forUpdate: true }));
+    policy.checkCanVoid(e);
+    const locationId = e.locationId!;
+    const { incoming, outgoing } = await exchanges.items(tx, id);
+    const entries = await exchanges.settlementEntries(tx, id);
 
-// ── initiateExchange ──────────────────────────────────────────────────────────
-
-export async function initiateExchange(
-  data: {
-    locationId?: number | null;
-    customerId?: number | null;
-    originalOrderId?: number | null;
-    notes?: string;
-    items: ExchangeItemInput2[];
-  },
-  staffCtx: StaffCtx,
-): Promise<ExchangeRow> {
-  if (!data.items || data.items.length === 0) {
-    throw new ValidationError('Exchange must have at least one item');
-  }
-
-  // Same location requirement as createExchange() (Module 2) — settleExchange()
-  // silently skips every inventory movement it would otherwise make when
-  // locationId is absent.
-  if (!data.locationId) {
-    throw new ValidationError('locationId is required for an exchange');
-  }
-
-  // Validate all books exist and are active
-  const allBookIds = data.items.map(i => i.bookId);
-  for (const bookId of allBookIds) {
-    const bookRes = await db.query('SELECT id, is_active FROM books WHERE id = $1', [bookId]);
-    if (!bookRes.rows.length) throw new NotFoundError('Book ' + bookId);
-    if (!bookRes.rows[0].is_active) throw new BusinessError('BOOK_INACTIVE', 'Book ' + bookId + ' is not active');
-  }
-
-  // Acquisition Allowance Capture / Valuation Integrity — same requirement as
-  // createExchange() (see there for the full rationale): a returned item's
-  // unitPrice becomes its cost basis in inventory once settled.
-  for (const item of data.items.filter(i => i.type === 'returned')) {
-    if (!(item.unitPrice > 0)) {
-      throw new ValidationError(`Customer allowance value is required for incoming book ${item.bookId} and must be greater than zero`);
+    if (e.settlementType === 'Store_Refunds' && e.refundMethod === 'store_credit' && e.customerId !== null) {
+      const given = e.netBalance.negate();
+      policy.checkStoreCreditUnspent((await customers.lockStoreCredit(tx, e.customerId)) ?? Money.ZERO, given);
+      await customers.moveStoreCredit(tx, e.customerId, given, { direction: 'debit', refType: 'exchange_void', refId: e.exchangeReference });
     }
-  }
+    await cancelReceivable(tx, { sourceType: 'exchange_difference', sourceEntityId: id, paymentsReturned: true });
 
-  let resolvedCustomerId = data.customerId ?? null;
-
-  // Validate original order if provided
-  if (data.originalOrderId) {
-    const orderRes = await db.query('SELECT id, status, customer_id FROM orders WHERE id = $1', [data.originalOrderId]);
-    if (!orderRes.rows.length) throw new NotFoundError('Order ' + data.originalOrderId);
-    const orderStatus = orderRes.rows[0].status as string;
-    if (!['COMPLETED', 'FULFILLED', 'Completed', 'Fulfilled'].includes(orderStatus)) {
-      throw new BusinessError('ORDER_NOT_ELIGIBLE', 'Original order must be in COMPLETED or FULFILLED status');
+    for (const i of incoming) {
+      const change = { bookId: i.bookId, locationId, quantity: i.quantity, referenceId: id, staffCtx: actor, notes: 'Exchange voided' };
+      if (i.condition === 'damaged') await inventoryService.issueDamaged(tx, { ...change, referenceType: 'exchange_damaged' });
+      else await inventoryService.issueStock(tx, { ...change, referenceType: 'customer_exchange', reasonCode: 'correction' });
     }
-    // Auto-inherit customer_id if not provided
-    if (!resolvedCustomerId && orderRes.rows[0].customer_id) {
-      resolvedCustomerId = orderRes.rows[0].customer_id as number;
-    }
-  }
-
-  // Compute values
-  const returnedItems = data.items.filter(i => i.type === 'returned');
-  const newItems = data.items.filter(i => i.type === 'new');
-
-  const totalReturnedValue = parseFloat(
-    returnedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0).toFixed(2),
-  );
-  const totalNewValue = parseFloat(
-    newItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0).toFixed(2),
-  );
-  const netBalance = parseFloat((totalNewValue - totalReturnedValue).toFixed(2));
-
-  let settlementType: 'Even' | 'Customer_Pays' | 'Store_Refunds';
-  if (netBalance > 0.01) settlementType = 'Customer_Pays';
-  else if (netBalance < -0.01) settlementType = 'Store_Refunds';
-  else settlementType = 'Even';
-
-  // Same reasoning as createExchange() — a non-Even settlement has to be
-  // posted against a customer or it's untrackable (applyExchangeSettlementEffects
-  // silently no-ops without one).
-  if (settlementType !== 'Even' && !resolvedCustomerId) {
-    throw new BusinessError(
-      'CUSTOMER_REQUIRED_FOR_SETTLEMENT',
-      `A customer is required for a ${settlementType === 'Customer_Pays' ? 'Customer Pays' : 'Store Refunds'} exchange so the ${netBalance > 0 ? 'amount owed' : 'refund'} can be tracked.`,
-    );
-  }
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Generate exchange reference
-    // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
-    // orders.service.ts confirm() for the full rationale).
-    const cntRes = await client.query(
-      `SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str FROM exchanges WHERE DATE(created_at) = CURRENT_DATE`,
-    );
-    const dateStr = cntRes.rows[0].date_str as string;
-    const exchangeReference = 'EXC-' + dateStr + '-' + String(parseInt(cntRes.rows[0].count as string, 10) + 1).padStart(4, '0');
-
-    // INSERT exchange with lifecycle_status = 'INITIATED'
-    const excRes = await client.query(
-      `INSERT INTO exchanges
-         (exchange_reference, branch_id, location_id, customer_id, customer_id_v2,
-          original_order_id, status, lifecycle_status,
-          total_incoming_value, total_outgoing_value, net_balance,
-          settlement_type, currency, notes, created_by)
-       VALUES ($1,$2,$3,$4,$4,$5,'Evaluated','INITIATED',$6,$7,$8,$9,'ETB',$10,$11)
-       RETURNING id`,
-      [
-        exchangeReference,
-        staffCtx.branchId,
-        data.locationId ?? null,
-        resolvedCustomerId,
-        data.originalOrderId ?? null,
-        totalReturnedValue.toFixed(2),
-        totalNewValue.toFixed(2),
-        netBalance.toFixed(2),
-        settlementType,
-        data.notes ?? null,
-        staffCtx.staffId,
-      ],
-    );
-    const exchangeId = String(excRes.rows[0].id);
-
-    // INSERT into exchange_items (unified table)
-    for (const item of data.items) {
-      const totalPrice = parseFloat((item.unitPrice * item.quantity).toFixed(2));
-      const condition = item.type === 'returned' ? (item.condition ?? 'resellable') : 'resellable';
-      await client.query(
-        `INSERT INTO exchange_items (exchange_id, book_id, quantity, unit_price, total_price, type, condition)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [exchangeId, item.bookId, item.quantity, item.unitPrice.toFixed(2), totalPrice.toFixed(2), item.type, condition],
-      );
+    for (const o of outgoing) {
+      await inventoryService.receiveStock(tx, {
+        bookId: o.bookId,
+        locationId,
+        quantity: o.quantity,
+        referenceType: 'exchange_out',
+        referenceId: id,
+        reasonCode: 'return',
+        notes: 'Exchange voided',
+        staffCtx: actor,
+        unitCost: o.unitCost && o.unitCost.greaterThan(0) ? o.unitCost : undefined,
+      });
     }
 
-    // Audit log
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1,$2,'CREATE','exchange',$3,$4,$5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        exchangeId,
-        staffCtx.branchId,
-        JSON.stringify({ action: 'initiate', lifecycleStatus: 'INITIATED', exchangeReference }),
-      ],
-    );
-
-    // Outbox event
-    await insertOutbox(client, 'exchange.initiated', {
-      exchangeId,
-      exchangeRef: exchangeReference,
-      settlementType,
-      netBalance,
-      branchId: staffCtx.branchId,
-    });
-
-    await client.query('COMMIT');
-    return getById(exchangeId);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── reviewExchange ────────────────────────────────────────────────────────────
-
-export async function reviewExchange(exchangeId: string | number, staffCtx: StaffCtx): Promise<ExchangeRow> {
-  const exchange = await getById(exchangeId);
-  if (exchange.lifecycleStatus !== 'INITIATED') {
-    throw new BusinessError('INVALID_LIFECYCLE_TRANSITION', `Exchange must be in INITIATED status to review. Current: ${exchange.lifecycleStatus}`);
-  }
-
-  // Recompute difference from exchange_items
-  const itemsRes = await db.query(
-    `SELECT type, SUM(total_price) AS total FROM exchange_items WHERE exchange_id = $1 GROUP BY type`,
-    [exchangeId],
-  );
-  let returnedTotal = 0;
-  let newTotal = 0;
-  for (const row of itemsRes.rows) {
-    if (row.type === 'returned') returnedTotal = parseFloat(row.total as string);
-    if (row.type === 'new') newTotal = parseFloat(row.total as string);
-  }
-  const netBalance = parseFloat((newTotal - returnedTotal).toFixed(2));
-
-  let settlementType: 'Even' | 'Customer_Pays' | 'Store_Refunds';
-  if (netBalance > 0.01) settlementType = 'Customer_Pays';
-  else if (netBalance < -0.01) settlementType = 'Store_Refunds';
-  else settlementType = 'Even';
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    await client.query(
-      `UPDATE exchanges
-       SET lifecycle_status = 'REVIEWED',
-           total_incoming_value = $1,
-           total_outgoing_value = $2,
-           net_balance = $3,
-           settlement_type = $4,
-           updated_at = now()
-       WHERE id = $5`,
-      [returnedTotal.toFixed(2), newTotal.toFixed(2), netBalance.toFixed(2), settlementType, exchangeId],
-    );
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1,$2,'UPDATE','exchange',$3,$4,$5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(exchangeId),
-        staffCtx.branchId,
-        JSON.stringify({ action: 'review', lifecycleStatus: 'REVIEWED', netBalance }),
-      ],
-    );
-
-    await insertOutbox(client, 'exchange.reviewed', {
-      exchangeId: String(exchangeId),
-      exchangeRef: exchange.exchangeReference,
-      branchId: staffCtx.branchId,
-    });
-
-    await client.query('COMMIT');
-    return getById(exchangeId);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── approveExchange ───────────────────────────────────────────────────────────
-
-export async function approveExchange(exchangeId: string | number, staffCtx: StaffCtx): Promise<ExchangeRow> {
-  const exchange = await getById(exchangeId);
-  if (exchange.lifecycleStatus !== 'REVIEWED') {
-    throw new BusinessError('INVALID_LIFECYCLE_TRANSITION', `Exchange must be in REVIEWED status to approve. Current: ${exchange.lifecycleStatus}`);
-  }
-
-  // Module 2: validate available stock before confirmation. Previously the
-  // only check was deep inside settleExchange()'s call to inventoryService.issueStock(),
-  // which runs after review AND approval -- a stock shortfall (e.g. sold via
-  // POS between initiation and settlement) only surfaced as a failure at the
-  // very last step, discarding the review/approval work. Outgoing ('new')
-  // items are what get deducted at settlement, so they're what must be
-  // checked here.
-  if (exchange.locationId) {
-    for (const item of exchange.outgoingItems ?? []) {
-      const stock = await inventoryService.availableStock(kysely, item.bookId, exchange.locationId);
-      if (stock.available < item.quantity) {
-        throw new BusinessError(
-          'INSUFFICIENT_STOCK',
-          `Insufficient stock for "${item.bookTitle}". Available: ${stock.available}, Requested: ${item.quantity}`,
-          { bookId: item.bookId, available: stock.available, requested: item.quantity },
-        );
+    const handedBack: Record<string, number> = {};
+    for (const p of entries.filter((x) => x.entryType === 'cash_payment')) {
+      if (e.customerId !== null && p.method === 'store_credit') {
+        await customers.moveStoreCredit(tx, e.customerId, p.amount, { direction: 'credit', refType: 'exchange_void', refId: e.exchangeReference });
+      } else if (e.customerId !== null && p.method === 'loyalty_points') {
+        await customers.addPoints(tx, e.customerId, p.amount.toNumber(), { reason: 'VOID_REVERSAL', transactionRef: e.exchangeReference });
+      } else {
+        const method = p.method ?? 'cash';
+        handedBack[method] = Money.of(handedBack[method] ?? 0).plus(p.amount).toNumber();
       }
     }
-  }
+    const cashRefund = entries.filter((x) => x.entryType === 'cash_refund');
+    const takenBack = Money.sum(cashRefund.map((x) => x.amount));
 
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    await client.query(
-      `UPDATE exchanges SET lifecycle_status = 'APPROVED', updated_at = now() WHERE id = $1`,
-      [exchangeId],
-    );
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1,$2,'UPDATE','exchange',$3,$4,$5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(exchangeId),
-        staffCtx.branchId,
-        JSON.stringify({ action: 'approve', lifecycleStatus: 'APPROVED' }),
-      ],
-    );
-
-    await insertOutbox(client, 'exchange.approved', {
-      exchangeId: String(exchangeId),
-      exchangeRef: exchange.exchangeReference,
-      branchId: staffCtx.branchId,
+    await exchanges.setVoided(tx, id, actor.staffId, reason);
+    await audit(tx, actor, 'UPDATE', id, {
+      action: 'void', exchangeReference: e.exchangeReference, reason, paymentsHandedBack: handedBack, cashRefundTakenBack: takenBack.toNumber(),
     });
-
-    await client.query('COMMIT');
-    return getById(exchangeId);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    await insertOutboxEvent(tx, 'exchange.cancelled', { exchangeId: id, exchangeRef: e.exchangeReference, branchId: e.branchId });
+  });
+  return getById(id);
 }
 
-// ── settleExchange ────────────────────────────────────────────────────────────
-
-export async function settleExchange(
-  exchangeId: string | number,
-  entries: SettlementEntry[],
-  idempotencyKey: string,
-  staffCtx: StaffCtx,
-  dueDate?: string | null,
-): Promise<ExchangeRow> {
-  const exchange = await getById(exchangeId);
-  if (exchange.lifecycleStatus !== 'APPROVED') {
-    throw new BusinessError('INVALID_LIFECYCLE_TRANSITION', `Exchange must be in APPROVED status to settle. Current: ${exchange.lifecycleStatus}`);
-  }
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Idempotency check: if settlement entries already exist for this exchange, return existing
-    const existingEntries = await client.query(
-      `SELECT id FROM exchange_settlement_entries WHERE exchange_id = $1 LIMIT 1`,
-      [exchangeId],
-    );
-    if (existingEntries.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return getById(exchangeId);
-    }
-
-    // Load exchange_items for this exchange
-    const itemsRes = await client.query(
-      `SELECT ei.*, b.title AS book_title
-       FROM exchange_items ei
-       JOIN books b ON b.id = ei.book_id
-       WHERE ei.exchange_id = $1`,
-      [exchangeId],
-    );
-    const exchangeItems = itemsRes.rows;
-
-    // Validate settlement balance
-    const sum = entries.reduce((acc, e) => {
-      if (e.entryType === 'cash_payment') return acc + e.amount;
-      if (e.entryType === 'cash_refund') return acc - e.amount;
-      if (e.entryType === 'item_value_adjustment') return acc + e.amount;
-      return acc;
-    }, 0);
-
-    if (Math.abs(sum - exchange.netBalance) > 0.01) {
-      await client.query('ROLLBACK');
-      throw new BusinessError(
-        'SETTLEMENT_UNBALANCED',
-        `Settlement entries sum (${sum.toFixed(2)}) does not match exchange net balance (${exchange.netBalance.toFixed(2)})`,
-        { sum, netBalance: exchange.netBalance },
-      );
-    }
-
-    const locationId = exchange.locationId;
-
-    // Process inventory changes for each item
-    for (const item of exchangeItems) {
-      const bookId = item.book_id as number;
-      const qty = item.quantity as number;
-      const itemType = item.type as string;
-      const condition = item.condition as string;
-
-      if (itemType === 'returned') {
-        if (locationId) {
-          // Ensure inventory row exists
-          await client.query(
-            `INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version)
-             VALUES ($1,$2,0,5,0)
-             ON CONFLICT (book_id, location_id) DO NOTHING`,
-            [bookId, locationId],
-          );
-
-          if (condition === 'resellable') {
-            // Virtual Exchange Receiving: restore resellable stock via
-            // centralized service (Requirement 2.12), tagged and cost-based
-            // the same way createExchange() does (see there for rationale).
-            await inventoryService.receiveStock(queryableOn(client), { bookId, locationId, quantity: qty, referenceType: 'customer_exchange', referenceId: String(exchangeId), reasonCode: 'return', notes: 'Customer exchange — incoming trade-in', staffCtx, unitCost: parseFloat(item.unit_price as string) });
-          } else if (condition === 'damaged') {
-            // Damaged items — update damaged_quantity directly (not a sellable stock movement)
-            const invRes = await client.query(
-              `SELECT damaged_quantity FROM inventory WHERE book_id = $1 AND location_id = $2 FOR UPDATE`,
-              [bookId, locationId],
-            );
-            const dmgBefore = invRes.rows[0]?.damaged_quantity ?? 0;
-            await client.query(
-              `UPDATE inventory SET damaged_quantity = damaged_quantity + $1, updated_at = now() WHERE book_id = $2 AND location_id = $3`,
-              [qty, bookId, locationId],
-            );
-            await client.query(
-              `INSERT INTO inventory_history
-                 (book_id, location_id, qty_before, qty_after, delta, reason_code, movement_type, reference_type, reference_id, notes, staff_id)
-               VALUES ($1,$2,$3,$4,$5,'stock_in','stock_in','exchange_damaged',$6,'Exchange returned damaged',$7)`,
-              [bookId, locationId, dmgBefore, dmgBefore + qty, qty, String(exchangeId), staffCtx.staffId],
-            );
-          }
-        }
-      } else if (itemType === 'new') {
-        if (locationId) {
-          // Deduct outgoing item via centralized service — reservation-aware (Requirement 2.13).
-          // Exchange Rule: outgoing items post at current average cost,
-          // persisted on the line item permanently.
-          const { unitCost } = await inventoryService.issueStock(queryableOn(client), { bookId, locationId, quantity: qty, referenceType: 'exchange_out', referenceId: String(exchangeId), reasonCode: 'loss', notes: 'Exchange new item issued', staffCtx });
-          await client.query('UPDATE exchange_items SET unit_cost = $1 WHERE id = $2', [unitCost.toFixed(2), item.id]);
-        }
-      }
-    }
-
-    // INSERT exchange_settlement_entries
-    for (const entry of entries) {
-      await client.query(
-        `INSERT INTO exchange_settlement_entries
-           (exchange_id, entry_type, amount, currency, method, note, override_reason, authorised_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [
-          exchangeId,
-          entry.entryType,
-          entry.amount.toFixed(2),
-          entry.currency ?? 'ETB',
-          entry.method ?? null,
-          entry.note ?? null,
-          entry.overrideReason ?? null,
-          staffCtx.staffId,
-        ],
-      );
-    }
-
-    // INSERT financial_transactions for cash entries
-    for (const entry of entries) {
-      let txType: 'payment' | 'refund' | 'adjustment';
-      if (entry.entryType === 'cash_payment') txType = 'payment';
-      else if (entry.entryType === 'cash_refund') txType = 'refund';
-      else txType = 'adjustment';
-
-      const ftKey = `${idempotencyKey}-${entry.entryType}-${entry.amount}`;
-      await client.query(
-        `INSERT INTO financial_transactions
-           (type, exchange_id, idempotency_key, amount, currency, method, staff_id, branch_id, meta)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         ON CONFLICT (idempotency_key) DO NOTHING`,
-        [
-          txType,
-          exchangeId,
-          ftKey,
-          entry.amount.toFixed(2),
-          entry.currency ?? 'ETB',
-          entry.method ?? null,
-          staffCtx.staffId,
-          staffCtx.branchId,
-          JSON.stringify({ entryType: entry.entryType, note: entry.note }),
-        ],
-      );
-    }
-
-    // UPDATE lifecycle_status to SETTLED then COMPLETED (auto-complete)
-    await client.query(
-      `UPDATE exchanges SET lifecycle_status = 'SETTLED', status = 'Completed', updated_at = now() WHERE id = $1`,
-      [exchangeId],
-    );
-    await client.query(
-      `UPDATE exchanges SET lifecycle_status = 'COMPLETED', updated_at = now() WHERE id = $1`,
-      [exchangeId],
-    );
-
-    // Audit log
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, branch_id, meta)
-       VALUES ($1,$2,'UPDATE','exchange',$3,$4,$5)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(exchangeId),
-        staffCtx.branchId,
-        JSON.stringify({ action: 'settle', lifecycleStatus: 'COMPLETED', idempotencyKey }),
-      ],
-    );
-
-    // Post the financial effect of a non-Even settlement (store credit /
-    // receivable) — same shared hook Quick Exchange uses (module 2 refactor,
-    // deduplicated from three near-identical inline blocks previously here).
-    await applyExchangeSettlementEffects(
-      {
-        exchangeId: String(exchangeId), exchangeReference: exchange.exchangeReference,
-        branchId: exchange.branchId, customerId: exchange.customerId,
-        settlementType: exchange.settlementType, netBalance: exchange.netBalance,
-        originalOrderId: exchange.originalOrderId, dueDate,
-      },
-      client,
-    );
-
-    // Outbox events
-    await insertOutbox(client, 'exchange.settled', {
-      exchangeId: String(exchangeId),
-      exchangeRef: exchange.exchangeReference,
-      branchId: staffCtx.branchId,
-    });
-    await insertOutbox(client, 'exchange.completed', {
-      exchangeId: String(exchangeId),
-      exchangeRef: exchange.exchangeReference,
-      settlementType: exchange.settlementType,
-      netBalance: exchange.netBalance,
-      branchId: staffCtx.branchId,
-    });
-
-    await client.query('COMMIT');
-    return getById(exchangeId);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+/**
+ * The lifecycle flow (initiate, review, approve, settle, cancel) is retired
+ * (owner decision 1a): an exchange is made in one step and undone by a void.
+ */
+export function lifecycleRetired(): never {
+  throw new AppError(
+    'DEPRECATED',
+    'Exchanges are made in one step with POST /exchanges, and undone on their day with POST /exchanges/{id}/void.',
+    410,
+  );
 }

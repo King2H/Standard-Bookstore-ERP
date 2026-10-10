@@ -138,6 +138,11 @@ import {
   PosTransactionSchema,
   CreateReturnRequestSchema,
   ClosePurchaseOrderRequestSchema,
+  CreateExchangeRequestSchema,
+  ExchangeListQuerySchema,
+  ExchangeListResponseSchema,
+  ExchangeSchema,
+  VoidExchangeRequestSchema,
   CreateSupplierCreditNoteRequestSchema,
   CreateSupplierPaymentRequestSchema,
   ReverseSupplierPaymentRequestSchema,
@@ -215,6 +220,7 @@ export const operations: ApiOperation[] = [
   ...returnOperations(),
   ...purchaseOrderOperations(),
   ...supplierPayableOperations(),
+  ...exchangeOperations(),
 ];
 
 function auditOperations(): ApiOperation[] {
@@ -1691,5 +1697,69 @@ function supplierPayableOperations(): ApiOperation[] {
       responses: {},
       errors: [400, 401, 403, 404, 500],
     },
+  ];
+}
+
+function exchangeOperations(): ApiOperation[] {
+  const tag = 'Exchanges';
+  const roles = 'Sales, Manager, Admin, Finance_Officer';
+  const change = [400, 401, 403, 404, 409, 422, 500];
+  return [
+    {
+      operationId: 'createExchange',
+      method: 'post',
+      path: '/exchanges',
+      summary:
+        'Books in for books out at the counter, settled at once: the customer pays the difference (or leaves it on credit), ' +
+        'or the store gives it back as store credit or cash (CREATE_SALE; trade-ins above the approval limit: Manager, Admin)',
+      tag,
+      request: { body: CreateExchangeRequestSchema },
+      responses: { 201: { description: 'The exchange', schema: ExchangeSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'listExchanges',
+      method: 'get',
+      path: '/exchanges',
+      summary: `Exchanges of the session branch, newest first (${roles}; ?branchId= another branch needs access to all branches)`,
+      tag,
+      request: { query: ExchangeListQuerySchema },
+      responses: { 200: { description: 'One page of exchanges', schema: ExchangeListResponseSchema } },
+    },
+    {
+      operationId: 'getExchange',
+      method: 'get',
+      path: '/exchanges/{id}',
+      summary: `One exchange with its books and settlement (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The exchange', schema: ExchangeSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'voidExchange',
+      method: 'post',
+      path: '/exchanges/{id}/void',
+      summary: 'Undo an exchange on its day, with a reason: stock back both ways, money and store credit back (Manager, Admin)',
+      tag,
+      request: { params: IdParamsSchema, body: VoidExchangeRequestSchema },
+      responses: { 200: { description: 'The voided exchange', schema: ExchangeSchema } },
+      errors: change,
+    },
+    ...[
+      ['/exchanges/initiate', 'initiateExchange'],
+      ['/exchanges/{id}/review', 'reviewExchange'],
+      ['/exchanges/{id}/approve', 'approveExchange'],
+      ['/exchanges/{id}/settle', 'settleExchange'],
+      ['/exchanges/{id}/cancel', 'cancelExchange'],
+    ].map(([path, operationId]): ApiOperation => ({
+      operationId,
+      method: 'post',
+      path,
+      summary: 'Retired: exchanges are made in one step with POST /exchanges and undone with POST /exchanges/{id}/void',
+      tag,
+      responses: {},
+      errors: [401, 410],
+    })),
   ];
 }

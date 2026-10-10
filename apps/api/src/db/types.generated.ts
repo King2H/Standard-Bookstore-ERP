@@ -232,6 +232,7 @@ export interface DocumentCounters {
 
 export interface ExchangeIncomingItems {
   book_id: number;
+  condition: Generated<string>;
   evaluated_unit_price: Numeric;
   exchange_id: Int8;
   id: Generated<Int8>;
@@ -281,12 +282,16 @@ export interface Exchanges {
   net_balance: Generated<Numeric>;
   notes: string | null;
   original_order_id: Int8 | null;
+  refund_method: string | null;
   related_payment_id: Int8 | null;
   settlement_type: Generated<string>;
   status: Generated<string>;
   total_incoming_value: Generated<Numeric>;
   total_outgoing_value: Generated<Numeric>;
   updated_at: Generated<Timestamp>;
+  void_reason: string | null;
+  voided_at: Timestamp | null;
+  voided_by: number | null;
 }
 
 export interface ExchangeSettlementEntries {

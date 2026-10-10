@@ -181,6 +181,30 @@ export async function receiveDamaged(tx: Queryable, change: StockChange): Promis
   });
 }
 
+/** Damaged books leaving (a voided exchange that brought them in): the quantity on hand stays as it was. */
+export async function issueDamaged(tx: Queryable, change: StockChange): Promise<void> {
+  checkQuantity(change.quantity);
+  const level = await lockOrThrow(tx, change.bookId, change.locationId);
+  if (!(await stock.removeDamaged(tx, change.bookId, change.locationId, change.quantity))) {
+    throw new BusinessError('INSUFFICIENT_STOCK', `Fewer than ${change.quantity} damaged copies of book ${change.bookId} are left here`, {
+      requested: change.quantity,
+    });
+  }
+  await stock.insertMovement(tx, {
+    bookId: change.bookId,
+    locationId: change.locationId,
+    qtyBefore: level.quantity,
+    qtyAfter: level.quantity,
+    movementType: 'stock_out',
+    reasonCode: change.reasonCode ?? 'damage',
+    referenceType: change.referenceType ?? null,
+    referenceId: change.referenceId ?? null,
+    notes: change.notes ?? null,
+    staffId: change.staffCtx.staffId,
+    unitCost: null,
+  });
+}
+
 /**
  * Stock leaving a location: a sale, a confirmed order, an exchange. Returns
  * the average cost it left at, which a sale keeps as its cost of goods.
