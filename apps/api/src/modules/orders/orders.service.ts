@@ -5,7 +5,7 @@ import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutbox, type OutboxEventType } from '../../lib/outbox.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
-import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import { checkNotWrittenOff, createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
@@ -232,6 +232,7 @@ export async function confirm(
       const outstanding = policy.amountToInvoice(order.total, await orders.sumPaid(tx, order.id));
       if (outstanding && !(await orders.hasReceivable(tx, order.id))) {
         await createReceivable(
+          tx,
           {
             sourceType: 'order_credit_sale',
             sourceRefId: order.orderNumber,
@@ -241,7 +242,6 @@ export async function confirm(
             originalAmount: outstanding.toNumber(),
             dueDate: dueDate ?? null,
           },
-          client,
         );
       }
     }
@@ -337,8 +337,8 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
     // receivables of orders that are already CANCELLED.
     if (await orders.hasReceivable(tx, order.id, { openOnly: true })) {
       await updateReceivableOnPayment(
+        tx,
         { sourceType: 'order_credit_sale', sourceEntityId: Number(orderId), newOutstandingAmount: 0, isFullySettled: true },
-        client,
       );
     }
 
@@ -373,9 +373,10 @@ export async function collectPayment(
   staffCtx: StaffCtx,
 ): Promise<OrderRow> {
   policy.checkPaymentAmount(paymentAmount);
-  await withTransaction({}, async (tx, client) => {
+  await withTransaction({}, async (tx) => {
     const order = await loadOrder(tx, orderId, { forUpdate: true });
     policy.checkCanCollectPayment(order);
+    await checkNotWrittenOff(tx, 'order_credit_sale', order.id);
 
     const outstanding = await orders.lockReceivableOutstanding(tx, order.id);
     if (outstanding === undefined) {
@@ -383,8 +384,8 @@ export async function collectPayment(
     }
     const { newOutstanding, isFullySettled, paymentStatus } = policy.applyPayment(outstanding, paymentAmount);
     await updateReceivableOnPayment(
+      tx,
       { sourceType: 'order_credit_sale', sourceEntityId: Number(orderId), newOutstandingAmount: newOutstanding.toNumber(), isFullySettled },
-      client,
     );
     await orders.setPaymentStatus(tx, order.id, paymentStatus);
     await audit(tx, staffCtx, 'UPDATE', String(orderId), {

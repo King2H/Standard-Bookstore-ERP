@@ -14,7 +14,7 @@ interface ReceivablesPageProps {
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }
 
-type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
+type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue' | 'WrittenOff';
 type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
 
 interface ReceivableRow {
@@ -37,6 +37,8 @@ interface ReceivableRow {
   settlementDate: string | null;
   status: ReceivableStatus;
   notes: string | null;
+  writtenOffAt: string | null;
+  writeOffReason: string | null;
   createdAt: string;
 }
 
@@ -48,6 +50,7 @@ interface Summary {
   overdueCount: number;
   partiallyPaidCount: number;
   settledThisMonth: number;
+  writtenOffThisMonth: number;
 }
 
 const STATUS_COLORS: Record<ReceivableStatus, string> = {
@@ -55,7 +58,18 @@ const STATUS_COLORS: Record<ReceivableStatus, string> = {
   PartiallyPaid: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
   Settled:       'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
   Overdue:       'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  WrittenOff:    'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
 };
+
+const STATUS_LABELS: Record<ReceivableStatus, string> = {
+  Pending:       'Pending',
+  PartiallyPaid: 'Partial',
+  Settled:       'Settled',
+  Overdue:       'Overdue',
+  WrittenOff:    'Written off',
+};
+
+const isOpen = (s: ReceivableStatus) => s === 'Pending' || s === 'PartiallyPaid' || s === 'Overdue';
 
 const SOURCE_LABELS: Record<ReceivableSourceType, string> = {
   pos_credit_sale:     'POS Credit Sale',
@@ -85,7 +99,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   const [editingDueDateId, setEditingDueDateId] = useState<string | null>(null);
   const [dueDateDraft, setDueDateDraft] = useState('');
   const [writeOffId, setWriteOffId] = useState<string | null>(null);
-  const [writeOffNotes, setWriteOffNotes] = useState('');
+  const [writeOffReason, setWriteOffReason] = useState('');
 
   // ── Queries ───────────────────────────────────────────────────────────────────
   const params = new URLSearchParams({ branchId: String(branchId), page: String(page), pageSize: String(pageSize) });
@@ -115,12 +129,12 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   // module; see openInPayments() below, which navigates there instead of
   // calling that endpoint directly.
 
-  // Write off: bad-debt only — records no payment. Restricted server-side to
-  // Admin/Manager/Finance_Officer.
+  // Write off: bad debt only — records no payment, needs a reason. Restricted
+  // server-side to Admin/Manager/Finance_Officer.
   const writeOffMut = useMutation({
-    mutationFn: ({ id, notes }: { id: string; notes: string }) =>
-      api.post(`/receivables/${id}/settle`, { notes: notes || undefined }),
-    onSuccess: () => { inv(); setWriteOffId(null); setWriteOffNotes(''); showToast('Receivable written off', 'success'); },
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.post(`/receivables/${id}/write-off`, { reason }),
+    onSuccess: () => { inv(); setWriteOffId(null); setWriteOffReason(''); showToast('Receivable written off', 'success'); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
@@ -134,9 +148,9 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   const canWrite = (perms?: string[]) =>
     perms?.includes('PROCESS_PAYMENT') ||
     ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
-  // Write-off is stricter than routine collection — matches the backend's
-  // requireRole('Admin', 'Manager', 'Finance_Officer') on POST /:id/settle.
-  const canWriteOff = () => ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
+  // Writing off and rescheduling are stricter than routine collection —
+  // matches the backend's requireRole('Admin', 'Manager', 'Finance_Officer').
+  const canManage = () => ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
 
   // "Open in Payments" — routes to the same entity Payments' own
   // unpaid-orders list keys on: the order/POS-transaction id for those two
@@ -156,13 +170,14 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
   return (
     <div className="p-6 space-y-5">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         {[
           { label: 'Total Outstanding', value: summary ? fmt(summary.totalOutstanding) : '—', color: 'text-red-600 dark:text-red-400' },
           { label: 'Overdue',           value: summary?.overdueCount ?? '—',       color: 'text-red-500 dark:text-red-400' },
           { label: 'Pending',           value: summary?.pendingCount ?? '—',       color: 'text-blue-600 dark:text-blue-400' },
           { label: 'Partially Paid',    value: summary?.partiallyPaidCount ?? '—', color: 'text-yellow-600 dark:text-yellow-400' },
           { label: 'Settled This Month',value: summary?.settledThisMonth ?? '—',   color: 'text-green-600 dark:text-green-400' },
+          { label: 'Written Off This Month', value: summary?.writtenOffThisMonth ?? '—', color: 'text-gray-600 dark:text-gray-300' },
         ].map(c => (
           <div key={c.label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{c.label}</p>
@@ -183,7 +198,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
               looked like the drill-down hadn't applied any filter even
               though it had. */}
           <option value="Pending,PartiallyPaid,Overdue">Outstanding (Pending/Partial/Overdue)</option>
-          {['Pending', 'PartiallyPaid', 'Settled', 'Overdue'].map(s => <option key={s} value={s}>{s}</option>)}
+          {(['Pending', 'PartiallyPaid', 'Settled', 'Overdue', 'WrittenOff'] as const).map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
           className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -261,20 +276,22 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                     {/* Status */}
                     <td className="px-4 py-3">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[rec.status]}`}>
-                        {rec.status === 'PartiallyPaid' ? 'Partial' : rec.status}
+                        {STATUS_LABELS[rec.status]}
                       </span>
                     </td>
                     {/* Actions */}
                     <td className="px-4 py-3">
-                      {rec.status !== 'Settled' && canWrite(userPermissions) && (
+                      {isOpen(rec.status) && canWrite(userPermissions) && (
                         <div className="flex gap-1 text-xs">
-                          {/* Edit due date */}
-                          <button
-                            onClick={() => { setEditingDueDateId(rec.id); setDueDateDraft(rec.dueDate ?? ''); }}
-                            title="Set due date"
-                            className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">
-                            📅
-                          </button>
+                          {/* Edit due date — restricted */}
+                          {canManage() && (
+                            <button
+                              onClick={() => { setEditingDueDateId(rec.id); setDueDateDraft(rec.dueDate ?? ''); }}
+                              title="Set due date"
+                              className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">
+                              📅
+                            </button>
+                          )}
                           {/* Single Authoritative Payment Collection Workflow: Receivables
                               no longer collects payment itself — this opens the Payments
                               module's Collect flow, pre-filled for this receivable. */}
@@ -285,9 +302,9 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                             ↗ Open in Payments
                           </button>
                           {/* Write off — bad debt only, restricted */}
-                          {canWriteOff() && (
+                          {canManage() && (
                             <button
-                              onClick={() => { setWriteOffId(rec.id); setWriteOffNotes(''); }}
+                              onClick={() => { setWriteOffId(rec.id); setWriteOffReason(''); }}
                               title="Write off (no payment collected)"
                               className="px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                               ✕ Write Off
@@ -297,6 +314,9 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                       )}
                       {rec.status === 'Settled' && (
                         <span className="text-xs text-gray-400">{fmtDate(rec.settlementDate)}</span>
+                      )}
+                      {rec.status === 'WrittenOff' && (
+                        <span className="text-xs text-gray-400" title={rec.writeOffReason ?? undefined}>{fmtDate(rec.writtenOffAt)}</span>
                       )}
                     </td>
                   </tr>
@@ -324,20 +344,20 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Write Off Receivable</h3>
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2">
-                  ⚠️ This marks {fmt(rec.outstandingAmount)} as uncollectible — no payment is recorded, and it will not appear in Payments reporting. Use "Open in Payments" instead if the customer actually paid.
+                  ⚠️ This marks {fmt(rec.outstandingAmount)} as uncollectible — no payment is recorded, the sale takes no further payments, and the amount is booked as a write-off. Use "Open in Payments" instead if the customer actually paid.
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
-                <input value={writeOffNotes} onChange={e => setWriteOffNotes(e.target.value)} placeholder="Why is this being written off?"
+                <label htmlFor="write-off-reason" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (required)</label>
+                <input id="write-off-reason" value={writeOffReason} onChange={e => setWriteOffReason(e.target.value)} placeholder="Why is this being written off?"
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500" />
               </div>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setWriteOffId(null)}
                   className="flex-1 px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
                 <button
-                  onClick={() => writeOffMut.mutate({ id: rec.id, notes: writeOffNotes })}
-                  disabled={writeOffMut.isPending}
+                  onClick={() => writeOffMut.mutate({ id: rec.id, reason: writeOffReason.trim() })}
+                  disabled={writeOffMut.isPending || !writeOffReason.trim()}
                   className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition-colors">
                   {writeOffMut.isPending ? 'Writing off…' : 'Write Off'}
                 </button>

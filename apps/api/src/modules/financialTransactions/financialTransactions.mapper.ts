@@ -7,6 +7,7 @@ export interface FinancialTransactionRow {
   type: string;
   order_id: string | number | bigint | null;
   exchange_id: string | number | bigint | null;
+  receivable_id: string | number | bigint | null;
   idempotency_key: string;
   amount: string;
   currency: string;
@@ -17,13 +18,14 @@ export interface FinancialTransactionRow {
   created_at: Date;
 }
 
-// The database CHECK constraint limits type to the three values.
+// The database CHECK constraint limits type to the values of FinancialTransactionType.
 export function toFinancialTransactionRecord(row: FinancialTransactionRow): FinancialTransactionRecord {
   return {
     id: String(row.id),
     type: row.type as FinancialTransactionType,
     orderId: row.order_id === null ? null : String(row.order_id),
     exchangeId: row.exchange_id === null ? null : String(row.exchange_id),
+    receivableId: row.receivable_id === null ? null : String(row.receivable_id),
     idempotencyKey: row.idempotency_key,
     amount: Money.of(row.amount),
     currency: row.currency,

@@ -11768,7 +11768,8 @@
               "enum": [
                 "payment",
                 "refund",
-                "adjustment"
+                "adjustment",
+                "write_off"
               ]
             }
           },
@@ -11804,7 +11805,8 @@
                             "enum": [
                               "payment",
                               "refund",
-                              "adjustment"
+                              "adjustment",
+                              "write_off"
                             ]
                           },
                           "orderId": {
@@ -11814,6 +11816,12 @@
                             ]
                           },
                           "exchangeId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "receivableId": {
                             "type": [
                               "string",
                               "null"
@@ -11860,6 +11868,7 @@
                           "type",
                           "orderId",
                           "exchangeId",
+                          "receivableId",
                           "idempotencyKey",
                           "amount",
                           "currency",
@@ -18810,6 +18819,1475 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receivables": {
+      "get": {
+        "operationId": "listReceivables",
+        "summary": "The session branch's receivables, newest first (?branchId= another branch needs access to all branches)",
+        "tags": [
+          "Receivables"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pos_credit_sale",
+                "exchange_difference",
+                "order_credit_sale"
+              ]
+            }
+          },
+          {
+            "name": "dueDateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dueDateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "overdueOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of receivables",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sourceType": {
+                            "type": "string",
+                            "enum": [
+                              "pos_credit_sale",
+                              "exchange_difference",
+                              "order_credit_sale"
+                            ]
+                          },
+                          "sourceRefId": {
+                            "type": "string"
+                          },
+                          "sourceEntityId": {
+                            "type": "string"
+                          },
+                          "customerId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "customerName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "customerCode": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "branchId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "originalAmount": {
+                            "type": "number"
+                          },
+                          "outstandingAmount": {
+                            "type": "number"
+                          },
+                          "currency": {
+                            "type": "string"
+                          },
+                          "dueDate": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "settlementDate": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "Pending",
+                              "PartiallyPaid",
+                              "Settled",
+                              "Overdue",
+                              "WrittenOff"
+                            ]
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "writtenOffAmount": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "writtenOffAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "writtenOffBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "writeOffReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "sourceType",
+                          "sourceRefId",
+                          "sourceEntityId",
+                          "customerId",
+                          "customerName",
+                          "customerCode",
+                          "branchId",
+                          "originalAmount",
+                          "outstandingAmount",
+                          "currency",
+                          "dueDate",
+                          "settlementDate",
+                          "status",
+                          "notes",
+                          "writtenOffAmount",
+                          "writtenOffAt",
+                          "writtenOffBy",
+                          "writeOffReason",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "totalPages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receivables/{id}": {
+      "get": {
+        "operationId": "getReceivable",
+        "summary": "One receivable",
+        "tags": [
+          "Receivables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The receivable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sourceType": {
+                      "type": "string",
+                      "enum": [
+                        "pos_credit_sale",
+                        "exchange_difference",
+                        "order_credit_sale"
+                      ]
+                    },
+                    "sourceRefId": {
+                      "type": "string"
+                    },
+                    "sourceEntityId": {
+                      "type": "string"
+                    },
+                    "customerId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "customerCode": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "originalAmount": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "settlementDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "Pending",
+                        "PartiallyPaid",
+                        "Settled",
+                        "Overdue",
+                        "WrittenOff"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAmount": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "writeOffReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "sourceType",
+                    "sourceRefId",
+                    "sourceEntityId",
+                    "customerId",
+                    "customerName",
+                    "customerCode",
+                    "branchId",
+                    "originalAmount",
+                    "outstandingAmount",
+                    "currency",
+                    "dueDate",
+                    "settlementDate",
+                    "status",
+                    "notes",
+                    "writtenOffAmount",
+                    "writtenOffAt",
+                    "writtenOffBy",
+                    "writeOffReason",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receivables/{id}/collect": {
+      "post": {
+        "operationId": "collectReceivable",
+        "summary": "Record a payment: an order or POS sale through its own payment flow, an exchange difference in the ledger",
+        "tags": [
+          "Receivables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                      }
+                    ]
+                  },
+                  "paymentMethod": {
+                    "type": "string",
+                    "enum": [
+                      "cash",
+                      "bank",
+                      "mobile",
+                      "store_credit"
+                    ]
+                  },
+                  "bankAccountId": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "amount",
+                  "paymentMethod"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The receivable after the payment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sourceType": {
+                      "type": "string",
+                      "enum": [
+                        "pos_credit_sale",
+                        "exchange_difference",
+                        "order_credit_sale"
+                      ]
+                    },
+                    "sourceRefId": {
+                      "type": "string"
+                    },
+                    "sourceEntityId": {
+                      "type": "string"
+                    },
+                    "customerId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "customerCode": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "originalAmount": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "settlementDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "Pending",
+                        "PartiallyPaid",
+                        "Settled",
+                        "Overdue",
+                        "WrittenOff"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAmount": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "writeOffReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "sourceType",
+                    "sourceRefId",
+                    "sourceEntityId",
+                    "customerId",
+                    "customerName",
+                    "customerCode",
+                    "branchId",
+                    "originalAmount",
+                    "outstandingAmount",
+                    "currency",
+                    "dueDate",
+                    "settlementDate",
+                    "status",
+                    "notes",
+                    "writtenOffAmount",
+                    "writtenOffAt",
+                    "writtenOffBy",
+                    "writeOffReason",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receivables/{id}/due-date": {
+      "patch": {
+        "operationId": "changeReceivableDueDate",
+        "summary": "Set or remove the due date (Admin, Manager, Finance_Officer); the status follows the new date",
+        "tags": [
+          "Receivables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dueDate": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "dueDate"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The receivable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sourceType": {
+                      "type": "string",
+                      "enum": [
+                        "pos_credit_sale",
+                        "exchange_difference",
+                        "order_credit_sale"
+                      ]
+                    },
+                    "sourceRefId": {
+                      "type": "string"
+                    },
+                    "sourceEntityId": {
+                      "type": "string"
+                    },
+                    "customerId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "customerCode": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "originalAmount": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "settlementDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "Pending",
+                        "PartiallyPaid",
+                        "Settled",
+                        "Overdue",
+                        "WrittenOff"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAmount": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "writeOffReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "sourceType",
+                    "sourceRefId",
+                    "sourceEntityId",
+                    "customerId",
+                    "customerName",
+                    "customerCode",
+                    "branchId",
+                    "originalAmount",
+                    "outstandingAmount",
+                    "currency",
+                    "dueDate",
+                    "settlementDate",
+                    "status",
+                    "notes",
+                    "writtenOffAmount",
+                    "writtenOffAt",
+                    "writtenOffBy",
+                    "writeOffReason",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receivables/{id}/settle": {
+      "post": {
+        "operationId": "settleReceivable",
+        "summary": "Retired: use POST /receivables/{id}/write-off",
+        "tags": [
+          "Receivables"
+        ],
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receivables/{id}/write-off": {
+      "post": {
+        "operationId": "writeOffReceivable",
+        "summary": "Close a bad debt without payment, with a reason (Admin, Manager, Finance_Officer); its sale takes no further payments",
+        "tags": [
+          "Receivables"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The written-off receivable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sourceType": {
+                      "type": "string",
+                      "enum": [
+                        "pos_credit_sale",
+                        "exchange_difference",
+                        "order_credit_sale"
+                      ]
+                    },
+                    "sourceRefId": {
+                      "type": "string"
+                    },
+                    "sourceEntityId": {
+                      "type": "string"
+                    },
+                    "customerId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "customerCode": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "originalAmount": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "settlementDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "Pending",
+                        "PartiallyPaid",
+                        "Settled",
+                        "Overdue",
+                        "WrittenOff"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAmount": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "writtenOffAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "writtenOffBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "writeOffReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "sourceType",
+                    "sourceRefId",
+                    "sourceEntityId",
+                    "customerId",
+                    "customerName",
+                    "customerCode",
+                    "branchId",
+                    "originalAmount",
+                    "outstandingAmount",
+                    "currency",
+                    "dueDate",
+                    "settlementDate",
+                    "status",
+                    "notes",
+                    "writtenOffAmount",
+                    "writtenOffAt",
+                    "writtenOffBy",
+                    "writeOffReason",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receivables/summary": {
+      "get": {
+        "operationId": "getReceivableSummary",
+        "summary": "Totals of the session branch's receivables; every branch for staff with access to all branches who name none",
+        "tags": [
+          "Receivables"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalOutstanding": {
+                      "type": "number"
+                    },
+                    "pendingCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "overdueCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "partiallyPaidCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "settledThisMonth": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "writtenOffThisMonth": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "totalOutstanding",
+                    "pendingCount",
+                    "overdueCount",
+                    "partiallyPaidCount",
+                    "settledThisMonth",
+                    "writtenOffThisMonth"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
             "content": {
               "application/json": {
                 "schema": {

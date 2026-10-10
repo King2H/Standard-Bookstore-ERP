@@ -1,3 +1,4 @@
+import { Money } from '@bms/shared';
 import { db } from '../../db/index.js';
 import { computeNetProfit } from '../../lib/profit.service.js';
 import { costBasisLateralJoin } from '../../lib/costBasis.js';
@@ -1307,6 +1308,7 @@ export async function getReceivablesExportRows(filters: ReportFilters): Promise<
        TO_CHAR(r.created_at, 'YYYY-MM-DD') AS date_str,
        r.original_amount,
        r.outstanding_amount,
+       COALESCE(r.written_off_amount, 0) AS written_off_amount,
        TO_CHAR(r.due_date, 'YYYY-MM-DD') AS due_date_str,
        r.status,
        GREATEST(0, EXTRACT(DAY FROM now() - r.due_date)::int) AS days_overdue,
@@ -1331,7 +1333,8 @@ export async function getReceivablesExportRows(filters: ReportFilters): Promise<
       date:               row.date_str as string,
       customer_name:      row.customer_name as string,
       original_amount:    original,
-      collected_amount:   original - outstanding,
+      // A write-off closes the balance without collecting it.
+      collected_amount:   Money.of(row.original_amount as string).minus(row.outstanding_amount as string).minus(row.written_off_amount as string).toNumber(),
       outstanding_amount: outstanding,
       due_date:           (row.due_date_str as string | null) ?? '',
       days_overdue:       row.days_overdue as number ?? 0,

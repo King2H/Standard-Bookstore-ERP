@@ -307,6 +307,7 @@ export interface FinancialTransactions {
   meta: Generated<Json>;
   method: string | null;
   order_id: Int8 | null;
+  receivable_id: Int8 | null;
   staff_id: number;
   type: string;
 }
@@ -590,6 +591,10 @@ export interface Receivables {
   source_type: string;
   status: Generated<string>;
   updated_at: Generated<Timestamp>;
+  write_off_reason: string | null;
+  written_off_amount: Numeric | null;
+  written_off_at: Timestamp | null;
+  written_off_by: number | null;
 }
 
 export interface RefreshTokens {

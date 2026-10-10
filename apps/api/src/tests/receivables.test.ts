@@ -285,41 +285,41 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     expect(Number(after.body.summary.totalCollected)).toBeCloseTo(collectedBefore + netBalance, 2);
   });
 
-  // ── 9-10. Write-off (/settle) is restricted and records no payment ────────
+  // ── 9-10. Write-off is restricted and books no payment ────────────────────
 
   it('9. Sales role cannot write off a receivable (403); Manager can', async () => {
     const { receivableId } = await createCustomerPaysExchange();
 
     const salesRes = await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/settle`)
+      .post(`/api/receivables/${receivableId}/write-off`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ notes: 'trying to write off' });
+      .send({ reason: 'trying to write off' });
     expect(salesRes.status).toBe(403);
 
     const mgrRes = await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/settle`)
+      .post(`/api/receivables/${receivableId}/write-off`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ notes: 'bad debt write-off' });
+      .send({ reason: 'bad debt write-off' });
     expect(mgrRes.status).toBe(200);
-    expect(mgrRes.body.status).toBe('Settled');
+    expect(mgrRes.body.status).toBe('WrittenOff');
   });
 
-  it('10. Write-off records no financial_transactions row (unlike /collect)', async () => {
+  it('10. Write-off records no payment in financial_transactions (unlike /collect), only a write_off entry', async () => {
     const { receivableId } = await createCustomerPaysExchange();
 
     await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/settle`)
+      .post(`/api/receivables/${receivableId}/write-off`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ notes: 'write-off, no payment' });
+      .send({ reason: 'write-off, no payment' });
 
     const ftRes = await db.query(
-      `SELECT * FROM financial_transactions WHERE exchange_id = (SELECT source_entity_id::bigint FROM receivables WHERE id = $1)`,
+      `SELECT type FROM financial_transactions WHERE exchange_id = (SELECT source_entity_id::bigint FROM receivables WHERE id = $1)`,
       [receivableId],
     );
-    expect(ftRes.rows.length).toBe(0);
+    expect(ftRes.rows.map((r) => r.type)).toEqual(['write_off']);
   });
 
   // ── 11. Already-settled receivable rejects further collection ─────────────

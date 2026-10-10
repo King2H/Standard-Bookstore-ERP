@@ -23,6 +23,7 @@ export async function list(
         'type',
         'order_id',
         'exchange_id',
+        'receivable_id',
         'idempotency_key',
         'amount',
         'currency',

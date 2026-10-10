@@ -272,15 +272,15 @@ async function applyExchangeSettlementEffects(
       const origOrderRes = await client.query(`SELECT o.id, o.sale_type FROM orders o WHERE o.id = $1`, [originalOrderId]);
       if (origOrderRes.rows.length && origOrderRes.rows[0].sale_type === 'credit_sale') {
         const openRecRes = await client.query(
-          `SELECT r.id, r.outstanding_amount FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = $1 AND r.status != 'Settled' LIMIT 1`,
+          `SELECT r.id, r.outstanding_amount FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = $1 AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue') LIMIT 1`,
           [originalOrderId],
         );
         if (openRecRes.rows.length) {
           const currentOutstanding = parseFloat(openRecRes.rows[0].outstanding_amount as string);
           const newOutstanding = Math.max(0, parseFloat((currentOutstanding - netBalance).toFixed(2)));
           await updateReceivableOnPayment(
+            queryableOn(client),
             { sourceType: 'order_credit_sale', sourceEntityId: originalOrderId, newOutstandingAmount: newOutstanding, isFullySettled: newOutstanding <= 0.01 },
-            client,
           );
         }
       }
@@ -294,8 +294,8 @@ async function applyExchangeSettlementEffects(
     try {
       await client.query('SAVEPOINT before_exchange_receivable');
       await createReceivable(
+        queryableOn(client),
         { sourceType: 'exchange_difference', sourceRefId: exchangeReference, sourceEntityId: parseInt(exchangeId, 10), customerId, branchId, originalAmount: netBalance, dueDate: dueDate ?? null },
-        client,
       );
       await client.query('RELEASE SAVEPOINT before_exchange_receivable');
     } catch (hookErr) {
