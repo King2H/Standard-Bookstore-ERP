@@ -136,7 +136,7 @@ describe('Location restrictions on sales and stock', () => {
       locationId: locB, items: [{ bookId, quantityReceived: 1 }],
     }));
     expectRefused(await as(api().post('/api/v1/returns'), sales).send({
-      transactionId: txId, refundMethod: 'cash', lines: [{ txLineItemId: 1, quantity: 1 }],
+      transactionId: txId, lines: [{ transactionLineItemId: 1, quantity: 1 }],
     }));
   });
 

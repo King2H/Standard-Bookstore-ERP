@@ -115,6 +115,26 @@ export async function reopenOnRefund(
 }
 
 /**
+ * Sets a return against what is still owed on its sale (owner decision 1a):
+ * a credit note of up to `amount`. Returns the part credited; the rest, if
+ * any, is refunded. A closed receivable takes no credit.
+ */
+export async function creditReturn(
+  q: Queryable,
+  opts: { sourceType: ReceivableSourceType; sourceEntityId: number | string; amount: Money },
+): Promise<Money> {
+  const r = await receivables.lockBySource(q, opts.sourceType, opts.sourceEntityId);
+  if (!r || !policy.isOpen(r.status)) return Money.ZERO;
+  const credited = Money.min(opts.amount, r.outstandingAmount);
+  if (!credited.greaterThan(0)) return Money.ZERO;
+  const outstanding = r.outstandingAmount.minus(credited);
+  // A credit note is not a payment: the status moves only if nothing is left owed.
+  const status = outstanding.greaterThan(0) ? r.status : 'Settled';
+  await receivables.credit(q, r.id, outstanding, credited, status);
+  return credited;
+}
+
+/**
  * Closes the receivable of a sale that was cancelled (owner decision 2a): it
  * becomes Cancelled, neither paid nor written off. `paymentsReturned`: the
  * sale's payments were given back too (a voided POS sale). A written-off

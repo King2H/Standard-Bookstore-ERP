@@ -418,7 +418,6 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
       .set('X-Branch-Id', String(branchId))
       .send({
         transactionId: txId,
-        refundMethod: 'cash',
         lines: [{ transactionLineItemId: lineItemId, quantity: 1, disposition: 'DAMAGED' }],
       });
     // Return should succeed (200/201) on both fixed and unfixed code

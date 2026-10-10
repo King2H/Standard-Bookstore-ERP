@@ -166,6 +166,21 @@ export async function writeOff(q: Queryable, id: string, w: { amount: Money; sta
     .execute();
 }
 
+/** A credit note from a return: the balance goes down by `amount`, kept apart from what was collected. */
+export async function credit(q: Queryable, id: string, outstanding: Money, amount: Money, status: ReceivableStatus): Promise<void> {
+  await q
+    .updateTable('receivables')
+    .set((eb) => ({
+      outstanding_amount: outstanding.toFixed(2),
+      credited_amount: eb('credited_amount', '+', amount.toFixed(2)),
+      status,
+      settlement_date: status === 'Settled' ? sql<Date>`now()` : null,
+      updated_at: sql<Date>`now()`,
+    }))
+    .where('id', '=', id)
+    .execute();
+}
+
 /** The debt goes with its sale: `amount` is what is no longer owed. */
 export async function cancel(q: Queryable, id: string, amount: Money): Promise<void> {
   await q

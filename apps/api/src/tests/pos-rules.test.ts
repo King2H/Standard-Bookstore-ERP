@@ -155,7 +155,7 @@ describe('Counter sales', () => {
     it('refuses a sale with returned books, so they are not restocked twice (was: 200, restocked twice)', async () => {
       const sale = (await as(api().get(`/api/v1/pos/transactions/${(await sell()).body.id}`))).body;
       const returned = await as(api().post('/api/v1/returns'), manager).send({
-        transactionId: Number(sale.id), refundMethod: 'cash', reason: 'Damaged',
+        transactionId: Number(sale.id), reason: 'Damaged',
         lines: [{ transactionLineItemId: Number(sale.lineItems[0].id), quantity: 1 }],
       });
       expect(returned.status).toBe(201);

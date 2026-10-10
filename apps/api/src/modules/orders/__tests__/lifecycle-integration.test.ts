@@ -921,7 +921,6 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .set('X-Branch-Id', String(branchId))
       .send({
         transactionId: txId,
-        refundMethod: 'cash',
         reason: 'Test SELLABLE return 14.6',
         lines: [{ transactionLineItemId: txLineItemId, quantity: RETURN_QTY, disposition: 'SELLABLE' }],
       });
@@ -1000,7 +999,6 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .set('X-Branch-Id', String(branchId))
       .send({
         transactionId: txId,
-        refundMethod: 'cash',
         reason: 'Test DAMAGED return 14.7',
         lines: [{ transactionLineItemId: txLineItemId, quantity: RETURN_QTY, disposition: 'DAMAGED' }],
       });
@@ -1023,20 +1021,16 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────────
-  // Task 14.8 — CREDIT return: receivable balance reduced
+  // Task 14.8 — a POS return does not touch a credit order's receivable
   //
-  // Verifies that returning items on a CREDIT order adjusts the receivable:
-  //   CREDIT order → fulfill → return SELLABLE via POS return path
-  //   assert receivable.outstanding_amount decreases by returned line value
-  //
-  // Note: createReturn() in this codebase is POS-centric. The CREDIT receivable
-  // adjustment path in 10.3 looks for an open order_credit_sale receivable
-  // linked to a FULFILLED/COMPLETED CREDIT order for the same customer/branch.
-  // We verify that path works by checking the receivable after return.
+  // A return is set against its own sale (#21, owner decision 1a): a cash
+  // sale refunds cash, and a credit order of the same customer keeps what it
+  // is owed. The old path also reduced the newest open order_credit_sale
+  // receivable of that customer, so the customer got the cash back and owed less.
   //
   // Requirements: 5.2
   // ──────────────────────────────────────────────────────────────────────────────
-  it('14.8 CREDIT return — receivable balance reduced by returned line value', async () => {
+  it("14.8 POS return — refunded on its own sale, a credit order's receivable left alone (owner decision 1a)", async () => {
     const INITIAL_QTY = 20;
     const ORDER_QTY = 4;
     const RETURN_QTY = 2;
@@ -1107,7 +1101,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     );
     const txLineItemId = txLineRes.rows[0].id as number;
 
-    // ── Return SELLABLE — triggers receivable adjustment for open credit receivable ─
+    // ── Return SELLABLE — a cash sale refunds cash; the order's debt is another sale's ─
     // Fetch the actual line item price from the POS transaction
     const txLineItemRes = await db.query(
       `SELECT unit_price, quantity FROM transaction_line_items WHERE id = $1`,
@@ -1121,21 +1115,22 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       .set('X-Branch-Id', String(branchId))
       .send({
         transactionId: txId,
-        refundMethod: 'cash',
-        reason: 'Test CREDIT return 14.8',
+        reason: 'Test return 14.8',
         lines: [{ transactionLineItemId: txLineItemId, quantity: RETURN_QTY, disposition: 'SELLABLE' }],
       });
     expect(returnRes.status).toBeGreaterThanOrEqual(200);
     expect(returnRes.status).toBeLessThan(300);
 
-    // Receivable outstanding_amount should decrease by the returned line value
+    expect(returnRes.body.refundMethod).toBe('cash');
+    expect(returnRes.body.totalRefundAmount).toBeCloseTo(returnTotal, 2);
+
+    // It used to be reduced as well, so the customer got the cash back and owed less.
     const recAfterReturn = await db.query(
       `SELECT outstanding_amount, status FROM receivables WHERE id = $1`,
       [receivableId],
     );
     const outstandingAfter = parseFloat(recAfterReturn.rows[0].outstanding_amount as string);
-    const expectedOutstanding = Math.max(0, parseFloat((outstandingBefore - returnTotal).toFixed(2)));
-    expect(outstandingAfter).toBeCloseTo(expectedOutstanding, 1);
+    expect(outstandingAfter).toBeCloseTo(outstandingBefore, 2);
 
     await db.query(`UPDATE customers SET is_active = false WHERE id = $1`, [customerId]);
   });

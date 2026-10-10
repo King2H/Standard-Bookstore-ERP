@@ -219,7 +219,7 @@ export async function addPoints(
   q: Queryable,
   customerId: number,
   delta: number,
-  entry: { reason: 'ACCRUAL' | 'REDEMPTION' | 'REFUND' | 'VOID_REVERSAL'; transactionRef: string | null },
+  entry: { reason: 'ACCRUAL' | 'REDEMPTION' | 'REFUND' | 'VOID_REVERSAL' | 'RETURN_REVERSAL'; transactionRef: string | null },
 ): Promise<void> {
   await q
     .updateTable('loyalty_accounts')

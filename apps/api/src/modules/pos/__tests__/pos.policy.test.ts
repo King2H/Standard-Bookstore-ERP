@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Money } from '@bms/shared';
-import { amountDue, checkCanVoid, checkDiscounts, checkSalePayments, checkTender, isVoidable, paymentStatus, priceLine } from '../pos.policy.js';
+import { afterCollect, amountDue, checkCanVoid, checkDiscounts, checkSalePayments, checkTender, isVoidable, paymentStatus, priceLine } from '../pos.policy.js';
 
 const sold = { status: 'completed' as const, soldOn: '2026-10-10', today: '2026-10-10', hasReturns: false };
 
@@ -46,5 +46,12 @@ describe('voiding', () => {
     expect(() => checkCanVoid({ ...sold, soldOn: '2026-10-09' })).toThrow(expect.objectContaining({ code: 'VOID_WINDOW_CLOSED' }));
     expect(() => checkCanVoid({ ...sold, hasReturns: true })).toThrow(expect.objectContaining({ code: 'TRANSACTION_HAS_RETURNS' }));
     expect(() => checkCanVoid({ ...sold, status: 'voided' })).toThrow(expect.objectContaining({ code: 'ALREADY_VOIDED' }));
+  });
+});
+
+describe('afterCollect', () => {
+  it('counts from what is due, which a credit note may have lowered', () => {
+    expect(afterCollect(Money.of(30), Money.of(30))).toEqual({ due: Money.ZERO, status: 'paid' });
+    expect(afterCollect(Money.of(30), Money.of(10))).toEqual({ due: Money.of(20), status: 'partial' });
   });
 });

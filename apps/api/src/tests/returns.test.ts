@@ -124,7 +124,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', reason: 'Customer changed mind', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
+      .send({ transactionId: parseInt(tx.id), reason: 'Customer changed mind', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
 
     expect(res.status).toBe(201);
     expect(res.body.returnNumber).toMatch(/^RET-\d{8}-\d{4}$/);
@@ -150,7 +150,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
+      .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
 
     expect(res.status).toBe(201);
     expect(Number(res.body.totalRefundAmount)).toBeCloseTo(bookPrice * 1, 1);
@@ -170,7 +170,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 5 }] });
+      .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 5 }] });
 
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('OVER_RETURN');
@@ -178,7 +178,7 @@ describe('Returns & Refunds', () => {
 
   // ── 4. Store credit refund ──────────────────────────────────────────────────
 
-  it('4. Store credit refund → customer balance increased', async () => {
+  it('4. A sale paid with store credit refunds to store credit → customer balance increased', async () => {
     await ensureInventory(bookId, locationId, 50);
 
     // Create a customer with store credit account
@@ -188,15 +188,15 @@ describe('Returns & Refunds', () => {
       [branchId, `CUS-RET-${Date.now()}`],
     );
     const customerId = custRes.rows[0].id as number;
-    await db.query(`INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0)`, [customerId]);
+    const grand = parseFloat((bookPrice * 1).toFixed(2));
+    await db.query(`INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, $2)`, [customerId, grand]);
     await db.query(`INSERT INTO loyalty_accounts (customer_id, points_balance, lifetime_points, updated_at) VALUES ($1, 0, 0, now())`, [customerId]);
 
-    const grand = parseFloat((bookPrice * 1).toFixed(2));
     const txRes = await request(getTestApp())
       .post('/api/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ branchId, locationId, customerId, items: [{ bookId, quantity: 1 }], payments: [{ method: 'cash', amount: grand }] });
+      .send({ branchId, locationId, customerId, items: [{ bookId, quantity: 1 }], payments: [{ method: 'store_credit', amount: grand }] });
     expect(txRes.status).toBe(201);
     const lineItemId = txRes.body.lineItems[0].id;
 
@@ -204,7 +204,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(txRes.body.id), refundMethod: 'store_credit', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
+      .send({ transactionId: parseInt(txRes.body.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
 
     expect(res.status).toBe(201);
     expect(res.body.refundMethod).toBe('store_credit');
@@ -255,7 +255,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(txRes.body.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
+      .send({ transactionId: parseInt(txRes.body.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
 
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('APPROVAL_REQUIRED');
@@ -282,7 +282,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
+      .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
 
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('TRANSACTION_VOIDED');
@@ -313,7 +313,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
+      .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
     expect(r1.status).toBe(201);
 
     // Second return — tries to return again
@@ -321,7 +321,7 @@ describe('Returns & Refunds', () => {
       .post('/api/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ transactionId: parseInt(tx.id), refundMethod: 'cash', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
+      .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
     expect(r2.status).toBe(422);
     expect(r2.body.error).toBe('OVER_RETURN');
   });

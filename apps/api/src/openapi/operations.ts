@@ -136,6 +136,10 @@ import {
   PosTransactionListQuerySchema,
   PosTransactionListResponseSchema,
   PosTransactionSchema,
+  CreateReturnRequestSchema,
+  ReturnListQuerySchema,
+  ReturnListResponseSchema,
+  ReturnSchema,
 } from '@bms/shared';
 
 /**
@@ -195,6 +199,7 @@ export const operations: ApiOperation[] = [
   ...receivableOperations(),
   ...paymentOperations(),
   ...posOperations(),
+  ...returnOperations(),
 ];
 
 function auditOperations(): ApiOperation[] {
@@ -1481,6 +1486,53 @@ function posOperations(): ApiOperation[] {
       request: { params: IdParamsSchema },
       responses: sale('The voided sale'),
       errors: change,
+    },
+  ];
+}
+
+function returnOperations(): ApiOperation[] {
+  const tag = 'Returns';
+  const roles = 'Admin, Manager, Finance_Officer, Sales';
+  return [
+    {
+      operationId: 'createReturn',
+      method: 'post',
+      path: '/returns',
+      summary:
+        'Books back from a sale of the session branch: set against what the sale still owes, then refunded the way it was paid ' +
+        '(Sales, Manager, Admin; above the approval limit, Manager or Admin)',
+      tag,
+      request: { body: CreateReturnRequestSchema },
+      responses: { 201: { description: 'The return, with its lines and refunds', schema: ReturnSchema } },
+      errors: [400, 401, 403, 404, 409, 422, 500],
+    },
+    {
+      operationId: 'listReturns',
+      method: 'get',
+      path: '/returns',
+      summary: `Returns of the session branch, newest first (${roles}; ?branchId= another branch needs access to all branches)`,
+      tag,
+      request: { query: ReturnListQuerySchema },
+      responses: { 200: { description: 'One page of returns', schema: ReturnListResponseSchema } },
+    },
+    {
+      operationId: 'getReturn',
+      method: 'get',
+      path: '/returns/{id}',
+      summary: `One return with its lines and refunds (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The return', schema: ReturnSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'rejectReturn',
+      method: 'post',
+      path: '/returns/{id}/reject',
+      summary: 'Retired: a return is complete when it is made; above the approval limit a Manager or Admin makes it',
+      tag,
+      responses: {},
+      errors: [401, 403, 410],
     },
   ];
 }

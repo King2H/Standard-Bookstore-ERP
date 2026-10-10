@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
+import { api, getCurrentBranchId } from '../lib/api.js';
+import { paymentMethodPlainLabel } from '../lib/paymentMethods.js';
 import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
@@ -11,22 +12,26 @@ interface ReturnsPageProps { userRole?: Role; userPermissions?: string[]; }
 interface TxLine { id: string; bookId: number; bookTitle: string; bookIsbn: string; quantity: number; unitPrice: number; discountPct: number; lineTotal: number; }
 interface Transaction { id: string; transactionNumber: string; grandTotal: number; amountPaid: number; status: string; paymentStatus: string; createdAt: string; lineItems?: TxLine[]; }
 interface ReturnLine { id: string; bookTitle: string; quantity: number; unitPrice: number; lineRefundAmount: number; }
-interface ReturnRow { id: string; returnNumber: string; transactionId: string; totalRefundAmount: number; refundMethod: string; status: string; reason: string | null; createdAt: string; lineItems?: ReturnLine[]; }
+interface ReturnRefund { id: string; method: string; amount: number; }
+interface ReturnRow { id: string; returnNumber: string; transactionId: string; totalRefundAmount: number; refundMethod: string; status: string; reason: string | null; createdAt: string; lineItems?: ReturnLine[]; refunds?: ReturnRefund[]; }
 interface ReturnListResponse { items: ReturnRow[]; total: number; page: number; totalPages: number; }
 
 const canCreate = (r?: Role, perms?: string[]) => (perms?.includes('CREATE_SALE') || perms?.includes('PROCESS_REFUND')) || ['Sales', 'Manager', 'Admin'].includes(r ?? '');
-const canApprove = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin'].includes(r ?? '');
-const canReject  = (r?: Role, perms?: string[]) => (perms?.includes('PROCESS_REFUND')) || ['Manager', 'Admin'].includes(r ?? '');
+// The server lets only a Manager or Admin process a return above the approval limit.
+const canApprove = (r?: Role) => ['Manager', 'Admin'].includes(r ?? '');
 
 type Tab = 'new' | 'list';
 
-function getStaffIdFromToken(): number | null {
-  const token = getAccessToken();
-  if (!token) return null;
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.staffId as number ?? null;
-  } catch { return null; }
+/** How a refund went back: a payment method, a credit note against what the sale owed, or mixed. */
+function refundLabel(method: string): string {
+  if (method === 'credit_note') return 'Credit Note';
+  if (method === 'mixed') return 'Mixed';
+  return paymentMethodPlainLabel(method);
+}
+
+/** A line's share of what it cost after its discount, as the server values it. */
+function lineValue(li: TxLine, qty: number): number {
+  return li.quantity > 0 ? (li.lineTotal * qty) / li.quantity : 0;
 }
 
 export default function ReturnsPage({ userRole, userPermissions }: ReturnsPageProps) {
@@ -35,14 +40,12 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
   const currency = useCurrency();
   const [tab, setTab] = useState<Tab>('new');
   const branchId = getCurrentBranchId() ?? 1;
-  const currentStaffId = getStaffIdFromToken();
 
   // ── New Return state ──────────────────────────────────────────────────────────
   const [txSearch, setTxSearch]         = useState('');
   const [txSearchInput, setTxSearchInput] = useState('');
   const [selectedTx, setSelectedTx]     = useState<Transaction | null>(null);
   const [quantities, setQuantities]     = useState<Record<string, number>>({});
-  const [refundMethod, setRefundMethod] = useState<'cash' | 'store_credit'>('cash');
   const [reason, setReason]             = useState('');
 
   // ── List state ────────────────────────────────────────────────────────────────
@@ -90,20 +93,11 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
     },
   });
 
-  const rejectMut = useMutation({
-    mutationFn: (id: string) => api.post<ReturnRow>(`/returns/${id}/reject`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['returns-list'] }); showToast('Return rejected', 'success'); },
-    onError: (e: Error) => showToast(e.message, 'error'),
-  });
-
   // ── Derived ───────────────────────────────────────────────────────────────────
   const tx = selectedTx ?? txData ?? null;
   const lines = tx?.lineItems ?? [];
 
-  const totalRefund = lines.reduce((s, li) => {
-    const qty = quantities[li.id] ?? 0;
-    return s + li.unitPrice * qty * (1 - (li.discountPct ?? 0) / 100);
-  }, 0);
+  const totalRefund = lines.reduce((s, li) => s + lineValue(li, quantities[li.id] ?? 0), 0);
 
   function setQty(lineId: string, val: number, max: number) {
     setQuantities(q => ({ ...q, [lineId]: Math.max(0, Math.min(max, val)) }));
@@ -124,10 +118,8 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
     if (selectedLines.length === 0) { showToast('Select at least one item to return', 'error'); return; }
     createMut.mutate({
       transactionId: parseInt(tx.id),
-      refundMethod,
       reason: reason || undefined,
       lines: selectedLines,
-      // Service auto-approves for Manager/Admin; Sales will get APPROVAL_REQUIRED if over limit
     });
   }
 
@@ -207,7 +199,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
                       <span className="text-xs text-gray-400">/ {li.quantity}</span>
                     </div>
                     <div className="text-sm font-medium text-gray-900 dark:text-white w-24 text-right">
-                      {currency} {(li.unitPrice * (quantities[li.id] ?? 0) * (1 - (li.discountPct ?? 0) / 100)).toFixed(2)}
+                      {currency} {lineValue(li, quantities[li.id] ?? 0).toFixed(2)}
                     </div>
                   </div>
                 ))}
@@ -220,42 +212,34 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 3 — Refund Details</h3>
 
-              <div className="flex gap-2">
-                {(['cash', 'store_credit'] as const).map(m => (
-                  <button key={m} onClick={() => setRefundMethod(m)}
-                    className={`flex-1 py-2 text-sm rounded-lg transition-colors ${refundMethod === m ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
-                    {/* Bug fix: was mislabeled "Telebirr" — refund_method's
-                        only two values are cash/store_credit (see the
-                        returns migration's CHECK constraint); this credits
-                        store_credit_accounts.balance directly. */}
-                    {m === 'cash' ? '💵 Cash' : '🎁 Store Credit'}
-                  </button>
-                ))}
-              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                The refund goes back the way the sale was paid. On a credit sale it is first set against what the customer still owes, as a credit note.
+                After the return window, store policy may allow store credit only.
+              </p>
 
               <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for return (optional)"
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
               {/* Approval section */}
-              {canApprove(userRole, userPermissions) ? (
+              {canApprove(userRole) ? (
                 <div className="rounded-lg p-3 border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30">
                   <p className="text-sm font-medium text-green-800 dark:text-green-300">✓ Manager/Admin Approval</p>
                   <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                    As {userRole}, you can process returns of any amount. Your approval (Staff ID: {currentStaffId}) will be automatically recorded.
+                    As {userRole}, you can process returns above the approval limit; you are recorded as approving them.
                   </p>
                 </div>
               ) : (
                 <div className="rounded-lg p-3 border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
                   <p className="text-sm font-medium text-amber-800 dark:text-amber-300">⚠ Approval Policy</p>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                    Refunds over {currency} 500 must be processed by a Manager or Admin. Ask them to log in and process this return directly.
+                    Returns above the approval limit must be processed by a Manager or Admin. Ask them to log in and process this return directly.
                   </p>
                 </div>
               )}
 
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
                 <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Refund</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Value</p>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">{currency} {totalRefund.toFixed(2)}</p>
                 </div>
                 {canCreate(userRole, userPermissions) && (
@@ -278,7 +262,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
             {listLoading ? <div className="p-8 text-center text-gray-400">Loading...</div> : (
               <table className="w-full text-sm min-w-[700px]">
                 <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                  <tr>{['Return #', 'Tx #', 'Refund', 'Method', 'Status', 'Date', 'Actions'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">{h}</th>)}</tr>
+                  <tr>{['Return #', 'Tx #', 'Value', 'Refunded As', 'Status', 'Date'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {(listData?.items ?? []).map(ret => (
@@ -287,19 +271,13 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{ret.returnNumber}</td>
                         <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">#{ret.transactionId}</td>
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Number(ret.totalRefundAmount).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{ret.refundMethod === 'store_credit' ? 'Store Credit' : ret.refundMethod.replace('_', ' ')}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">{refundLabel(ret.refundMethod)}</td>
                         <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ret.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>{ret.status}</span></td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(ret.createdAt).toLocaleString()}</td>
-                        <td className="px-4 py-3">
-                          {canReject(userRole, userPermissions) && ret.status === 'completed' && (
-                            <button onClick={e => { e.stopPropagation(); if (confirm('Reject this return?')) rejectMut.mutate(ret.id); }}
-                              className="text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950 px-2 py-1 rounded transition-colors">Reject</button>
-                          )}
-                        </td>
                       </tr>
                       {expandedId === ret.id && (
                         <tr key={`${ret.id}-detail`}>
-                          <td colSpan={7} className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50">
+                          <td colSpan={6} className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50">
                             {ret.reason && <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Reason: {ret.reason}</p>}
                             <ReturnDetailLoader returnId={ret.id} />
                           </td>
@@ -329,15 +307,22 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
 
 function ReturnDetailLoader({ returnId }: { returnId: string }) {
   const currency = useCurrency();
-  const { data } = useQuery<{ lineItems?: ReturnLine[] }>({
+  const { data } = useQuery<{ lineItems?: ReturnLine[]; refunds?: ReturnRefund[] }>({
     queryKey: ['return-detail', returnId],
     queryFn: () => api.get(`/returns/${returnId}`),
   });
   if (!data?.lineItems) return <p className="text-xs text-gray-400">Loading...</p>;
   return (
-    <table className="text-xs w-full max-w-lg">
-      <thead><tr className="text-gray-500 dark:text-gray-400">{['Book', 'Qty', 'Refund'].map(h => <th key={h} className="text-left pr-4 pb-1">{h}</th>)}</tr></thead>
-      <tbody>{data.lineItems.map((li, i) => <tr key={i}><td className="pr-4 text-gray-900 dark:text-white">{li.bookTitle}</td><td className="pr-4 text-gray-600 dark:text-gray-400">{li.quantity}</td><td className="text-gray-900 dark:text-white">{currency} {Number(li.lineRefundAmount).toFixed(2)}</td></tr>)}</tbody>
-    </table>
+    <div className="space-y-2">
+      <table className="text-xs w-full max-w-lg">
+        <thead><tr className="text-gray-500 dark:text-gray-400">{['Book', 'Qty', 'Value'].map(h => <th key={h} className="text-left pr-4 pb-1">{h}</th>)}</tr></thead>
+        <tbody>{data.lineItems.map((li, i) => <tr key={i}><td className="pr-4 text-gray-900 dark:text-white">{li.bookTitle}</td><td className="pr-4 text-gray-600 dark:text-gray-400">{li.quantity}</td><td className="text-gray-900 dark:text-white">{currency} {Number(li.lineRefundAmount).toFixed(2)}</td></tr>)}</tbody>
+      </table>
+      {data.refunds && data.refunds.length > 0 && (
+        <ul className="text-xs text-gray-600 dark:text-gray-400">
+          {data.refunds.map(r => <li key={r.id}>{refundLabel(r.method)}: {currency} {Number(r.amount).toFixed(2)}</li>)}
+        </ul>
+      )}
+    </div>
   );
 }

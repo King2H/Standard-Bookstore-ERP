@@ -269,7 +269,6 @@ describe('Inventory Valuation, Returns, Exchanges & Procurement Accounting Stand
       .set('X-Branch-Id', String(branchId))
       .send({
         transactionId: parseInt(sale.txId, 10),
-        refundMethod: 'cash',
         reason: 'inv_val_test return',
         lines: [{ transactionLineItemId: sale.lineItemId, quantity: 2 }],
       });

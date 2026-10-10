@@ -154,6 +154,30 @@ export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promis
 }
 
 /**
+ * Damaged books coming back (a damaged return): counted apart, not for sale,
+ * so the quantity on hand and its value stay as they were.
+ */
+export async function receiveDamaged(tx: Queryable, change: StockChange): Promise<void> {
+  checkQuantity(change.quantity);
+  await stock.ensureLevel(tx, change.bookId, change.locationId);
+  const level = await lockOrThrow(tx, change.bookId, change.locationId);
+  await stock.addDamaged(tx, change.bookId, change.locationId, change.quantity);
+  await stock.insertMovement(tx, {
+    bookId: change.bookId,
+    locationId: change.locationId,
+    qtyBefore: level.quantity,
+    qtyAfter: level.quantity,
+    movementType: 'stock_in',
+    reasonCode: change.reasonCode ?? 'damage',
+    referenceType: change.referenceType ?? null,
+    referenceId: change.referenceId ?? null,
+    notes: change.notes ?? null,
+    staffId: change.staffCtx.staffId,
+    unitCost: null,
+  });
+}
+
+/**
  * Stock leaving a location: a sale, a confirmed order, an exchange. Returns
  * the average cost it left at, which a sale keeps as its cost of goods.
  */
