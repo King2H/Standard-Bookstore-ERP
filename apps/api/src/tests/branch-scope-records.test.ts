@@ -164,7 +164,7 @@ describe('Branch scope for single records', () => {
       expect(sale.body.error).toBe('BRANCH_ACCESS_DENIED');
 
       const po = await auth(api().post('/api/v1/purchase-orders'), adminA)
-        .send({ branchId: branchB, supplierId: 1, items: [] });
+        .send({ branchId: branchB, supplierId: 1, lineItems: [{ bookId, quantity: 1, unitCost: 1 }] });
       expect(po.status).toBe(403);
     });
 

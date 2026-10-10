@@ -127,6 +127,11 @@ export interface StockReceipt extends StockChange {
    * leaves the average as it was. It must be more than zero.
    */
   unitCost?: MoneyInput;
+  /**
+   * Free copies on a purchase order (owner decision 5a): a unit cost of zero
+   * is then allowed, and lowers the average cost as weighted average does.
+   */
+  freeOfCharge?: boolean;
 }
 
 export interface Adjustment {

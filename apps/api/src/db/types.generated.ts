@@ -566,6 +566,9 @@ export interface Publishers {
 export interface PurchaseOrders {
   approved_by: number | null;
   branch_id: number;
+  closed_at: Timestamp | null;
+  closed_by: number | null;
+  closed_reason: string | null;
   created_at: Generated<Timestamp>;
   created_by: number;
   currency: Generated<string>;

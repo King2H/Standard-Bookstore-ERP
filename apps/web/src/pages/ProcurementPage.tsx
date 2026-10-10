@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
-import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
 type Role = string;
@@ -26,6 +25,8 @@ interface PO {
   receivingLocationName: string | null; financialStatus: 'unpaid' | 'partial' | 'paid';
   paymentTerms: 'cash' | 'credit';
   createdBy: number; approvedBy: number | null; createdAt: string; updatedAt: string;
+  /** Why a part-received order was closed short. */
+  closedReason?: string | null;
   lineItems?: POLineItem[]; receipts?: POReceipt[]; payments?: SupplierPayment[];
   creditNotes?: CreditNote[];
   // Prompt 2 — standardized procurement financial fields (computed on-read
@@ -247,12 +248,9 @@ function BookSearchCombobox({
 
 function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO) => void; onCancel: () => void }) {
   const { showToast } = useToast();
-  const systemCurrency = useCurrency();
   const [supplierId, setSupplierId] = useState<number | null>(editing?.supplierId ?? null);
-  // Module 8: default new POs to the system's configured currency (ETB)
-  // instead of a hardcoded 'USD' — every other money figure in the app
-  // (POS, Orders, Dashboard, Receivables) is denominated in ETB.
-  const [currency, setCurrency] = useState(editing?.currency ?? systemCurrency);
+  // Purchase orders are in ETB: their amounts become stock costs and supplier balances.
+  const currency = 'ETB';
   const [paymentTerms, setPaymentTerms] = useState<'cash' | 'credit'>(editing?.paymentTerms ?? 'credit');
   const [expectedDate, setExpectedDate] = useState(editing?.expectedDeliveryDate ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
@@ -308,7 +306,6 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
     if (!validLines.length) { showToast('At least one line item with a book is required', 'error'); return; }
     const body = {
       supplierId,
-      currency,
       paymentTerms,
       expectedDeliveryDate: expectedDate || null,
       notes: notes || null,
@@ -339,8 +336,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Currency</label>
-              <input value={currency} onChange={e => setCurrency(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="px-3 py-2 text-sm text-gray-900 dark:text-white">{currency}</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Terms</label>
@@ -595,7 +591,12 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
   const submitMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/submit`), onSuccess: () => { inv(); showToast('Submitted for approval', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const approveMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/approve`), onSuccess: () => { inv(); showToast('PO approved', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
   const orderMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/order`), onSuccess: () => { inv(); showToast('Marked as ordered', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const closeMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/close`), onSuccess: () => { inv(); showToast('PO closed', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const closeMut = useMutation({ mutationFn: (reason?: string) => api.post<PO>(`/purchase-orders/${poId}/close`, reason ? { reason } : {}), onSuccess: () => { inv(); showToast('PO closed', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
+  // A part-received order closes short when the supplier will not deliver the rest.
+  function closeShort() {
+    const reason = prompt('Why will the rest not be delivered?')?.trim();
+    if (reason) closeMut.mutate(reason);
+  }
   const cancelMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/cancel`), onSuccess: () => { inv(); showToast('PO cancelled', 'success'); onBack(); }, onError: (e: Error) => showToast(e.message, 'error') });
   const paymentMut = useMutation({
     mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/payments`, { amount: parseFloat(paymentAmount), paymentMethod }),
@@ -639,6 +640,7 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 grid grid-cols-2 gap-4 text-sm">
         <div><span className="text-gray-500 dark:text-gray-400">Supplier:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.supplierName}</span></div>
         <div><span className="text-gray-500 dark:text-gray-400">Total:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.currency} {Number(po.totalAmount).toFixed(2)}</span></div>
+        {po.closedReason && <div><span className="text-gray-500 dark:text-gray-400">Closed short:</span> <span className="text-gray-900 dark:text-white ml-1">{po.closedReason}</span></div>}
         <div><span className="text-gray-500 dark:text-gray-400">Expected Delivery:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.expectedDeliveryDate ?? '—'}</span></div>
         <div><span className="text-gray-500 dark:text-gray-400">Created:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{new Date(po.createdAt).toLocaleDateString()}</span></div>
         {po.receivingLocationName && (
@@ -766,11 +768,12 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
           {canReceive(userRole, userPermissions) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive Goods</button>}
           {canWrite(userRole, userPermissions) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
         </>}
-        {status === 'partially_received' && canReceive(userRole, userPermissions) && (
-          <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive More Goods</button>
-        )}
+        {status === 'partially_received' && <>
+          {canReceive(userRole, userPermissions) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive More Goods</button>}
+          {canClose(userRole, userPermissions) && <button onClick={closeShort} disabled={closeMut.isPending} className="px-4 py-2 text-sm font-medium bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 rounded-lg hover:bg-teal-200 dark:hover:bg-teal-800 disabled:opacity-50 transition-colors">Close Short</button>}
+        </>}
         {status === 'received' && canClose(userRole, userPermissions) && (
-          <button onClick={() => closeMut.mutate()} disabled={closeMut.isPending} className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">Close PO</button>
+          <button onClick={() => closeMut.mutate(undefined)} disabled={closeMut.isPending} className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">Close PO</button>
         )}
       </div>
 
