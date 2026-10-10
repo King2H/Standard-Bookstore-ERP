@@ -312,7 +312,7 @@ export async function hasReceivable(q: Queryable, orderId: string, opts: { openO
     .select(sql`1`.as('one'))
     .where('source_type', '=', 'order_credit_sale')
     .where('source_entity_id', '=', orderId);
-  if (opts.openOnly) query = query.where('status', '!=', 'Settled');
+  if (opts.openOnly) query = query.where('status', 'in', ['Pending', 'PartiallyPaid', 'Overdue']);
   return (await query.limit(1).executeTakeFirst()) !== undefined;
 }
 

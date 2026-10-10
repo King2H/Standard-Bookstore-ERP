@@ -37,6 +37,9 @@ export async function cleanTestStaff(usernamePrefix: string): Promise<void> {
     await db.query(`DELETE FROM staff_locations WHERE staff_id = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM inventory_history WHERE staff_id = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM financial_transactions WHERE staff_id = ANY($1)`, [staffIds]);
+    // A written-off receivable names who wrote it off.
+    await db.query(`DELETE FROM financial_transactions WHERE receivable_id IN (SELECT id FROM receivables WHERE written_off_by = ANY($1))`, [staffIds]);
+    await db.query(`DELETE FROM receivables WHERE written_off_by = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM exchange_settlement_entries WHERE authorised_by = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM staff WHERE id = ANY($1)`, [staffIds]);
   }
@@ -131,10 +134,17 @@ export async function cleanTestBranches(namePrefix: string): Promise<void> {
     [`${namePrefix}%`],
   );
   // Remove receivables (created for credit_sale orders/POS credit sales) —
-  // a direct FK to branches with no dependents of its own, so this is safe
+  // a direct FK to branches, so this is safe
   // to delete right before the branches themselves. Previously caused
   // "update or delete on table branches violates foreign key constraint
   // receivables_branch_id_fkey" for any test creating a credit_sale order.
+  // Ledger entries may name a receivable (write-offs).
+  await db.query(
+    `DELETE FROM financial_transactions WHERE receivable_id IN (
+       SELECT r.id FROM receivables r JOIN branches b ON b.id = r.branch_id WHERE b.name LIKE $1
+     )`,
+    [`${namePrefix}%`],
+  );
   await db.query(
     `DELETE FROM receivables WHERE branch_id IN (
        SELECT id FROM branches WHERE name LIKE $1

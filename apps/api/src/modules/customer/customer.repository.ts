@@ -42,7 +42,7 @@ function selectCustomers(q: Queryable) {
       sql<string>`COALESCE(sca.balance, 0)`.as('store_credit_balance'),
       sql<string>`COALESCE((
         SELECT SUM(r.outstanding_amount) FROM receivables r
-        WHERE r.customer_id = c.id AND r.status != 'Settled'
+        WHERE r.customer_id = c.id AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
       ), 0)`.as('outstanding_receivables'),
     ]);
 }

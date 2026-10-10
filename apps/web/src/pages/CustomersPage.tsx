@@ -30,7 +30,7 @@ interface LoyaltyHistoryItem { id: number; pointsDelta: number; reason: string; 
 interface StoreCreditHistoryItem { id: number; amount: number; direction: 'credit' | 'debit'; refType: string | null; refId: string | null; createdAt: string; }
 interface HistoryResponse<T> { items: T[]; total: number; page: number; totalPages: number; }
 
-type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue';
+type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue' | 'WrittenOff';
 type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
 
 // Module 8: matches ReceivablesPage.tsx's SOURCE_LABELS. The inline table
@@ -602,9 +602,10 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                           r.status === 'Pending' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
                           : r.status === 'PartiallyPaid' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
                           : r.status === 'Settled' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                          : r.status === 'WrittenOff' ? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
                           : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
                         }`}>
-                          {r.status === 'PartiallyPaid' ? 'Partial' : r.status}
+                          {r.status === 'PartiallyPaid' ? 'Partial' : r.status === 'WrittenOff' ? 'Written off' : r.status}
                         </span>
                       </td>
                     </tr>

@@ -6,6 +6,7 @@ export interface FinancialTransactionRecord {
   type: FinancialTransactionType;
   orderId: string | null;
   exchangeId: string | null;
+  receivableId: string | null;
   idempotencyKey: string;
   amount: Money;
   currency: string;

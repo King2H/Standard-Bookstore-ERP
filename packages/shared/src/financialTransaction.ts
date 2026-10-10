@@ -3,16 +3,18 @@ import { IdSchema, MAX_PAGE_SIZE } from './common.js';
 
 /** Contracts for /api/v1/financial-transactions (#21). */
 
-export const FinancialTransactionTypeSchema = z.enum(['payment', 'refund', 'adjustment']);
+export const FinancialTransactionTypeSchema = z.enum(['payment', 'refund', 'adjustment', 'write_off']);
 export type FinancialTransactionType = z.infer<typeof FinancialTransactionTypeSchema>;
 
-/** A ledger entry, written by the flow that also updates its order or exchange. */
+/** A ledger entry, written by the flow that also updates its order, exchange or receivable. */
 export const FinancialTransactionSchema = z.object({
   /** A bigint, sent as a string. */
   id: z.string(),
   type: FinancialTransactionTypeSchema,
   orderId: z.string().nullable(),
   exchangeId: z.string().nullable(),
+  /** Set on write-offs; a POS sale's write-off names only its receivable. */
+  receivableId: z.string().nullable(),
   idempotencyKey: z.string(),
   amount: z.number(),
   currency: z.string(),

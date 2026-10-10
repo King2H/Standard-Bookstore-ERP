@@ -1,8 +1,9 @@
 import { db } from '../../db/index.js';
+import { queryableOn } from '../../db/tx.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import type { PoolClient } from 'pg';
 import { insertOutbox } from '../../lib/outbox.js';
-import { updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import { checkNotWrittenOff, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 
 export interface StaffCtx { staffId: number; role: string; branchId: number; }
 
@@ -396,6 +397,8 @@ export async function createPayment(
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    // A written-off debt is closed; locks the receivable against a concurrent write-off.
+    await checkNotWrittenOff(queryableOn(client), 'order_credit_sale', data.orderId);
 
     // Generate payment reference
     // Module 9: date-stamp derived from the DB's CURRENT_DATE (see
@@ -488,7 +491,7 @@ export async function createPayment(
     // This guarantees the receivable and payment_status are always consistent.
     {
       const recRes = await client.query(
-        "SELECT 1 FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1 AND status != 'Settled' LIMIT 1",
+        "SELECT 1 FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1 AND status IN ('Pending', 'PartiallyPaid', 'Overdue') LIMIT 1",
         [data.orderId],
       );
       if (recRes.rows.length) {
@@ -501,13 +504,13 @@ export async function createPayment(
         const totalPaidVal = parseFloat(paidRes2.rows[0].total_paid as string);
         const newOutstanding = Math.max(0, parseFloat((orderTotalVal - totalPaidVal).toFixed(2)));
         await updateReceivableOnPayment(
+          queryableOn(client),
           {
             sourceType: 'order_credit_sale',
             sourceEntityId: Number(data.orderId),
             newOutstandingAmount: newOutstanding,
             isFullySettled: newPaymentStatus === 'paid',
           },
-          client,
         );
       }
     }
@@ -694,6 +697,11 @@ export async function listUnpaidOrders(opts: {
           ) < o.total - 0.01)
       )
       AND o.status != 'Cancelled'
+      -- A written-off debt is closed: nothing left to collect.
+      AND NOT EXISTS (
+        SELECT 1 FROM receivables wr
+        WHERE wr.source_type = 'order_credit_sale' AND wr.source_entity_id = o.id AND wr.status = 'WrittenOff'
+      )
       UNION ALL
       SELECT
         t.id::text AS id,
@@ -768,6 +776,11 @@ export async function listUnpaidOrders(opts: {
           ) < o.total - 0.01)
       )
       AND o.status != 'Cancelled'
+      -- A written-off debt is closed: nothing left to collect.
+      AND NOT EXISTS (
+        SELECT 1 FROM receivables wr
+        WHERE wr.source_type = 'order_credit_sale' AND wr.source_entity_id = o.id AND wr.status = 'WrittenOff'
+      )
       UNION ALL
       SELECT
         t.id,

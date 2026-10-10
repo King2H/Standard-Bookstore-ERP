@@ -230,7 +230,7 @@ export async function createReturn(
        WHERE o.id = (
          SELECT source_entity_id FROM receivables
          WHERE source_type = 'order_credit_sale'
-           AND status != 'Settled'
+           AND status IN ('Pending', 'PartiallyPaid', 'Overdue')
          LIMIT 1
        )`,
     ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
@@ -241,7 +241,7 @@ export async function createReturn(
         `SELECT r.id, r.outstanding_amount, r.source_entity_id
          FROM receivables r
          WHERE r.source_type = 'order_credit_sale'
-           AND r.status != 'Settled'
+           AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
            AND r.source_entity_id IN (
              SELECT o.id FROM orders o
              WHERE o.branch_id = $1
@@ -258,13 +258,13 @@ export async function createReturn(
         const currentOutstanding = parseFloat(receivable.outstanding_amount as string);
         const newOutstanding = Math.max(0, parseFloat((currentOutstanding - totalRefundAmount).toFixed(2)));
         await updateReceivableOnPayment(
+          queryableOn(client),
           {
             sourceType: 'order_credit_sale',
             sourceEntityId: Number(receivable.source_entity_id),
             newOutstandingAmount: newOutstanding,
             isFullySettled: newOutstanding <= 0.01,
           },
-          client,
         );
       }
     } catch {

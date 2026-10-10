@@ -4,7 +4,7 @@ import { queryableOn } from '../../db/tx.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { getMaxLineDiscountPct } from '../config/config.service.js';
 import { insertOutbox } from '../../lib/outbox.js';
-import { createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import { checkNotWrittenOff, createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -519,6 +519,7 @@ export async function createTransaction(
         try {
           await client.query('SAVEPOINT before_receivable');
           await createReceivable(
+            queryableOn(client),
             {
               sourceType: 'pos_credit_sale',
               sourceRefId: transactionNumber,
@@ -528,7 +529,6 @@ export async function createTransaction(
               originalAmount: amountDue,
               dueDate: (data as { dueDate?: string | null }).dueDate ?? null,
             },
-            client,
           );
           await client.query('RELEASE SAVEPOINT before_receivable');
         } catch (hookErr) {
@@ -572,6 +572,8 @@ export async function recordPayment(
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    // A written-off debt is closed; locks the receivable against a concurrent write-off.
+    await checkNotWrittenOff(queryableOn(client), 'pos_credit_sale', txId);
 
     // Validate customer payment methods
     if (tx.customerId) {
@@ -667,7 +669,7 @@ export async function recordPayment(
          FROM receivables
          WHERE source_type      = 'pos_credit_sale'
            AND source_entity_id = $1
-           AND status          != 'Settled'
+           AND status IN ('Pending', 'PartiallyPaid', 'Overdue')
          FOR UPDATE`,
         [parseInt(String(txId), 10)],
       );
@@ -678,6 +680,7 @@ export async function recordPayment(
           Math.max(0, currentOutstanding - incomingTotal).toFixed(2),
         );
         await updateReceivableOnPayment(
+          queryableOn(client),
           {
             sourceType: 'pos_credit_sale',
             sourceEntityId: parseInt(String(txId), 10),
@@ -685,7 +688,6 @@ export async function recordPayment(
             newOutstandingAmount: newOutstanding,
             isFullySettled: false,
           },
-          client,
         );
       }
 

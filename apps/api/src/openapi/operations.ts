@@ -113,6 +113,13 @@ import {
   SupplierSchema,
   SupplierUsageSchema,
   UpdateSupplierRequestSchema,
+  CollectReceivableRequestSchema,
+  ReceivableDueDateRequestSchema,
+  ReceivableListQuerySchema,
+  ReceivableListResponseSchema,
+  ReceivableSchema,
+  ReceivableSummarySchema,
+  WriteOffReceivableRequestSchema,
 } from '@bms/shared';
 
 /**
@@ -169,6 +176,7 @@ export const operations: ApiOperation[] = [
   ...notificationOperations(),
   ...supplierOperations(),
   ...orderOperations(),
+  ...receivableOperations(),
 ];
 
 function auditOperations(): ApiOperation[] {
@@ -1220,6 +1228,80 @@ function orderOperations(): ApiOperation[] {
       request: byId,
       responses: {},
       errors: [401, 403, 404, 410],
+    },
+  ];
+}
+
+function receivableOperations(): ApiOperation[] {
+  const tag = 'Receivables';
+  const receivable = (description: string) => ({ 200: { description, schema: ReceivableSchema } });
+  const change = [400, 401, 403, 404, 422, 500];
+  return [
+    {
+      operationId: 'getReceivableSummary',
+      method: 'get',
+      path: '/receivables/summary',
+      summary: 'Totals of the session branch\'s receivables; every branch for staff with access to all branches who name none',
+      tag,
+      responses: { 200: { description: 'The summary', schema: ReceivableSummarySchema } },
+    },
+    {
+      operationId: 'listReceivables',
+      method: 'get',
+      path: '/receivables',
+      summary: 'The session branch\'s receivables, newest first (?branchId= another branch needs access to all branches)',
+      tag,
+      request: { query: ReceivableListQuerySchema },
+      responses: { 200: { description: 'One page of receivables', schema: ReceivableListResponseSchema } },
+    },
+    {
+      operationId: 'getReceivable',
+      method: 'get',
+      path: '/receivables/{id}',
+      summary: 'One receivable',
+      tag,
+      request: { params: IdParamsSchema },
+      responses: receivable('The receivable'),
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'collectReceivable',
+      method: 'post',
+      path: '/receivables/{id}/collect',
+      summary: 'Record a payment: an order or POS sale through its own payment flow, an exchange difference in the ledger',
+      tag,
+      request: { params: IdParamsSchema, body: CollectReceivableRequestSchema },
+      responses: receivable('The receivable after the payment'),
+      errors: change,
+    },
+    {
+      operationId: 'writeOffReceivable',
+      method: 'post',
+      path: '/receivables/{id}/write-off',
+      summary: 'Close a bad debt without payment, with a reason (Admin, Manager, Finance_Officer); its sale takes no further payments',
+      tag,
+      request: { params: IdParamsSchema, body: WriteOffReceivableRequestSchema },
+      responses: receivable('The written-off receivable'),
+      errors: change,
+    },
+    {
+      operationId: 'settleReceivable',
+      method: 'post',
+      path: '/receivables/{id}/settle',
+      summary: 'Retired: use POST /receivables/{id}/write-off',
+      tag,
+      responses: {},
+      errors: [401, 403, 410],
+    },
+    {
+      operationId: 'changeReceivableDueDate',
+      method: 'patch',
+      path: '/receivables/{id}/due-date',
+      summary: 'Set or remove the due date (Admin, Manager, Finance_Officer); the status follows the new date',
+      tag,
+      request: { params: IdParamsSchema, body: ReceivableDueDateRequestSchema },
+      responses: receivable('The receivable'),
+      errors: change,
     },
   ];
 }
