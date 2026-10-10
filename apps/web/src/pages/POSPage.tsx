@@ -83,6 +83,8 @@ interface Transaction {
   currency: string; status: string; createdAt: string;
   lineItems?: TransactionLine[]; payments?: TransactionPayment[];
   dueDate?: string | null;
+  /** Sold today, nothing returned: a void is still possible (otherwise use a return). */
+  voidable?: boolean;
 }
 
 interface TxListResponse { items: Transaction[]; total: number; page: number; totalPages: number; }
@@ -693,7 +695,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                         <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{new Date(tx.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
-                            {canVoid(userRole, userPermissions) && tx.status === 'completed' && (
+                            {canVoid(userRole, userPermissions) && tx.voidable && (
                               <button onClick={() => { if (confirm('Void this transaction?')) voidMut.mutate(tx.id); }} className="text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-2 py-1 rounded-lg font-medium transition-colors whitespace-nowrap">Void</button>
                             )}
                             {/* Single Authoritative Payment Collection Workflow: Sales

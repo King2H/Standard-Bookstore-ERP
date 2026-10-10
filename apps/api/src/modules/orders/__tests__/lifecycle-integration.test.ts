@@ -675,11 +675,11 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
   //   2. Cancel → assert atomically:
   //      a. inventory.quantity restored to pre-confirm value (stockIn called)
   //      b. inventory_reservations.status = 'released'
-  //      c. receivable.status = 'Settled', outstanding_amount = 0
+  //      c. receivable.status = 'Cancelled' (#21, owner decision), outstanding_amount = 0
   //
   // Requirements: 2.11, 3.2
   // ──────────────────────────────────────────────────────────────────────────────
-  it('14.4 Cancellation before fulfillment — inventory restored, reservation released, receivable settled', async () => {
+  it('14.4 Cancellation before fulfillment — inventory restored, reservation released, receivable cancelled', async () => {
     const INITIAL_QTY = 20;
     const ORDER_QTY = 4;
 
@@ -754,12 +754,12 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
       expect(resRow.rows[0].status).toBe('released');
     }
 
-    // ── Assertion c: receivable settled ──────────────────────────────────────
+    // ── Assertion c: receivable cancelled, not paid ──────────────────────────
     const recAfterCancel = await db.query(
       `SELECT outstanding_amount, status FROM receivables WHERE id = $1`,
       [receivableId],
     );
-    expect(recAfterCancel.rows[0].status).toBe('Settled');
+    expect(recAfterCancel.rows[0].status).toBe('Cancelled');
     expect(parseFloat(recAfterCancel.rows[0].outstanding_amount as string)).toBeCloseTo(0, 1);
 
     // ── Inventory history: order_cancelled row expected ────────────────────

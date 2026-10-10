@@ -1,120 +1,25 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import * as posService from './pos.service.js';
+import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole, requirePermission } from '../../middleware/rbac.js';
-import { paramInt } from '../../lib/http.js';
-import { assertLocationUsable, bookingBranch, scopedBranch } from '../../lib/scope.js';
+import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { recordInBranch } from '../../middleware/recordScope.js';
+import { validate } from '../../middleware/validate.js';
+import * as pos from './pos.controller.js';
+
+// URL -> middleware -> controller (A2). Request and response contracts are in
+// @bms/shared (pos.ts) and listed in src/openapi/operations.ts.
 
 const router = Router();
+const { schemas } = pos;
 
-const qs = (v: unknown): string | undefined =>
-  typeof v === 'string' ? v : Array.isArray(v) ? (v[0] as string | undefined) : undefined;
-const qi = (v: unknown, fallback: number): number => {
-  const s = qs(v);
-  return s ? parseInt(s, 10) || fallback : fallback;
-};
-// Bug Sweep: was a bare parseInt() with no NaN guard — see customer.routes.ts's comment.
-const pi = paramInt;
+// Sales history is for the roles that sell, take returns or collect (owner
+// decision 3a). Super_Admin, a governance-only role, does not sell.
+const canSee = requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer');
+const inBranch = recordInBranch('posTransaction');
 
-// ── POST /api/pos/transactions ────────────────────────────────────────────────
-
-router.post(
-  '/pos/transactions',
-  authenticate,
-  // Super_Admin is intentionally excluded here (was previously included via
-  // requireRole). Super_Admin is a governance-only role — see
-  // lib/permissions.ts ROLE_PERMISSIONS and Layout.tsx, which already hides
-  // POS from Super_Admin's sidebar entirely. Backend enforcement now matches
-  // that documented intent instead of being more permissive than the UI.
-  requirePermission('CREATE_SALE'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      await assertLocationUsable(req, req.body.locationId);
-      const tx = await posService.createTransaction(
-        {
-          branchId:    bookingBranch(req, req.body.branchId),
-          locationId:  req.body.locationId,
-          customerId:  req.body.customerId ?? null,
-          items:       req.body.items,
-          payments:    req.body.payments ?? [],
-          allowCredit: req.body.allowCredit === true,
-          dueDate:     req.body.dueDate ?? null,
-        },
-        req.staff!,
-      );
-      res.status(201).json(tx);
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/pos/transactions ─────────────────────────────────────────────────
-
-router.get(
-  '/pos/transactions',
-  authenticate,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await posService.list({
-        branchId:      scopedBranch(req),
-        customerId:    qi(req.query.customerId, 0) || undefined,
-        staffId:       qi(req.query.staffId, 0) || undefined,
-        dateFrom:      qs(req.query.dateFrom),
-        dateTo:        qs(req.query.dateTo),
-        status:        qs(req.query.status),
-        paymentStatus: qs(req.query.paymentStatus),
-        transactionNumber: qs(req.query.transactionNumber),
-        page:          qi(req.query.page, 1),
-        pageSize:      qi(req.query.pageSize, 25),
-      });
-      res.json(result);
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/pos/transactions/:id ─────────────────────────────────────────────
-
-router.get(
-  '/pos/transactions/:id',
-  authenticate,
-  recordInBranch('posTransaction'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const tx = await posService.getById(pi(req.params.id));
-      res.json(tx);
-    } catch (err) { next(err); }
-  },
-);
-
-// ── POST /api/pos/transactions/:id/payment ────────────────────────────────────
-// Collect outstanding balance on a credit or partial transaction.
-
-router.post(
-  '/pos/transactions/:id/payment',
-  authenticate,
-  recordInBranch('posTransaction'),
-  requireRole('Sales', 'Manager', 'Admin', 'Finance_Officer'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const tx = await posService.recordPayment(pi(req.params.id), req.body.payments, req.staff!);
-      res.json(tx);
-    } catch (err) { next(err); }
-  },
-);
-
-// ── POST /api/pos/transactions/:id/void ──────────────────────────────────────
-
-router.post(
-  '/pos/transactions/:id/void',
-  authenticate,
-  recordInBranch('posTransaction'),
-  requireRole('Manager', 'Admin'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const tx = await posService.voidTransaction(pi(req.params.id), req.staff!);
-      res.json(tx);
-    } catch (err) { next(err); }
-  },
-);
+router.post('/pos/transactions', authenticate, requirePermission('CREATE_SALE'), validate(schemas.create), pos.create);
+router.get('/pos/transactions', authenticate, canSee, validate(schemas.list), pos.list);
+router.get('/pos/transactions/:id', authenticate, inBranch, canSee, validate(schemas.byId), pos.getById);
+router.post('/pos/transactions/:id/payment', authenticate, inBranch, canSee, validate(schemas.collect), pos.collect);
+router.post('/pos/transactions/:id/void', authenticate, inBranch, requireRole('Manager', 'Admin'), validate(schemas.byId), pos.voidTransaction);
 
 export default router;

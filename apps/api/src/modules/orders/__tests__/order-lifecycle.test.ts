@@ -878,13 +878,13 @@ describe('Order Lifecycle — credit_sale paths', () => {
     expect(hist.rows.length).toBeGreaterThan(0);
     expect(Number(hist.rows[0].delta)).toBe(5);
 
-    // receivable settled on cancel
+    // receivable cancelled with the order (#21, owner decision)
     const recRes = await db.query(
       `SELECT status FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1`,
       [order.id],
     );
     if (recRes.rows.length > 0) {
-      expect(recRes.rows[0].status).toBe('Settled');
+      expect(recRes.rows[0].status).toBe('Cancelled');
     }
   });
 

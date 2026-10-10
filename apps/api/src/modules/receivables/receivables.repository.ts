@@ -42,6 +42,8 @@ function selectReceivables(q: Queryable) {
       'r.written_off_at',
       'r.written_off_by',
       'r.write_off_reason',
+      'r.cancelled_amount',
+      'r.cancelled_at',
       'r.created_at',
       'r.updated_at',
     ]);
@@ -158,6 +160,22 @@ export async function writeOff(q: Queryable, id: string, w: { amount: Money; sta
       written_off_at: sql<Date>`now()`,
       written_off_by: w.staffId,
       write_off_reason: w.reason,
+      updated_at: sql<Date>`now()`,
+    })
+    .where('id', '=', id)
+    .execute();
+}
+
+/** The debt goes with its sale: `amount` is what is no longer owed. */
+export async function cancel(q: Queryable, id: string, amount: Money): Promise<void> {
+  await q
+    .updateTable('receivables')
+    .set({
+      status: 'Cancelled',
+      outstanding_amount: '0',
+      cancelled_amount: amount.toFixed(2),
+      cancelled_at: sql<Date>`now()`,
+      settlement_date: null,
       updated_at: sql<Date>`now()`,
     })
     .where('id', '=', id)

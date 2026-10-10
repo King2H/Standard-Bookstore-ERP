@@ -219,14 +219,15 @@ export async function addPoints(
   q: Queryable,
   customerId: number,
   delta: number,
-  entry: { reason: 'ACCRUAL' | 'REDEMPTION' | 'REFUND'; transactionRef: string | null },
+  entry: { reason: 'ACCRUAL' | 'REDEMPTION' | 'REFUND' | 'VOID_REVERSAL'; transactionRef: string | null },
 ): Promise<void> {
   await q
     .updateTable('loyalty_accounts')
     .set((eb) => ({
       points_balance: eb('points_balance', '+', String(delta)),
-      // Points given back on a refund were earned once already.
-      ...(delta > 0 && entry.reason !== 'REFUND' && { lifetime_points: eb('lifetime_points', '+', String(delta)) }),
+      // Only earned points count towards the lifetime total; points given
+      // back on a refund or a void were earned once already.
+      ...(delta > 0 && entry.reason === 'ACCRUAL' && { lifetime_points: eb('lifetime_points', '+', String(delta)) }),
       updated_at: sql`now()`,
     }))
     .where('customer_id', '=', customerId)

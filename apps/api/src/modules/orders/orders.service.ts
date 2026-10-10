@@ -6,7 +6,7 @@ import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { insertOutbox, type OutboxEventType } from '../../lib/outbox.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
-import { checkNotWrittenOff, createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import { cancelReceivable, checkNotWrittenOff, createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
@@ -304,7 +304,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
 /**
  * Cancels an unfulfilled order: stock taken out at confirm goes back at the
  * cost it left at, reservations are released and an open receivable is
- * settled. The order's finances are frozen from then on.
+ * cancelled. The order's finances are frozen from then on.
  */
 export async function cancel(orderId: string | number, reason: string, staffCtx: StaffCtx): Promise<OrderRow> {
   await withTransaction({}, async (tx, client) => {
@@ -333,13 +333,10 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
       if (item.qtyReserved > 0) await orders.setLineReserved(tx, item.id, 0);
     }
 
-    // Before the status changes: updateReceivableOnPayment() ignores
-    // receivables of orders that are already CANCELLED.
+    // The debt goes with the order: Cancelled, neither paid nor written off.
+    // Payments already taken stay; they are refunded through Payments.
     if (await orders.hasReceivable(tx, order.id, { openOnly: true })) {
-      await updateReceivableOnPayment(
-        tx,
-        { sourceType: 'order_credit_sale', sourceEntityId: Number(orderId), newOutstandingAmount: 0, isFullySettled: true },
-      );
+      await cancelReceivable(tx, { sourceType: 'order_credit_sale', sourceEntityId: order.id, paymentsReturned: false });
     }
 
     await orders.setStatus(tx, order.id, 'CANCELLED', reason);

@@ -469,7 +469,7 @@ describe('POS — Transactions', () => {
   });
 
   // ── 11. Credit Sale → creates receivable and customer store credit debit ──
-  it('11. Credit Sale → creates receivable and customer store credit debit', async () => {
+  it('11. Credit Sale → creates receivable; the debt is not written to store credit history', async () => {
     await ensureInventory(bookId, locationId, 50);
     const customerId = await createTestCustomer(branchId);
     const qty = 2;
@@ -512,14 +512,12 @@ describe('POS — Transactions', () => {
     const recDueDate = toLocalDateString(rec.due_date);
     expect(recDueDate).toBe(dueDate);
 
-    // Verify store credit debit is created
+    // Debts live in Receivables, not in the store credit history (#21, owner decision 5a).
     const scRes = await db.query(
-      `SELECT * FROM store_credit_history WHERE customer_id = $1 AND ref_type = 'pos_credit_sale' ORDER BY id DESC LIMIT 1`,
+      `SELECT * FROM store_credit_history WHERE customer_id = $1 AND ref_type = 'pos_credit_sale'`,
       [customerId],
     );
-    expect(scRes.rows.length).toBe(1);
-    expect(Number(scRes.rows[0].amount)).toBeCloseTo(expectedGrand, 1);
-    expect(scRes.rows[0].direction).toBe('debit');
+    expect(scRes.rows.length).toBe(0);
   });
 
   // ── 12. Partial payment → receivable stays PartiallyPaid, balance reduced ────
