@@ -141,7 +141,7 @@ export async function setBalance(q: Queryable, id: string, outstanding: Money, s
     .set({
       outstanding_amount: outstanding.toFixed(2),
       status,
-      ...(status === 'Settled' && { settlement_date: sql<Date>`now()` }),
+      settlement_date: status === 'Settled' ? sql<Date>`now()` : null,
       updated_at: sql<Date>`now()`,
     })
     .where('id', '=', id)

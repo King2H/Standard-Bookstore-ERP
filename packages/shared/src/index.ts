@@ -33,6 +33,7 @@ export * from './inventory.js';
 export * from './location.js';
 export * from './notification.js';
 export * from './order.js';
+export * from './payment.js';
 export * from './receivable.js';
 export * from './supplier.js';
 export { Money } from './money.js';

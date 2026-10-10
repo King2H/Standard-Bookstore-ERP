@@ -3,6 +3,7 @@ import { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
+import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { insertOutbox, type OutboxEventType } from '../../lib/outbox.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
 import { checkNotWrittenOff, createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
@@ -213,9 +214,8 @@ export async function confirm(
         policy.checkStoreCredit(await orders.lockStoreCreditBalance(tx, customerId), order.total);
         await orders.debitStoreCredit(tx, customerId, amount, String(orderId));
       }
-      const { count, dateStr } = await orders.countCreatedToday(tx, 'order_payments');
       await orders.insertPayment(tx, {
-        reference: policy.dailyNumber('PAY', dateStr, count),
+        reference: await nextDailyNumber(tx, 'PAY'),
         orderId: order.id,
         amount,
         method,

@@ -99,6 +99,22 @@ export async function updateReceivableOnPayment(
 }
 
 /**
+ * Records what is owed again after a payment was refunded (owner decision
+ * 2a): a paid receivable reopens. Its status follows its due date.
+ */
+export async function reopenOnRefund(
+  q: Queryable,
+  opts: { sourceType: ReceivableSourceType; sourceEntityId: number | string; newOutstandingAmount: MoneyInput },
+): Promise<void> {
+  const r = await receivables.lockBySource(q, opts.sourceType, opts.sourceEntityId);
+  if (!r || r.status === 'WrittenOff') return;
+  const outstanding = Money.min(r.originalAmount, Money.max(0, Money.of(opts.newOutstandingAmount).round(2)));
+  if (!outstanding.greaterThan(0)) return;
+  const status = policy.statusForDueDate({ ...r, outstandingAmount: outstanding }, r.dueDate, await receivables.today(q));
+  await receivables.setBalance(q, r.id, outstanding, status);
+}
+
+/**
  * Refuses a payment against a sale whose receivable was written off. Call it
  * inside the payment's transaction: it locks the receivable, so a write-off
  * and a payment never pass each other.

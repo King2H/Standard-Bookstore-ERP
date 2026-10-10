@@ -167,7 +167,7 @@ describe('Payments — Order Payment Management', () => {
 
   // ── 4. Refund → payment status updated ────────────────────────────────────
 
-  it('4. Full refund → payment status = refunded, order = refunded', async () => {
+  it('4. Full refund → payment status = refunded; the credit order is owed again (unpaid)', async () => {
     const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const payRes = await request(getTestApp())
@@ -191,9 +191,9 @@ describe('Payments — Order Payment Management', () => {
     const payCheck = await db.query(`SELECT status FROM order_payments WHERE id = $1`, [paymentId]);
     expect(payCheck.rows[0].status).toBe('refunded');
 
-    // Order payment_status should be 'refunded'
+    // A refunded credit sale is owed again (#21, owner decision 2a).
     const orderRes = await db.query(`SELECT payment_status FROM orders WHERE id = $1`, [order.id]);
-    expect(orderRes.rows[0].payment_status).toBe('refunded');
+    expect(orderRes.rows[0].payment_status).toBe('unpaid');
   });
 
   // ── 5. Refund exceeds payment → 422 ───────────────────────────────────────

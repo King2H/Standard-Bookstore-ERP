@@ -87,16 +87,14 @@ export async function collect(req: Request, res: Response): Promise<void> {
   const amount = Money.of(body.amount);
   const receivable = await service.getById(id);
   if (receivable.sourceType === 'order_credit_sale') {
-    await paymentsService.createPayment(
-      {
-        orderId: Number(receivable.sourceEntityId),
-        amount: amount.toNumber(),
-        paymentMethod: body.paymentMethod,
-        bankAccountId: body.bankAccountId,
-        notes: body.notes,
-      },
-      req.staff!,
-    );
+    await paymentsService.createPayment(actor(req), {
+      orderId: receivable.sourceEntityId,
+      amount,
+      paymentMethod: body.paymentMethod,
+      transactionReference: null,
+      notes: body.notes ?? null,
+      bankAccountId: body.bankAccountId ?? null,
+    });
   } else if (receivable.sourceType === 'pos_credit_sale') {
     await posService.recordPayment(
       receivable.sourceEntityId,
