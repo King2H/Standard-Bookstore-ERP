@@ -21,6 +21,8 @@ const BRANCH_PREFIX = 'InvVal Test ';
 const BOOK_PREFIX = 'InvVal Test Book ';
 
 let adminToken: string;
+// Approves the orders the Admin creates: nobody approves their own (owner decision 2a).
+let managerToken: string;
 let branchId: number;
 let locationId: number;
 let supplierId: number;
@@ -59,7 +61,7 @@ async function createAndReceivePO(bookId: number, quantity: number, unitCost: nu
 
   await request(getTestApp())
     .post(`/api/purchase-orders/${poId}/approve`)
-    .set('Authorization', `Bearer ${adminToken}`)
+    .set('Authorization', `Bearer ${managerToken}`)
     .set('X-Branch-Id', String(branchId));
 
   await request(getTestApp())
@@ -166,6 +168,7 @@ describe('Inventory Valuation, Returns, Exchanges & Procurement Accounting Stand
     branchId = branch.branchId;
     const admin = await createTestStaff({ username: `${STAFF_PREFIX}admin`, role: 'Admin', branchId });
     adminToken = admin.token;
+    managerToken = (await createTestStaff({ username: `${STAFF_PREFIX}mgr`, role: 'Manager', branchId })).token;
 
     const locRes = await db.query(
       `INSERT INTO locations (branch_id, name, is_default_fulfillment) VALUES ($1, 'InvVal Test Location', true) RETURNING id`,

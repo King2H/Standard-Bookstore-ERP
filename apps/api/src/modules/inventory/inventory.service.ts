@@ -119,17 +119,21 @@ export async function bookAvailability(
   }));
 }
 
-/** Stock arriving at a location: a purchase, a return, a cancelled order. */
+/**
+ * Stock arriving at a location: a purchase, a return, a cancelled order. The
+ * location's stock record is created when it has none yet.
+ */
 export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promise<{ averageCost: Money }> {
   const { bookId, locationId, quantity } = receipt;
   checkQuantity(quantity);
   const unitCost = receipt.unitCost === undefined ? undefined : Money.of(receipt.unitCost);
-  if (unitCost && (unitCost.isNegative() || unitCost.isZero())) {
+  if (unitCost && (unitCost.isNegative() || (unitCost.isZero() && !receipt.freeOfCharge))) {
     throw new ValidationError('A unit cost must be more than zero; stock without a value would distort the average cost', {
       field: 'unitCost',
     });
   }
 
+  await stock.ensureLevel(tx, bookId, locationId);
   const before = await lockOrThrow(tx, bookId, locationId);
   const after = before.quantity + quantity;
   const averageCost = unitCost

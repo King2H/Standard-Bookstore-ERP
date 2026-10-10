@@ -137,6 +137,13 @@ import {
   PosTransactionListResponseSchema,
   PosTransactionSchema,
   CreateReturnRequestSchema,
+  ClosePurchaseOrderRequestSchema,
+  CreatePurchaseOrderRequestSchema,
+  PurchaseOrderListQuerySchema,
+  PurchaseOrderListResponseSchema,
+  PurchaseOrderSchema,
+  ReceivePurchaseOrderRequestSchema,
+  UpdatePurchaseOrderRequestSchema,
   ReturnListQuerySchema,
   ReturnListResponseSchema,
   ReturnSchema,
@@ -200,6 +207,7 @@ export const operations: ApiOperation[] = [
   ...paymentOperations(),
   ...posOperations(),
   ...returnOperations(),
+  ...purchaseOrderOperations(),
 ];
 
 function auditOperations(): ApiOperation[] {
@@ -1533,6 +1541,89 @@ function returnOperations(): ApiOperation[] {
       tag,
       responses: {},
       errors: [401, 403, 410],
+    },
+  ];
+}
+
+function purchaseOrderOperations(): ApiOperation[] {
+  const tag = 'Purchase orders';
+  const roles = 'Admin, Manager, Purchasor, Stock_Clerk, Finance_Officer';
+  const buyers = 'Admin, Manager, Purchasor; the ordering branch';
+  const order = (description: string) => ({ 200: { description, schema: PurchaseOrderSchema } });
+  const change = [400, 401, 403, 404, 409, 422, 500];
+  const action = (operationId: string, path: string, summary: string, description: string): ApiOperation => ({
+    operationId,
+    method: 'post',
+    path,
+    summary,
+    tag,
+    request: { params: IdParamsSchema },
+    responses: order(description),
+    errors: change,
+  });
+  return [
+    {
+      operationId: 'listPurchaseOrders',
+      method: 'get',
+      path: '/purchase-orders',
+      summary: `Orders the session branch placed or receives, newest first (${roles}; ?branchId= another branch needs access to all branches)`,
+      tag,
+      request: { query: PurchaseOrderListQuerySchema },
+      responses: { 200: { description: 'One page of purchase orders', schema: PurchaseOrderListResponseSchema } },
+    },
+    {
+      operationId: 'createPurchaseOrder',
+      method: 'post',
+      path: '/purchase-orders',
+      summary: 'A draft order in ETB from the session branch, received by it or another branch (Admin, Manager, Purchasor)',
+      tag,
+      request: { body: CreatePurchaseOrderRequestSchema },
+      responses: { 201: { description: 'The draft', schema: PurchaseOrderSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'getPurchaseOrder',
+      method: 'get',
+      path: '/purchase-orders/{id}',
+      summary: `One order with its lines, receipts, payments and credit notes (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: order('The order'),
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'updatePurchaseOrder',
+      method: 'put',
+      path: '/purchase-orders/{id}',
+      summary: `Change a draft (${buyers})`,
+      tag,
+      request: { params: IdParamsSchema, body: UpdatePurchaseOrderRequestSchema },
+      responses: order('The draft'),
+      errors: change,
+    },
+    action('submitPurchaseOrder', '/purchase-orders/{id}/submit', `Submit a draft: approved below the approval threshold, else pending approval (${buyers})`, 'The order'),
+    action('approvePurchaseOrder', '/purchase-orders/{id}/approve', 'Approve an order someone else created (Admin, Manager; the ordering branch)', 'The approved order'),
+    action('orderPurchaseOrder', '/purchase-orders/{id}/order', `Mark an approved order as sent to the supplier (${buyers})`, 'The order'),
+    {
+      operationId: 'receivePurchaseOrder',
+      method: 'post',
+      path: '/purchase-orders/{id}/receive',
+      summary: 'Goods arriving, into a location of the receiving branch (Admin, Manager, Stock_Clerk; the receiving branch)',
+      tag,
+      request: { params: IdParamsSchema, body: ReceivePurchaseOrderRequestSchema },
+      responses: order('The order with what arrived'),
+      errors: change,
+    },
+    action('cancelPurchaseOrder', '/purchase-orders/{id}/cancel', `Cancel an order while nothing has arrived (${buyers})`, 'The cancelled order'),
+    {
+      operationId: 'closePurchaseOrder',
+      method: 'post',
+      path: '/purchase-orders/{id}/close',
+      summary: 'Close a received order, or a part-received one short with a reason (Admin, Manager; the ordering branch)',
+      tag,
+      request: { params: IdParamsSchema, body: ClosePurchaseOrderRequestSchema },
+      responses: order('The closed order'),
+      errors: change,
     },
   ];
 }

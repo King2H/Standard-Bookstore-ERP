@@ -144,7 +144,7 @@ describe('Procurement — Purchase Orders', () => {
       .send({
         supplierId,
         branchId,
-        currency: 'USD',
+        currency: 'ETB',
         notes: 'proc_test create',
         lineItems: [
           { bookId, quantity: 5, unitCost: 10.00 },
@@ -155,6 +155,7 @@ describe('Procurement — Purchase Orders', () => {
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('draft');
     expect(Number(res.body.totalAmount)).toBe(110.00); // 5*10 + 3*20
+    expect(res.body.currency).toBe('ETB');
     expect(res.body.lineItems).toHaveLength(2);
   });
 
@@ -214,10 +215,10 @@ describe('Procurement — Purchase Orders', () => {
   // ── 4. Approve PO (Admin role) ────────────────────────────────────────────
 
   it('4. Approve PO (Admin role)', async () => {
-    // Create and submit above threshold
+    // A Manager creates and submits above threshold; the Admin approves (nobody approves their own, owner decision 2a).
     const createRes = await request(getTestApp())
       .post('/api/purchase-orders')
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
         supplierId,
@@ -229,7 +230,7 @@ describe('Procurement — Purchase Orders', () => {
 
     await request(getTestApp())
       .post(`/api/purchase-orders/${poId}/submit`)
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
     const approveRes = await request(getTestApp())

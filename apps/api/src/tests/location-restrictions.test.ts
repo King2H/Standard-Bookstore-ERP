@@ -133,7 +133,7 @@ describe('Location restrictions on sales and stock', () => {
 
   it('refuses to receive a purchase order or take a return at a location not assigned', async () => {
     expectRefused(await as(api().post(`/api/v1/purchase-orders/${poId}/receive`), clerk).send({
-      locationId: locB, items: [{ bookId, quantityReceived: 1 }],
+      locationId: locB, items: [{ poLineItemId: 1, quantityReceived: 1 }],
     }));
     expectRefused(await as(api().post('/api/v1/returns'), sales).send({
       transactionId: txId, lines: [{ transactionLineItemId: 1, quantity: 1 }],

@@ -35,6 +35,7 @@ export * from './notification.js';
 export * from './order.js';
 export * from './payment.js';
 export * from './pos.js';
+export * from './purchaseOrder.js';
 export * from './return.js';
 export * from './receivable.js';
 export * from './supplier.js';
