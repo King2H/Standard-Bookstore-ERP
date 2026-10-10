@@ -296,10 +296,11 @@ export async function insertPayment(
 }
 
 /** What was paid on the order, refunded payments included (they were received). */
+/** What the order has been paid, less what was refunded. */
 export async function sumPaid(q: Queryable, orderId: string): Promise<string> {
   const row = await q
     .selectFrom('order_payments')
-    .select(sql<string>`COALESCE(SUM(amount), 0)`.as('total_paid'))
+    .select(sql<string>`COALESCE(SUM(amount), 0) - (SELECT COALESCE(SUM(refund_amount), 0) FROM order_refunds WHERE order_id = ${orderId})`.as('total_paid'))
     .where('order_id', '=', orderId)
     .where('status', 'in', ['success', 'partially_refunded', 'refunded'])
     .executeTakeFirstOrThrow();

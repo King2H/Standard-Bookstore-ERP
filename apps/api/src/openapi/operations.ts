@@ -120,6 +120,17 @@ import {
   ReceivableSchema,
   ReceivableSummarySchema,
   WriteOffReceivableRequestSchema,
+  CreatePaymentRequestSchema,
+  OrderBalanceSchema,
+  OrderPaymentListResponseSchema,
+  PaymentListQuerySchema,
+  PaymentListResponseSchema,
+  PaymentRefundListResponseSchema,
+  PaymentRefundSchema,
+  PaymentSchema,
+  RefundPaymentRequestSchema,
+  UnpaidListQuerySchema,
+  UnpaidListResponseSchema,
 } from '@bms/shared';
 
 /**
@@ -177,6 +188,7 @@ export const operations: ApiOperation[] = [
   ...supplierOperations(),
   ...orderOperations(),
   ...receivableOperations(),
+  ...paymentOperations(),
 ];
 
 function auditOperations(): ApiOperation[] {
@@ -1302,6 +1314,95 @@ function receivableOperations(): ApiOperation[] {
       request: { params: IdParamsSchema, body: ReceivableDueDateRequestSchema },
       responses: receivable('The receivable'),
       errors: change,
+    },
+  ];
+}
+
+function paymentOperations(): ApiOperation[] {
+  const tag = 'Payments';
+  const roles = 'Sales, Manager, Admin, Finance_Officer';
+  const otherBranch = '?branchId= another branch needs access to all branches';
+  return [
+    {
+      operationId: 'listUnpaidOrders',
+      method: 'get',
+      path: '/payments/unpaid-orders',
+      summary: `What customers still owe in the session branch: credit orders, POS credit sales, exchange differences (${roles}; ${otherBranch})`,
+      tag,
+      request: { query: UnpaidListQuerySchema },
+      responses: { 200: { description: 'One page of unpaid sales', schema: UnpaidListResponseSchema } },
+    },
+    {
+      operationId: 'createPayment',
+      method: 'post',
+      path: '/payments',
+      summary: `Take a payment on a credit order of the session branch (${roles}); an Idempotency-Key header makes a retry return the first payment`,
+      tag,
+      request: { body: CreatePaymentRequestSchema },
+      responses: {
+        201: { description: 'The payment', schema: PaymentSchema },
+        200: { description: 'The payment of an earlier request with the same Idempotency-Key', schema: PaymentSchema },
+      },
+      errors: [400, 401, 403, 404, 409, 422, 500],
+    },
+    {
+      operationId: 'listPayments',
+      method: 'get',
+      path: '/payments',
+      summary: `Payment history of the session branch: order payments and collections on POS and exchange debts, newest first (${roles}; ${otherBranch})`,
+      tag,
+      request: { query: PaymentListQuerySchema },
+      responses: { 200: { description: 'One page of payments', schema: PaymentListResponseSchema } },
+    },
+    {
+      operationId: 'getPayment',
+      method: 'get',
+      path: '/payments/{id}',
+      summary: `One order payment with its refunds (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The payment', schema: PaymentSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'refundPayment',
+      method: 'post',
+      path: '/payments/{id}/refund',
+      summary: 'Give back (part of) a payment, the way it was paid; on a credit sale the amount is owed again (Manager, Admin, Finance_Officer)',
+      tag,
+      request: { params: IdParamsSchema, body: RefundPaymentRequestSchema },
+      responses: { 201: { description: 'The refund', schema: PaymentRefundSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'listPaymentRefunds',
+      method: 'get',
+      path: '/payments/{id}/refunds',
+      summary: `A payment's refunds (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The refunds', schema: PaymentRefundListResponseSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'listOrderPayments',
+      method: 'get',
+      path: '/orders/{id}/payments',
+      summary: `An order's payments, oldest first (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The payments', schema: OrderPaymentListResponseSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'getOrderBalance',
+      method: 'get',
+      path: '/orders/{id}/balance',
+      summary: `What an order has been paid and refunded, and what is still owed (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The balance', schema: OrderBalanceSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
     },
   ];
 }

@@ -224,6 +224,12 @@ export interface Customers {
   updated_by: number | null;
 }
 
+export interface DocumentCounters {
+  last_value: number;
+  period: string;
+  series: string;
+}
+
 export interface ExchangeIncomingItems {
   book_id: number;
   evaluated_unit_price: Numeric;
@@ -478,6 +484,7 @@ export interface OrderRefunds {
   bank_account_id: number | null;
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
+  method: string | null;
   order_id: Int8;
   payment_id: Int8;
   processed_by: number;
@@ -795,6 +802,7 @@ export interface DB {
   customer_group_membership: CustomerGroupMembership;
   customer_groups: CustomerGroups;
   customers: Customers;
+  document_counters: DocumentCounters;
   exchange_incoming_items: ExchangeIncomingItems;
   exchange_items: ExchangeItems;
   exchange_outgoing_items: ExchangeOutgoingItems;
