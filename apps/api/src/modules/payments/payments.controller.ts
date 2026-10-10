@@ -14,6 +14,7 @@ import {
   type PaymentRefundListResponse,
   type UnpaidListResponse,
 } from '@bms/shared';
+import { AppError } from '../../lib/errors.js';
 import { hashBody, withIdempotency } from '../../lib/idempotency.js';
 import { scopedBranch } from '../../lib/scope.js';
 import { valid } from '../../middleware/validate.js';
@@ -134,4 +135,17 @@ export async function listByOrder(req: Request, res: Response): Promise<void> {
 export async function orderBalance(req: Request, res: Response): Promise<void> {
   const body: OrderBalance = toBalanceResponse(await service.getOrderBalance(String(valid(req, schemas.byId).params.id)));
   res.json(body);
+}
+
+/**
+ * Retired (owner decision, 2026-10-10): installment plans duplicated the
+ * receivable. Staged payments, if ever needed, become a payment schedule on
+ * the receivable.
+ */
+export function installmentsRetired(): never {
+  throw new AppError(
+    'DEPRECATED',
+    'Installment plans are no longer supported. Take payments on the order; the receivable tracks what is still owed.',
+    410,
+  );
 }

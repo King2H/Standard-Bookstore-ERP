@@ -196,9 +196,9 @@ describe('Config — Branch', () => {
   it('Manager can set a branch config override', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put(`/api/config/branches/${branchId}/min_deposit_pct`)
+      .put(`/api/config/branches/${branchId}/reorder_point_default`)
       .set('Authorization', `Bearer ${managerToken}`)
-      .send({ value: 30 });
+      .send({ value: 8 });
     expect(res.status).toBe(200);
   });
 

@@ -26,8 +26,8 @@ import type {
 /**
  * Use cases of order payments (A4): taking a payment on a credit order,
  * refunding one, and the lists the Payments page reads. One function each,
- * owning its transaction. Installment plans are still v1
- * (installments.service.ts) until part 2.
+ * owning its transaction. Installment plans were retired (owner decision,
+ * 2026-10-10); their endpoints answer 410.
  */
 
 function audit(q: Queryable, actor: Actor, entityType: string, id: string, meta: Record<string, unknown>) {

@@ -40,9 +40,6 @@ const CONFIG_META: Record<string, { label: string; tab: string; type: 'string' |
   return_window_days:               { label: 'Return Window (days)',         tab: 'Returns',      type: 'number',  description: 'Days within which returns are allowed' },
   max_return_value_without_auth:    { label: 'Max Return Value w/o Auth',    tab: 'Returns',      type: 'number',  description: 'Max refund amount without manager auth' },
   refund_method_after_window:       { label: 'Refund Method After Window',   tab: 'Returns',      type: 'string',  description: '"any" or "store_credit_only"' },
-  min_deposit_pct:                  { label: 'Min Deposit %',                tab: 'Payments',     type: 'number',  description: 'Minimum deposit % for installment plans' },
-  max_installments:                 { label: 'Max Installments',             tab: 'Payments',     type: 'number',  description: 'Maximum installments per plan' },
-  installment_grace_period_days:    { label: 'Installment Grace Period',     tab: 'Payments',     type: 'number',  description: 'Days before overdue status is set' },
   loyalty_accrual_rate:             { label: 'Loyalty Accrual Rate',         tab: 'Loyalty',      type: 'number',  description: 'Points earned per currency unit (e.g. 0.01)' },
   loyalty_redemption_rate:          { label: 'Loyalty Redemption Rate',      tab: 'Loyalty',      type: 'number',  description: 'Currency value per point (e.g. 1.0)' },
   loyalty_min_transaction_amount:   { label: 'Loyalty Min Transaction',      tab: 'Loyalty',      type: 'number',  description: 'Min transaction amount to earn points' },
@@ -53,7 +50,7 @@ const CONFIG_META: Record<string, { label: string; tab: string; type: 'string' |
   password_expiry_days:             { label: 'Password Expiry (days)',        tab: 'Security',     type: 'number',  description: 'Days before password must be changed; 0 = never expires (default: 0)' },
 };
 
-const TABS = ['General', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Payments', 'Loyalty', 'Exchange', 'Notifications', 'Security'];
+const TABS = ['General', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Notifications', 'Security'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

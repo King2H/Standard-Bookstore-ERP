@@ -24,7 +24,6 @@ import paymentsRouter from './modules/payments/payments.routes.js';
 import exchangesRouter from './modules/exchanges/exchanges.routes.js';
 import financialTransactionsRouter from './modules/financialTransactions/financialTransactions.routes.js';
 import reportsRouter from './modules/reports/reports.routes.js';
-import installmentsRouter from './modules/payments/installments.routes.js';
 import notificationsRouter from './modules/notifications/notifications.routes.js';
 import receivablesRouter from './modules/receivables/receivables.routes.js';
 import { csrfMiddleware } from './middleware/csrf.js';
@@ -82,7 +81,6 @@ export function createApp() {
   api.use(exchangesRouter);
   api.use(financialTransactionsRouter);
   api.use(reportsRouter);
-  api.use(installmentsRouter);
   api.use('/notifications', notificationsRouter);
   api.use(receivablesRouter);
   api.use(auditLogsRouter);

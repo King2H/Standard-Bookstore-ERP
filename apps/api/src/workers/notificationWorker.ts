@@ -190,30 +190,6 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'payment',
     entityId: String(p.paymentId ?? ''),
   }),
-  'installment.payment_recorded': (p) => ({
-    title: '✅ Installment Paid',
-    body: `Installment ${p.installmentNum}/${p.totalInstallments} paid for order ${p.orderNumber}`,
-    targetRoles: ['Finance_Officer'],
-    severity: 'success',
-    entityType: 'payment',
-    entityId: String(p.orderId ?? ''),
-  }),
-  'installment.overdue': (p) => ({
-    title: '⚠️ Installment Overdue',
-    body: `Order ${p.orderNumber} — installment ${p.installmentNum} overdue by ${p.daysOverdue} days`,
-    targetRoles: ['Finance_Officer', 'Manager'],
-    severity: 'warning',
-    entityType: 'payment',
-    entityId: String(p.orderId ?? ''),
-  }),
-  'installment.plan_completed': (p) => ({
-    title: '🎉 Plan Completed',
-    body: `Installment plan for order ${p.orderNumber} fully paid`,
-    targetRoles: ['Finance_Officer', 'Manager'],
-    severity: 'success',
-    entityType: 'payment',
-    entityId: String(p.orderId ?? ''),
-  }),
 
   // ── Returns ────────────────────────────────────────────────────────────────
   'return.initiated': (p) => ({

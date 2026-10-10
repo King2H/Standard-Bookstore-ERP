@@ -8,7 +8,6 @@
  */
 import { db } from '../db/index.js';
 import { handleLoyaltyAccrual } from './loyaltyWorker.js';
-import { handleInstallmentOverdue } from './installmentChecker.js';
 import { handleNotification } from './notificationWorker.js';
 
 const POLL_INTERVAL_MS = 1000;
@@ -21,19 +20,6 @@ type EventHandler = (payload: Record<string, unknown>) => Promise<void>;
 
 const HANDLERS: Record<string, EventHandler> = {
   LoyaltyAccrualRequested: handleLoyaltyAccrual,
-  // Legacy Code Audit finding: installmentChecker.ts's daily cron has always
-  // inserted 'InstallmentOverdue' (PascalCase) outbox rows and imported
-  // handleInstallmentOverdue specifically to process them, but this map
-  // never had a matching key — every such event silently fell through
-  // pollOnce()'s handler lookup and was marked failed with no side effect.
-  // (Distinct from the newer Phase 5 'installment.overdue' — dot-case —
-  // notification event, which IS routed below but is never actually
-  // emitted anywhere via insertOutbox(); that gap is unrelated and left
-  // as-is, flagged separately.) Wiring this up is additive/log-only
-  // (handleInstallmentOverdue only console.logs today) — no user-facing
-  // behavior changes, it just stops discarding an event that was always
-  // meant to be handled.
-  InstallmentOverdue: handleInstallmentOverdue,
   // Phase 5 — Notification system: all notification event types route to handleNotification
   'inventory.stock_in': handleNotification,
   'inventory.stock_out': handleNotification,
@@ -54,9 +40,6 @@ const HANDLERS: Record<string, EventHandler> = {
   'payment.recorded': handleNotification,
   'payment.refunded': handleNotification,
   'payment.bank_transfer': handleNotification,
-  'installment.payment_recorded': handleNotification,
-  'installment.overdue': handleNotification,
-  'installment.plan_completed': handleNotification,
   'return.initiated': handleNotification,
   'return.approval_required': handleNotification,
   'return.approved': handleNotification,

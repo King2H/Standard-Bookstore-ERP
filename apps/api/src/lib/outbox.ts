@@ -47,9 +47,6 @@ export type OutboxEventType =
   | 'payment.recorded'
   | 'payment.refunded'
   | 'payment.bank_transfer'
-  | 'installment.payment_recorded'
-  | 'installment.overdue'
-  | 'installment.plan_completed'
   // Returns
   | 'return.initiated'
   | 'return.approval_required'
