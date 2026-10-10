@@ -587,6 +587,7 @@ export interface Receivables {
   cancelled_amount: Numeric | null;
   cancelled_at: Timestamp | null;
   created_at: Generated<Timestamp>;
+  credited_amount: Generated<Numeric>;
   currency: Generated<string>;
   customer_id: number;
   due_date: Timestamp | null;

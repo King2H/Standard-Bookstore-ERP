@@ -219,8 +219,7 @@ export async function recordPayment(actor: Actor, txId: string, payments: Paymen
     await spendFromAccounts(tx, t.customerId, payments, { id: t.id, number: t.transactionNumber, refType: 'payment' });
     for (const p of payments) await pos.insertPayment(tx, t.id, p);
     const paid = t.amountPaid.plus(incoming);
-    const due = policy.amountDue(t.grandTotal, paid);
-    const status = policy.paymentStatus(t.grandTotal, paid);
+    const { due, status } = policy.afterCollect(t.amountDue, incoming);
     await pos.setPaid(tx, t.id, paid, due, status);
     await updateReceivableOnPayment(tx, {
       sourceType: 'pos_credit_sale',

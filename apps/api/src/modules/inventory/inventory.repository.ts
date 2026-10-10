@@ -183,6 +183,16 @@ export async function updateLevel(
     .execute();
 }
 
+/** Damaged units are counted apart from the quantity for sale. */
+export async function addDamaged(q: Queryable, bookId: number, locationId: number, quantity: number): Promise<void> {
+  await q
+    .updateTable('inventory')
+    .set((eb) => ({ damaged_quantity: eb(eb.fn.coalesce('damaged_quantity', sql<number>`0`), '+', quantity), updated_at: sql`now()` }))
+    .where('book_id', '=', bookId)
+    .where('location_id', '=', locationId)
+    .execute();
+}
+
 /** False when there is no stock row for the book at the location. */
 export async function setReorderPoint(
   q: Queryable,

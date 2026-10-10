@@ -393,7 +393,6 @@ describe('Inventory Consistency Scenarios', () => {
       .send({
         transactionId: txId,
         reason: 'Customer changed mind',
-        refundMethod: 'cash',
         // POST /api/returns reads req.body.lines, not "items" -- confirmed
         // against the real request ReturnsPage.tsx sends (`lines: selectedLines`,
         // same { transactionLineItemId, quantity } shape). Test had the wrong key.

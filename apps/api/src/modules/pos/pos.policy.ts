@@ -61,6 +61,16 @@ export function amountDue(grandTotal: Money, paid: Money): Money {
 }
 
 /**
+ * A later payment on what the sale still owes. It counts from the amount due,
+ * not the total: a return's credit note may have taken some of the debt off.
+ */
+export function afterCollect(amountDue: Money, incoming: Money): { due: Money; status: PosPaymentStatus } {
+  const due = amountDue.minus(incoming);
+  if (!due.greaterThan(TOLERANCE)) return { due: Money.ZERO, status: 'paid' };
+  return { due, status: 'partial' };
+}
+
+/**
  * Store credit and loyalty points come from a customer's account, so they
  * need a customer on the sale.
  */
