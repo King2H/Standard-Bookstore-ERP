@@ -4,11 +4,11 @@ import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
 /** Contracts for /api/v1/receivables: what customers owe on credit sales and exchanges (#21). */
 
 /**
- * Pending, PartiallyPaid and Overdue are still owed. Settled was paid in full
- * (or its sale was cancelled); WrittenOff was closed as a bad debt, without
- * payment.
+ * Pending, PartiallyPaid and Overdue are still owed. Settled was paid in full;
+ * WrittenOff was closed as a bad debt, without payment; Cancelled went with
+ * its sale (a voided POS sale, a cancelled order).
  */
-export const ReceivableStatusSchema = z.enum(['Pending', 'PartiallyPaid', 'Settled', 'Overdue', 'WrittenOff']);
+export const ReceivableStatusSchema = z.enum(['Pending', 'PartiallyPaid', 'Settled', 'Overdue', 'WrittenOff', 'Cancelled']);
 export type ReceivableStatus = z.infer<typeof ReceivableStatusSchema>;
 
 export const ReceivableSourceTypeSchema = z.enum(['pos_credit_sale', 'exchange_difference', 'order_credit_sale']);
@@ -40,6 +40,9 @@ export const ReceivableSchema = z.object({
   writtenOffAt: z.string().nullable(),
   writtenOffBy: z.number().int().nullable(),
   writeOffReason: z.string().nullable(),
+  /** What was still owed when its sale was cancelled. */
+  cancelledAmount: z.number().nullable(),
+  cancelledAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

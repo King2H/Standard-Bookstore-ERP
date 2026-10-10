@@ -96,11 +96,9 @@ export async function collect(req: Request, res: Response): Promise<void> {
       bankAccountId: body.bankAccountId ?? null,
     });
   } else if (receivable.sourceType === 'pos_credit_sale') {
-    await posService.recordPayment(
-      receivable.sourceEntityId,
-      [{ method: body.paymentMethod, amount: amount.toNumber(), reference: body.notes }],
-      req.staff!,
-    );
+    await posService.recordPayment(actor(req), receivable.sourceEntityId, [
+      { method: body.paymentMethod, amount, reference: body.notes ?? null },
+    ]);
   } else {
     await service.collectPayment(actor(req), id, {
       amount,

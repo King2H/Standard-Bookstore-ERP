@@ -115,6 +115,25 @@ export async function reopenOnRefund(
 }
 
 /**
+ * Closes the receivable of a sale that was cancelled (owner decision 2a): it
+ * becomes Cancelled, neither paid nor written off. `paymentsReturned`: the
+ * sale's payments were given back too (a voided POS sale). A written-off
+ * debt cannot go with its sale; nothing happens to one already closed by
+ * payment unless its payments were given back.
+ */
+export async function cancelReceivable(
+  q: Queryable,
+  opts: { sourceType: ReceivableSourceType; sourceEntityId: number | string; paymentsReturned: boolean },
+): Promise<void> {
+  const r = await receivables.lockBySource(q, opts.sourceType, opts.sourceEntityId);
+  if (!r || r.status === 'Cancelled') return;
+  if (r.status === 'WrittenOff') policy.checkOpen(r);
+  if (r.status === 'Settled' && !opts.paymentsReturned) return;
+  const amount = policy.cancelledAmount(r, opts.paymentsReturned);
+  if (amount.greaterThan(0)) await receivables.cancel(q, r.id, amount);
+}
+
+/**
  * Refuses a payment against a sale whose receivable was written off. Call it
  * inside the payment's transaction: it locks the receivable, so a write-off
  * and a payment never pass each other.

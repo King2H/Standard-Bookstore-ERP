@@ -14,7 +14,7 @@ interface ReceivablesPageProps {
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }
 
-type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue' | 'WrittenOff';
+type ReceivableStatus = 'Pending' | 'PartiallyPaid' | 'Settled' | 'Overdue' | 'WrittenOff' | 'Cancelled';
 type ReceivableSourceType = 'pos_credit_sale' | 'exchange_difference' | 'order_credit_sale';
 
 interface ReceivableRow {
@@ -59,6 +59,7 @@ const STATUS_COLORS: Record<ReceivableStatus, string> = {
   Settled:       'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
   Overdue:       'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   WrittenOff:    'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
+  Cancelled:     'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
 };
 
 const STATUS_LABELS: Record<ReceivableStatus, string> = {
@@ -67,6 +68,7 @@ const STATUS_LABELS: Record<ReceivableStatus, string> = {
   Settled:       'Settled',
   Overdue:       'Overdue',
   WrittenOff:    'Written off',
+  Cancelled:     'Cancelled',
 };
 
 const isOpen = (s: ReceivableStatus) => s === 'Pending' || s === 'PartiallyPaid' || s === 'Overdue';
@@ -198,7 +200,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
               looked like the drill-down hadn't applied any filter even
               though it had. */}
           <option value="Pending,PartiallyPaid,Overdue">Outstanding (Pending/Partial/Overdue)</option>
-          {(['Pending', 'PartiallyPaid', 'Settled', 'Overdue', 'WrittenOff'] as const).map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+          {(['Pending', 'PartiallyPaid', 'Settled', 'Overdue', 'WrittenOff', 'Cancelled'] as const).map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
           className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">

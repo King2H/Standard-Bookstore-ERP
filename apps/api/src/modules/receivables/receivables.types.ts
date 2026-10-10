@@ -31,6 +31,8 @@ export interface ReceivableRecord {
   writtenOffAt: Date | null;
   writtenOffBy: number | null;
   writeOffReason: string | null;
+  cancelledAmount: Money | null;
+  cancelledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

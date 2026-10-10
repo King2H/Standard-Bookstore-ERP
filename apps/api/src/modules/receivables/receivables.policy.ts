@@ -21,6 +21,9 @@ export function checkOpen(r: Pick<ReceivableRecord, 'status'>): void {
   if (r.status === 'WrittenOff') {
     throw new BusinessError('RECEIVABLE_WRITTEN_OFF', 'This receivable was written off; it is closed');
   }
+  if (r.status === 'Cancelled') {
+    throw new BusinessError('RECEIVABLE_CANCELLED', 'The sale of this receivable was cancelled; it is closed');
+  }
   if (r.status === 'Settled') {
     throw new BusinessError('RECEIVABLE_ALREADY_SETTLED', 'Receivable is already settled');
   }
@@ -69,4 +72,14 @@ export function checkCanWriteOff(r: Balance): Money {
     throw new BusinessError('RECEIVABLE_ALREADY_SETTLED', 'Nothing is left to write off');
   }
   return r.outstandingAmount;
+}
+
+/**
+ * What a cancelled sale no longer owes. When its payments were given back
+ * (a voided POS sale) that is the whole debt, so none of it reads as
+ * collected; otherwise (a cancelled order keeps its payments) it is what was
+ * still outstanding.
+ */
+export function cancelledAmount(r: Balance, paymentsReturned: boolean): Money {
+  return paymentsReturned ? r.originalAmount : r.outstandingAmount;
 }

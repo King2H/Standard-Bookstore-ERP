@@ -94,8 +94,8 @@ export async function computeNetProfit(opts: {
   const recvParams: unknown[] = ['order_credit_sale'];
   // Include both Settled (fully paid) and PartiallyPaid (partial collection) receivables.
   // For both: collected portion = original_amount − outstanding_amount − written_off_amount
-  // (a write-off closes the balance without collecting it).
-  const recvConds: string[] = [`r.source_type = $1`, `r.outstanding_amount + COALESCE(r.written_off_amount, 0) < r.original_amount`];
+  // − cancelled_amount (a write-off or a cancelled sale closes the balance without collecting it).
+  const recvConds: string[] = [`r.source_type = $1`, `r.outstanding_amount + COALESCE(r.written_off_amount, 0) + COALESCE(r.cancelled_amount, 0) < r.original_amount`];
   if (opts.branchId !== undefined) { recvParams.push(opts.branchId); recvConds.push(`r.branch_id = $${recvParams.length}`); }
   if (opts.dateFrom) { recvParams.push(opts.dateFrom); recvConds.push(`r.created_at::date >= $${recvParams.length}::date`); }
   if (opts.dateTo)   { recvParams.push(opts.dateTo);   recvConds.push(`r.created_at::date <= $${recvParams.length}::date`); }
@@ -217,9 +217,9 @@ export async function computeNetProfit(opts: {
     ),
     // Q5: Collected credit revenue — the SINGLE source for all credit order revenue.
     //     Covers both 'Settled' (fully paid) and 'PartiallyPaid' receivables.
-    //     collected = original_amount − outstanding_amount − written_off_amount (works for both full and partial).
+    //     collected = original_amount − outstanding_amount − written_off_amount − cancelled_amount.
     db.query(
-      `SELECT COALESCE(SUM(r.original_amount - r.outstanding_amount - COALESCE(r.written_off_amount, 0)), 0)::NUMERIC AS collected_credit_revenue
+      `SELECT COALESCE(SUM(r.original_amount - r.outstanding_amount - COALESCE(r.written_off_amount, 0) - COALESCE(r.cancelled_amount, 0)), 0)::NUMERIC AS collected_credit_revenue
        FROM receivables r WHERE ${recvConds.join(' AND ')}`,
       recvParams,
     ),

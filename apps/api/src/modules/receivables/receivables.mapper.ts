@@ -23,6 +23,8 @@ export interface ReceivableRow {
   written_off_at: Date | null;
   written_off_by: number | null;
   write_off_reason: string | null;
+  cancelled_amount: string | null;
+  cancelled_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -49,6 +51,8 @@ export function toReceivableRecord(row: ReceivableRow): ReceivableRecord {
     writtenOffAt: row.written_off_at,
     writtenOffBy: row.written_off_by,
     writeOffReason: row.write_off_reason,
+    cancelledAmount: row.cancelled_amount === null ? null : Money.of(row.cancelled_amount),
+    cancelledAt: row.cancelled_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -62,6 +66,8 @@ export function toReceivableResponse(r: ReceivableRecord): Receivable {
     settlementDate: r.settlementDate?.toISOString() ?? null,
     writtenOffAmount: r.writtenOffAmount?.toNumber() ?? null,
     writtenOffAt: r.writtenOffAt?.toISOString() ?? null,
+    cancelledAmount: r.cancelledAmount?.toNumber() ?? null,
+    cancelledAt: r.cancelledAt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };

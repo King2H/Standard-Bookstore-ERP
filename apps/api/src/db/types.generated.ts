@@ -584,6 +584,8 @@ export interface PurchaseOrders {
 
 export interface Receivables {
   branch_id: number;
+  cancelled_amount: Numeric | null;
+  cancelled_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   currency: Generated<string>;
   customer_id: number;

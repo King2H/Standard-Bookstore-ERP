@@ -209,6 +209,15 @@ describe('Receivables', () => {
       expect(row?.collected_amount).toBe(0);
     });
 
+    it('cancels a cancelled order\'s receivable, which is not reported as collected (was: Settled, counted as collected)', async () => {
+      const { id, orderId } = await orderDebt();
+      expect((await as(api().post(`/api/v1/orders/${orderId}/cancel`)).send({ reason: 'Customer changed mind' })).status).toBe(200);
+      const rec = (await db.query(`SELECT status, source_ref_id FROM receivables WHERE id = $1`, [id])).rows[0];
+      expect(rec.status).toBe('Cancelled');
+      const row = (await getReceivablesExportRows({ branchId })).find((r) => r.order_reference === rec.source_ref_id);
+      expect(row?.collected_amount).toBe(0);
+    });
+
     it('answers 410 on the retired /settle (was: 200)', async () => {
       const { id } = await exchangeDebt();
       const res = await as(api().post(`/api/v1/receivables/${id}/settle`)).send({ notes: 'x' });

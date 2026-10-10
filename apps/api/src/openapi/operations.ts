@@ -131,6 +131,11 @@ import {
   RefundPaymentRequestSchema,
   UnpaidListQuerySchema,
   UnpaidListResponseSchema,
+  CreatePosTransactionRequestSchema,
+  PosCollectRequestSchema,
+  PosTransactionListQuerySchema,
+  PosTransactionListResponseSchema,
+  PosTransactionSchema,
 } from '@bms/shared';
 
 /**
@@ -189,6 +194,7 @@ export const operations: ApiOperation[] = [
   ...orderOperations(),
   ...receivableOperations(),
   ...paymentOperations(),
+  ...posOperations(),
 ];
 
 function auditOperations(): ApiOperation[] {
@@ -1205,7 +1211,7 @@ function orderOperations(): ApiOperation[] {
       operationId: 'cancelOrder',
       method: 'post',
       path: '/orders/{id}/cancel',
-      summary: 'Cancel an unfulfilled order: restores stock and settles its receivable',
+      summary: 'Cancel an unfulfilled order: restores stock and cancels its receivable',
       tag,
       request: { params: IdParamsSchema, body: CancelOrderRequestSchema },
       responses: order('The cancelled order'),
@@ -1417,6 +1423,64 @@ function paymentOperations(): ApiOperation[] {
       request: { params: IdParamsSchema },
       responses: { 200: { description: 'The balance', schema: OrderBalanceSchema } },
       errors: [400, 401, 403, 404, 422, 500],
+    },
+  ];
+}
+
+function posOperations(): ApiOperation[] {
+  const tag = 'POS';
+  const roles = 'Sales, Manager, Admin, Finance_Officer';
+  const sale = (description: string) => ({ 200: { description, schema: PosTransactionSchema } });
+  const change = [400, 401, 403, 404, 409, 422, 500];
+  return [
+    {
+      operationId: 'createPosTransaction',
+      method: 'post',
+      path: '/pos/transactions',
+      summary: 'A counter sale in the session branch: paid in full, or on credit (with a customer) for the rest',
+      tag,
+      request: { body: CreatePosTransactionRequestSchema },
+      responses: { 201: { description: 'The sale', schema: PosTransactionSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'listPosTransactions',
+      method: 'get',
+      path: '/pos/transactions',
+      summary: `Sales of the session branch, newest first (${roles}; ?branchId= another branch needs access to all branches)`,
+      tag,
+      request: { query: PosTransactionListQuerySchema },
+      responses: { 200: { description: 'One page of sales', schema: PosTransactionListResponseSchema } },
+    },
+    {
+      operationId: 'getPosTransaction',
+      method: 'get',
+      path: '/pos/transactions/{id}',
+      summary: `One sale with its lines and payments (${roles})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: sale('The sale'),
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'collectPosPayment',
+      method: 'post',
+      path: '/pos/transactions/{id}/payment',
+      summary: `Collect what a credit or part-paid sale still owes (${roles})`,
+      tag,
+      request: { params: IdParamsSchema, body: PosCollectRequestSchema },
+      responses: sale('The sale with its new balance'),
+      errors: change,
+    },
+    {
+      operationId: 'voidPosTransaction',
+      method: 'post',
+      path: '/pos/transactions/{id}/void',
+      summary: 'Cancel a sale on the day it was made, while nothing was returned; payments go back the way they came (Manager, Admin)',
+      tag,
+      request: { params: IdParamsSchema },
+      responses: sale('The voided sale'),
+      errors: change,
     },
   ];
 }
