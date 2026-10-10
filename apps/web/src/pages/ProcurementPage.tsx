@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
+import { paymentMethodPlainLabel } from '../lib/paymentMethods.js';
 import { useToast } from '../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 
@@ -15,8 +16,13 @@ interface POLineItem {
 }
 interface POReceiptItem { id: string; receiptId: string; poLineItemId: string; bookTitle: string; quantityReceived: number; }
 interface POReceipt { id: string; poId: string; locationId: number; locationName: string; receivedBy: number; receivedAt: string; notes: string | null; items: POReceiptItem[]; }
-interface SupplierPayment { id: string; poId: string; amount: number; paymentMethod: string; source: 'manual' | 'auto_on_receipt'; notes: string | null; createdBy: number; createdAt: string; }
-interface CreditNote { id: string; poId: string; supplierId: number; amount: number; reason: string; createdBy: number; createdAt: string; }
+interface SupplierPayment {
+  id: string; paymentNumber?: string | null; poId: string; amount: number; paymentMethod: string; source: 'manual' | 'auto_on_receipt';
+  notes: string | null; createdBy: number; createdAt: string;
+  /** A reversed payment no longer counts as paid. */
+  reversedAt?: string | null; reversalReason?: string | null;
+}
+interface CreditNote { id: string; creditNoteNumber?: string | null; poId: string; supplierId: number; amount: number; reason: string; createdBy: number; createdAt: string; }
 interface PO {
   id: string; branchId: number; supplierId: number; supplierName: string;
   status: string; totalAmount: number; currency: string;
@@ -598,6 +604,17 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
     if (reason) closeMut.mutate(reason);
   }
   const cancelMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/cancel`), onSuccess: () => { inv(); showToast('PO cancelled', 'success'); onBack(); }, onError: (e: Error) => showToast(e.message, 'error') });
+  const reverseMut = useMutation({
+    mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) =>
+      api.post<PO>(`/purchase-orders/${poId}/payments/${paymentId}/reverse`, { reason }),
+    onSuccess: () => { inv(); showToast('Payment reversed', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  // A payment recorded by mistake is reversed, with a reason; it stays on record.
+  function reversePayment(paymentId: string) {
+    const reason = prompt('Why is this payment being reversed?')?.trim();
+    if (reason) reverseMut.mutate({ paymentId, reason });
+  }
   const paymentMut = useMutation({
     mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/payments`, { amount: parseFloat(paymentAmount), paymentMethod }),
     onSuccess: () => { inv(); showToast('Payment recorded', 'success'); setPaymentAmount(''); },
@@ -700,7 +717,8 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
                 <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="cash">Cash</option>
-                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="bank">Bank Transfer</option>
+                  <option value="mobile">Telebirr</option>
                   <option value="cheque">Cheque</option>
                 </select>
               </div>
@@ -841,13 +859,20 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {(po.payments ?? []).map(p => (
               <div key={p.id} className="p-4 flex items-center gap-4 text-sm">
-                <span className="font-medium text-gray-900 dark:text-white">{po.currency} {Number(p.amount).toFixed(2)}</span>
-                <span className="text-gray-500 dark:text-gray-400">{p.paymentMethod}</span>
+                {p.paymentNumber && <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{p.paymentNumber}</span>}
+                <span className={`font-medium text-gray-900 dark:text-white ${p.reversedAt ? 'line-through' : ''}`}>{po.currency} {Number(p.amount).toFixed(2)}</span>
+                <span className="text-gray-500 dark:text-gray-400">{paymentMethodPlainLabel(p.paymentMethod === 'bank_transfer' ? 'bank' : p.paymentMethod)}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full ${p.source === 'auto_on_receipt' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
                   {p.source === 'auto_on_receipt' ? 'auto (on receipt)' : 'manual'}
                 </span>
                 <span className="text-gray-500 dark:text-gray-400">{new Date(p.createdAt).toLocaleString()}</span>
                 {p.notes && <span className="text-gray-500 dark:text-gray-400 italic">{p.notes}</span>}
+                {p.reversedAt
+                  ? <span className="text-xs text-red-600 dark:text-red-400">Reversed: {p.reversalReason}</span>
+                  : canRecordPayment(userRole, userPermissions) && (
+                    <button onClick={() => reversePayment(p.id)} disabled={reverseMut.isPending}
+                      className="ml-auto text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950 px-2 py-1 rounded transition-colors">Reverse</button>
+                  )}
               </div>
             ))}
           </div>
@@ -863,6 +888,7 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {(po.creditNotes ?? []).map(cn => (
               <div key={cn.id} className="p-4 flex items-center gap-4 text-sm">
+                {cn.creditNoteNumber && <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{cn.creditNoteNumber}</span>}
                 <span className="font-medium text-gray-900 dark:text-white">{po.currency} {Number(cn.amount).toFixed(2)}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">credit note</span>
                 <span className="text-gray-500 dark:text-gray-400 italic">{cn.reason}</span>

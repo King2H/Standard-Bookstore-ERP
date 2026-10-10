@@ -1803,14 +1803,14 @@ export async function getPaymentsLedgerRows(filters: ReportFilters): Promise<Pay
       exchSettle.params,
     ),
     db.query(
-      `SELECT ('SUP-' || sp.id) AS receipt_no, s2.name AS party,
+      `SELECT COALESCE(sp.payment_number, 'SUP-' || sp.id) AS receipt_no, s2.name AS party,
               ('PO-' || LPAD(sp.po_id::text, 6, '0')) AS reference_no, sp.payment_method,
               sp.amount, TO_CHAR(sp.created_at, 'YYYY-MM-DD') AS date_str,
               s.username AS staff_username
        FROM supplier_payments sp
        JOIN suppliers s2 ON s2.id = sp.supplier_id
        LEFT JOIN staff s ON s.id = sp.created_by
-       WHERE 1=1 ${supPay.clause}`,
+       WHERE sp.reversed_at IS NULL ${supPay.clause}`,
       supPay.params,
     ),
   ]);
@@ -2118,7 +2118,7 @@ export async function getPeriodCashCollected(branchId: number | undefined, dateF
 
 const PO_BALANCE_SUBQUERY = `
   COALESCE((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id), 0)
-  - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id), 0)
+  - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id AND sp.reversed_at IS NULL), 0)
   - COALESCE((SELECT SUM(cn.amount) FROM supplier_credit_notes cn WHERE cn.po_id = po.id), 0)`;
 
 // ── Open POs ─────────────────────────────────────────────────────────────────
@@ -2176,7 +2176,7 @@ export async function getSupplierBalances(filters: ReportFilters): Promise<Suppl
     `SELECT s.id AS supplier_id, s.name AS supplier_name,
             COUNT(DISTINCT po.id) FILTER (WHERE po.status NOT IN ('closed','cancelled')) AS open_po_count,
             COALESCE(SUM((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id)), 0) AS received_value,
-            COALESCE(SUM((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id)), 0) AS paid,
+            COALESCE(SUM((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id AND sp.reversed_at IS NULL)), 0) AS paid,
             COALESCE(SUM((SELECT SUM(cn.amount) FROM supplier_credit_notes cn WHERE cn.po_id = po.id)), 0) AS credited
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
@@ -2308,7 +2308,8 @@ export async function getSupplierPaymentHistory(filters: ReportFilters): Promise
   paymentMethod: string; source: string; user: string;
 }>> {
   const { conditions, params } = buildDateConditions(filters, 'sp');
-  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+  // A reversed payment was a mistake: it was never paid.
+  const where = 'WHERE ' + ['sp.reversed_at IS NULL', ...conditions].join(' AND ');
   const res = await db.query(
     `SELECT TO_CHAR(sp.created_at,'YYYY-MM-DD') AS date_str, s.name AS supplier_name, sp.po_id,
             sp.amount, sp.payment_method, sp.source, st.username AS staff_username

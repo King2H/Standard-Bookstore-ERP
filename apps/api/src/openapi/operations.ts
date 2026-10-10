@@ -138,6 +138,12 @@ import {
   PosTransactionSchema,
   CreateReturnRequestSchema,
   ClosePurchaseOrderRequestSchema,
+  CreateSupplierCreditNoteRequestSchema,
+  CreateSupplierPaymentRequestSchema,
+  ReverseSupplierPaymentRequestSchema,
+  SupplierLedgerQuerySchema,
+  SupplierLedgerResponseSchema,
+  SupplierPaymentParamsSchema,
   CreatePurchaseOrderRequestSchema,
   PurchaseOrderListQuerySchema,
   PurchaseOrderListResponseSchema,
@@ -208,6 +214,7 @@ export const operations: ApiOperation[] = [
   ...posOperations(),
   ...returnOperations(),
   ...purchaseOrderOperations(),
+  ...supplierPayableOperations(),
 ];
 
 function auditOperations(): ApiOperation[] {
@@ -1624,6 +1631,65 @@ function purchaseOrderOperations(): ApiOperation[] {
       request: { params: IdParamsSchema, body: ClosePurchaseOrderRequestSchema },
       responses: order('The closed order'),
       errors: change,
+    },
+  ];
+}
+
+function supplierPayableOperations(): ApiOperation[] {
+  const tag = 'Supplier payables';
+  const finance = 'Admin, Manager, Finance_Officer; the ordering branch';
+  const ledgerRoles = 'Admin, Manager, Finance_Officer, Purchasor';
+  const change = [400, 401, 403, 404, 409, 422, 500];
+  return [
+    {
+      operationId: 'recordSupplierPayment',
+      method: 'post',
+      path: '/purchase-orders/{id}/payments',
+      summary: `Pay the supplier for an approved order; payments and credit notes stay within the ordered total (${finance})`,
+      tag,
+      request: { params: IdParamsSchema, body: CreateSupplierPaymentRequestSchema },
+      responses: { 201: { description: 'The order with the payment', schema: PurchaseOrderSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'reverseSupplierPayment',
+      method: 'post',
+      path: '/purchase-orders/{id}/payments/{paymentId}/reverse',
+      summary: `Reverse a payment recorded by mistake, with a reason; it stays on record (${finance})`,
+      tag,
+      request: { params: SupplierPaymentParamsSchema, body: ReverseSupplierPaymentRequestSchema },
+      responses: { 200: { description: 'The order with the reversed payment', schema: PurchaseOrderSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'recordSupplierCreditNote',
+      method: 'post',
+      path: '/purchase-orders/{id}/credit-notes',
+      summary: `The supplier's credit against an order: damaged goods, an overcharge (${finance})`,
+      tag,
+      request: { params: IdParamsSchema, body: CreateSupplierCreditNoteRequestSchema },
+      responses: { 201: { description: 'The order with the credit note', schema: PurchaseOrderSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'getSupplierLedger',
+      method: 'get',
+      path: '/suppliers/{id}/ledger',
+      summary: `What is owed to a supplier, entry by entry, for the session branch's orders (${ledgerRoles}; all branches with access to all)`,
+      tag,
+      request: { params: IdParamsSchema, query: SupplierLedgerQuerySchema },
+      responses: { 200: { description: 'The ledger', schema: SupplierLedgerResponseSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'exportSupplierLedger',
+      method: 'get',
+      path: '/suppliers/{id}/ledger/export',
+      summary: `The supplier ledger as CSV (${ledgerRoles})`,
+      tag,
+      request: { params: IdParamsSchema, query: SupplierLedgerQuerySchema },
+      responses: {},
+      errors: [400, 401, 403, 404, 500],
     },
   ];
 }

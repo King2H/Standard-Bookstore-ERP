@@ -802,7 +802,7 @@ describe('Procurement — Purchase Orders', () => {
       .post(`/api/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ amount: 40, paymentMethod: 'bank_transfer', notes: 'proc_test partial settlement' });
+      .send({ amount: 40, paymentMethod: 'bank', notes: 'proc_test partial settlement' });
     expect(partialRes.status).toBe(201);
     expect(partialRes.body.financialStatus).toBe('partial');
 
@@ -810,7 +810,7 @@ describe('Procurement — Purchase Orders', () => {
       .post(`/api/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ amount: 60, paymentMethod: 'bank_transfer', notes: 'proc_test final settlement' });
+      .send({ amount: 60, paymentMethod: 'bank', notes: 'proc_test final settlement' });
     expect(fullRes.status).toBe(201);
     expect(fullRes.body.financialStatus).toBe('paid');
     expect(fullRes.body.payments.length).toBe(2);

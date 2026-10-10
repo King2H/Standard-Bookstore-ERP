@@ -1,6 +1,7 @@
 import { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
+import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BranchAccessError, BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
@@ -309,6 +310,7 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
     // Cash terms settle what arrived in this delivery, not the whole order.
     if (po.paymentTerms === 'cash' && value.greaterThan(0)) {
       await orders.insertSupplierPayment(tx, {
+        paymentNumber: await nextDailyNumber(tx, 'SPAY'),
         poId: id,
         branchId: po.branchId,
         supplierId: po.supplierId,

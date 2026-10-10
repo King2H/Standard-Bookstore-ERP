@@ -101,7 +101,12 @@ export function toPurchaseOrderResponse(po: PurchaseOrderRecord): PurchaseOrder 
     }),
     ...(receipts && { receipts: receipts.map((r: ReceiptRecord) => ({ ...r, receivedAt: r.receivedAt.toISOString() })) }),
     ...(payments && {
-      payments: payments.map((p: SupplierPaymentRecord) => ({ ...p, amount: p.amount.toNumber(), createdAt: p.createdAt.toISOString() })),
+      payments: payments.map((p: SupplierPaymentRecord) => ({
+        ...p,
+        amount: p.amount.toNumber(),
+        createdAt: p.createdAt.toISOString(),
+        reversedAt: p.reversedAt?.toISOString() ?? null,
+      })),
     }),
     ...(creditNotes && {
       creditNotes: creditNotes.map((c: CreditNoteRecord) => ({ ...c, amount: c.amount.toNumber(), createdAt: c.createdAt.toISOString() })),

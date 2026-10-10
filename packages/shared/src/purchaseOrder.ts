@@ -49,19 +49,32 @@ export const PurchaseOrderReceiptSchema = z.object({
   ),
 });
 
+/** The payment-method codes the rest of the system uses, and cheque (owner decision 3a). */
+export const SupplierPaymentMethodSchema = z.enum(['cash', 'bank', 'mobile', 'cheque']);
+export type SupplierPaymentMethod = z.infer<typeof SupplierPaymentMethodSchema>;
+
 export const SupplierPaymentSchema = z.object({
   id: z.string(),
+  /** SPAY-YYYYMMDD-NNNN. */
+  paymentNumber: z.string().nullable(),
   poId: z.string(),
   amount: z.number(),
   paymentMethod: z.string(),
+  /** auto_on_receipt: a cash-terms order paying for what arrived. */
   source: z.enum(['manual', 'auto_on_receipt']),
   notes: z.string().nullable(),
   createdBy: z.number().int(),
   createdAt: z.string(),
+  /** A reversed payment no longer counts as paid (owner decision 1a). */
+  reversedAt: z.string().nullable(),
+  reversedBy: z.number().int().nullable(),
+  reversalReason: z.string().nullable(),
 });
 
 export const SupplierCreditNoteSchema = z.object({
   id: z.string(),
+  /** SCN-YYYYMMDD-NNNN. */
+  creditNoteNumber: z.string().nullable(),
   poId: z.string(),
   supplierId: z.number().int(),
   amount: z.number(),
@@ -204,3 +217,61 @@ export const ClosePurchaseOrderRequestSchema = z
   })
   .default({});
 export type ClosePurchaseOrderRequest = z.infer<typeof ClosePurchaseOrderRequestSchema>;
+
+// ── Supplier payables ─────────────────────────────────────────────────────────
+
+/** A positive amount in whole cents. */
+const PayableAmountSchema = MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be more than zero').refine(
+  (v) => /^\d+(\.\d{1,2})?$/.test(String(v)),
+  'At most two decimals',
+);
+
+export const CreateSupplierPaymentRequestSchema = z.object({
+  amount: PayableAmountSchema,
+  paymentMethod: SupplierPaymentMethodSchema.default('cash'),
+  notes: z.string().max(1000).nullable().optional(),
+});
+export type CreateSupplierPaymentRequest = z.infer<typeof CreateSupplierPaymentRequestSchema>;
+
+export const ReverseSupplierPaymentRequestSchema = z.object({
+  reason: z.string().trim().min(1, 'A reason is required').max(1000),
+});
+export type ReverseSupplierPaymentRequest = z.infer<typeof ReverseSupplierPaymentRequestSchema>;
+
+export const SupplierPaymentParamsSchema = z.object({ id: IdSchema, paymentId: IdSchema });
+
+export const CreateSupplierCreditNoteRequestSchema = z.object({
+  amount: PayableAmountSchema,
+  reason: z.string().trim().min(1, 'A reason is required').max(1000),
+});
+export type CreateSupplierCreditNoteRequest = z.infer<typeof CreateSupplierCreditNoteRequestSchema>;
+
+export const SupplierLedgerQuerySchema = z.object({
+  /** From this day on, in the database's calendar. */
+  dateFrom: DateOnlySchema.optional(),
+  /** Up to and including this day. */
+  dateTo: DateOnlySchema.optional(),
+  /** Staff with access to all branches: one branch; without it, all. */
+  branchId: IdSchema.optional(),
+});
+export type SupplierLedgerQuery = z.infer<typeof SupplierLedgerQuerySchema>;
+
+export const SupplierLedgerEntrySchema = z.object({
+  /** YYYY-MM-DD, in the database's calendar. */
+  date: z.string(),
+  type: z.enum(['PO', 'GOODS_RECEIPT', 'PAYMENT', 'PAYMENT_REVERSAL', 'CREDIT_NOTE']),
+  reference: z.string(),
+  description: z.string(),
+  /** + adds to what is owed (goods received, a reversed payment); − settles it. */
+  amount: z.number(),
+  /** What is owed after this entry; below zero is an advance. */
+  balance: z.number(),
+});
+export type SupplierLedgerEntry = z.infer<typeof SupplierLedgerEntrySchema>;
+
+export const SupplierLedgerResponseSchema = z.object({
+  entries: z.array(SupplierLedgerEntrySchema),
+  /** What is owed now, all dates included. */
+  currentBalance: z.number(),
+});
+export type SupplierLedgerResponse = z.infer<typeof SupplierLedgerResponseSchema>;
