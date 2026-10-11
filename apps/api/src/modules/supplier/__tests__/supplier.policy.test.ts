@@ -49,10 +49,19 @@ describe('typeAfterUpdate', () => {
 
 describe('lifecycleTransition', () => {
   it('keeps is_active true only for ACTIVE, and marks only ARCHIVE as archived', () => {
-    expect(lifecycleTransition('ACTIVATE')).toEqual({ status: 'ACTIVE', isActive: true, archived: false });
-    expect(lifecycleTransition('INACTIVATE')).toEqual({ status: 'INACTIVE', isActive: false, archived: false });
-    expect(lifecycleTransition('ARCHIVE')).toEqual({ status: 'ARCHIVED', isActive: false, archived: true });
-    expect(lifecycleTransition('RESTORE')).toEqual({ status: 'ACTIVE', isActive: true, archived: false });
+    expect(lifecycleTransition('INACTIVE', 'ACTIVATE')).toEqual({ status: 'ACTIVE', isActive: true, archived: false });
+    expect(lifecycleTransition('ACTIVE', 'INACTIVATE')).toEqual({ status: 'INACTIVE', isActive: false, archived: false });
+    expect(lifecycleTransition('INACTIVE', 'ARCHIVE')).toEqual({ status: 'ARCHIVED', isActive: false, archived: true });
+    expect(lifecycleTransition('ARCHIVED', 'RESTORE')).toEqual({ status: 'ACTIVE', isActive: true, archived: false });
+  });
+
+  it('follows the catalog rules: restore only from archived, nothing on a repeat (#96)', () => {
+    const invalid = expect.objectContaining({ code: 'INVALID_LIFECYCLE_TRANSITION' });
+    expect(() => lifecycleTransition('ARCHIVED', 'ACTIVATE')).toThrow(invalid);
+    expect(() => lifecycleTransition('ARCHIVED', 'INACTIVATE')).toThrow(invalid);
+    expect(() => lifecycleTransition('INACTIVE', 'RESTORE')).toThrow(invalid);
+    expect(lifecycleTransition('ACTIVE', 'ACTIVATE')).toBeNull();
+    expect(lifecycleTransition('ARCHIVED', 'ARCHIVE')).toBeNull();
   });
 });
 

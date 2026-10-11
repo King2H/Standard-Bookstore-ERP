@@ -1,5 +1,5 @@
 import { sql } from 'kysely';
-import { Money } from '@bms/shared';
+import { Money, type LifecycleStatus } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
 import { toCustomerRecord, type CustomerRow } from './customer.mapper.js';
 import type {
@@ -73,6 +73,28 @@ async function withGroups(q: Queryable, rows: CustomerRow[]): Promise<CustomerRe
 export async function findById(q: Queryable, id: number): Promise<CustomerRecord | undefined> {
   const row = await selectCustomers(q).where('c.id', '=', id).executeTakeFirst();
   return row && (await withGroups(q, [row as CustomerRow]))[0];
+}
+
+export async function lockStatus(q: Queryable, id: number): Promise<LifecycleStatus | undefined> {
+  const row = await q.selectFrom('customers').select('status').where('id', '=', id).forUpdate().executeTakeFirst();
+  return row?.status as LifecycleStatus | undefined;
+}
+
+/** is_active follows the status, as for suppliers: sales still check is_active. */
+export async function setStatus(q: Queryable, id: number, status: LifecycleStatus, staffId: number): Promise<void> {
+  const archived = status === 'ARCHIVED';
+  await q
+    .updateTable('customers')
+    .set({
+      status,
+      is_active: status === 'ACTIVE',
+      archived_at: archived ? sql<Date>`now()` : null,
+      archived_by: archived ? staffId : null,
+      updated_at: sql<Date>`now()`,
+      updated_by: staffId,
+    })
+    .where('id', '=', id)
+    .execute();
 }
 
 export async function exists(q: Queryable, id: number): Promise<{ fullName: string; customerCode: string; branchId: number | null } | undefined> {
