@@ -1,13 +1,4 @@
-/** A report's scope: the branch (undefined: all branches) and a date range, both ends included. */
-export interface ReportScope {
-  branchId?: number;
-  dateFrom?: string;
-  dateTo?: string;
-}
-
-export interface ReportFilters extends ReportScope {
-  groupBy: 'day' | 'week' | 'month';
-}
+export type { ReportFilters, ReportScope } from '../reportScope.js';
 
 export type TransactionType = 'ORDER' | 'POS' | 'RETURN' | 'EXCHANGE';
 export type LinePaymentStatus = 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';

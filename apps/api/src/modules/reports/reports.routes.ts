@@ -5,9 +5,8 @@ import { requirePermission } from '../../middleware/rbac.js';
 import { scopedBranchOrAll } from '../../lib/scope.js';
 import {
   buildCsv, sendCsv,
-  INVENTORY_COLUMNS, PROCUREMENT_COLUMNS, RECEIVABLES_COLUMNS,
+  PROCUREMENT_COLUMNS,
   RETURN_COLUMNS, EXCHANGE_DETAIL_COLUMNS, PAYMENTS_LEDGER_COLUMNS,
-  RECEIVABLES_AGING_COLUMNS, INVENTORY_VALUATION_COLUMNS,
   OPEN_POS_COLUMNS, SUPPLIER_BALANCES_COLUMNS, AP_AGING_COLUMNS,
   PURCHASES_BY_SUPPLIER_COLUMNS, PURCHASES_BY_BOOK_COLUMNS,
   SUPPLIER_PAYMENT_HISTORY_COLUMNS,
@@ -60,32 +59,6 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const report = await reportsService.getExchangeReport(parseFilters(req));
-      res.json(report);
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/reports/inventory ────────────────────────────────────────────────
-
-router.get(
-  '/reports/inventory',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const report = await reportsService.getInventoryReport(parseFilters(req));
-      res.json(report);
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/reports/customers ────────────────────────────────────────────────
-
-router.get(
-  '/reports/customers',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const report = await reportsService.getCustomerReport(parseFilters(req));
       res.json(report);
     } catch (err) { next(err); }
   },
@@ -198,54 +171,6 @@ router.get(
   },
 );
 
-// ── GET /api/reports/receivables-aging ─────────────────────────────────────────
-
-router.get(
-  '/reports/receivables-aging',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await reportsService.getReceivablesAgingReport(parseFilters(req));
-      res.json(result);
-    } catch (err) { next(err); }
-  },
-);
-
-router.get(
-  '/reports/receivables-aging/export',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { rows } = await reportsService.getReceivablesAgingReport(parseFilters(req));
-      const csvRows = rows.map(r => ({
-        customer: r.customer,
-        invoice_no: r.invoiceNo,
-        invoice_date: r.invoiceDate,
-        due_date: r.dueDate,
-        outstanding_amount: r.outstandingAmount,
-        aging_bucket: r.agingBucket,
-        last_payment_date: r.lastPaymentDate,
-      }));
-      const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `receivables-aging-${today}.csv`, buildCsv(csvRows, RECEIVABLES_AGING_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/reports/inventory-valuation/export ─────────────────────────────────
-
-router.get(
-  '/reports/inventory-valuation/export',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const rows = await reportsService.getInventoryExportRowsV2(parseFilters(req));
-      const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `inventory-valuation-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], INVENTORY_VALUATION_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
-
 router.get(
   '/reports/payments/export',
   ...reportAccess,
@@ -270,18 +195,6 @@ router.get(
 );
 
 router.get(
-  '/reports/inventory/export',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const rows = await reportsService.getInventoryExportRowsV2(parseFilters(req));
-      const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `inventory-export-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], INVENTORY_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
-
-router.get(
   '/reports/procurement/export',
   ...reportAccess,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -289,42 +202,6 @@ router.get(
       const rows = await reportsService.getProcurementExportRows(parseFilters(req));
       const today = new Date().toISOString().slice(0, 10);
       sendCsv(res, `procurement-report-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], PROCUREMENT_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
-
-router.get(
-  '/reports/receivables/export',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const rows = await reportsService.getReceivablesExportRows(parseFilters(req));
-      const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `receivables-report-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], RECEIVABLES_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
-
-router.get(
-  '/reports/customers/export',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const report = await reportsService.getCustomerReport(parseFilters(req));
-      const today = new Date().toISOString().slice(0, 10);
-      const rows = report.topCustomers.map(c => ({
-        customer_id:  c.customerId,
-        full_name:    c.fullName,
-        total_spend:  c.totalSpend,
-        order_count:  c.orderCount,
-      }));
-      const cols = [
-        { key: 'customer_id',  header: 'customer_id',  type: 'integer' as const },
-        { key: 'full_name',    header: 'full_name',     type: 'string'  as const },
-        { key: 'total_spend',  header: 'total_spend',   type: 'number'  as const },
-        { key: 'order_count',  header: 'order_count',   type: 'integer' as const },
-      ];
-      sendCsv(res, `customers-report-${today}.csv`, buildCsv(rows as Record<string, unknown>[], cols));
     } catch (err) { next(err); }
   },
 );

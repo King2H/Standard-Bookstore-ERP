@@ -1,29 +1,11 @@
 import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
+import { scopeConditions } from '../reportScope.js';
 import { NOT_SALE_ORDER_STATUS_LIST } from './sales.policy.js';
 import type { OrderTotalsRow, ReportFilters, ReportScope } from './sales.types.js';
 
 // Order and POS totals of the Sales Report. Report SQL runs on the report
 // connection (db/reportDb.ts); values always go in as parameters.
-
-/** `alias.branch_id = $n` and the date range on `alias.column`, both ends included. */
-export function scopeConditions(scope: ReportScope, alias: string, column = 'created_at'): { conditions: string[]; params: unknown[] } {
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  if (scope.branchId) {
-    params.push(scope.branchId);
-    conditions.push(`${alias}.branch_id = $${params.length}`);
-  }
-  if (scope.dateFrom) {
-    params.push(scope.dateFrom);
-    conditions.push(`${alias}.${column}::date >= $${params.length}::date`);
-  }
-  if (scope.dateTo) {
-    params.push(scope.dateTo);
-    conditions.push(`${alias}.${column}::date <= $${params.length}::date`);
-  }
-  return { conditions, params };
-}
 
 /** Orders that are sales: confirmed or later. */
 function orderWhere(scope: ReportScope): { where: string; params: unknown[] } {

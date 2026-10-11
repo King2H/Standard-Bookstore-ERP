@@ -170,3 +170,69 @@ export const PeriodKpisSchema = PeriodFiguresSchema.extend({
   previousCashCollected: z.number(),
 });
 export type PeriodKpis = z.infer<typeof PeriodKpisSchema>;
+
+// ── Inventory ─────────────────────────────────────────────────────────────────
+
+export const InventoryReportSchema = z.object({
+  /** Stock now, not a period flow. */
+  summary: z.object({
+    totalBooks: z.number().int(),
+    totalStockUnits: z.number().int(),
+    availableStock: z.number().int(),
+    reservedStock: z.number().int(),
+    lowStockItems: z.number().int(),
+    outOfStockItems: z.number().int(),
+  }),
+  lowStockItems: z.array(
+    z.object({
+      bookId: z.number().int(),
+      title: z.string(),
+      locationId: z.number().int(),
+      locationName: z.string(),
+      quantity: z.number().int(),
+      reorderPoint: z.number().int(),
+    }),
+  ),
+  /** POS sales in the range. */
+  topSellingBooks: z.array(z.object({ bookId: z.number().int(), title: z.string(), unitsSold: z.number().int(), revenue: z.number() })),
+  stockMovement: z.array(z.object({ period: z.string(), stockIn: z.number().int(), stockOut: z.number().int() })),
+});
+export type InventoryReport = z.infer<typeof InventoryReportSchema>;
+
+// ── Customers ─────────────────────────────────────────────────────────────────
+
+export const CustomerReportSchema = z.object({
+  summary: z.object({
+    totalCustomers: z.number().int(),
+    activeCustomers: z.number().int(),
+    /** Customers with more than one sale (orders confirmed or later) in the range. */
+    repeatCustomers: z.number().int(),
+    newCustomersInPeriod: z.number().int(),
+  }),
+  /** By spend on orders confirmed or later in the range. */
+  topCustomers: z.array(z.object({ customerId: z.number().int(), fullName: z.string(), totalSpend: z.number(), orderCount: z.number().int() })),
+  byPeriod: z.array(z.object({ period: z.string(), newCustomers: z.number().int() })),
+});
+export type CustomerReport = z.infer<typeof CustomerReportSchema>;
+
+// ── Receivables ───────────────────────────────────────────────────────────────
+
+export const AgingBucketSchema = z.enum(['Current', '1-30', '31-60', '61-90', '90+']);
+export type AgingBucket = z.infer<typeof AgingBucketSchema>;
+
+export const ReceivablesAgingRowSchema = z.object({
+  customer: z.string(),
+  invoiceNo: z.string(),
+  invoiceDate: z.string(),
+  dueDate: z.string(),
+  outstandingAmount: z.number(),
+  agingBucket: AgingBucketSchema,
+  lastPaymentDate: z.string(),
+});
+
+/** Open receivables by days past due; a balance now, so the date range does not apply. */
+export const ReceivablesAgingSchema = z.object({
+  rows: z.array(ReceivablesAgingRowSchema),
+  byBucket: z.array(z.object({ bucket: AgingBucketSchema, count: z.number().int(), totalOutstanding: z.number() })),
+});
+export type ReceivablesAging = z.infer<typeof ReceivablesAgingSchema>;
