@@ -6,6 +6,8 @@ import { useCurrency } from '../lib/useCurrency.js';
 import QuickAddCustomer, { type QuickCustomerPayload } from '../components/QuickAddCustomer.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
+import BankAccountSelect from '../components/BankAccountSelect.js';
+import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
 import { paymentMethodPlainLabel, PAYMENT_METHOD_META, type PaymentMethodCode } from '../lib/paymentMethods.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -70,7 +72,6 @@ interface Customer {
 }
 
 interface Location { id: number; name: string; isDefaultFulfillment: boolean; }
-interface BankAccount { id: number; accountName: string; bankName: string; maskedAccountNumber: string; currency: string; }
 
 interface TransactionLine { bookTitle: string; quantity: number; unitPrice: number; discountAmount: number; lineTotal: number; }
 interface TransactionPayment { method: string; amount: number; }
@@ -218,11 +219,8 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
     enabled:  branchId !== null,
   });
 
-  const { data: bankData } = useQuery<{ items: BankAccount[] }>({
-    queryKey: ['pos-bank-accounts', branchId],
-    queryFn:  () => api.get(`/branches/${branchId}/bank-accounts?isActive=true&pageSize=50`),
-    enabled:  branchId !== null && payMethod === 'bank',
-  });
+  // With Bank Accounts on, a bank payment names the account it went to (#21).
+  const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(branchId, payMethod === 'bank');
 
   const { data: bookResults } = useQuery<{ items: BookResult[] }>({
     queryKey: ['pos-books', bookSearch, locationId, branchId],
@@ -443,15 +441,15 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
     const raw = payAmount.trim() !== '' ? payAmount : remaining.toFixed(2);
     const amt = parseFloat(raw);
     if (!amt || amt <= 0) return;
-    if (payMethod === 'bank' && !payBankAccountId) { showToast('Select a bank account', 'error'); return; }
-    setPaymentLines(prev => [...prev, { method: payMethod, amount: raw, bankAccountId: payMethod === 'bank' ? Number(payBankAccountId) : undefined }]);
+    if (payMethod === 'bank' && bankAccountRequired && !payBankAccountId) { showToast('Select a bank account', 'error'); return; }
+    setPaymentLines(prev => [...prev, { method: payMethod, amount: raw, bankAccountId: payMethod === 'bank' && payBankAccountId ? Number(payBankAccountId) : undefined }]);
     setPayAmount('');
   }
 
   function removePayment(idx: number) { setPaymentLines(prev => prev.filter((_, i) => i !== idx)); }
 
   function buildPaymentPayload() {
-    return paymentLines.map(p => ({ method: p.method, amount: parseFloat(p.amount), reference: p.bankAccountId ? String(p.bankAccountId) : undefined }));
+    return paymentLines.map(p => ({ method: p.method, amount: parseFloat(p.amount), bankAccountId: p.bankAccountId }));
   }
 
   function handleCompleteSale() {
@@ -498,7 +496,6 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
 
   function newSale() { setCart([]); setPaymentLines([]); setSelectedCustomer(null); setReceipt(null); setPayAmount(''); setDueDate(''); }
 
-  const bankAccounts = bankData?.items ?? [];
 
   // ── Stock badge ────────────────────────────────────────────────────────────
 
@@ -1069,17 +1066,8 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
               <PaymentMethodTabs methods={PAYMENT_TABS} value={payMethod} onChange={setPayMethod} columns={3} />
 
               {/* Bank account selector */}
-              {payMethod === 'bank' && (
-                <select
-                  value={payBankAccountId}
-                  onChange={e => setPayBankAccountId(Number(e.target.value) || '')}
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select bank account…</option>
-                  {bankAccounts.map(b => (
-                    <option key={b.id} value={b.id}>{b.bankName} — {b.accountName}</option>
-                  ))}
-                </select>
+              {payMethod === 'bank' && bankAccountRequired && (
+                <BankAccountSelect accounts={bankAccounts} value={payBankAccountId || null} onChange={(id) => setPayBankAccountId(id ?? '')} />
               )}
 
               {/* Store credit info */}

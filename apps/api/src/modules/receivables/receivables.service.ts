@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { Money, type MoneyInput } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
-import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
-import { validateBankAccountForBranch } from '../bankAccount/bankAccount.service.js';
+import { accountForPayment, recordMovement } from '../bankAccount/bankAccount.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as policy from './receivables.policy.js';
 import * as receivables from './receivables.repository.js';
@@ -191,12 +191,9 @@ export function getSummary(branchId: number | undefined): Promise<ReceivableSumm
  * reads, and for bank transfers queued for reconciliation.
  */
 export async function collectPayment(actor: Actor, id: string, payment: PaymentCollection): Promise<ReceivableRecord> {
-  if (payment.paymentMethod === 'bank') {
-    if (payment.bankAccountId === null) throw new ValidationError('bankAccountId is required for bank transfer payments');
-    await validateBankAccountForBranch(payment.bankAccountId, actor.branchId);
-  }
-
   await withTransaction({}, async (tx) => {
+    // With bank accounts on, a bank payment names an active account of the branch (#21).
+    const bankAccountId = payment.paymentMethod === 'bank' ? await accountForPayment(tx, payment.bankAccountId, actor.branchId) : null;
     const r = found(await receivables.findById(tx, id, { forUpdate: true }));
     policy.checkCanCollect(r, payment.amount);
 
@@ -225,11 +222,13 @@ export async function collectPayment(actor: Actor, id: string, payment: PaymentC
       staffId: actor.staffId,
       meta: { receivableId: r.id, sourceType: r.sourceType, notes: payment.notes },
     });
-    if (payment.paymentMethod === 'bank' && payment.bankAccountId !== null) {
-      await receivables.insertBankReconciliation(tx, {
-        bankAccountId: payment.bankAccountId,
-        paymentRefId: entryId,
+    if (bankAccountId !== null) {
+      await recordMovement(tx, {
+        bankAccountId,
+        direction: 'in',
         amount: payment.amount,
+        sourceType: 'receivable_payment',
+        sourceId: entryId,
         notes: `Receivable #${r.id} payment`,
       });
     }

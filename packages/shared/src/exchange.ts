@@ -118,6 +118,8 @@ export const ExchangePaymentInputSchema = z.object({
   method: z.enum(['cash', 'bank', 'mobile', 'store_credit', 'loyalty_points']),
   amount: PositiveMoneySchema,
   reference: z.string().max(200).optional(),
+  /** A bank payment's account; required while bank accounts are on (#21). */
+  bankAccountId: z.number().int().positive().optional(),
 });
 
 export const CreateExchangeRequestSchema = z

@@ -94,7 +94,7 @@ export function paymentStatusAfterRefund(payment: PaymentRecord, refundedTotal: 
  * a bank account (the payment's own unless another is named); nothing else
  * goes to a bank account.
  */
-export function refundBankAccount(payment: PaymentRecord, requested: number | null): number | null {
+export function refundBankAccount(payment: PaymentRecord, requested: number | null, accountRequired: boolean): number | null {
   if (payment.paymentMethod !== 'bank') {
     if (requested !== null) {
       throw new ValidationError(`A ${payment.paymentMethod} payment is refunded the same way, not to a bank account`);
@@ -102,6 +102,7 @@ export function refundBankAccount(payment: PaymentRecord, requested: number | nu
     return null;
   }
   const account = requested ?? payment.bankAccountId;
-  if (account === null) throw new ValidationError('bankAccountId is required to refund a bank payment');
+  // With bank accounts off (#21), a bank refund names no account.
+  if (account === null && accountRequired) throw new ValidationError('bankAccountId is required to refund a bank payment');
   return account;
 }

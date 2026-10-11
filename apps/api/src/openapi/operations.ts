@@ -1,5 +1,20 @@
 import type { z } from 'zod';
 import {
+  BankAccountBranchParamsSchema,
+  BankAccountListQuerySchema,
+  BankAccountListResponseSchema,
+  BankAccountParamsSchema,
+  BankAccountSchema,
+  BankEntryListQuerySchema,
+  BankEntryListResponseSchema,
+  CreateBankAccountRequestSchema,
+  ImportStatementRequestSchema,
+  ImportStatementResponseSchema,
+  MatchStatementLineRequestSchema,
+  StatementLineListQuerySchema,
+  StatementLineListResponseSchema,
+  StatementLineParamsSchema,
+  UpdateBankAccountRequestSchema,
   CreateStaffRequestSchema,
   CreateStaffResponseSchema,
   ResetPasswordRequestSchema,
@@ -221,6 +236,7 @@ export const operations: ApiOperation[] = [
   },
   ...authOperations(),
   ...staffOperations(),
+  ...bankAccountOperations(),
   ...auditOperations(),
   ...branchOperations(),
   ...catalogOperations(),
@@ -445,6 +461,140 @@ function staffOperations(): ApiOperation[] {
       responses: message('Unlocked'),
       errors: change,
     },
+  ];
+}
+
+function bankAccountOperations(): ApiOperation[] {
+  const tag = 'Bank accounts';
+  const off = ' Only with FEATURE_BANK_ACCOUNTS=true.';
+  const read = '(Admin, Manager, Finance_Officer of the branch)';
+  const manage = '(Admin, Manager of the branch)';
+  const change = [400, 401, 403, 404, 409, 422, 500];
+  const base = '/branches/{branchId}/bank-accounts';
+  const account = { 200: { description: 'The account', schema: BankAccountSchema } };
+  return [
+    {
+      operationId: 'listBankAccounts',
+      method: 'get',
+      path: base,
+      summary: `The branch's bank accounts ${read}.${off}`,
+      tag,
+      request: { params: BankAccountBranchParamsSchema, query: BankAccountListQuerySchema },
+      responses: { 200: { description: 'One page of accounts', schema: BankAccountListResponseSchema } },
+    },
+    {
+      operationId: 'createBankAccount',
+      method: 'post',
+      path: base,
+      summary: `Open an ETB account; each account number is registered once in the company ${manage}.${off}`,
+      tag,
+      request: { params: BankAccountBranchParamsSchema, body: CreateBankAccountRequestSchema },
+      responses: { 201: { description: 'The account', schema: BankAccountSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'getBankAccount',
+      method: 'get',
+      path: `${base}/{id}`,
+      summary: `One account of the branch ${read}.${off}`,
+      tag,
+      request: { params: BankAccountParamsSchema },
+      responses: account,
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'updateBankAccount',
+      method: 'put',
+      path: `${base}/{id}`,
+      summary: `Change an account; its number, IBAN and currency only while no money has moved through it ${manage}.${off}`,
+      tag,
+      request: { params: BankAccountParamsSchema, body: UpdateBankAccountRequestSchema },
+      responses: account,
+      errors: change,
+    },
+    {
+      operationId: 'deactivateBankAccount',
+      method: 'post',
+      path: `${base}/{id}/deactivate`,
+      summary: `Stop new payments to an account; its movements and reconciliation stay ${manage}.${off}`,
+      tag,
+      request: { params: BankAccountParamsSchema },
+      responses: account,
+      errors: change,
+    },
+    {
+      operationId: 'reactivateBankAccount',
+      method: 'post',
+      path: `${base}/{id}/reactivate`,
+      summary: `Take payments to an account again ${manage}.${off}`,
+      tag,
+      request: { params: BankAccountParamsSchema },
+      responses: account,
+      errors: change,
+    },
+    {
+      operationId: 'listBankEntries',
+      method: 'get',
+      path: `${base}/{id}/entries`,
+      summary: `The system's bank movements on the account: payments in, refunds and supplier payments out ${read}.${off}`,
+      tag,
+      request: { params: BankAccountParamsSchema, query: BankEntryListQuerySchema },
+      responses: { 200: { description: 'One page of movements', schema: BankEntryListResponseSchema } },
+    },
+    {
+      operationId: 'listStatementLines',
+      method: 'get',
+      path: `${base}/{id}/statement-lines`,
+      summary: `The bank statement lines imported for the account ${read}.${off}`,
+      tag,
+      request: { params: BankAccountParamsSchema, query: StatementLineListQuerySchema },
+      responses: { 200: { description: 'One page of statement lines', schema: StatementLineListResponseSchema } },
+    },
+    {
+      operationId: 'importStatement',
+      method: 'post',
+      path: `${base}/{id}/statement-lines`,
+      summary:
+        'Import statement lines: a line whose bank reference was imported before is skipped; a line is matched to the only ' +
+        `open movement of the same amount and direction within 3 days, if there is exactly one ${read}.${off}`,
+      tag,
+      request: { params: BankAccountParamsSchema, body: ImportStatementRequestSchema },
+      responses: { 201: { description: 'What was imported and matched', schema: ImportStatementResponseSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'matchStatementLine',
+      method: 'post',
+      path: `${base}/{id}/statement-lines/{lineId}/match`,
+      summary: `Match a line by hand to an open movement of the same amount and direction; both are cleared ${read}.${off}`,
+      tag,
+      request: { params: StatementLineParamsSchema, body: MatchStatementLineRequestSchema },
+      responses: { 200: { description: 'Matched', schema: MessageResponseSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'unmatchStatementLine',
+      method: 'post',
+      path: `${base}/{id}/statement-lines/{lineId}/unmatch`,
+      summary: `Undo a match made by mistake; the line and the movement are open again ${read}.${off}`,
+      tag,
+      request: { params: StatementLineParamsSchema },
+      responses: { 200: { description: 'Unmatched', schema: MessageResponseSchema } },
+      errors: change,
+    },
+    ...[
+      ['get', '/branches/{branchId}/reconciliation', 'listReconciliation'],
+      ['post', '/branches/{branchId}/reconciliation/import', 'importReconciliation'],
+      ['put', '/branches/{branchId}/reconciliation/{entryId}', 'clearReconciliationEntry'],
+    ].map(([method, path, operationId]): ApiOperation => ({
+      operationId,
+      method: method as ApiOperation['method'],
+      path,
+      summary: `Retired: use ${base}/{id}/statement-lines and /entries.${off}`,
+      tag,
+      responses: {},
+      errors: [401, 410],
+    })),
   ];
 }
 

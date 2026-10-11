@@ -46,6 +46,7 @@ export async function recordPayment(req: Request, res: Response): Promise<void> 
     amount: Money.of(body.amount),
     paymentMethod: body.paymentMethod,
     notes: body.notes ?? null,
+    bankAccountId: body.bankAccountId ?? null,
   });
   send(res, record, 201);
 }

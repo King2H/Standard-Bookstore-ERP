@@ -210,8 +210,26 @@ export async function insertLine(
     .execute();
 }
 
-export async function insertRefund(q: Queryable, returnId: string, part: RefundPart): Promise<void> {
-  await q.insertInto('refunds').values({ return_id: returnId, method: part.method, amount: part.amount.toFixed(2) }).execute();
+export async function insertRefund(q: Queryable, returnId: string, part: RefundPart, bankAccountId: number | null = null): Promise<string> {
+  const row = await q
+    .insertInto('refunds')
+    .values({ return_id: returnId, method: part.method, amount: part.amount.toFixed(2), bank_account_id: bankAccountId })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
+}
+
+/** The account the sale's latest bank payment went to, if any (#21). */
+export async function lastBankAccount(q: Queryable, transactionId: string): Promise<number | null> {
+  const row = await q
+    .selectFrom('transaction_payments')
+    .select('bank_account_id')
+    .where('transaction_id', '=', transactionId)
+    .where('method', '=', 'bank')
+    .where('bank_account_id', 'is not', null)
+    .orderBy('id', 'desc')
+    .executeTakeFirst();
+  return row?.bank_account_id ?? null;
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────

@@ -4,6 +4,8 @@ import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
 import { paymentMethodPlainLabel } from '../lib/paymentMethods.js';
 import { useToast } from '../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
+import BankAccountSelect from '../components/BankAccountSelect.js';
+import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
 
 type Role = string;
 
@@ -573,6 +575,9 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
   const qc = useQueryClient();
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState<number | null>(null);
+  // The ordering branch pays; with Bank Accounts on, a bank payment names its account (#21).
+  const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(getCurrentBranchId(), paymentMethod === 'bank');
   const [creditAmount, setCreditAmount] = useState('');
   const [creditReason, setCreditReason] = useState('');
 
@@ -616,7 +621,11 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
     if (reason) reverseMut.mutate({ paymentId, reason });
   }
   const paymentMut = useMutation({
-    mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/payments`, { amount: parseFloat(paymentAmount), paymentMethod }),
+    mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/payments`, {
+      amount: parseFloat(paymentAmount),
+      paymentMethod,
+      ...(paymentMethod === 'bank' && paymentBankAccountId ? { bankAccountId: paymentBankAccountId } : {}),
+    }),
     onSuccess: () => { inv(); showToast('Payment recorded', 'success'); setPaymentAmount(''); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
@@ -722,8 +731,19 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
                   <option value="cheque">Cheque</option>
                 </select>
               </div>
+              {paymentMethod === 'bank' && bankAccountRequired && (
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Bank account</label>
+                  <BankAccountSelect accounts={bankAccounts} value={paymentBankAccountId} onChange={setPaymentBankAccountId} />
+                </div>
+              )}
               <button
-                onClick={() => { const amt = parseFloat(paymentAmount); if (!amt || amt <= 0) { showToast('Enter a positive amount', 'error'); return; } paymentMut.mutate(); }}
+                onClick={() => {
+                  const amt = parseFloat(paymentAmount);
+                  if (!amt || amt <= 0) { showToast('Enter a positive amount', 'error'); return; }
+                  if (paymentMethod === 'bank' && bankAccountRequired && !paymentBankAccountId) { showToast('Select the bank account the payment went out of', 'error'); return; }
+                  paymentMut.mutate();
+                }}
                 disabled={paymentMut.isPending}
                 className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
                 Record Payment

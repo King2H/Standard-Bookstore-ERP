@@ -47,7 +47,7 @@ function newExchange(req: Request, body: CreateExchangeRequest): NewExchange {
     notes: body.notes ?? null,
     incoming: body.incomingItems.map((i) => ({ bookId: i.bookId, quantity: i.quantity, unitValue: Money.of(i.unitPrice), condition: i.condition })),
     outgoing: body.outgoingItems.map((o) => ({ bookId: o.bookId, quantity: o.quantity })),
-    payments: body.payments.map((p) => ({ method: p.method, amount: Money.of(p.amount), reference: p.reference ?? null })),
+    payments: body.payments.map((p) => ({ method: p.method, amount: Money.of(p.amount), reference: p.reference ?? null, bankAccountId: p.bankAccountId ?? null })),
     allowCredit: body.allowCredit,
     dueDate: body.dueDate ?? null,
     refundMethod: body.refundMethod,

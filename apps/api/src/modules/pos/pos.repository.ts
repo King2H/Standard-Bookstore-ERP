@@ -90,7 +90,7 @@ export async function lineItems(q: Queryable, transactionId: string): Promise<Po
 export async function payments(q: Queryable, transactionId: string): Promise<PosPaymentRecord[]> {
   const rows = await q
     .selectFrom('transaction_payments')
-    .select(['id', 'transaction_id', 'method', 'amount', 'reference', 'created_at'])
+    .select(['id', 'transaction_id', 'method', 'amount', 'reference', 'bank_account_id', 'created_at'])
     .where('transaction_id', '=', transactionId)
     .orderBy('id')
     .execute();
@@ -207,11 +207,19 @@ export async function insertLine(q: Queryable, transactionId: string, line: Pric
     .execute();
 }
 
-export async function insertPayment(q: Queryable, transactionId: string, p: PaymentLine): Promise<void> {
-  await q
+export async function insertPayment(q: Queryable, transactionId: string, p: PaymentLine): Promise<string> {
+  const row = await q
     .insertInto('transaction_payments')
-    .values({ transaction_id: transactionId, method: p.method, amount: p.amount.toFixed(2), reference: p.reference })
-    .execute();
+    .values({
+      transaction_id: transactionId,
+      method: p.method,
+      amount: p.amount.toFixed(2),
+      reference: p.reference,
+      bank_account_id: p.bankAccountId ?? null,
+    })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
 }
 
 export async function setPaid(q: Queryable, id: string, paid: Money, due: Money, status: PosPaymentStatus): Promise<void> {

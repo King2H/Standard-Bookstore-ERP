@@ -34,7 +34,7 @@ function actor(req: Request): Actor {
 }
 
 function paymentLines(payments: PosPaymentInput[]): PaymentLine[] {
-  return payments.map((p) => ({ method: p.method, amount: Money.of(p.amount), reference: p.reference ?? null }));
+  return payments.map((p) => ({ method: p.method, amount: Money.of(p.amount), reference: p.reference ?? null, bankAccountId: p.bankAccountId ?? null }));
 }
 
 function send(res: Response, record: Parameters<typeof toTransactionResponse>[0], status = 200): void {

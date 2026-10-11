@@ -17,25 +17,20 @@ describe('Bank Accounts', () => {
   let financeToken: string;
   let salesToken: string;
   let branchId: number;
+  const api = () => request(getTestApp());
+  const url = (path = '') => `/api/v1/branches/${branchId}/bank-accounts${path}`;
 
   beforeAll(async () => {
     await cleanTestStaff(STAFF_PREFIX);
+    const old = await db.query(`SELECT id FROM branches WHERE name LIKE $1`, [`${BRANCH_PREFIX}%`]);
+    for (const b of old.rows) await cleanBankAccounts(b.id);
     await cleanTestBranches(BRANCH_PREFIX);
 
-    const branch = await createTestBranch({ name: 'BA Test Branch' });
-    branchId = branch.branchId;
-
-    const admin = await createTestStaff({ username: 'ba_test_admin', role: 'Admin', branchId });
-    adminToken = admin.token;
-
-    const mgr = await createTestStaff({ username: 'ba_test_manager', role: 'Manager', branchId });
-    managerToken = mgr.token;
-
-    const fin = await createTestStaff({ username: 'ba_test_finance', role: 'Finance_Officer', branchId });
-    financeToken = fin.token;
-
-    const sales = await createTestStaff({ username: 'ba_test_sales', role: 'Sales', branchId });
-    salesToken = sales.token;
+    branchId = (await createTestBranch({ name: 'BA Test Branch' })).branchId;
+    adminToken = (await createTestStaff({ username: 'ba_test_admin', role: 'Admin', branchId })).token;
+    managerToken = (await createTestStaff({ username: 'ba_test_manager', role: 'Manager', branchId })).token;
+    financeToken = (await createTestStaff({ username: 'ba_test_finance', role: 'Finance_Officer', branchId })).token;
+    salesToken = (await createTestStaff({ username: 'ba_test_sales', role: 'Sales', branchId })).token;
   });
 
   afterAll(async () => {
@@ -44,231 +39,81 @@ describe('Bank Accounts', () => {
     await cleanTestBranches(BRANCH_PREFIX);
   });
 
-  // ── Create ──────────────────────────────────────────────────────────────
-
-  it('Admin can create a bank account', async () => {
-    const app = getTestApp();
-    const res = await request(app)
-      .post(`/api/branches/${branchId}/bank-accounts`)
+  it('Admin creates an account, masked and audited', async () => {
+    const res = await api()
+      .post(url())
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        accountName: 'Main Operations',
-        bankName: 'First National Bank',
-        accountNumber: '1234567890',
-        iban: 'GB29NWBK60161331926819',
-        currency: 'USD',
-      });
+      .send({ accountName: 'Main Operations', bankName: 'CBE', accountNumber: '1000123456789', iban: 'ET29NWBK60161331926819' });
 
     expect(res.status).toBe(201);
-    expect(res.body.accountName).toBe('Main Operations');
-    expect(res.body.bankName).toBe('First National Bank');
-    expect(res.body.currency).toBe('USD');
-    expect(res.body.isActive).toBe(true);
+    expect(res.body).toMatchObject({ accountName: 'Main Operations', bankName: 'CBE', currency: 'ETB', isActive: true, hasMovements: false });
+    expect(res.body.accountNumberMasked).toBe('****6789');
+    expect(res.body.ibanMasked).toMatch(/^\*{4}.{4}$/);
 
-    // Account number must be masked — never plaintext
-    expect(res.body.accountNumberMasked).toMatch(/^\*{4}\d{4}$/);
-    expect(res.body.accountNumberMasked).not.toContain('1234567890');
-
-    // IBAN must be masked
-    expect(res.body.ibanMasked).toMatch(/^\*{4}.+$/);
-
-    // Verify audit log
-    const audit = await db.query(
-      `SELECT * FROM audit_logs WHERE entity_type = 'bank_account' AND entity_id = $1`,
-      [String(res.body.id)],
-    );
-    expect(audit.rows.length).toBeGreaterThan(0);
-    expect(audit.rows[0].action).toBe('CREATE');
+    const audit = await db.query(`SELECT 1 FROM audit_logs WHERE entity_type = 'bank_account' AND entity_id = $1 AND action = 'CREATE'`, [
+      String(res.body.id),
+    ]);
+    expect(audit.rows).toHaveLength(1);
   });
 
-  it('Manager can create a bank account', async () => {
-    const app = getTestApp();
-    const res = await request(app)
-      .post(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${managerToken}`)
-      .send({
-        accountName: 'Petty Cash',
-        bankName: 'City Bank',
-        accountNumber: '9876543210',
-        currency: 'USD',
-      });
-
+  it('Manager creates an account; Sales cannot', async () => {
+    const res = await api().post(url()).set('Authorization', `Bearer ${managerToken}`).send({ accountName: 'Petty', bankName: 'Awash', accountNumber: '9876543210' });
     expect(res.status).toBe(201);
     expect(res.body.ibanMasked).toBeNull();
+
+    const denied = await api().post(url()).set('Authorization', `Bearer ${salesToken}`).send({ accountName: 'X', bankName: 'Y', accountNumber: '12345' });
+    expect(denied.status).toBe(403);
   });
 
-  it('Sales role cannot create a bank account (403)', async () => {
-    const app = getTestApp();
-    const res = await request(app)
-      .post(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${salesToken}`)
-      .send({
-        accountName: 'Unauthorized',
-        bankName: 'Some Bank',
-        accountNumber: '111',
-        currency: 'USD',
-      });
-
-    expect(res.status).toBe(403);
-  });
-
-  it('Finance_Officer can read bank accounts', async () => {
-    const app = getTestApp();
-    const res = await request(app)
-      .get(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${financeToken}`);
-
+  it('Finance_Officer reads the accounts', async () => {
+    const res = await api().get(url()).set('Authorization', `Bearer ${financeToken}`);
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body.items)).toBe(true);
-    expect(res.body.items.length).toBeGreaterThan(0);
+    expect(res.body.items.length).toBeGreaterThanOrEqual(2);
+  });
 
-    // All account numbers must be masked
-    for (const acct of res.body.items) {
-      expect(acct.accountNumberMasked).toMatch(/^\*{4}/);
+  it('keeps the account number encrypted at rest, with a lookup hash', async () => {
+    const { rows } = await db.query(`SELECT account_number, account_number_hash FROM bank_accounts WHERE branch_id = $1`, [branchId]);
+    for (const r of rows) {
+      expect(r.account_number).not.toMatch(/^\d+$/);
+      expect(r.account_number_hash).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 
-  it('Account number is encrypted at rest', async () => {
-    // Verify the raw DB value is NOT the plaintext account number
-    const raw = await db.query(
-      `SELECT account_number FROM bank_accounts WHERE branch_id = $1 LIMIT 1`,
-      [branchId],
-    );
-    expect(raw.rows.length).toBeGreaterThan(0);
-    expect(raw.rows[0].account_number).not.toBe('1234567890');
-    expect(raw.rows[0].account_number).not.toBe('9876543210');
-    // Should be base64-encoded ciphertext
-    expect(raw.rows[0].account_number.length).toBeGreaterThan(20);
+  it('deactivates and reactivates an account, audited', async () => {
+    const id = (await api().post(url()).set('Authorization', `Bearer ${adminToken}`).send({ accountName: 'Toggle', bankName: 'CBE', accountNumber: '55501' })).body.id;
+
+    const off = await api().post(url(`/${id}/deactivate`)).set('Authorization', `Bearer ${adminToken}`);
+    expect(off.status).toBe(200);
+    expect(off.body.isActive).toBe(false);
+    const on = await api().post(url(`/${id}/reactivate`)).set('Authorization', `Bearer ${adminToken}`);
+    expect(on.body.isActive).toBe(true);
+
+    const { rows } = await db.query(`SELECT action FROM audit_logs WHERE entity_type = 'bank_account' AND entity_id = $1 ORDER BY id`, [String(id)]);
+    expect(rows.map((r) => r.action)).toEqual(['CREATE', 'INACTIVATE', 'ACTIVATE']);
   });
 
-  // ── Deactivate ──────────────────────────────────────────────────────────
-
-  it('Admin can deactivate a bank account', async () => {
-    const app = getTestApp();
-
-    // Create one to deactivate
-    const createRes = await request(app)
-      .post(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ accountName: 'To Deactivate', bankName: 'Test Bank', accountNumber: '555', currency: 'EUR' });
-
-    const id = createRes.body.id;
-
-    const deactivateRes = await request(app)
-      .post(`/api/branches/${branchId}/bank-accounts/${id}/deactivate`)
-      .set('Authorization', `Bearer ${adminToken}`);
-
-    expect(deactivateRes.status).toBe(200);
-
-    // Verify in DB
-    const dbResult = await db.query(`SELECT is_active FROM bank_accounts WHERE id = $1`, [id]);
-    expect(dbResult.rows[0].is_active).toBe(false);
-
-    // Verify audit log
-    const audit = await db.query(
-      `SELECT * FROM audit_logs WHERE entity_type = 'bank_account' AND entity_id = $1 AND action = 'DEACTIVATE'`,
-      [String(id)],
-    );
-    expect(audit.rows.length).toBeGreaterThan(0);
-  });
-
-  // ── Reconciliation ──────────────────────────────────────────────────────
-
-  it('Admin can import reconciliation rows', async () => {
-    const app = getTestApp();
-
-    // Get an account id
-    const listRes = await request(app)
-      .get(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${adminToken}`);
-    const accountId = listRes.body.items[0].id;
-
-    const importRes = await request(app)
-      .post(`/api/branches/${branchId}/reconciliation/import?bankAccountId=${accountId}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        rows: [
-          { amount: 500.00, direction: 'in',  statementDate: '2026-04-01', notes: 'Customer payment' },
-          { amount: 120.50, direction: 'out', statementDate: '2026-04-02', notes: 'Supplier refund' },
-        ],
-      });
-
-    expect(importRes.status).toBe(201);
-    expect(importRes.body.imported).toBe(2);
-
-    // Verify entries in DB
-    const entries = await db.query(
-      `SELECT * FROM bank_reconciliation WHERE bank_account_id = $1`,
-      [accountId],
-    );
-    expect(entries.rows.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('Finance_Officer can clear a reconciliation entry', async () => {
-    const app = getTestApp();
-
-    // Get an uncleared entry
-    const listRes = await request(app)
-      .get(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${adminToken}`);
-    const accountId = listRes.body.items[0].id;
-
-    const reconRes = await request(app)
-      .get(`/api/branches/${branchId}/reconciliation?bankAccountId=${accountId}&status=unmatched`)
-      .set('Authorization', `Bearer ${financeToken}`);
-
-    expect(reconRes.status).toBe(200);
-    if (reconRes.body.items.length === 0) return; // no entries to clear
-
-    const entryId = reconRes.body.items[0].id;
-
-    const clearRes = await request(app)
-      .put(`/api/branches/${branchId}/reconciliation/${entryId}`)
+  it('imports statement lines (Finance_Officer), refusing an empty statement', async () => {
+    const id = (await api().get(url()).set('Authorization', `Bearer ${financeToken}`)).body.items[0].id;
+    const res = await api()
+      .post(url(`/${id}/statement-lines`))
       .set('Authorization', `Bearer ${financeToken}`)
-      .send({ paymentRefId: null });
+      .send({ lines: [{ statementDate: '2026-10-01', amount: 150.5, direction: 'in', reference: 'BA-TEST-1' }] });
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ imported: 1, matched: 0, duplicates: 0 });
 
-    expect(clearRes.status).toBe(200);
-    expect(clearRes.body.status).toBe('cleared');
+    const empty = await api().post(url(`/${id}/statement-lines`)).set('Authorization', `Bearer ${financeToken}`).send({ lines: [] });
+    expect(empty.status).toBe(400);
   });
 
-  it('Clearing an already-cleared entry returns 409', async () => {
-    const app = getTestApp();
-
-    // Get a cleared entry
-    const listRes = await request(app)
-      .get(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${adminToken}`);
-    const accountId = listRes.body.items[0].id;
-
-    const reconRes = await request(app)
-      .get(`/api/branches/${branchId}/reconciliation?bankAccountId=${accountId}&status=cleared`)
-      .set('Authorization', `Bearer ${adminToken}`);
-
-    if (reconRes.body.items.length === 0) return; // skip if no cleared entries yet
-
-    const entryId = reconRes.body.items[0].id;
-
-    const clearRes = await request(app)
-      .put(`/api/branches/${branchId}/reconciliation/${entryId}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ paymentRefId: null });
-
-    expect(clearRes.status).toBe(409);
-    expect(clearRes.body.error).toBe('ALREADY_CLEARED');
-  });
-
-  it('Import with empty rows returns 400', async () => {
-    const app = getTestApp();
-    const listRes = await request(app)
-      .get(`/api/branches/${branchId}/bank-accounts`)
-      .set('Authorization', `Bearer ${adminToken}`);
-    const accountId = listRes.body.items[0].id;
-
-    const res = await request(app)
-      .post(`/api/branches/${branchId}/reconciliation/import?bankAccountId=${accountId}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ rows: [] });
-
-    expect(res.status).toBe(400);
+  it('answers 410 to the retired v1 reconciliation endpoints', async () => {
+    const base = `/api/v1/branches/${branchId}/reconciliation`;
+    for (const res of [
+      await api().get(`${base}?bankAccountId=1`).set('Authorization', `Bearer ${adminToken}`),
+      await api().post(`${base}/import?bankAccountId=1`).set('Authorization', `Bearer ${adminToken}`).send({}),
+      await api().put(`${base}/1`).set('Authorization', `Bearer ${adminToken}`).send({}),
+    ]) {
+      expect(res.status).toBe(410);
+      expect(res.body.error).toBe('DEPRECATED');
+    }
   });
 });

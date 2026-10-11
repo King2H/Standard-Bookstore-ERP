@@ -108,8 +108,8 @@ describe('Order payments', () => {
 
     const account = async (branch: number, n: number, active = true) =>
       (await db.query(
-        `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, currency, is_active)
-         VALUES ($1, 'Pay Rule', 'CBE', $2, 'ETB', $3) RETURNING id`,
+        `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, account_number_hash, currency, is_active)
+         VALUES ($1, 'Pay Rule', 'CBE', $2, md5(random()::text), 'ETB', $3) RETURNING id`,
         [branch, `${ACCOUNT_PREFIX}${n}`, active],
       )).rows[0].id;
     bankAccount = await account(branchId, 1);
@@ -214,7 +214,7 @@ describe('Order payments', () => {
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ method: 'bank', bankAccountId: bankAccount });
       const { rows } = await db.query(
-        `SELECT bank_account_id, direction FROM bank_reconciliation WHERE refund_ref_id = $1`,
+        `SELECT bank_account_id, direction FROM bank_reconciliation WHERE source_type = 'order_refund' AND source_id = $1`,
         [res.body.id],
       );
       expect(rows).toEqual([{ bank_account_id: bankAccount, direction: 'out' }]);

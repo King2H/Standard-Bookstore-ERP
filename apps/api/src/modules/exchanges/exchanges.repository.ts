@@ -148,11 +148,18 @@ export async function items(q: Queryable, exchangeId: string): Promise<{ incomin
 export async function settlementEntries(q: Queryable, exchangeId: string): Promise<SettlementEntryRecord[]> {
   const rows = await q
     .selectFrom('exchange_settlement_entries')
-    .select(['id', 'entry_type', 'amount', 'method', 'created_at'])
+    .select(['id', 'entry_type', 'amount', 'method', 'bank_account_id', 'created_at'])
     .where('exchange_id', '=', exchangeId)
     .orderBy('id')
     .execute();
-  return rows.map((r) => ({ id: String(r.id), entryType: r.entry_type, amount: Money.of(r.amount), method: r.method, createdAt: r.created_at }));
+  return rows.map((r) => ({
+    id: String(r.id),
+    entryType: r.entry_type,
+    amount: Money.of(r.amount),
+    method: r.method,
+    bankAccountId: r.bank_account_id,
+    createdAt: r.created_at,
+  }));
 }
 
 // ── What an exchange needs to know ────────────────────────────────────────────
@@ -258,9 +265,17 @@ export async function insertOutgoing(
 
 export async function insertEntry(
   q: Queryable,
-  e: { exchangeId: string; entryType: 'cash_payment' | 'cash_refund'; amount: Money; method: string; note: string | null; by: number },
-): Promise<void> {
-  await q
+  e: {
+    exchangeId: string;
+    entryType: 'cash_payment' | 'cash_refund';
+    amount: Money;
+    method: string;
+    note: string | null;
+    by: number;
+    bankAccountId?: number | null;
+  },
+): Promise<string> {
+  const row = await q
     .insertInto('exchange_settlement_entries')
     .values({
       exchange_id: e.exchangeId,
@@ -270,8 +285,11 @@ export async function insertEntry(
       method: e.method,
       note: e.note,
       authorised_by: e.by,
+      bank_account_id: e.bankAccountId ?? null,
     })
-    .execute();
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
 }
 
 export async function setVoided(q: Queryable, id: string, by: number, reason: string): Promise<void> {

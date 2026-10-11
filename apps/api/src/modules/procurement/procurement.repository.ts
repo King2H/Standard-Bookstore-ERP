@@ -171,6 +171,7 @@ export async function payments(q: Queryable, poId: string): Promise<SupplierPaym
       'po_id',
       'amount',
       'payment_method',
+      'bank_account_id',
       'source',
       'notes',
       'created_by',
@@ -189,6 +190,7 @@ export async function payments(q: Queryable, poId: string): Promise<SupplierPaym
     poId: String(r.po_id),
     amount: Money.of(r.amount),
     paymentMethod: r.payment_method,
+    bankAccountId: r.bank_account_id,
     source: r.source as SupplierPaymentRecord['source'],
     notes: r.notes,
     createdBy: r.created_by,
@@ -417,11 +419,13 @@ export async function insertSupplierPayment(
     source: 'manual' | 'auto_on_receipt';
     notes: string | null;
     createdBy: number;
+    bankAccountId?: number | null;
   },
 ): Promise<string> {
   const row = await q
     .insertInto('supplier_payments')
     .values({
+      bank_account_id: p.bankAccountId ?? null,
       payment_number: p.paymentNumber,
       po_id: p.poId,
       branch_id: p.branchId,

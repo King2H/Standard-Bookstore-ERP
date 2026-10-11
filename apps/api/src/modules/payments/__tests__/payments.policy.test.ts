@@ -57,12 +57,17 @@ describe('checkCanRefund', () => {
 
 describe('refundBankAccount', () => {
   it('sends a bank payment back to its own account unless another is named', () => {
-    expect(refundBankAccount(payment({ paymentMethod: 'bank', bankAccountId: 3 }), null)).toBe(3);
-    expect(refundBankAccount(payment({ paymentMethod: 'bank', bankAccountId: 3 }), 4)).toBe(4);
+    expect(refundBankAccount(payment({ paymentMethod: 'bank', bankAccountId: 3 }), null, true)).toBe(3);
+    expect(refundBankAccount(payment({ paymentMethod: 'bank', bankAccountId: 3 }), 4, true)).toBe(4);
   });
 
   it('sends nothing else to a bank account', () => {
-    expect(refundBankAccount(payment(), null)).toBeNull();
-    expect(() => refundBankAccount(payment(), 3)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(refundBankAccount(payment(), null, true)).toBeNull();
+    expect(() => refundBankAccount(payment(), 3, true)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+  });
+
+  it('needs an account for a bank refund only with bank accounts on (#21)', () => {
+    expect(() => refundBankAccount(payment({ paymentMethod: 'bank', bankAccountId: null }), null, true)).toThrow();
+    expect(refundBankAccount(payment({ paymentMethod: 'bank', bankAccountId: null }), null, false)).toBeNull();
   });
 });

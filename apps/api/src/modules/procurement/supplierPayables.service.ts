@@ -4,6 +4,7 @@ import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { accountForPayment, cancelMovement, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { poNumber } from './procurement.mapper.js';
 import * as orderPolicy from './procurement.policy.js';
 import * as orders from './procurement.repository.js';
@@ -39,12 +40,14 @@ async function checkWithinOrder(q: Queryable, po: PurchaseOrderRecord, amount: M
 export async function recordPayment(
   actor: Actor,
   poId: string,
-  payment: { amount: Money; paymentMethod: string; notes: string | null },
+  payment: { amount: Money; paymentMethod: string; notes: string | null; bankAccountId?: number | null },
 ): Promise<PurchaseOrderRecord> {
   await withTransaction({}, async (tx) => {
     const po = await lockOwnOrder(tx, actor, poId);
     policy.checkPayable(po.status);
     await checkWithinOrder(tx, po, payment.amount);
+    // With bank accounts on, a bank payment names an active account of the ordering branch (#21).
+    const bankAccountId = payment.paymentMethod === 'bank' ? await accountForPayment(tx, payment.bankAccountId ?? null, po.branchId) : null;
     const paymentNumber = await nextDailyNumber(tx, 'SPAY');
     const id = await orders.insertSupplierPayment(tx, {
       paymentNumber,
@@ -56,7 +59,13 @@ export async function recordPayment(
       source: 'manual',
       notes: payment.notes,
       createdBy: actor.staffId,
+      bankAccountId,
     });
+    if (bankAccountId !== null) {
+      await recordMovement(tx, {
+        bankAccountId, direction: 'out', amount: payment.amount, sourceType: 'supplier_payment', sourceId: id, notes: `Supplier payment ${paymentNumber}`,
+      });
+    }
     await refreshFinancialStatus(tx, poId);
     await audit(tx, actor, 'supplier_payment', id, {
       paymentNumber, poNumber: poNumber(poId), amount: payment.amount.toNumber(), paymentMethod: payment.paymentMethod,
@@ -72,6 +81,8 @@ export async function reversePayment(actor: Actor, poId: string, paymentId: numb
     const payment = await payables.lockPayment(tx, poId, paymentId);
     if (!payment) throw new NotFoundError('Supplier payment');
     policy.checkCanReverse(payment);
+    // Money that never left takes its bank movement with it; refused once matched to the statement.
+    await cancelMovement(tx, 'supplier_payment', String(payment.id));
     await payables.reversePayment(tx, payment.id, actor.staffId, reason);
     await refreshFinancialStatus(tx, poId);
     await audit(

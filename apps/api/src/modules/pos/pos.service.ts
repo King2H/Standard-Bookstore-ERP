@@ -5,6 +5,7 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { accountForPayment, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxLineDiscountPct } from '../config/config.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -39,6 +40,20 @@ function audit(q: Queryable, actor: Actor, action: string, id: string, meta: Rec
 function found(t: PosTransactionRecord | undefined): PosTransactionRecord {
   if (t === undefined) throw new NotFoundError('Transaction');
   return t;
+}
+
+/**
+ * Records the payments. With bank accounts on (#21), a bank payment names an
+ * active account of the branch and is queued for reconciliation.
+ */
+async function insertPayments(tx: Queryable, t: { id: string; number: string; branchId: number }, payments: PaymentLine[]): Promise<void> {
+  for (const p of payments) {
+    const bankAccountId = p.method === 'bank' ? await accountForPayment(tx, p.bankAccountId ?? null, t.branchId) : null;
+    const id = await pos.insertPayment(tx, t.id, { ...p, bankAccountId });
+    if (bankAccountId !== null) {
+      await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'pos_payment', sourceId: id, notes: `Sale ${t.number}` });
+    }
+  }
 }
 
 function sumOf(payments: PaymentLine[]): Money {
@@ -152,7 +167,7 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
       await pos.insertLine(tx, id, line, unitCost);
     }
     await spendFromAccounts(tx, sale.customerId, sale.payments, { id, number: transactionNumber, refType: 'transaction' });
-    for (const p of sale.payments) await pos.insertPayment(tx, id, p);
+    await insertPayments(tx, { id, number: transactionNumber, branchId: sale.branchId }, sale.payments);
 
     if (sale.customerId !== null && status !== 'credit' && sale.payments.length > 0) {
       await insertOutboxEvent(tx, 'LoyaltyAccrualRequested', {
@@ -217,7 +232,7 @@ export async function recordPayment(actor: Actor, txId: string, payments: Paymen
     await checkNotWrittenOff(tx, 'pos_credit_sale', t.id);
 
     await spendFromAccounts(tx, t.customerId, payments, { id: t.id, number: t.transactionNumber, refType: 'payment' });
-    for (const p of payments) await pos.insertPayment(tx, t.id, p);
+    await insertPayments(tx, { id: t.id, number: t.transactionNumber, branchId: t.branchId }, payments);
     const paid = t.amountPaid.plus(incoming);
     const { due, status } = policy.afterCollect(t.amountDue, incoming);
     await pos.setPaid(tx, t.id, paid, due, status);
@@ -297,6 +312,18 @@ export async function voidTransaction(actor: Actor, txId: string): Promise<PosTr
           await customers.addPoints(tx, t.customerId, -takeBack, { reason: 'VOID_REVERSAL', transactionRef: t.transactionNumber });
         }
       }
+    }
+
+    // A bank payment goes back to the customer from the account it came in to.
+    for (const p of payments.filter((x) => x.method === 'bank' && x.bankAccountId !== null)) {
+      await recordMovement(tx, {
+        bankAccountId: p.bankAccountId as number,
+        direction: 'out',
+        amount: p.amount,
+        sourceType: 'pos_void',
+        sourceId: p.id,
+        notes: `Void of ${t.transactionNumber}`,
+      });
     }
 
     await pos.setVoided(tx, t.id);

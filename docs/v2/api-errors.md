@@ -70,6 +70,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `BOOK_IN_USE`
 - `CATEGORY_IN_USE`
 - `DEPENDENCY_CONFLICT`
+- `DUPLICATE_ACCOUNT_NUMBER`
 - `DUPLICATE_AUTHOR`
 - `DUPLICATE_BRANCH_NAME`
 - `DUPLICATE_CATEGORY`
@@ -80,6 +81,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `DUPLICATE_SUPPLIER_NAME`
 - `DUPLICATE_USERNAME`
 - `IDEMPOTENCY_CONFLICT`
+- `NOT_MATCHED`
 - `PUBLISHER_IN_USE`
 - `VERSION_CONFLICT`
 
@@ -93,6 +95,8 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `ALREADY_VOIDED`
 - `APPROVAL_REQUIRED`
 - `AUTHOR_NOT_SELECTABLE`
+- `BANK_ACCOUNT_IN_USE`
+- `BANK_ENTRY_CLEARED`
 - `BOOK_INACTIVE`
 - `BRANCH_INACTIVE`
 - `CANNOT_CANCEL_WITH_RECEIPTS`
@@ -122,6 +126,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `INVALID_STATE`
 - `LINE_ITEM_MISMATCH`
 - `LOYALTY_REQUIRES_CUSTOMER`
+- `MATCH_MISMATCH`
 - `MISSING_TRANSACTION_REFERENCE`
 - `ORDER_ALREADY_FULFILLED`
 - `ORDER_ALREADY_PAID`
