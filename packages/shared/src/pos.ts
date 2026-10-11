@@ -30,6 +30,8 @@ export const PosPaymentSchema = z.object({
   method: z.string(),
   amount: z.number(),
   reference: z.string().nullable(),
+  /** The bank account a bank payment went to (#21). */
+  bankAccountId: z.number().int().nullable(),
   createdAt: z.string(),
 });
 
@@ -96,6 +98,8 @@ export const PosPaymentInputSchema = z.object({
   method: PosPaymentMethodSchema,
   amount: MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be more than zero'),
   reference: z.string().max(200).optional(),
+  /** A bank payment's account; required while bank accounts are on (#21). */
+  bankAccountId: z.number().int().positive().optional(),
 });
 export type PosPaymentInput = z.infer<typeof PosPaymentInputSchema>;
 

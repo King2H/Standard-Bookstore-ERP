@@ -57,6 +57,7 @@ export interface PosPaymentRecord {
   method: string;
   amount: Money;
   reference: string | null;
+  bankAccountId: number | null;
   createdAt: Date;
 }
 
@@ -64,6 +65,7 @@ export interface PaymentLine {
   method: PosPaymentMethod;
   amount: Money;
   reference: string | null;
+  bankAccountId?: number | null;
 }
 
 export interface SaleLine {

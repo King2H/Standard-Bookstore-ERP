@@ -2,9 +2,10 @@ import { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
-import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { accountForPayment, bankAccountsEnabled, recordMovement } from '../bankAccount/bankAccount.service.js';
 import * as customers from '../customer/customer.repository.js';
 import { checkNotWrittenOff, reopenOnRefund, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as policy from './payments.policy.js';
@@ -49,16 +50,6 @@ function window(paging: Paging) {
 function foundOrder(order: OrderForPayment | undefined): OrderForPayment {
   if (order === undefined) throw new NotFoundError('Order');
   return order;
-}
-
-/** An active bank account of the branch the money moves in. */
-async function checkBankAccount(q: Queryable, bankAccountId: number, branchId: number): Promise<void> {
-  const account = await payments.findBankAccount(q, bankAccountId);
-  if (!account) throw new BusinessError('INVALID_BANK_ACCOUNT', 'Bank account not found');
-  if (!account.isActive) throw new BusinessError('INVALID_BANK_ACCOUNT', 'Bank account is inactive');
-  if (account.branchId !== branchId) {
-    throw new BusinessError('INVALID_BANK_ACCOUNT', 'Bank account does not belong to the current branch');
-  }
 }
 
 /**
@@ -121,13 +112,10 @@ export async function getOrderBalance(orderId: string): Promise<OrderBalanceReco
  * credit and loyalty points are spent under lock too.
  */
 export async function createPayment(actor: Actor, p: NewPayment): Promise<PaymentRecord> {
-  if (p.paymentMethod === 'bank' && p.bankAccountId === null) {
-    throw new ValidationError('bank_account_id is required for bank transfer payments');
-  }
-
   const paymentId = await withTransaction({}, async (tx) => {
     // The money comes in at the session branch, which must be the order's (checkCanPay).
-    if (p.paymentMethod === 'bank' && p.bankAccountId !== null) await checkBankAccount(tx, p.bankAccountId, actor.branchId);
+    // With bank accounts on, a bank payment names an active account of it (#21).
+    const bankAccountId = p.paymentMethod === 'bank' ? await accountForPayment(tx, p.bankAccountId, actor.branchId) : null;
     const order = foundOrder(await payments.findOrder(tx, p.orderId, { forUpdate: true }));
     const total = policy.checkCanPay(order, actor.branchId, p.amount, await payments.takings(tx, order.id));
     await checkNotWrittenOff(tx, 'order_credit_sale', order.id);
@@ -136,12 +124,12 @@ export async function createPayment(actor: Actor, p: NewPayment): Promise<Paymen
     if (p.paymentMethod === 'store_credit') await checkStoreCredit(tx, order, p.amount);
     if (p.paymentMethod === 'loyalty_points') await spendPoints(tx, order, p.amount, reference);
 
-    const id = await payments.insertPayment(tx, { ...p, reference, processedBy: actor.staffId });
+    const id = await payments.insertPayment(tx, { ...p, bankAccountId, reference, processedBy: actor.staffId });
     if (p.paymentMethod === 'store_credit') {
       await customers.moveStoreCredit(tx, order.customerId as number, p.amount, { direction: 'debit', refType: 'order_payment', refId: id });
     }
-    if (p.paymentMethod === 'bank' && p.bankAccountId !== null) {
-      await payments.insertBankReconciliation(tx, { bankAccountId: p.bankAccountId, amount: p.amount, paymentId: id });
+    if (bankAccountId !== null) {
+      await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'order_payment', sourceId: id, notes: `Payment ${reference}` });
     }
 
     const status = await settleOrder(tx, order, total, 'payment');
@@ -211,8 +199,8 @@ export async function refund(actor: Actor, paymentId: string, r: NewRefund): Pro
     policy.checkCanRefund(payment, earlier, r.refundAmount);
     // A written-off debt is closed: refunding would make it owed again.
     await checkNotWrittenOff(tx, 'order_credit_sale', order.id);
-    const bankAccountId = policy.refundBankAccount(payment, r.bankAccountId);
-    if (bankAccountId !== null) await checkBankAccount(tx, bankAccountId, order.branchId);
+    const refundTo = policy.refundBankAccount(payment, r.bankAccountId, bankAccountsEnabled());
+    const bankAccountId = refundTo === null ? null : await accountForPayment(tx, refundTo, order.branchId);
 
     const refund = await payments.insertRefund(tx, {
       payment,
@@ -222,7 +210,7 @@ export async function refund(actor: Actor, paymentId: string, r: NewRefund): Pro
       processedBy: actor.staffId,
     });
     if (bankAccountId !== null) {
-      await payments.insertBankReconciliation(tx, { bankAccountId, amount: r.refundAmount, refundId: refund.id });
+      await recordMovement(tx, { bankAccountId, direction: 'out', amount: r.refundAmount, sourceType: 'order_refund', sourceId: refund.id, notes: `Refund of ${payment.paymentReference}` });
     }
     if (order.customerId !== null && payment.paymentMethod === 'store_credit') {
       await customers.moveStoreCredit(tx, order.customerId, r.refundAmount, { direction: 'credit', refType: 'order_refund', refId: refund.id });

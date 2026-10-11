@@ -171,12 +171,13 @@ export async function cleanBranchConfig(branchId: number): Promise<void> {
  * Cleans bank_accounts and bank_reconciliation rows for a specific branch.
  */
 export async function cleanBankAccounts(branchId: number): Promise<void> {
-  await db.query(
-    `DELETE FROM bank_reconciliation WHERE bank_account_id IN (
-       SELECT id FROM bank_accounts WHERE branch_id = $1
-     )`,
-    [branchId],
-  );
+  const accounts = `SELECT id FROM bank_accounts WHERE branch_id = $1`;
+  await db.query(`DELETE FROM bank_statement_lines WHERE bank_account_id IN (${accounts})`, [branchId]);
+  await db.query(`DELETE FROM bank_reconciliation WHERE bank_account_id IN (${accounts})`, [branchId]);
+  // Payments that went to the accounts keep their rows; only the link goes.
+  for (const table of ['order_payments', 'order_refunds', 'transaction_payments', 'refunds', 'exchange_settlement_entries', 'supplier_payments']) {
+    await db.query(`UPDATE ${table} SET bank_account_id = NULL WHERE bank_account_id IN (${accounts})`, [branchId]);
+  }
   await db.query(`DELETE FROM bank_accounts WHERE branch_id = $1`, [branchId]);
 }
 

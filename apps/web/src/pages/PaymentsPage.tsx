@@ -6,6 +6,8 @@ import { useToast } from '../components/Toast.js';
 import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
+import BankAccountSelect from '../components/BankAccountSelect.js';
+import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
 import { paymentMethodLabel, type PaymentMethodCode } from '../lib/paymentMethods.js';
 
 type Role = string;
@@ -40,9 +42,6 @@ interface UnpaidOrder {
   sourceType?: string;
 }
 interface UnpaidOrdersResponse { items: UnpaidOrder[]; total: number; page: number; totalPages: number; }
-interface BankAccount {
-  id: number; accountName: string; bankName: string; maskedAccountNumber: string; currency: string;
-}
 
 const STATUS_COLORS: Record<string, string> = {
   success: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
@@ -150,14 +149,9 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
     return () => { cancelled = true; };
   }, [initialContext.orderId, initialContext.sourceType]);
 
-  // Fetch active bank accounts for this branch — only when Bank method is selected
-  const { data: bankAccountsData } = useQuery<{ items: BankAccount[] }>({
-    queryKey: ['bank-accounts-for-payment', branchId],
-    queryFn: () => api.get(`/branches/${branchId}/bank-accounts`),
-    enabled: paymentMethod === 'bank',
-    staleTime: 5 * 60 * 1000,
-  });
-  const bankAccounts = bankAccountsData?.items ?? [];
+  // With Bank Accounts on, a bank payment names the account it went to (#21).
+  const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(branchId, paymentMethod === 'bank');
+  const missingBankAccount = paymentMethod === 'bank' && bankAccountRequired && !selectedBankAccountId;
 
   // Fetch customer store credit balance — only when Store Credit is selected and order has a customer
   const { data: customerData } = useQuery<{
@@ -197,7 +191,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
 
   // POS credit-sale payment collection (routes to /api/pos/transactions/:id/payment)
   const posPayMut = useMutation({
-    mutationFn: ({ txId, payments }: { txId: string; payments: { method: string; amount: number; reference?: string }[] }) =>
+    mutationFn: ({ txId, payments }: { txId: string; payments: { method: string; amount: number; reference?: string; bankAccountId?: number }[] }) =>
       api.post<unknown>(`/pos/transactions/${txId}/payment`, { payments }),
     onSuccess: () => {
       showToast('POS Credit Sale payment collected', 'success');
@@ -302,7 +296,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
 
   function submitPayment() {
     if (!selectedOrder || !amount || !paymentMethod) { showToast('Fill all required fields', 'error'); return; }
-    if (paymentMethod === 'bank' && !selectedBankAccountId) {
+    if (missingBankAccount) {
       showToast('Select a bank account for bank transfer payments', 'error');
       return;
     }
@@ -311,7 +305,12 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
     if (selectedOrder.sourceType === 'pos') {
       posPayMut.mutate({
         txId: selectedOrder.id,
-        payments: [{ method: paymentMethod as 'cash' | 'bank' | 'mobile' | 'store_credit' | 'loyalty_points', amount: parseFloat(amount), reference: txRef || undefined }],
+        payments: [{
+          method: paymentMethod as 'cash' | 'bank' | 'mobile' | 'store_credit' | 'loyalty_points',
+          amount: parseFloat(amount),
+          reference: txRef || undefined,
+          bankAccountId: paymentMethod === 'bank' ? selectedBankAccountId ?? undefined : undefined,
+        }],
       });
       return;
     }
@@ -494,30 +493,18 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
               columns={3}
             />
 
-            {/* Bank account selector — shown only when Bank Transfer is selected */}
-            {paymentMethod === 'bank' && (
+            {/* Bank account selector: Bank Transfer, with Bank Accounts on (#21) */}
+            {paymentMethod === 'bank' && bankAccountRequired && (
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Bank Account <span className="text-red-500">*</span>
                 </label>
-                {bankAccounts.length === 0 ? (
-                  <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300">
-                    ⚠️ No active bank accounts registered for this branch.
-                    <a href="#" onClick={e => { e.preventDefault(); }} className="ml-1 underline">Add one in Bank Accounts.</a>
-                  </div>
-                ) : (
-                  <select
-                    value={selectedBankAccountId ?? ''}
-                    onChange={e => setSelectedBankAccountId(e.target.value ? parseInt(e.target.value) : null)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">— Select bank account —</option>
-                    {bankAccounts.map(ba => (
-                      <option key={ba.id} value={ba.id}>
-                        {ba.bankName} — {ba.accountName} ({ba.maskedAccountNumber}) · {ba.currency}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <BankAccountSelect
+                  accounts={bankAccounts}
+                  value={selectedBankAccountId}
+                  onChange={setSelectedBankAccountId}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
             )}
 
@@ -595,7 +582,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
               (createMut.isPending || posPayMut.isPending || receivableCollectMut.isPending) ||
               !amount ||
               parseFloat(amount) <= 0 ||
-              (paymentMethod === 'bank' && !selectedBankAccountId) ||
+              missingBankAccount ||
               (paymentMethod === 'store_credit' && (!selectedOrder?.customerName || (customerData != null && parseFloat(amount) > customerData.storeCreditBalance))) ||
               (paymentMethod === 'loyalty_points' && (!selectedOrder?.customerName || (customerData != null && parseFloat(amount) > customerData.loyaltyBalance)))
             }

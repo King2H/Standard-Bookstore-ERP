@@ -83,6 +83,7 @@ export interface SupplierPaymentRecord {
   poId: string;
   amount: Money;
   paymentMethod: string;
+  bankAccountId: number | null;
   source: 'manual' | 'auto_on_receipt';
   notes: string | null;
   createdBy: number;

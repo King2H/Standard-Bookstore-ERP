@@ -266,20 +266,3 @@ export async function insertLedgerEntry(q: Queryable, e: LedgerEntry): Promise<s
   return String(row.id);
 }
 
-/** An uncleared incoming bank movement, to be matched against the statement. */
-export async function insertBankReconciliation(
-  q: Queryable,
-  e: { bankAccountId: number; paymentRefId: string; amount: Money; notes: string },
-): Promise<void> {
-  await q
-    .insertInto('bank_reconciliation')
-    .values({
-      bank_account_id: e.bankAccountId,
-      payment_ref_id: e.paymentRefId,
-      amount: e.amount.toFixed(2),
-      direction: 'in',
-      status: 'uncleared',
-      notes: e.notes,
-    })
-    .execute();
-}

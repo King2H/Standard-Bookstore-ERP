@@ -32,8 +32,8 @@ async function ensureInventory(bookId: number, locationId: number, qty = 50) {
 
 async function createTestBankAccount(branchId: number): Promise<number> {
   const r = await db.query(
-    `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, currency, is_active)
-     VALUES ($1, 'Test Bank', 'CBE', 'ACC-TEST-001', 'ETB', true) RETURNING id`,
+    `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, account_number_hash, currency, is_active)
+     VALUES ($1, 'Test Bank', 'CBE', 'ACC-TEST-001', md5(random()::text), 'ETB', true) RETURNING id`,
     [branchId],
   );
   return r.rows[0].id as number;
@@ -173,7 +173,8 @@ describe('Post-MVP Hardening', () => {
   // ── Bank Transfer Validation ────────────────────────────────────────────────
 
   describe('Bank Transfer Validation', () => {
-    it('6. Bank payment without bank_account_id → 400', async () => {
+    it('6. Bank payment without bank_account_id → 400 while bank accounts are on', async () => {
+      process.env.FEATURE_BANK_ACCOUNTS = 'true';
       const orderId = await createTestOrder(adminToken, branchId, bookId);
       // Confirm order first
       await request(getTestApp())
@@ -188,6 +189,19 @@ describe('Post-MVP Hardening', () => {
         .send({ orderId, amount: bookPrice, paymentMethod: 'bank' });
 
       expect(res.status).toBe(400);
+      delete process.env.FEATURE_BANK_ACCOUNTS;
+    });
+
+    it('6b. Bank payment needs no account while bank accounts are off (#21; was: 400, bank payments impossible)', async () => {
+      delete process.env.FEATURE_BANK_ACCOUNTS;
+      const orderId = await createCreditTestOrder(adminToken, branchId, bookId, customerId);
+      const res = await request(getTestApp())
+        .post('/api/v1/payments')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ orderId, amount: bookPrice, paymentMethod: 'bank' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.bankAccountId).toBeNull();
     });
 
     it('7. Bank payment with valid bank_account_id → 201 + reconciliation entry created', async () => {
@@ -204,7 +218,7 @@ describe('Post-MVP Hardening', () => {
 
       // Verify reconciliation entry was created
       const reconRes = await db.query(
-        `SELECT * FROM bank_reconciliation WHERE bank_account_id = $1 AND payment_ref_id = $2`,
+        `SELECT * FROM bank_reconciliation WHERE bank_account_id = $1 AND source_type = 'order_payment' AND source_id = $2`,
         [bankAccountId, res.body.id],
       );
       expect(reconRes.rows.length).toBe(1);
@@ -216,8 +230,8 @@ describe('Post-MVP Hardening', () => {
       // Create a bank account in a different branch
       const otherBranch = await createTestBranch({ name: 'Hardening Test Other Branch' });
       const otherBaRes = await db.query(
-        `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, currency, is_active)
-         VALUES ($1, 'Other Bank', 'CBE', 'ACC-OTHER-001', 'ETB', true) RETURNING id`,
+        `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, account_number_hash, currency, is_active)
+         VALUES ($1, 'Other Bank', 'CBE', 'ACC-OTHER-001', md5(random()::text), 'ETB', true) RETURNING id`,
         [otherBranch.branchId],
       );
       const otherBaId = otherBaRes.rows[0].id as number;

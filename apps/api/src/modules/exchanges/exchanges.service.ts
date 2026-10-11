@@ -5,6 +5,7 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { AppError, BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { accountForPayment, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxReturnValueWithoutAuth } from '../config/config.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -96,7 +97,7 @@ async function spendFromAccounts(q: Queryable, customerId: number | null, paymen
  */
 export async function createExchange(actor: Actor, input: NewExchange): Promise<ExchangeRecord> {
   checkTender(
-    input.payments.map((p) => ({ method: p.method, amount: p.amount, reference: p.reference })),
+    input.payments.map((p) => ({ method: p.method, amount: p.amount, reference: p.reference, bankAccountId: p.bankAccountId })),
     input.customerId,
   );
 
@@ -166,7 +167,14 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
 
     await spendFromAccounts(tx, input.customerId, input.payments, reference);
     for (const p of input.payments) {
-      await exchanges.insertEntry(tx, { exchangeId: id, entryType: 'cash_payment', amount: p.amount, method: p.method, note: p.reference, by: actor.staffId });
+      // With bank accounts on, a bank payment names an active account of the branch (#21).
+      const bankAccountId = p.method === 'bank' ? await accountForPayment(tx, p.bankAccountId, input.branchId) : null;
+      const entryId = await exchanges.insertEntry(tx, {
+        exchangeId: id, entryType: 'cash_payment', amount: p.amount, method: p.method, note: p.reference, by: actor.staffId, bankAccountId,
+      });
+      if (bankAccountId !== null) {
+        await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'exchange_payment', sourceId: entryId, notes: `Exchange ${reference}` });
+      }
     }
     const credit = type === 'Customer_Pays' ? net.minus(paid) : Money.ZERO;
     if (credit.greaterThan(0) && input.customerId !== null) {
@@ -265,6 +273,12 @@ export async function voidExchange(actor: Actor, id: string, reason: string): Pr
       } else {
         const method = p.method ?? 'cash';
         handedBack[method] = Money.of(handedBack[method] ?? 0).plus(p.amount).toNumber();
+        // A bank payment goes back from the account it came in to.
+        if (method === 'bank' && p.bankAccountId !== null) {
+          await recordMovement(tx, {
+            bankAccountId: p.bankAccountId, direction: 'out', amount: p.amount, sourceType: 'exchange_void', sourceId: p.id, notes: `Void of ${e.exchangeReference}`,
+          });
+        }
       }
     }
     const cashRefund = entries.filter((x) => x.entryType === 'cash_refund');

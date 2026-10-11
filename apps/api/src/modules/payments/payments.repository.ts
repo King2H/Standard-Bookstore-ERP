@@ -180,27 +180,6 @@ export async function insertRefund(
 
 // ── Bank ──────────────────────────────────────────────────────────────────────
 
-export async function findBankAccount(q: Queryable, id: number): Promise<{ isActive: boolean; branchId: number } | undefined> {
-  const row = await q.selectFrom('bank_accounts').select(['is_active', 'branch_id']).where('id', '=', id).executeTakeFirst();
-  return row && { isActive: row.is_active, branchId: row.branch_id };
-}
-
-/** An uncleared bank movement, to be matched against the statement. */
-export async function insertBankReconciliation(
-  q: Queryable,
-  e: { bankAccountId: number; amount: Money } & ({ paymentId: string } | { refundId: string }),
-): Promise<void> {
-  await q
-    .insertInto('bank_reconciliation')
-    .values({
-      bank_account_id: e.bankAccountId,
-      amount: e.amount.toFixed(2),
-      status: 'uncleared',
-      ...('paymentId' in e ? { payment_ref_id: e.paymentId, direction: 'in' } : { refund_ref_id: e.refundId, direction: 'out' }),
-    })
-    .execute();
-}
-
 // ── Lists ─────────────────────────────────────────────────────────────────────
 
 function whereAll(conditions: RawBuilder<unknown>[]): RawBuilder<unknown> {

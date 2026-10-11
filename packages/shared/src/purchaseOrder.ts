@@ -60,6 +60,8 @@ export const SupplierPaymentSchema = z.object({
   poId: z.string(),
   amount: z.number(),
   paymentMethod: z.string(),
+  /** The bank account a bank payment went out of (#21). */
+  bankAccountId: z.number().int().nullable(),
   /** auto_on_receipt: a cash-terms order paying for what arrived. */
   source: z.enum(['manual', 'auto_on_receipt']),
   notes: z.string().nullable(),
@@ -230,6 +232,8 @@ export const CreateSupplierPaymentRequestSchema = z.object({
   amount: PayableAmountSchema,
   paymentMethod: SupplierPaymentMethodSchema.default('cash'),
   notes: z.string().max(1000).nullable().optional(),
+  /** A bank payment's account; required while bank accounts are on (#21). */
+  bankAccountId: z.number().int().positive().nullable().optional(),
 });
 export type CreateSupplierPaymentRequest = z.infer<typeof CreateSupplierPaymentRequestSchema>;
 

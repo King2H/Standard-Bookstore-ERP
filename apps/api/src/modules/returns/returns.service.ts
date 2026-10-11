@@ -5,6 +5,7 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxReturnValueWithoutAuth, getRefundMethodAfterWindow, getReturnWindowDays } from '../config/config.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -170,7 +171,15 @@ export async function createReturn(
         value: l.value,
       });
     }
-    for (const p of parts) await returns.insertRefund(tx, returnId, p);
+    // A bank refund goes out of the account the sale was paid into (#21).
+    const bankAccountId = parts.some((p) => p.method === 'bank') ? await returns.lastBankAccount(tx, sale.id) : null;
+    for (const p of parts) {
+      const account = p.method === 'bank' ? bankAccountId : null;
+      const refundId = await returns.insertRefund(tx, returnId, p, account);
+      if (account !== null) {
+        await recordMovement(tx, { bankAccountId: account, direction: 'out', amount: p.amount, sourceType: 'return_refund', sourceId: refundId, notes: `Return ${returnNumber}` });
+      }
+    }
 
     await payBack(tx, sale, returnId, refunded);
     // What all returns on the sale took back, this one included.

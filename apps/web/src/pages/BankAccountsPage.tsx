@@ -20,39 +20,69 @@ interface BankAccount {
   currency: string;
   isActive: boolean;
   createdAt: string;
+  hasMovements: boolean;
 }
 
-interface ReconciliationEntry {
-  id: number;
-  bankAccountId: number;
-  paymentRefId: number | null;
-  refundRefId: number | null;
-  amount: string;
+/** A bank movement the system recorded: a payment in, a refund or supplier payment out (#21). */
+interface BankEntry {
+  id: string;
+  sourceType: string;
+  amount: number;
   direction: 'in' | 'out';
-  status: 'uncleared' | 'cleared' | 'unmatched';
-  statementDate: string | null;
+  status: 'uncleared' | 'cleared';
   notes: string | null;
   createdAt: string;
 }
 
+/** A line of the bank's statement. */
+interface StatementLine {
+  id: string;
+  statementDate: string;
+  amount: number;
+  direction: 'in' | 'out';
+  reference: string | null;
+  description: string | null;
+  entryId: string | null;
+}
+
+interface StatementLineInput { statementDate: string; amount: number; direction: 'in' | 'out'; reference?: string; description?: string }
+
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
+// Accounts are in ETB (owner decision 3a; foreign currency: #106).
 const createSchema = z.object({
   accountName:   z.string().min(1, 'Required'),
   bankName:      z.string().min(1, 'Required'),
-  accountNumber: z.string().min(1, 'Required'),
+  accountNumber: z.string().min(4, 'At least 4 characters'),
   iban:          z.string().optional(),
-  currency:      z.string().length(3, 'Must be 3-letter ISO code').toUpperCase(),
 });
 type CreateForm = z.infer<typeof createSchema>;
 
-const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+/**
+ * Statement lines pasted from the bank's export, one per line:
+ * date (YYYY-MM-DD), amount, in|out, reference, description.
+ */
+export function parseStatement(text: string): StatementLineInput[] {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '')
+    .map((l) => {
+      const [statementDate, amount, direction, reference, ...rest] = l.split(',').map((x) => x.trim());
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(statementDate ?? '') || !(Number(amount) > 0) || (direction !== 'in' && direction !== 'out')) {
+        throw new Error(`Cannot read: "${l}"`);
+      }
+      return {
+        statementDate,
+        amount: Number(amount),
+        direction,
+        ...(reference ? { reference } : {}),
+        ...(rest.length ? { description: rest.join(', ') } : {}),
+      };
+    });
+}
 
-const STATUS_COLORS: Record<string, string> = {
-  uncleared: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300',
-  cleared:   'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400',
-  unmatched: 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-400',
-};
+const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -64,11 +94,10 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
   const [showForm, setShowForm] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
-  const [reconPage, setReconPage] = useState(1);
-  const [reconStatusFilter, setReconStatusFilter] = useState('');
 
-  const canWrite = ['Super_Admin', 'Admin', 'Manager'].includes(userRole ?? '');
-  const canReconcile = ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
+  // The API's roles: Admin and Manager manage accounts; Finance_Officer too reconciles.
+  const canWrite = ['Admin', 'Manager'].includes(userRole ?? '');
+  const canReconcile = ['Admin', 'Manager', 'Finance_Officer'].includes(userRole ?? '');
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -87,27 +116,11 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
     enabled: !!getAccessToken() && selectedBranchId !== null,
   });
 
-  const { data: reconData, isLoading: reconLoading } = useQuery({
-    queryKey: ['reconciliation', selectedAccountId, reconPage, reconStatusFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        bankAccountId: String(selectedAccountId),
-        page: String(reconPage),
-        pageSize: '20',
-      });
-      if (reconStatusFilter) params.set('status', reconStatusFilter);
-      return api.get<{ items: ReconciliationEntry[]; total: number; totalPages: number }>(
-        `/branches/${selectedBranchId}/reconciliation?${params}`,
-      );
-    },
-    enabled: !!getAccessToken() && selectedAccountId !== null && selectedBranchId !== null,
-  });
-
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const createMutation = useMutation({
     mutationFn: (body: CreateForm) =>
-      api.post<BankAccount>(`/branches/${selectedBranchId}/bank-accounts`, body),
+      api.post<BankAccount>(`/branches/${selectedBranchId}/bank-accounts`, { ...body, iban: body.iban || undefined }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank-accounts', selectedBranchId] });
       setShowForm(false); reset(); setApiError(null);
@@ -120,12 +133,12 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
     },
   });
 
-  const deactivateMutation = useMutation({
-    mutationFn: (id: number) =>
-      api.post(`/branches/${selectedBranchId}/bank-accounts/${id}/deactivate`),
-    onSuccess: () => {
+  const setActiveMutation = useMutation({
+    mutationFn: ({ id, active }: { id: number; active: boolean }) =>
+      api.post(`/branches/${selectedBranchId}/bank-accounts/${id}/${active ? 'reactivate' : 'deactivate'}`),
+    onSuccess: (_, { active }) => {
       queryClient.invalidateQueries({ queryKey: ['bank-accounts', selectedBranchId] });
-      showToast('Bank account deactivated');
+      showToast(active ? 'Bank account reactivated' : 'Bank account deactivated');
     },
     onError: (err: unknown) => {
       const e = err as { message?: string };
@@ -133,22 +146,9 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
     },
   });
 
-  const clearMutation = useMutation({
-    mutationFn: ({ entryId, paymentRefId }: { entryId: number; paymentRefId: number | null }) =>
-      api.put(`/branches/${selectedBranchId}/reconciliation/${entryId}`, { paymentRefId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reconciliation', selectedAccountId] });
-      showToast('Entry cleared');
-    },
-    onError: (err: unknown) => {
-      const e = err as { message?: string };
-      showToast(e.message ?? 'Failed to clear entry', 'error');
-    },
-  });
-
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
-    defaultValues: { accountName: '', bankName: '', accountNumber: '', iban: '', currency: 'USD' },
+    defaultValues: { accountName: '', bankName: '', accountNumber: '', iban: '' },
   });
 
   return (
@@ -226,11 +226,6 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
                     <input {...register('accountNumber')} placeholder="Account number" className={inputCls} />
                     {errors.accountNumber && <p className="text-red-500 text-xs mt-1">{errors.accountNumber.message}</p>}
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Currency *</label>
-                    <input {...register('currency')} placeholder="USD" maxLength={3} className={inputCls} />
-                    {errors.currency && <p className="text-red-500 text-xs mt-1">{errors.currency.message}</p>}
-                  </div>
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">IBAN (optional)</label>
                     <input {...register('iban')} placeholder="e.g. GB29NWBK60161331926819" className={inputCls} />
@@ -300,13 +295,13 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
                           </span>
                         </td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          {canWrite && acct.isActive && (
+                          {canWrite && (
                             <button
-                              onClick={() => deactivateMutation.mutate(acct.id)}
-                              disabled={deactivateMutation.isPending}
-                              className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-xs font-medium disabled:opacity-50 transition-colors"
+                              onClick={() => setActiveMutation.mutate({ id: acct.id, active: !acct.isActive })}
+                              disabled={setActiveMutation.isPending}
+                              className={`${acct.isActive ? 'text-red-500 dark:text-red-400 hover:text-red-700' : 'text-green-600 dark:text-green-400 hover:text-green-800'} text-xs font-medium disabled:opacity-50 transition-colors`}
                             >
-                              Deactivate
+                              {acct.isActive ? 'Deactivate' : 'Reactivate'}
                             </button>
                           )}
                         </td>
@@ -321,124 +316,154 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
             )}
           </div>
 
-          {/* ── Reconciliation panel ────────────────────────────────────── */}
+          {/* ── Reconciliation panel (owner decision 1a) ─────────────────── */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Reconciliation
-                {selectedAccountId && (
-                  <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">
-                    — Account #{selectedAccountId}
-                  </span>
-                )}
-              </h2>
-              <select
-                value={reconStatusFilter}
-                onChange={e => { setReconStatusFilter(e.target.value); setReconPage(1); }}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="">All statuses</option>
-                <option value="uncleared">Uncleared</option>
-                <option value="cleared">Cleared</option>
-                <option value="unmatched">Unmatched</option>
-              </select>
-            </div>
-
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Reconciliation</h2>
             {!selectedAccountId ? (
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center shadow-sm">
-                <p className="text-sm text-gray-400 dark:text-gray-500">Select an account to view reconciliation entries</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">Select an account to reconcile its statement</p>
               </div>
-            ) : reconLoading ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>
             ) : (
-              <>
-                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                      <tr>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Amount</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Dir</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Status</th>
-                        {canReconcile && (
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Action</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {reconData?.items.map(entry => (
-                        <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                          <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-                            {entry.statementDate ?? new Date(entry.createdAt).toLocaleDateString()}
-                          </td>
-                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                            {parseFloat(entry.amount).toFixed(2)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-medium ${
-                              entry.direction === 'in'
-                                ? 'text-green-600 dark:text-green-400'
-                                : 'text-red-600 dark:text-red-400'
-                            }`}>
-                              {entry.direction === 'in' ? '↑ IN' : '↓ OUT'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[entry.status]}`}>
-                              {entry.status}
-                            </span>
-                          </td>
-                          {canReconcile && (
-                            <td className="px-4 py-3">
-                              {entry.status !== 'cleared' && (
-                                <button
-                                  onClick={() => clearMutation.mutate({ entryId: entry.id, paymentRefId: null })}
-                                  disabled={clearMutation.isPending}
-                                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 transition-colors"
-                                >
-                                  Clear
-                                </button>
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {(!reconData?.items || reconData.items.length === 0) && (
-                    <p className="text-center text-gray-500 dark:text-gray-400 text-sm py-8">No reconciliation entries</p>
-                  )}
-                </div>
-
-                {/* Pagination */}
-                {reconData && reconData.totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-3">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Page {reconPage} of {reconData.totalPages}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setReconPage(p => Math.max(1, p - 1))}
-                        disabled={reconPage === 1}
-                        className="px-3 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() => setReconPage(p => Math.min(reconData.totalPages, p + 1))}
-                        disabled={reconPage === reconData.totalPages}
-                        className="px-3 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
+              <Reconciliation branchId={selectedBranchId} accountId={selectedAccountId} canReconcile={canReconcile} />
             )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Reconciliation ────────────────────────────────────────────────────────────
+// The bank's statement lines on one side, the system's open movements on the
+// other; a line is matched to one movement and both are cleared (#21).
+
+function Reconciliation({ branchId, accountId, canReconcile }: { branchId: number; accountId: number; canReconcile: boolean }) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const [statement, setStatement] = useState('');
+  const [matching, setMatching] = useState<string | null>(null);
+  const base = `/branches/${branchId}/bank-accounts/${accountId}`;
+
+  const { data: lines } = useQuery({
+    queryKey: ['bank-lines', accountId],
+    queryFn: () => api.get<{ items: StatementLine[] }>(`${base}/statement-lines?pageSize=100`),
+    enabled: !!getAccessToken(),
+  });
+  const { data: open } = useQuery({
+    queryKey: ['bank-entries', accountId],
+    queryFn: () => api.get<{ items: BankEntry[] }>(`${base}/entries?status=uncleared&pageSize=100`),
+    enabled: !!getAccessToken(),
+  });
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['bank-lines', accountId] });
+    queryClient.invalidateQueries({ queryKey: ['bank-entries', accountId] });
+  };
+  const fail = (err: unknown) => showToast((err as { message?: string }).message ?? 'Failed', 'error');
+
+  const importMutation = useMutation({
+    mutationFn: (rows: StatementLineInput[]) =>
+      api.post<{ imported: number; matched: number; duplicates: number }>(`${base}/statement-lines`, { lines: rows }),
+    onSuccess: (r) => {
+      refresh();
+      setStatement('');
+      showToast(`Imported ${r.imported} line(s), ${r.matched} matched${r.duplicates ? `, ${r.duplicates} already imported` : ''}`);
+    },
+    onError: fail,
+  });
+  const matchMutation = useMutation({
+    mutationFn: ({ lineId, entryId }: { lineId: string; entryId: string }) => api.post(`${base}/statement-lines/${lineId}/match`, { entryId }),
+    onSuccess: () => { refresh(); setMatching(null); showToast('Matched'); },
+    onError: fail,
+  });
+  const unmatchMutation = useMutation({
+    mutationFn: (lineId: string) => api.post(`${base}/statement-lines/${lineId}/unmatch`),
+    onSuccess: () => { refresh(); showToast('Unmatched'); },
+    onError: fail,
+  });
+
+  const submitImport = () => {
+    try {
+      importMutation.mutate(parseStatement(statement));
+    } catch (err) {
+      fail(err);
+    }
+  };
+  const candidates = (l: StatementLine) => (open?.items ?? []).filter((e) => e.direction === l.direction && Math.abs(e.amount - l.amount) < 0.005);
+  const sign = (d: 'in' | 'out') => (d === 'in' ? '↑ IN' : '↓ OUT');
+
+  return (
+    <div className="space-y-4">
+      {canReconcile && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-sm space-y-2">
+          <label htmlFor="statement" className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+            Import statement lines: date, amount, in/out, bank reference, description (one per line)
+          </label>
+          <textarea id="statement" value={statement} onChange={(e) => setStatement(e.target.value)} rows={3}
+            placeholder="2026-10-11, 1500.00, in, FT26284XYZ, Transfer from customer" className={`${inputCls} font-mono text-xs`} />
+          <button onClick={submitImport} disabled={!statement.trim() || importMutation.isPending}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50">
+            Import
+          </button>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+        <h3 className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">Statement lines</h3>
+        <table className="w-full text-sm">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {(lines?.items ?? []).map((l) => (
+              <tr key={l.id}>
+                <td className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{l.statementDate}</td>
+                <td className="px-4 py-2 font-medium text-gray-900 dark:text-white">{l.amount.toFixed(2)}</td>
+                <td className="px-4 py-2 text-xs">{sign(l.direction)}</td>
+                <td className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{l.reference ?? l.description ?? ''}</td>
+                <td className="px-4 py-2 text-xs">
+                  {l.entryId !== null ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400">Matched</span>
+                      {canReconcile && (
+                        <button onClick={() => unmatchMutation.mutate(l.id)} className="text-gray-500 hover:text-red-600">Unmatch</button>
+                      )}
+                    </span>
+                  ) : matching === l.id ? (
+                    <select aria-label="Movement to match" defaultValue="" onChange={(e) => e.target.value && matchMutation.mutate({ lineId: l.id, entryId: e.target.value })}
+                      className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 text-xs">
+                      <option value="">{candidates(l).length ? 'Choose a movement…' : 'No open movement fits'}</option>
+                      {candidates(l).map((e) => (
+                        <option key={e.id} value={e.id}>{new Date(e.createdAt).toLocaleDateString()} · {e.notes ?? e.sourceType}</option>
+                      ))}
+                    </select>
+                  ) : canReconcile ? (
+                    <button onClick={() => setMatching(l.id)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800">Match</button>
+                  ) : (
+                    <span className="text-amber-600">Open</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(lines?.items ?? []).length === 0 && <p className="text-center text-gray-500 dark:text-gray-400 text-sm py-6">No statement lines imported</p>}
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+        <h3 className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+          Open movements (not yet on a statement)
+        </h3>
+        <table className="w-full text-sm">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {(open?.items ?? []).map((e) => (
+              <tr key={e.id}>
+                <td className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{new Date(e.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-2 font-medium text-gray-900 dark:text-white">{e.amount.toFixed(2)}</td>
+                <td className="px-4 py-2 text-xs">{sign(e.direction)}</td>
+                <td className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{e.notes ?? e.sourceType}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(open?.items ?? []).length === 0 && <p className="text-center text-gray-500 dark:text-gray-400 text-sm py-6">Every movement is matched</p>}
+      </div>
     </div>
   );
 }

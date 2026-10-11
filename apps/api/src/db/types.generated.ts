@@ -54,6 +54,7 @@ export interface Authors {
 export interface BankAccounts {
   account_name: string;
   account_number: string;
+  account_number_hash: string;
   bank_name: string;
   branch_id: number;
   created_at: Generated<Timestamp>;
@@ -72,8 +73,25 @@ export interface BankReconciliation {
   notes: string | null;
   payment_ref_id: Int8 | null;
   refund_ref_id: Int8 | null;
+  source_id: string;
+  source_type: string;
   statement_date: Timestamp | null;
   status: Generated<string>;
+}
+
+export interface BankStatementLines {
+  amount: Numeric;
+  bank_account_id: number;
+  description: string | null;
+  direction: string;
+  entry_id: Int8 | null;
+  id: Generated<Int8>;
+  imported_at: Generated<Timestamp>;
+  imported_by: number | null;
+  matched_at: Timestamp | null;
+  matched_by: number | null;
+  reference: string | null;
+  statement_date: Timestamp;
 }
 
 export interface BookAuthors {
@@ -297,6 +315,7 @@ export interface Exchanges {
 export interface ExchangeSettlementEntries {
   amount: Numeric;
   authorised_by: number | null;
+  bank_account_id: number | null;
   created_at: Generated<Timestamp>;
   currency: Generated<string>;
   entry_type: string;
@@ -626,6 +645,7 @@ export interface RefreshTokens {
 
 export interface Refunds {
   amount: Numeric;
+  bank_account_id: number | null;
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
   method: string;
@@ -725,6 +745,7 @@ export interface SupplierCreditNotes {
 
 export interface SupplierPayments {
   amount: Numeric;
+  bank_account_id: number | null;
   branch_id: number;
   created_at: Generated<Timestamp>;
   created_by: number;
@@ -781,6 +802,7 @@ export interface TransactionLineItems {
 
 export interface TransactionPayments {
   amount: Numeric;
+  bank_account_id: number | null;
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
   method: string;
@@ -812,6 +834,7 @@ export interface DB {
   authors: Authors;
   bank_accounts: BankAccounts;
   bank_reconciliation: BankReconciliation;
+  bank_statement_lines: BankStatementLines;
   book_authors: BookAuthors;
   book_branch_prices: BookBranchPrices;
   book_categories: BookCategories;
