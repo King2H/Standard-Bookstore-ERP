@@ -15,3 +15,17 @@ export async function nextDailyNumber(q: Queryable, series: string): Promise<str
     RETURNING period, last_value`.execute(q);
   return `${series}-${rows[0].period}-${String(rows[0].last_value).padStart(4, '0')}`;
 }
+
+/**
+ * The next number of a running series that never restarts, e.g. customer
+ * codes: the same counter table, with an empty period. Locked like the
+ * daily series, so concurrent documents never share a number (#68).
+ */
+export async function nextRunningNumber(q: Queryable, series: string): Promise<number> {
+  const { rows } = await sql<{ last_value: number }>`
+    INSERT INTO document_counters (series, period, last_value)
+    VALUES (${series}, '', 1)
+    ON CONFLICT (series, period) DO UPDATE SET last_value = document_counters.last_value + 1
+    RETURNING last_value`.execute(q);
+  return rows[0].last_value;
+}

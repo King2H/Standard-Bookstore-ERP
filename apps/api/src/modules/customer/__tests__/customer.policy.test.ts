@@ -4,7 +4,7 @@ import {
   checkAdjustmentAmount,
   checkEnoughPoints,
   checkEnoughStoreCredit,
-  nextCustomerCode,
+  customerCode,
   pointsEarned,
   statusesFor,
 } from '../customer.policy.js';
@@ -18,11 +18,11 @@ describe('statusesFor', () => {
   });
 });
 
-describe('nextCustomerCode', () => {
+describe('customerCode', () => {
   it('numbers codes from CUS-0001', () => {
-    expect(nextCustomerCode(0)).toBe('CUS-0001');
-    expect(nextCustomerCode(41)).toBe('CUS-0042');
-    expect(nextCustomerCode(12345)).toBe('CUS-12346');
+    expect(customerCode(1)).toBe('CUS-0001');
+    expect(customerCode(42)).toBe('CUS-0042');
+    expect(customerCode(12346)).toBe('CUS-12346');
   });
 });
 

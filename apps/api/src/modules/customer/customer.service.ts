@@ -2,6 +2,7 @@ import type { CreateCustomerRequest, MoneyInput, UpdateCustomerRequest } from '@
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
+import { nextRunningNumber } from '../../lib/documentNumber.js';
 import { nextStatus } from '../../lib/lifecycle.js';
 import { insertOutbox, insertOutboxEvent } from '../../lib/outbox.js';
 import { encryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
@@ -95,7 +96,7 @@ export async function createCustomer(actor: Actor, dto: CreateCustomerRequest): 
   return withTransaction({}, async (tx) => {
     await checkContactFree(tx, 'phone', phone);
     await checkContactFree(tx, 'email', email);
-    const customerCode = policy.nextCustomerCode(await customers.highestCustomerNumber(tx));
+    const customerCode = policy.customerCode(await nextRunningNumber(tx, 'CUS'));
     const id = await customers.insert(tx, {
       branchId: dto.branchId ?? null,
       customerCode,

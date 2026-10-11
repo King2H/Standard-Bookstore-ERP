@@ -177,11 +177,6 @@ export function orderTotals(lines: PricedLine[]): OrderTotals {
   };
 }
 
-/** `PREFIX-YYYYMMDD-NNNN` from the count of today's records (see #68). */
-export function dailyNumber(prefix: string, dateStr: string, countToday: number): string {
-  return `${prefix}-${dateStr}-${String(countToday + 1).padStart(4, '0')}`;
-}
-
 // ── Confirming an order ──────────────────────────────────────────────────────
 
 export const CASH_PAYMENT_METHODS = ['cash', 'bank', 'mobile', 'store_credit'] as const;

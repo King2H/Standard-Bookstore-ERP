@@ -163,15 +163,6 @@ export async function findContactOwner(
 }
 
 /** The highest number used in a CUS-nnnn code so far (0 when none). */
-export async function highestCustomerNumber(q: Queryable): Promise<number> {
-  const row = await q
-    .selectFrom('customers')
-    .select(sql<number>`COALESCE(MAX(CAST(SUBSTRING(customer_code FROM 5) AS INTEGER)), 0)`.as('n'))
-    .where(sql<boolean>`customer_code ~ '^CUS-[0-9]+$'`)
-    .executeTakeFirstOrThrow();
-  return Number(row.n);
-}
-
 /** Inserts the customer with empty loyalty and store-credit accounts. */
 export async function insert(q: Queryable, c: NewCustomer): Promise<number> {
   const { id } = await q

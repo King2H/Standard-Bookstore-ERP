@@ -129,16 +129,6 @@ export async function findBranchLocation(q: Queryable, branchId: number): Promis
 }
 
 /** Today's date (the database's, YYYY-MM-DD and YYYYMMDD) and how many rows of `table` were created today. */
-export async function countCreatedToday(
-  q: Queryable,
-  table: 'orders' | 'order_payments',
-): Promise<{ count: number; dateStr: string }> {
-  const { rows } = await sql<{ count: string; date_str: string }>`
-    SELECT COUNT(*) AS count, TO_CHAR(CURRENT_DATE, 'YYYYMMDD') AS date_str
-    FROM ${sql.table(table)} WHERE DATE(created_at) = CURRENT_DATE`.execute(q);
-  return { count: Number(rows[0].count), dateStr: rows[0].date_str };
-}
-
 export async function today(q: Queryable): Promise<string> {
   const { rows } = await sql<{ today: string }>`SELECT TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS today`.execute(q);
   return rows[0].today;
