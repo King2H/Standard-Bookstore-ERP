@@ -79,7 +79,7 @@ describe('Forced password change', () => {
     expect((await get('/api/v1/orders', refreshed.body.accessToken)).status).toBe(403);
   });
 
-  it('blocks an open session as soon as an admin resets the password', async () => {
+  it('ends an open session as soon as an admin resets the password (#21, owner decision 5a)', async () => {
     const staff = await createTestStaff({ username: `${STAFF_PREFIX}reset`, role: 'Manager', branchId });
     expect((await get('/api/v1/orders', staff.token)).status).toBe(200);
 
@@ -90,8 +90,8 @@ describe('Forced password change', () => {
     expect(reset.status).toBe(200);
 
     const after = await get('/api/v1/orders', staff.token);
-    expect(after.status).toBe(403);
-    expect(after.body.error).toBe('PASSWORD_CHANGE_REQUIRED');
+    expect(after.status).toBe(401);
+    expect(after.body.error).toBe('TOKEN_REVOKED');
   });
 
   it('lifts the block as soon as the password is changed, with the same token', async () => {

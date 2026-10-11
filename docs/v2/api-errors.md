@@ -48,6 +48,7 @@ a test fails if one is missing.
 - `ACCOUNT_INACTIVE`
 - `ACCOUNT_LOCKED`
 - `BRANCH_ACCESS_DENIED`
+- `BRANCH_INACTIVE` (signing in to, or refreshing in, a closed branch; switching to one answers 422)
 - `INVALID_CREDENTIALS`
 - `INVALID_TOKEN`
 - `MISSING_REFRESH_TOKEN`
@@ -55,6 +56,12 @@ a test fails if one is missing.
 - `SERVER_ERROR`
 - `TOKEN_EXPIRED`
 - `TOKEN_REVOKED`
+
+Signing in answers `INVALID_CREDENTIALS` to every failure: an unknown username, a wrong
+password, and a wrong password for a locked or deactivated account. `ACCOUNT_LOCKED` and
+`ACCOUNT_INACTIVE` come only with the right password. `TOKEN_REVOKED` also answers a
+request made with the access token of a session that has ended: logout, a password change,
+an admin reset, deactivation, or a refresh token presented again after it was replaced.
 
 ## Conflicts (409)
 

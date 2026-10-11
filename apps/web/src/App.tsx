@@ -26,7 +26,7 @@ import Layout from './components/Layout.js';
 import SessionWarning from './components/SessionWarning.js';
 import { getAccessToken } from './lib/api.js';
 import { logout as doLogout, restoreSession, switchBranch } from './lib/auth.js';
-import { setPasswordChangeRequiredHandler } from './lib/api.js';
+import { setPasswordChangeRequiredHandler, setSessionEndedHandler } from './lib/api.js';
 import { startInactivityTimer, stopInactivityTimer } from './lib/session.js';
 
 const queryClient = new QueryClient({
@@ -122,6 +122,12 @@ export default function App() {
   const handleWarning = useCallback((seconds: number) => {
     setWarningSeconds(seconds);
   }, []);
+
+  // A session ended on the server (#21) signs the user out here too.
+  useEffect(() => {
+    setSessionEndedHandler(handleInactivityLogout);
+    return () => setSessionEndedHandler(null);
+  }, [handleInactivityLogout]);
 
   useEffect(() => {
     if (isAuthenticated) {

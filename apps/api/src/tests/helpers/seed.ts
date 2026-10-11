@@ -34,13 +34,26 @@ export async function createTestStaff(opts: {
     [staffId, branchId, role],
   );
 
-  const token = jwt.sign(
-    { staffId, role, branchId },
-    process.env.JWT_SECRET!,
-    { expiresIn: '15m' },
-  );
+  const token = await signTestToken(staffId, branchId, [role]);
 
   return { staffId, token, role, branchId };
+}
+
+/**
+ * An access token for an open session of the staff member in the branch,
+ * as login hands out (#21). The server reads the roles from the database;
+ * `roles` only fills the token's informational claims.
+ */
+export async function signTestToken(staffId: number, branchId: number, roles: string[] = []): Promise<string> {
+  const session = await db.query(
+    `INSERT INTO staff_sessions (staff_id, branch_id, expires_at) VALUES ($1, $2, now() + interval '8 hours') RETURNING id`,
+    [staffId, branchId],
+  );
+  return jwt.sign(
+    { sid: session.rows[0].id, staffId, branchId, role: roles[0], roles },
+    process.env.JWT_SECRET!,
+    { algorithm: 'HS256', expiresIn: '15m' },
+  );
 }
 
 /**

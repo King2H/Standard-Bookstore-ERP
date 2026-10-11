@@ -195,9 +195,12 @@ This replaces v1's per-endpoint filtering, which caused #12. Details: ADR on hyb
 
 ## 8. Identity and access
 
-- **Authentication:** short-lived access token (JWT) plus an httpOnly refresh cookie, with
-  rotation (v1 design kept).
-- **Authorization:** permission-based (the union of a user's roles in the active branch),
+- **Authentication:** a sign-in opens a session (at most 8 hours, in one branch at a time).
+  A short-lived access token (JWT, 15 minutes) names the session; the refresh token is an
+  httpOnly cookie, stored only as its SHA-256 hash, replaced at every refresh, and a replaced
+  one presented again ends the session (#21).
+- **Authorization:** permission-based (the union of a user's roles in the active branch, read
+  from the database on every request; access to all branches never adds roles),
   checked by middleware on every endpoint. Role names are never checked in business code.
 - **Server-enforced account state:** "password change required" and deactivation are
   checked by the server on every request, not only in the browser (#38).

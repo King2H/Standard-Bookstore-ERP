@@ -56,6 +56,15 @@ export function setPasswordChangeRequiredHandler(fn: (() => void) | null) {
   _onPasswordChangeRequired = fn;
 }
 
+// Called whenever the API says the session has ended (#21): signed out
+// elsewhere, password changed on another device, reset by an admin, account
+// deactivated, or a stolen refresh token used. The app returns to sign-in.
+const SESSION_ENDED = new Set(['TOKEN_REVOKED', 'ACCOUNT_INACTIVE']);
+let _onSessionEnded: (() => void) | null = null;
+export function setSessionEndedHandler(fn: (() => void) | null) {
+  _onSessionEnded = fn;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -80,6 +89,11 @@ async function request<T>(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'UNKNOWN', message: res.statusText }));
     if (err.error === 'PASSWORD_CHANGE_REQUIRED') _onPasswordChangeRequired?.();
+    if (SESSION_ENDED.has(err.error)) {
+      // Dropped first, so signing out does not call the API with it again.
+      accessToken = null;
+      _onSessionEnded?.();
+    }
     throw Object.assign(new Error(err.message), { code: err.error, status: res.status, details: err.details });
   }
 

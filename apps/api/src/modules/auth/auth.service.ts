@@ -1,659 +1,269 @@
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import { randomUUID } from 'crypto';
-import { db } from '../../db/index.js';
-import type { Role } from '@bms/shared';
-import {
-  AuthError,
-  BusinessError,
-  ConflictError,
-  ValidationError,
-} from '../../lib/errors.js';
-import { insertOutbox } from '../../lib/outbox.js';
-import { getPermissionsForRoles } from '../../lib/permissions.js';
+import type { ProfileResponse } from '@bms/shared';
+import { kysely } from '../../db/kysely.js';
+import { withTransaction } from '../../db/tx.js';
+import { AuthError, BranchAccessError, BusinessError, NotFoundError } from '../../lib/errors.js';
+import { insertOutboxEvent } from '../../lib/outbox.js';
+import { insertAuditEntry } from '../audit/audit.repository.js';
+import { getSignInLockoutPolicy } from '../config/config.service.js';
+import * as policy from './auth.policy.js';
+import * as repo from './auth.repository.js';
+import { hashRefreshToken, newRefreshToken, signAccessToken } from './auth.tokens.js';
+import type { BranchOption, IssuedTokens, RoleAssignment, SessionState, StaffCredentials } from './auth.types.js';
+
+// Signing in and sessions (#21, auth part 1). Owner decisions: sessions with
+// refresh tokens replaced at every refresh (1a); all-branch access never adds
+// roles (2a); closed branches refuse sign-in (3a); one answer for every failed
+// sign-in, counted atomically (4a); the session and roles are checked on
+// every request (5a).
 
 const BCRYPT_ROUNDS = 12;
-const ACCESS_TOKEN_TTL = '15m';
-const REFRESH_TOKEN_TTL_DAYS = 7;
 
-// Password complexity: min 10 chars, upper, lower, digit, special
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$/;
+/**
+ * Compared against when the username does not exist, so the answer takes as
+ * long as for a real account and the timing does not tell which names exist.
+ */
+const NO_SUCH_STAFF_HASH = '$2b$12$7sHemaVyEM8VQjtkjEmbzeCOs6R9XJUIeBxEizHiTgcOt8GRG9Rku';
 
-function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('JWT_SECRET not configured');
-  return secret;
+function invalidCredentials(): AuthError {
+  return new AuthError('INVALID_CREDENTIALS', 'Invalid username or password');
 }
 
-// ── Security policy helpers ───────────────────────────────────────────────────
+/**
+ * Checks a username and password. Whatever is wrong (no such account, wrong
+ * password, during a lockout too) the answer is INVALID_CREDENTIALS; only
+ * with the right password does it say the account is locked or deactivated
+ * (owner decision 4a, OWASP Authentication Cheat Sheet).
+ */
+async function checkCredentials(username: string, password: string): Promise<StaffCredentials> {
+  const staff = await repo.findCredentials(kysely, username);
+  if (!staff) {
+    await bcrypt.compare(password, NO_SUCH_STAFF_HASH);
+    throw invalidCredentials();
+  }
 
-export async function getSecurityPolicy(): Promise<{
-  maxFailedAttempts: number;
-  lockoutMinutes: number;
-}> {
-  const result = await db.query(
-    `SELECT key, value FROM system_config
-     WHERE key IN ('max_failed_login_attempts', 'account_lockout_minutes')`,
-  );
-  const map: Record<string, number> = {};
-  for (const row of result.rows) map[row.key] = Number(row.value);
-  return {
-    maxFailedAttempts: map['max_failed_login_attempts'] ?? 5,
-    lockoutMinutes: map['account_lockout_minutes'] ?? 30,
-  };
+  if (!(await bcrypt.compare(password, staff.passwordHash))) {
+    await countFailure(staff.staffId, username);
+    throw invalidCredentials();
+  }
+
+  const now = new Date();
+  if (staff.lockedUntil && policy.isLocked(staff.lockedUntil, now)) {
+    throw new AuthError('ACCOUNT_LOCKED', `Account is temporarily locked. Try again in ${policy.minutesLeft(staff.lockedUntil, now)} minute(s).`);
+  }
+  if (!staff.isActive) throw new AuthError('ACCOUNT_INACTIVE', 'This account has been deactivated');
+  return staff;
 }
 
-// ── Login ────────────────────────────────────────────────────────────────────
+async function countFailure(staffId: number, username: string): Promise<void> {
+  const { maxFailedAttempts, lockoutMinutes } = await getSignInLockoutPolicy();
+  await withTransaction({}, async (tx) => {
+    const attempts = await repo.countFailedSignIn(tx, staffId);
+    if (attempts === undefined || !policy.shouldLock(attempts, maxFailedAttempts)) return;
+    if (await repo.lock(tx, staffId, lockoutMinutes)) {
+      await insertOutboxEvent(tx, 'auth.failed_login_attempts', { username, attemptCount: attempts, branchId: null });
+    }
+  });
+}
 
-export async function login(
+/**
+ * The roles the staff member works with in the branch. Throws unless the
+ * branch is open and they hold a role there, or have access to all branches
+ * and hold a role anywhere.
+ */
+function rolesIn(
+  branch: { isActive: boolean } | undefined,
+  branchId: number,
+  assignments: RoleAssignment[],
+  isAllBranches: boolean,
+): string[] {
+  const roles = policy.effectiveRoles(assignments, branchId, isAllBranches);
+  if (!branch || roles.length === 0) throw new AuthError('BRANCH_ACCESS_DENIED', `No access to branch ${branchId}`);
+  if (!branch.isActive) throw new AuthError('BRANCH_INACTIVE', 'This branch is closed');
+  return roles;
+}
+
+async function branchRoles(staffId: number, branchId: number, isAllBranches: boolean): Promise<string[]> {
+  const [branch, assignments] = await Promise.all([repo.findBranch(kysely, branchId), repo.assignments(kysely, staffId)]);
+  return rolesIn(branch, branchId, assignments, isAllBranches);
+}
+
+// ── Use cases ─────────────────────────────────────────────────────────────────
+
+/** The first step of signing in: checks the password and lists the branches to choose from. */
+export async function preLogin(
   username: string,
   password: string,
-  branchId: number,
-): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; mustChangePassword: boolean }> {
-  const policy = await getSecurityPolicy();
+): Promise<{ staffId: number; branches: BranchOption[]; isAllBranches: boolean; autoSelectBranchId: number | null }> {
+  const staff = await checkCredentials(username, password);
+  const branches = await branchesOf(staff.staffId, staff.isAllBranches);
+  const autoSelect = branches.length === 1 || (staff.isAllBranches && branches.length > 0) ? branches[0].branchId : null;
+  return { staffId: staff.staffId, branches, isAllBranches: staff.isAllBranches, autoSelectBranchId: autoSelect };
+}
 
-  // 1. Find staff by username
-  const staffResult = await db.query(
-    `SELECT id, password_hash, is_active, failed_login_attempts, locked_until, must_change_password
-     FROM staff WHERE username = $1`,
-    [username],
-  );
+/** Signs in to a branch: opens a session and hands out its first tokens. */
+export async function login(username: string, password: string, branchId: number): Promise<IssuedTokens> {
+  const staff = await checkCredentials(username, password);
+  const roles = await branchRoles(staff.staffId, branchId, staff.isAllBranches);
 
-  if (staffResult.rows.length === 0) {
-    throw new AuthError('INVALID_CREDENTIALS', 'Invalid username or password');
-  }
-
-  const staff = staffResult.rows[0];
-
-  if (!staff.is_active) {
-    throw new AuthError('ACCOUNT_INACTIVE', 'This account has been deactivated');
-  }
-
-  // 2. Check account lockout
-  if (staff.locked_until && new Date(staff.locked_until) > new Date()) {
-    const minutesLeft = Math.ceil(
-      (new Date(staff.locked_until).getTime() - Date.now()) / 60000,
-    );
-    throw new AuthError(
-      'ACCOUNT_LOCKED',
-      `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`,
-    );
-  }
-
-  // 3. Verify password
-  const passwordValid = await bcrypt.compare(password, staff.password_hash);
-  if (!passwordValid) {
-    // Increment failed attempts and potentially lock
-    const newAttempts = (staff.failed_login_attempts ?? 0) + 1;
-    const shouldLock = newAttempts >= policy.maxFailedAttempts;
-    const lockedUntil = shouldLock
-      ? new Date(Date.now() + policy.lockoutMinutes * 60 * 1000)
-      : null;
-
-    await db.query(
-      `UPDATE staff
-       SET failed_login_attempts = $1,
-           locked_until = $2
-       WHERE id = $3`,
-      [newAttempts, lockedUntil, staff.id],
-    );
-
-    if (shouldLock) {
-      // Emit lockout notification (non-blocking)
-      try {
-        const notifClient = await db.connect();
-        try {
-          await notifClient.query('BEGIN');
-          await insertOutbox(notifClient, 'auth.failed_login_attempts', {
-            username, attemptCount: newAttempts, branchId: null,
-          });
-          await notifClient.query('COMMIT');
-        } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
-      } catch { /* non-fatal */ }
-
-      throw new AuthError(
-        'ACCOUNT_LOCKED',
-        `Too many failed attempts. Account locked for ${policy.lockoutMinutes} minute(s).`,
-      );
-    }
-
-    throw new AuthError('INVALID_CREDENTIALS', 'Invalid username or password');
-  }
-
-  // 4. Verify branch role assignment — load ALL roles for this staff+branch.
-  // Bug fix: is_all_branches staff (Admin/Super_Admin by default, or anyone
-  // explicitly granted it) were rejected here with BRANCH_ACCESS_DENIED for
-  // any branch they don't hold an explicit staff_branch_roles row on — even
-  // though getBranchesForUser() (which builds the branch picker / decides
-  // autoSelectBranchId) already lists every active branch for them
-  // regardless of explicit roles, and switchBranch() already correctly
-  // allows switching into such a branch post-login. That mismatch meant an
-  // is_all_branches staff member could get a confusing "branch access
-  // denied" on their very first login whenever autoSelectBranchId (or a
-  // manually-picked branch) landed on a branch with no explicit role row —
-  // e.g. a newly created branch. Mirrors switchBranch()'s existing,
-  // already-correct is_all_branches handling.
-  let isAllBranches = false;
-  try {
-    const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staff.id]);
-    isAllBranches = abRes.rows[0]?.is_all_branches === true;
-  } catch { /* column may not exist yet */ }
-
-  const allRolesResult = await db.query(
-    `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC`,
-    [staff.id, branchId],
-  );
-
-  if (allRolesResult.rows.length === 0 && !isAllBranches) {
-    throw new AuthError(
-      'BRANCH_ACCESS_DENIED',
-      `No role assignment found for branch ${branchId}`,
-    );
-  }
-
-  const allRoles = allRolesResult.rows.map(r => r.role as string);
-  const role: Role = (allRoles[0] ?? 'Admin') as Role; // primary role (backward compat)
-  const permissions = getPermissionsForRoles(allRoles.length ? allRoles : ['Admin']);
-
-  // 5. Reset failed attempts + update last_login on successful auth
-  await db.query(
-    `UPDATE staff
-     SET failed_login_attempts = 0,
-         locked_until = NULL,
-         last_login_at = now()
-     WHERE id = $1`,
-    [staff.id],
-  );
-
-  // 6. Issue access token (includes permissions for fine-grained RBAC)
-  const accessToken = jwt.sign(
-    { staffId: staff.id, role, roles: allRoles, branchId, permissions },
-    getJwtSecret(),
-    { expiresIn: ACCESS_TOKEN_TTL },
-  );
-  // 7. Issue refresh token (store bcrypt hash — never store plaintext)
-  const plainRefreshToken = randomUUID();
-  const tokenHash = await bcrypt.hash(plainRefreshToken, 10);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
-
-  // Store branch_id + role on the token for reliable refresh (migration 1700000032)
-  await db.query(
-    `INSERT INTO refresh_tokens (staff_id, token_hash, expires_at, revoked, branch_id, role)
-     VALUES ($1, $2, $3, false, $4, $5)`,
-    [staff.id, tokenHash, expiresAt, branchId, role],
-  );
+  const refreshToken = newRefreshToken();
+  const sessionExpiresAt = policy.sessionExpiry(new Date());
+  const sessionId = await withTransaction({}, async (tx) => {
+    await repo.recordSignIn(tx, staff.staffId);
+    const id = await repo.createSession(tx, { staffId: staff.staffId, branchId, expiresAt: sessionExpiresAt });
+    await repo.insertRefreshToken(tx, { sessionId: id, staffId: staff.staffId, tokenHash: hashRefreshToken(refreshToken) });
+    return id;
+  });
 
   return {
-    accessToken,
-    refreshToken: plainRefreshToken,
-    expiresIn: 900,
-    mustChangePassword: staff.must_change_password === true,
+    accessToken: signAccessToken({ sid: sessionId, staffId: staff.staffId, branchId }, roles),
+    refreshToken,
+    sessionExpiresAt,
+    mustChangePassword: staff.mustChangePassword,
   };
 }
 
-// ── Logout ───────────────────────────────────────────────────────────────────
+function tokenRevoked(): AuthError {
+  return new AuthError('TOKEN_REVOKED', 'Refresh token is invalid or expired');
+}
 
-export async function logout(staffId: number, refreshToken: string): Promise<void> {
-  // Find all non-revoked tokens for this staff and revoke the matching one
-  const tokens = await db.query(
-    `SELECT id, token_hash FROM refresh_tokens
-     WHERE staff_id = $1 AND revoked = false AND expires_at > now()`,
-    [staffId],
-  );
+/**
+ * A new access token for the session, in the branch the session works in.
+ * The refresh token is replaced; presenting a replaced one again ends the
+ * session (owner decision 1a).
+ */
+export async function refresh(refreshToken: string): Promise<IssuedTokens> {
+  const result = await withTransaction({}, async (tx) => {
+    const token = await repo.findRefreshToken(tx, hashRefreshToken(refreshToken));
+    if (!token || token.revokedAt || token.expiresAt <= token.now || !token.staffActive) return { kind: 'revoked' as const };
 
-  for (const row of tokens.rows) {
-    const matches = await bcrypt.compare(refreshToken, row.token_hash);
-    if (matches) {
-      await db.query(`UPDATE refresh_tokens SET revoked = true WHERE id = $1`, [row.id]);
-      return;
+    const outcome = policy.refreshOutcome(token.usedAt, token.now);
+    if (outcome === 'reuse') {
+      await repo.revokeSession(tx, token.sessionId, token.staffId, 'token_reuse');
+      await insertAuditEntry(tx, {
+        staffId: token.staffId,
+        staffRole: 'SYSTEM',
+        branchId: token.branchId,
+        action: 'REVOKE',
+        entityType: 'staff_session',
+        entityId: token.sessionId,
+        meta: { reason: 'token_reuse' },
+      });
+      return { kind: 'revoked' as const };
     }
-  }
-  // Silently succeed even if token not found (idempotent logout)
-}
 
-// ── Refresh ──────────────────────────────────────────────────────────────────
-
-export async function refresh(
-  refreshToken: string,
-): Promise<{ accessToken: string; expiresIn: number; mustChangePassword: boolean }> {
-  // Fetch all non-revoked, non-expired tokens for active staff.
-  // branch_id and role are stored directly on the token (migration 1700000032).
-  // Fall back to staff_branch_roles JOIN for tokens issued before the migration.
-  const tokens = await db.query(
-    `SELECT rt.id, rt.token_hash, rt.staff_id, rt.branch_id, rt.role, s.must_change_password,
-            sbr_fallback.role AS fallback_role, sbr_fallback.branch_id AS fallback_branch_id
-     FROM refresh_tokens rt
-     JOIN staff s ON s.id = rt.staff_id
-     LEFT JOIN LATERAL (
-       SELECT role, branch_id FROM staff_branch_roles
-       WHERE staff_id = rt.staff_id
-       ORDER BY id ASC LIMIT 1
-     ) sbr_fallback ON true
-     WHERE rt.revoked = false
-       AND rt.expires_at > now()
-       AND s.is_active = true
-     LIMIT 100`,
-  );
-
-  for (const row of tokens.rows) {
-    const matches = await bcrypt.compare(refreshToken, row.token_hash);
-    if (matches) {
-      // Use stored context if available, otherwise fall back to first role assignment
-      const role     = (row.role      ?? row.fallback_role)      as string;
-      const branchId = (row.branch_id ?? row.fallback_branch_id) as number;
-
-      if (!role || !branchId) {
-        throw new AuthError('TOKEN_REVOKED', 'Refresh token is invalid or expired');
-      }
-
-      // Load all roles for this staff+branch to compute the full permission set
-      const allRolesResult = await db.query(
-        `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC`,
-        [row.staff_id, branchId],
-      );
-      const allRoles = allRolesResult.rows.map(r => r.role as string);
-      // Fall back to the stored role if no assignments found (edge case)
-      const permissions = getPermissionsForRoles(allRoles.length ? allRoles : [role]);
-
-      const accessToken = jwt.sign(
-        { staffId: row.staff_id, role, roles: allRoles.length ? allRoles : [role], branchId, permissions },
-        getJwtSecret(),
-        { expiresIn: ACCESS_TOKEN_TTL },
-      );
-      return { accessToken, expiresIn: 900, mustChangePassword: row.must_change_password === true };
+    let next: string | null = null;
+    if (outcome === 'rotate') {
+      next = newRefreshToken();
+      await repo.markRefreshTokenUsed(tx, token.tokenId);
+      await repo.insertRefreshToken(tx, { sessionId: token.sessionId, staffId: token.staffId, tokenHash: hashRefreshToken(next) });
     }
-  }
+    return { kind: 'ok' as const, token, next };
+  });
 
-  throw new AuthError('TOKEN_REVOKED', 'Refresh token is invalid or expired');
+  // Thrown after the transaction, so ending a reused token's session commits.
+  if (result.kind === 'revoked') throw tokenRevoked();
+
+  const { token, next } = result;
+  const roles = await branchRoles(token.staffId, token.branchId, token.isAllBranches);
+  return {
+    accessToken: signAccessToken({ sid: token.sessionId, staffId: token.staffId, branchId: token.branchId }, roles),
+    refreshToken: next,
+    sessionExpiresAt: token.expiresAt,
+    mustChangePassword: token.mustChangePassword,
+  };
 }
 
-// ── Get Branches For User ─────────────────────────────────────────────────────
-// Returns all branches the staff member has access to, with their roles per branch.
-// Used by the login page (branch selection) and the branch switcher.
-
-export async function getBranchesForUser(
-  staffId: number,
-): Promise<Array<{ branchId: number; branchName: string; roles: string[]; isAllBranches: boolean }>> {
-  // Check is_all_branches flag
-  let isAllBranches = false;
-  try {
-    const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staffId]);
-    isAllBranches = abRes.rows[0]?.is_all_branches === true;
-  } catch { /* column may not exist yet */ }
-
-  if (isAllBranches) {
-    // Return all active branches with the staff's assigned roles (or empty if none)
-    const branchRes = await db.query(
-      `SELECT b.id, b.name,
-              COALESCE(
-                (SELECT json_agg(sbr.role ORDER BY sbr.id)
-                 FROM staff_branch_roles sbr
-                 WHERE sbr.staff_id = $1 AND sbr.branch_id = b.id),
-                '[]'::json
-              ) AS roles
-       FROM branches b
-       WHERE b.is_active = true
-       ORDER BY b.name ASC`,
-      [staffId],
-    );
-    return branchRes.rows.map(r => ({
-      branchId: r.id as number,
-      branchName: r.name as string,
-      roles: (r.roles as string[]) ?? [],
-      isAllBranches: true,
-    }));
-  }
-
-  // Normal staff: return only branches they have role assignments for
-  const res = await db.query(
-    `SELECT b.id, b.name, json_agg(sbr.role ORDER BY sbr.id) AS roles
-     FROM staff_branch_roles sbr
-     JOIN branches b ON b.id = sbr.branch_id
-     WHERE sbr.staff_id = $1 AND b.is_active = true
-     GROUP BY b.id, b.name
-     ORDER BY b.name ASC`,
-    [staffId],
-  );
-  return res.rows.map(r => ({
-    branchId: r.id as number,
-    branchName: r.name as string,
-    roles: (r.roles as string[]) ?? [],
-    isAllBranches: false,
-  }));
+export async function logout(staffId: number, sessionId: string): Promise<void> {
+  await repo.revokeSession(kysely, sessionId, staffId, 'logout');
 }
 
-// ── Switch Branch ─────────────────────────────────────────────────────────────
-// Issues a new access token for a different branch.
-// The refresh token cookie is NOT changed — only the access token is reissued.
-
+/** Moves the session to another branch; the next refresh stays there. */
 export async function switchBranch(
-  staffId: number,
-  targetBranchId: number,
-): Promise<{ accessToken: string; expiresIn: number }> {
-  // Verify staff is still active
-  const staffRes = await db.query(`SELECT is_active FROM staff WHERE id = $1`, [staffId]);
-  if (!staffRes.rows.length || !staffRes.rows[0].is_active) {
-    throw new AuthError('ACCOUNT_INACTIVE', 'Account is deactivated');
-  }
+  ctx: { staffId: number; sessionId: string },
+  branchId: number,
+): Promise<{ accessToken: string }> {
+  const state = await repo.sessionState(kysely, ctx.staffId, ctx.sessionId);
+  if (!state) throw tokenRevoked();
+  const branch = await repo.findBranch(kysely, branchId);
+  const roles = policy.effectiveRoles(state.assignments, branchId, state.isAllBranches);
+  if (!branch || roles.length === 0) throw new BranchAccessError(branchId);
+  if (!branch.isActive) throw new BusinessError('BRANCH_INACTIVE', 'This branch is closed');
 
-  // Check is_all_branches
-  let isAllBranches = false;
-  try {
-    const abRes = await db.query(`SELECT is_all_branches FROM staff WHERE id = $1`, [staffId]);
-    isAllBranches = abRes.rows[0]?.is_all_branches === true;
-  } catch { /* column may not exist yet */ }
-
-  // Load roles for the target branch
-  const rolesRes = await db.query(
-    `SELECT role FROM staff_branch_roles WHERE staff_id = $1 AND branch_id = $2 ORDER BY id ASC`,
-    [staffId, targetBranchId],
-  );
-
-  if (rolesRes.rows.length === 0 && !isAllBranches) {
-    throw new AuthError('BRANCH_ACCESS_DENIED', `No role assignment found for branch ${targetBranchId}`);
-  }
-
-  const allRoles = rolesRes.rows.map(r => r.role as string);
-  const role = (allRoles[0] ?? 'Admin') as import('@bms/shared').Role;
-  const permissions = getPermissionsForRoles(allRoles.length ? allRoles : ['Admin']);
-
-  const accessToken = jwt.sign(
-    { staffId, role, roles: allRoles, branchId: targetBranchId, permissions },
-    getJwtSecret(),
-    { expiresIn: ACCESS_TOKEN_TTL },
-  );
-
-  return { accessToken, expiresIn: 900 };
+  await repo.setSessionBranch(kysely, ctx.sessionId, ctx.staffId, branchId);
+  return { accessToken: signAccessToken({ sid: ctx.sessionId, staffId: ctx.staffId, branchId }, roles) };
 }
 
-// ── Create Staff ─────────────────────────────────────────────────────────────
-
-export async function createStaff(data: {
-  username: string;
-  password: string;
-  fullName: string;
-}): Promise<{ staffId: number }> {
-  if (!PASSWORD_REGEX.test(data.password)) {
-    throw new ValidationError(
-      'Password must be at least 10 characters and contain uppercase, lowercase, digit, and special character',
-    );
-  }
-
-  const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    let result;
-    try {
-      result = await client.query(
-        `INSERT INTO staff (username, password_hash, full_name, is_active)
-         VALUES ($1, $2, $3, true)
-         RETURNING id`,
-        [data.username, passwordHash, data.fullName],
-      );
-    } catch (err: unknown) {
-      if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('DUPLICATE_USERNAME', `Username '${data.username}' already exists`);
-      }
-      throw err;
-    }
-
-    const staffId = result.rows[0].id;
-
-    // Write audit log
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES (NULL, 'SYSTEM', 'CREATE', 'staff', $1, $2)`,
-      [String(staffId), JSON.stringify({ username: data.username })],
-    );
-
-    await client.query('COMMIT');
-    return { staffId };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+/** The open branches the staff member can work in, with the roles held in each. */
+export async function branchesOf(staffId: number, isAllBranches: boolean): Promise<BranchOption[]> {
+  const [branches, assignments] = await Promise.all([repo.openBranches(kysely), repo.assignments(kysely, staffId)]);
+  return branches
+    .map((b) => ({
+      branchId: b.id,
+      branchName: b.name,
+      roles: [...new Set(assignments.filter((a) => a.branchId === b.id).map((a) => a.role))],
+      isAllBranches,
+    }))
+    .filter((b) => policy.effectiveRoles(assignments, b.branchId, isAllBranches).length > 0);
 }
 
-// ── Deactivate ───────────────────────────────────────────────────────────────
-
-export async function deactivateStaff(staffId: number): Promise<void> {
-  const result = await db.query(
-    `UPDATE staff SET is_active = false WHERE id = $1 RETURNING username`,
-    [staffId],
-  );
-  // Revoke all refresh tokens immediately
-  await db.query(`UPDATE refresh_tokens SET revoked = true WHERE staff_id = $1`, [staffId]);
-
-  // Emit notification (non-blocking)
-  try {
-    const username = result.rows[0]?.username ?? String(staffId);
-    const notifClient = await db.connect();
-    try {
-      await notifClient.query('BEGIN');
-      await insertOutbox(notifClient, 'auth.staff_deactivated', { username, branchId: null });
-      await notifClient.query('COMMIT');
-    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
-  } catch { /* non-fatal */ }
+/** For authenticate(): the session and the account behind an access token. */
+export async function sessionState(staffId: number, sessionId: string): Promise<SessionState | undefined> {
+  return repo.sessionState(kysely, staffId, sessionId);
 }
 
-// ── Reactivate ───────────────────────────────────────────────────────────────
-
-export async function reactivateStaff(staffId: number): Promise<void> {
-  const result = await db.query(
-    `UPDATE staff SET is_active = true WHERE id = $1 RETURNING id`,
-    [staffId],
-  );
-  if (result.rows.length === 0) {
-    throw new BusinessError('STAFF_NOT_FOUND', `Staff ${staffId} not found`);
-  }
-  // Role assignments are retained (soft deactivation only)
-}
-
-// ── Admin: Reset Password ─────────────────────────────────────────────────────
-// Sets a temporary password and forces must_change_password = true
-
-export async function adminResetPassword(
-  targetStaffId: number,
-  temporaryPassword: string,
-  staffCtx: { staffId: number; role: string },
-): Promise<void> {
-  if (!PASSWORD_REGEX.test(temporaryPassword)) {
-    throw new ValidationError(
-      'Temporary password must be at least 10 characters and contain uppercase, lowercase, digit, and special character',
-    );
-  }
-
-  const newHash = await bcrypt.hash(temporaryPassword, BCRYPT_ROUNDS);
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    const result = await client.query(
-      `UPDATE staff
-       SET password_hash = $1,
-           must_change_password = true,
-           failed_login_attempts = 0,
-           locked_until = NULL,
-           password_changed_at = now()
-       WHERE id = $2
-       RETURNING id`,
-      [newHash, targetStaffId],
-    );
-    if (result.rows.length === 0) {
-      throw new BusinessError('STAFF_NOT_FOUND', `Staff ${targetStaffId} not found`);
-    }
-
-    // Revoke all existing refresh tokens — forces re-login with new password
-    await client.query(
-      `UPDATE refresh_tokens SET revoked = true WHERE staff_id = $1`,
-      [targetStaffId],
-    );
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES ($1, $2, 'UPDATE', 'staff', $3, $4)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(targetStaffId),
-        JSON.stringify({ action: 'admin_password_reset', mustChangePassword: true }),
-      ],
-    );
-
-    // Emit notification (non-blocking)
-    const targetRes = await client.query('SELECT username FROM staff WHERE id = $1', [targetStaffId]);
-    const targetUsername = targetRes.rows[0]?.username ?? String(targetStaffId);
-    const adminRes = await client.query('SELECT username FROM staff WHERE id = $1', [staffCtx.staffId]);
-    const adminName = adminRes.rows[0]?.username ?? String(staffCtx.staffId);
-    await insertOutbox(client, 'auth.password_reset', { username: targetUsername, adminName, branchId: null });
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── Admin: Unlock Account ─────────────────────────────────────────────────────
-
-export async function unlockAccount(
-  targetStaffId: number,
-  staffCtx: { staffId: number; role: string },
-): Promise<void> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    const result = await client.query(
-      `UPDATE staff
-       SET failed_login_attempts = 0,
-           locked_until = NULL
-       WHERE id = $1
-       RETURNING id`,
-      [targetStaffId],
-    );
-    if (result.rows.length === 0) {
-      throw new BusinessError('STAFF_NOT_FOUND', `Staff ${targetStaffId} not found`);
-    }
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES ($1, $2, 'UPDATE', 'staff', $3, $4)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(targetStaffId),
-        JSON.stringify({ action: 'account_unlocked' }),
-      ],
-    );
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── Get Staff by ID ───────────────────────────────────────────────────────────
-
-export async function getStaffById(staffId: number): Promise<{
-  id: number;
-  username: string;
-  fullName: string;
-  isActive: boolean;
-  failedLoginAttempts: number;
-  lockedUntil: string | null;
-  mustChangePassword: boolean;
-  lastLoginAt: string | null;
-  passwordChangedAt: string | null;
-  createdAt: string;
-  roles: Array<{ branchId: number; branchName: string | null; role: string }>;
-}> {
-  const result = await db.query(
-    `SELECT s.id, s.username, s.full_name, s.is_active,
-            s.failed_login_attempts, s.locked_until, s.must_change_password,
-            s.last_login_at, s.password_changed_at, s.created_at,
-            COALESCE(json_agg(
-              json_build_object('branchId', sbr.branch_id, 'branchName', b.name, 'role', sbr.role)
-            ) FILTER (WHERE sbr.staff_id IS NOT NULL), '[]') AS roles
-     FROM staff s
-     LEFT JOIN staff_branch_roles sbr ON sbr.staff_id = s.id
-     LEFT JOIN branches b ON b.id = sbr.branch_id
-     WHERE s.id = $1
-     GROUP BY s.id`,
-    [staffId],
-  );
-
-  if (result.rows.length === 0) {
-    throw new BusinessError('STAFF_NOT_FOUND', `Staff ${staffId} not found`);
-  }
-
-  const r = result.rows[0];
+export async function profile(ctx: { staffId: number; branchId: number; roles: string[] }): Promise<ProfileResponse> {
+  const [row, locations] = await Promise.all([
+    repo.profile(kysely, ctx.staffId),
+    repo.assignedLocations(kysely, ctx.staffId, ctx.branchId),
+  ]);
+  if (!row) throw new NotFoundError('Staff');
   return {
-    id: r.id,
-    username: r.username,
-    fullName: r.full_name,
-    isActive: r.is_active,
-    failedLoginAttempts: r.failed_login_attempts,
-    lockedUntil: r.locked_until ? new Date(r.locked_until).toISOString() : null,
-    mustChangePassword: r.must_change_password,
-    lastLoginAt: r.last_login_at ? new Date(r.last_login_at).toISOString() : null,
-    passwordChangedAt: r.password_changed_at ? new Date(r.password_changed_at).toISOString() : null,
-    createdAt: new Date(r.created_at).toISOString(),
-    roles: r.roles,
+    id: row.id,
+    username: row.username,
+    fullName: row.full_name,
+    isActive: row.is_active,
+    createdAt: row.created_at.toISOString(),
+    mustChangePassword: row.must_change_password,
+    lastLoginAt: row.last_login_at?.toISOString() ?? null,
+    passwordChangedAt: row.password_changed_at?.toISOString() ?? null,
+    isLocked: policy.isLocked(row.locked_until, new Date()),
+    isAllBranches: row.is_all_branches,
+    roles: row.roles,
+    currentRole: ctx.roles[0],
+    currentRoles: ctx.roles,
+    currentBranchId: ctx.branchId,
+    locationAccess: {
+      mode: locations.length > 0 ? 'restricted' : 'full',
+      locations: locations.map((l) => ({ id: l.id, name: l.name, isDefaultFulfillment: l.is_default_fulfillment })),
+    },
   };
 }
 
-// ── Assign Roles ─────────────────────────────────────────────────────────────
-// Replaces ALL role assignments for a staff member with the provided set.
-// Supports multiple roles per branch (e.g. Manager + Finance_Officer at same branch).
-
-export async function assignRoles(
-  staffId: number,
-  roles: Array<{ branchId: number; role: Role }>,
+/** Changes the staff member's own password and ends their other sessions. */
+export async function changePassword(
+  ctx: { staffId: number; sessionId: string; role: string; branchId: number },
+  currentPassword: string,
+  newPassword: string,
 ): Promise<void> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Delete ALL existing assignments first — this handles removals and branch switches
-    await client.query(
-      `DELETE FROM staff_branch_roles WHERE staff_id = $1`,
-      [staffId],
-    );
-
-    // Insert the new complete set — ON CONFLICT DO NOTHING handles duplicates gracefully
-    for (const { branchId, role } of roles) {
-      await client.query(
-        `INSERT INTO staff_branch_roles (staff_id, branch_id, role)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (staff_id, branch_id, role) DO NOTHING`,
-        [staffId, branchId, role],
-      );
-    }
-
-    // Write audit log
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES (NULL, 'SYSTEM', 'UPDATE', 'staff_roles', $1, $2)`,
-      [String(staffId), JSON.stringify({ assignments: roles })],
-    );
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
+  const hash = await repo.findPasswordHash(kysely, ctx.staffId);
+  if (!hash) throw new NotFoundError('Staff');
+  if (!(await bcrypt.compare(currentPassword, hash))) {
+    throw new BusinessError('INVALID_CURRENT_PASSWORD', 'Current password is incorrect');
   }
+  const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  await withTransaction({}, async (tx) => {
+    await repo.setPassword(tx, ctx.staffId, newHash);
+    await repo.revokeSessionsOf(tx, ctx.staffId, 'password_changed', ctx.sessionId);
+    await insertAuditEntry(tx, {
+      staffId: ctx.staffId,
+      staffRole: ctx.role,
+      branchId: ctx.branchId,
+      action: 'UPDATE',
+      entityType: 'staff',
+      entityId: ctx.staffId,
+      meta: { action: 'password_changed', otherSessionsEnded: true },
+    });
+  });
 }

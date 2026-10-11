@@ -468,7 +468,7 @@ describe('Bug 2 -- Profit Calculation Preservation (POS Revenue Must Remain Sepa
     await db.query(`DELETE FROM branches          WHERE id          = $1`, [bug2PosBranchId]);
 
     // Remove the staff member added for this suite
-    await db.query(`DELETE FROM refresh_tokens WHERE staff_id = $1`, [bug2PosStaffId]);
+    await db.query(`DELETE FROM staff_sessions WHERE staff_id = $1`, [bug2PosStaffId]);
     await db.query(`DELETE FROM staff          WHERE id       = $1`, [bug2PosStaffId]);
   });
 
@@ -714,7 +714,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     await db.query(`DELETE FROM staff_branch_roles WHERE branch_id = $1`, [fixBranchId]);
     await db.query(`DELETE FROM locations WHERE branch_id = $1`, [fixBranchId]);
     await db.query(`DELETE FROM branches  WHERE id = $1`, [fixBranchId]);
-    await db.query(`DELETE FROM refresh_tokens WHERE staff_id = $1`, [fixStaffId]);
+    await db.query(`DELETE FROM staff_sessions WHERE staff_id = $1`, [fixStaffId]);
     await db.query(`DELETE FROM staff     WHERE id = $1`, [fixStaffId]);
   });
 

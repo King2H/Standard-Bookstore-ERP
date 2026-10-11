@@ -1,5 +1,13 @@
 import type { z } from 'zod';
 import {
+  AccessTokenResponseSchema,
+  AuthBranchListResponseSchema,
+  ChangePasswordRequestSchema,
+  LoginRequestSchema,
+  PreLoginRequestSchema,
+  PreLoginResponseSchema,
+  ProfileResponseSchema,
+  SwitchBranchRequestSchema,
   AdjustStoreCreditRequestSchema,
   CreateCustomerGroupRequestSchema,
   CreateCustomerRequestSchema,
@@ -202,6 +210,7 @@ export const operations: ApiOperation[] = [
       503: { description: 'The database is unavailable', schema: HealthResponseSchema },
     },
   },
+  ...authOperations(),
   ...auditOperations(),
   ...branchOperations(),
   ...catalogOperations(),
@@ -222,6 +231,97 @@ export const operations: ApiOperation[] = [
   ...supplierPayableOperations(),
   ...exchangeOperations(),
 ];
+
+function authOperations(): ApiOperation[] {
+  const tag = 'Auth';
+  const signIn = [400, 401, 429, 500];
+  return [
+    {
+      operationId: 'preLogin',
+      method: 'post',
+      path: '/auth/pre-login',
+      summary:
+        'Check a username and password and list the open branches to sign in to. Any failure answers ' +
+        'INVALID_CREDENTIALS; ACCOUNT_LOCKED and ACCOUNT_INACTIVE come only with the right password',
+      tag,
+      auth: false,
+      request: { body: PreLoginRequestSchema },
+      responses: { 200: { description: 'The branches', schema: PreLoginResponseSchema } },
+      errors: [...signIn, 503],
+    },
+    {
+      operationId: 'login',
+      method: 'post',
+      path: '/auth/login',
+      summary:
+        'Sign in to an open branch: opens a session of at most 8 hours and sets the refresh token as an httpOnly cookie',
+      tag,
+      auth: false,
+      request: { body: LoginRequestSchema },
+      responses: { 200: { description: 'An access token for 15 minutes', schema: AccessTokenResponseSchema } },
+      errors: signIn,
+    },
+    {
+      operationId: 'refreshToken',
+      method: 'post',
+      path: '/auth/refresh',
+      summary:
+        'A new access token for the session, in its current branch, from the refresh token cookie. The cookie is ' +
+        'replaced; presenting a replaced one again ends the session (TOKEN_REVOKED)',
+      tag,
+      auth: false,
+      responses: { 200: { description: 'An access token for 15 minutes', schema: AccessTokenResponseSchema } },
+      errors: [401, 500],
+    },
+    {
+      operationId: 'logout',
+      method: 'post',
+      path: '/auth/logout',
+      summary: 'End the session; its access and refresh tokens stop working at once',
+      tag,
+      responses: { 200: { description: 'Signed out', schema: MessageResponseSchema } },
+      errors: [401, 500],
+    },
+    {
+      operationId: 'listMyBranches',
+      method: 'get',
+      path: '/auth/branches',
+      summary: 'The open branches the signed-in staff member can switch to, with the roles held in each',
+      tag,
+      responses: { 200: { description: 'The branches', schema: AuthBranchListResponseSchema } },
+      errors: [401, 403, 500],
+    },
+    {
+      operationId: 'switchBranch',
+      method: 'post',
+      path: '/auth/switch-branch',
+      summary: 'Move the session to another open branch; refreshes stay there',
+      tag,
+      request: { body: SwitchBranchRequestSchema },
+      responses: { 200: { description: 'An access token for the branch', schema: AccessTokenResponseSchema } },
+      errors: [400, 401, 403, 422, 500],
+    },
+    {
+      operationId: 'getMyProfile',
+      method: 'get',
+      path: '/staff/me',
+      summary: 'The signed-in staff member, with the roles in effect in the session branch',
+      tag,
+      responses: { 200: { description: 'The profile', schema: ProfileResponseSchema } },
+      errors: [401, 403, 500],
+    },
+    {
+      operationId: 'changeMyPassword',
+      method: 'put',
+      path: '/staff/me/password',
+      summary: "Change one's own password; the staff member's other sessions end",
+      tag,
+      request: { body: ChangePasswordRequestSchema },
+      responses: { 200: { description: 'Changed', schema: MessageResponseSchema } },
+      errors: [400, 401, 403, 422, 500],
+    },
+  ];
+}
 
 function auditOperations(): ApiOperation[] {
   return [
