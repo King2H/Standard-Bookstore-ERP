@@ -7,9 +7,11 @@ import { db } from '../db/index.js';
 import * as ordersService from '../modules/orders/orders.service.js';
 import type { StaffCtx } from '../modules/orders/orders.service.js';
 
-// #71: a partial payment against a fulfilled credit order wrote
-// payment_status 'partially_paid', which the database refuses, so every
-// partial collection failed with a 500.
+// #21: POST /orders/:id/collect-payment lowered a credit order's receivable
+// without recording a payment (no method, receipt or ledger entry), so the
+// money went missing from the books. It answers 410 now; part payments go
+// through POST /payments (#71's partial status is checked there). The legacy
+// /progress endpoint could never succeed and answers 410 too (#69).
 
 const STAFF_PREFIX = 'collect_test_';
 const BRANCH_PREFIX = 'Collect Test Branch';
@@ -25,6 +27,7 @@ describe('Collecting payment on a credit order', () => {
     const branches = (await db.query(`SELECT id FROM branches WHERE name LIKE $1`, [`${BRANCH_PREFIX}%`])).rows.map((r) => r.id);
     if (branches.length) {
       const ids = `(SELECT id FROM orders WHERE branch_id = ANY($1))`;
+      await db.query(`DELETE FROM order_payments WHERE order_id IN ${ids}`, [branches]);
       await db.query(`DELETE FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id IN ${ids}`, [branches]);
       await db.query(`DELETE FROM inventory_reservations WHERE order_id IN ${ids}`, [branches]);
       await db.query(`DELETE FROM inventory_history WHERE location_id IN (SELECT id FROM locations WHERE branch_id = ANY($1))`, [branches]);
@@ -68,25 +71,36 @@ describe('Collecting payment on a credit order', () => {
       [orderId],
     )).rows[0].outstanding_amount);
 
-  const collect = (amount: number) =>
+  const post = (path: string, body: object = {}) =>
     request(getTestApp())
-      .post(`/api/v1/orders/${orderId}/collect-payment`)
+      .post(`/api/v1/orders/${orderId}/${path}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ amount });
+      .send(body);
 
-  it('records a partial payment as payment status "partial" (was: 500)', async () => {
-    const res = await collect(1);
+  it('refuses collect-payment with 410 and leaves the receivable as it was (was: lowered with no payment recorded)', async () => {
+    const res = await post('collect-payment', { amount: 1 });
 
-    expect(res.status).toBe(200);
-    expect(res.body.paymentStatus).toBe('partial');
-    expect(await outstanding()).toBeCloseTo(total - 1, 2);
+    expect(res.status).toBe(410);
+    expect(res.body.error).toBe('DEPRECATED');
+    expect(await outstanding()).toBeCloseTo(total, 2);
   });
 
-  it('marks the order paid when the rest is collected', async () => {
-    const res = await collect(total - 1);
+  it('refuses the legacy progress endpoint with 410 (was: 422 for every order)', async () => {
+    const res = await post('progress');
 
-    expect(res.status).toBe(200);
-    expect(res.body.paymentStatus).toBe('paid');
-    expect(await outstanding()).toBe(0);
+    expect(res.status).toBe(410);
+    expect(res.body.error).toBe('DEPRECATED');
+  });
+
+  it('takes a part payment through Payments: recorded, and the order partly paid', async () => {
+    const res = await request(getTestApp())
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ orderId: Number(orderId), amount: 1, paymentMethod: 'cash' });
+
+    expect(res.status).toBe(201);
+    expect(await outstanding()).toBeCloseTo(total - 1, 2);
+    const order = await request(getTestApp()).get(`/api/v1/orders/${orderId}`).set('Authorization', `Bearer ${token}`);
+    expect(order.body.paymentStatus).toBe('partial');
   });
 });

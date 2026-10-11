@@ -6,7 +6,7 @@ import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { insertOutbox, type OutboxEventType } from '../../lib/outbox.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
-import { cancelReceivable, checkNotWrittenOff, createReceivable, updateReceivableOnPayment } from '../receivables/receivables.service.js';
+import { cancelReceivable, createReceivable } from '../receivables/receivables.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
@@ -115,9 +115,10 @@ export async function create(
   }
   const totals = policy.orderTotals(lines);
 
-  // A draft neither reserves nor deducts stock; this early check only keeps
-  // an order from being created oversold. confirm() re-checks under a row
-  // lock (see #70).
+  // An early refusal, not a promise: a draft neither reserves nor deducts
+  // stock, so the figures may change before it is confirmed. confirm() is
+  // the authoritative check, under a row lock, and reserves the stock
+  // (owner decision on #70).
   if (!(await isNegativeStockAllowed())) {
     const locationId = data.locationId || (await orders.findBranchLocation(kysely, staffCtx.branchId)) || staffCtx.branchId;
     for (const line of lines) {
@@ -249,30 +250,6 @@ export async function confirm(
   return getById(orderId);
 }
 
-/** Legacy CONFIRMED -> PAID (#69). */
-export async function pay(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
-  await withTransaction({}, async (tx, client) => {
-    const order = await loadOrder(tx, orderId, { forUpdate: true });
-    policy.checkCanPay(order.status);
-    await orders.setStatus(tx, order.id, 'PAID');
-    await audit(tx, staffCtx, 'UPDATE', String(orderId), { action: 'pay', fromStatus: 'CONFIRMED', toStatus: 'PAID' });
-    await publish(client, 'order.paid', { ...order, id: String(orderId) }, staffCtx);
-  });
-  return getById(orderId);
-}
-
-/** Legacy Confirmed -> In_Progress (#69). */
-export async function progress(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
-  await withTransaction({}, async (tx, client) => {
-    const order = await loadOrder(tx, orderId, { forUpdate: true });
-    policy.checkCanProgress(order.status);
-    await orders.setStatus(tx, order.id, 'In_Progress');
-    await audit(tx, staffCtx, 'UPDATE', String(orderId), { action: 'progress' });
-    await publish(client, 'order.in_progress', { ...order, id: String(orderId) }, staffCtx);
-  });
-  return getById(orderId);
-}
-
 /**
  * Hands the goods over: the reserved stock (already taken out at confirm) is
  * recorded as delivered, and the order is FULFILLED, then COMPLETED. A
@@ -361,37 +338,4 @@ export async function deleteOrder(orderId: string | number, staffCtx: StaffCtx):
     await orders.deleteOrder(tx, order.id);
     await audit(tx, staffCtx, 'DELETE', String(orderId), { orderNumber: order.orderNumber, status: order.status });
   });
-}
-
-/** A (partial or full) payment against a fulfilled credit order's receivable. */
-export async function collectPayment(
-  orderId: string | number,
-  paymentAmount: number,
-  staffCtx: StaffCtx,
-): Promise<OrderRow> {
-  policy.checkPaymentAmount(paymentAmount);
-  await withTransaction({}, async (tx) => {
-    const order = await loadOrder(tx, orderId, { forUpdate: true });
-    policy.checkCanCollectPayment(order);
-    await checkNotWrittenOff(tx, 'order_credit_sale', order.id);
-
-    const outstanding = await orders.lockReceivableOutstanding(tx, order.id);
-    if (outstanding === undefined) {
-      throw new BusinessError('RECEIVABLE_NOT_FOUND', `No receivable found for order ${String(orderId)}`);
-    }
-    const { newOutstanding, isFullySettled, paymentStatus } = policy.applyPayment(outstanding, paymentAmount);
-    await updateReceivableOnPayment(
-      tx,
-      { sourceType: 'order_credit_sale', sourceEntityId: Number(orderId), newOutstandingAmount: newOutstanding.toNumber(), isFullySettled },
-    );
-    await orders.setPaymentStatus(tx, order.id, paymentStatus);
-    await audit(tx, staffCtx, 'UPDATE', String(orderId), {
-      action: 'collect_payment',
-      paymentAmount,
-      previousOutstanding: Number(outstanding),
-      newOutstanding: newOutstanding.toNumber(),
-      isFullySettled,
-    });
-  });
-  return getById(orderId);
 }

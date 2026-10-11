@@ -22,23 +22,30 @@ router.delete('/orders/:id', authenticate, inBranch, requireRole('Admin'), valid
 router.post('/orders/:id/confirm', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.confirm), orders.confirm);
 router.post('/orders/:id/fulfill', authenticate, inBranch, requirePermission('PROCESS_PAYMENT'), validate(schemas.byId), orders.fulfill);
 router.post('/orders/:id/cancel', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.cancel), orders.cancel);
+
+// Retired endpoints answer 410 (#69). Payments, part payments of a credit
+// order included, are recorded with POST /payments, which keeps the payment,
+// its method and the ledger entry together with the receivable.
+function retired(endpoint: string, instead: string) {
+  return () => {
+    throw new AppError('DEPRECATED', `${endpoint} is no longer supported. ${instead}`, 410);
+  };
+}
+const usePayments = 'Use POST /payments to record payments against an order.';
+router.post('/orders/:id/pay', authenticate, inBranch, requirePermission('PROCESS_PAYMENT'), retired('POST /orders/:id/pay', usePayments));
 router.post(
   '/orders/:id/collect-payment',
   authenticate,
   inBranch,
   requireRole('Admin', 'Manager', 'Finance_Officer'),
-  validate(schemas.collectPayment),
-  orders.collectPayment,
+  retired('POST /orders/:id/collect-payment', usePayments),
 );
-
-// Legacy endpoints (#69).
-router.post('/orders/:id/progress', authenticate, inBranch, requireRole('Manager', 'Admin', 'Stock_Clerk'), validate(schemas.byId), orders.progress);
-router.post('/orders/:id/pay', authenticate, inBranch, requirePermission('PROCESS_PAYMENT'), () => {
-  throw new AppError(
-    'DEPRECATED',
-    'POST /orders/:id/pay is no longer supported. Use POST /payments to record payments against an order.',
-    410,
-  );
-});
+router.post(
+  '/orders/:id/progress',
+  authenticate,
+  inBranch,
+  requireRole('Manager', 'Admin', 'Stock_Clerk'),
+  retired('POST /orders/:id/progress', 'A confirmed order goes straight to POST /orders/:id/fulfill.'),
+);
 
 export default router;
