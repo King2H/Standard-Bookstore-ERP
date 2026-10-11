@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { grantableRoles, rankOf } from '@bms/shared';
 import { api, getAccessToken } from '../lib/api.js';
 import { useToast } from '../components/Toast.js';
 
@@ -20,6 +21,8 @@ interface StaffMember {
   lockedUntil?: string | null;
   mustChangePassword?: boolean;
   lastLoginAt?: string | null;
+  /** Whether the signed-in staff member may change this account (#21). */
+  canManage?: boolean;
 }
 interface Branch { id: number; name: string; isActive: boolean }
 interface LocationEntry { locationId: number; locationName: string; branchId: number }
@@ -48,8 +51,17 @@ type CreateForm = z.output<typeof createSchema>;
 
 const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
 
-export default function StaffPage() {
+/**
+ * Staff administration (#21, auth part 2). The API decides who may change
+ * whom; the page offers only what the signed-in staff member may do: roles
+ * below their own, all-branch access for a Super_Admin, and account actions
+ * (create, reset, unlock, deactivate) for Admins and Super_Admins.
+ */
+export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) {
   const queryClient = useQueryClient();
+  const grantable = grantableRoles(userRoles);
+  const isAdmin = rankOf(userRoles) >= 2;
+  const isSuperAdmin = userRoles.includes('Super_Admin');
   const [showForm, setShowForm] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [editingRoles, setEditingRoles] = useState<number | null>(null);
@@ -73,27 +85,17 @@ export default function StaffPage() {
   const branches = branchData?.items.filter(b => b.isActive) ?? [];
 
   const createMutation = useMutation({
+    // One request creates the account with its roles (#21): a failure part way
+    // can no longer leave an account without roles.
     mutationFn: async (body: CreateForm) => {
+      const allBranches = isSuperAdmin && body.isAllBranches;
+      const roles = allBranches
+        // The role goes on the first branch; access to all branches carries it everywhere.
+        ? (branches.length > 0 ? [{ branchId: branches[0].id, role: body.allBranchesRole }] : [])
+        : body.assignments.filter(a => a.branchId > 0);
       const { staffId } = await api.post<{ staffId: number }>('/staff', {
-        username: body.username, password: body.password, fullName: body.fullName,
+        username: body.username, password: body.password, fullName: body.fullName, roles, isAllBranches: allBranches,
       });
-
-      if (body.isAllBranches) {
-        // Grant all-branch access
-        await api.put(`/staff/${staffId}/all-branches`, { isAllBranches: true });
-        // Assign the selected role to the first available branch so the staff
-        // has at least one role entry (needed for login branch selection).
-        // The is_all_branches flag bypasses the branch check in branchCtx.
-        if (branches.length > 0) {
-          await api.put(`/staff/${staffId}/roles`, [{ branchId: branches[0].id, role: body.allBranchesRole }]);
-        }
-      } else {
-        // Normal per-branch assignment — filter out any placeholder rows (branchId=0)
-        const validAssignments = body.assignments.filter(a => a.branchId > 0);
-        if (validAssignments.length > 0) {
-          await api.put(`/staff/${staffId}/roles`, validAssignments);
-        }
-      }
       return staffId;
     },
     onSuccess: () => {
@@ -185,13 +187,15 @@ export default function StaffPage() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Staff</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Manage staff accounts and branch assignments</p>
         </div>
-        <button type="button" onClick={() => { setShowForm(!showForm); setApiError(null); }}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
-          {showForm ? 'Cancel' : '+ New Staff'}
-        </button>
+        {isAdmin && (
+          <button type="button" onClick={() => { setShowForm(!showForm); setApiError(null); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+            {showForm ? 'Cancel' : '+ New Staff'}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && isAdmin && (
         <form onSubmit={handleSubmit((data) => { setApiError(null); createMutation.mutate(data); })}
           className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-6 space-y-4 shadow-sm">
           <h2 className="font-semibold text-gray-800 dark:text-gray-100">Create Staff Account</h2>
@@ -220,8 +224,8 @@ export default function StaffPage() {
           </div>
 
           <div>
-            {/* All Branches toggle */}
-            <div className="flex items-center gap-3 mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            {/* All Branches toggle: Super_Admin only */}
+            {isSuperAdmin && <div className="flex items-center gap-3 mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
               <label className="flex items-center gap-2 cursor-pointer select-none flex-shrink-0">
                 <input type="checkbox" {...register('isAllBranches')} className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
                 <span className="text-xs font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">🌐 All Branches</span>
@@ -231,9 +235,9 @@ export default function StaffPage() {
                   ? 'Staff can access every branch. Select a role below — no per-branch assignment needed.'
                   : 'Enable to grant access to all current and future branches without per-branch assignment.'}
               </span>
-            </div>
+            </div>}
 
-            {watchIsAllBranches ? (
+            {isSuperAdmin && watchIsAllBranches ? (
               /* When All Branches is on: just pick a role, no branch selector needed */
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
@@ -242,7 +246,7 @@ export default function StaffPage() {
                 </label>
                 <div className="flex items-center gap-2">
                   <select {...register('allBranchesRole')} className={inputCls} style={{ maxWidth: 240 }}>
-                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                    {grantable.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
               </div>
@@ -272,7 +276,7 @@ export default function StaffPage() {
                         {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                       </select>
                       <select {...register(`assignments.${index}.role`)} className={inputCls}>
-                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        {grantable.map(r => <option key={r} value={r}>{r}</option>)}
                       </select>
                       {fields.length > 1 && (
                         <button type="button" onClick={() => remove(index)}
@@ -351,6 +355,7 @@ export default function StaffPage() {
                       <RoleEditor
                         currentRoles={staff.roles}
                         branches={branches}
+                        grantable={grantable}
                         onSave={(roles) => assignRolesMutation.mutate({ id: staff.id, roles })}
                         onCancel={() => setEditingRoles(null)}
                       />
@@ -388,7 +393,7 @@ export default function StaffPage() {
                   </td>
 
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                    {staff.canManage && <div className="flex items-center gap-3">
                       {editingRoles !== staff.id && (
                         <button type="button" title="Edit branch & role assignments"
                           onClick={() => setEditingRoles(staff.id)}
@@ -398,8 +403,8 @@ export default function StaffPage() {
                           </svg>
                         </button>
                       )}
-                      {/* All Branches toggle */}
-                      <button
+                      {/* All Branches toggle: Super_Admin only */}
+                      {isSuperAdmin && <button
                         type="button"
                         title={staff.isAllBranches ? 'Revoke all-branch access' : 'Grant all-branch access'}
                         onClick={() => setAllBranchesMutation.mutate({ id: staff.id, isAllBranches: !staff.isAllBranches })}
@@ -411,7 +416,7 @@ export default function StaffPage() {
                         }`}
                       >
                         🌐
-                      </button>
+                      </button>}
                       {/* Location access button */}
                       <button type="button" title="Manage location access"
                         onClick={() => setEditingLocations(editingLocations === staff.id ? null : staff.id)}
@@ -422,7 +427,7 @@ export default function StaffPage() {
                         </svg>
                       </button>
                       {/* Unlock button — shown when account is locked */}
-                      {staff.lockedUntil && new Date(staff.lockedUntil) > new Date() && (
+                      {isAdmin && staff.lockedUntil && new Date(staff.lockedUntil) > new Date() && (
                         <button type="button" title="Unlock account"
                           onClick={() => unlockMutation.mutate(staff.id)}
                           disabled={unlockMutation.isPending}
@@ -433,7 +438,7 @@ export default function StaffPage() {
                         </button>
                       )}
                       {/* Reset password button */}
-                      <button type="button" title="Reset password (staff must change on next login)"
+                      {isAdmin && <button type="button" title="Reset password (staff must change on next login)"
                         onClick={() => {
                           const tmp = prompt(`Set temporary password for ${staff.username} (min 10 chars, upper+lower+digit+special):`);
                           if (tmp) resetPasswordMutation.mutate({ id: staff.id, temporaryPassword: tmp });
@@ -443,8 +448,8 @@ export default function StaffPage() {
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                         </svg>
-                      </button>
-                      {staff.isActive ? (
+                      </button>}
+                      {isAdmin && (staff.isActive ? (
                         <button type="button" title="Deactivate staff"
                           onClick={() => deactivateMutation.mutate(staff.id)}
                           disabled={deactivateMutation.isPending}
@@ -462,8 +467,8 @@ export default function StaffPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                         </button>
-                      )}
-                    </div>
+                      ))}
+                    </div>}
                   </td>
                 </tr>
                 {editingLocations === staff.id && (
@@ -493,17 +498,20 @@ export default function StaffPage() {
   );
 }
 
-function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
+function RoleEditor({ currentRoles, branches, grantable, onSave, onCancel }: {
   currentRoles: StaffRole[];
   branches: Branch[];
+  /** The roles the signed-in staff member may grant; others are shown but kept as they are. */
+  grantable: string[];
   onSave: (roles: StaffRole[]) => void;
   onCancel: () => void;
 }) {
-  const [assignments, setAssignments] = useState<StaffRole[]>(
-    currentRoles.length > 0
-      ? currentRoles.map(r => ({ branchId: Number(r.branchId), role: r.role }))
-      : [{ branchId: branches[0]?.id ?? 0, role: 'Sales' }]
-  );
+  const kept = currentRoles.filter(r => !grantable.includes(r.role)).map(r => ({ branchId: Number(r.branchId), role: r.role }));
+  const firstRole = grantable.includes('Sales') ? 'Sales' : grantable[0] ?? 'Sales';
+  const [assignments, setAssignments] = useState<StaffRole[]>(() => {
+    const editable = currentRoles.filter(r => grantable.includes(r.role)).map(r => ({ branchId: Number(r.branchId), role: r.role }));
+    return editable.length > 0 || kept.length > 0 ? editable : [{ branchId: branches[0]?.id ?? 0, role: firstRole }];
+  });
 
   const update = (index: number, field: keyof StaffRole, value: string | number) => {
     setAssignments(prev => prev.map((a, i) =>
@@ -515,6 +523,11 @@ function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
 
   return (
     <div className="space-y-2 py-1">
+      {kept.map((a, i) => (
+        <div key={`kept-${i}`} className="text-xs text-gray-500 dark:text-gray-400" title="Not yours to change">
+          {branches.find(b => b.id === a.branchId)?.name ?? `Branch ${a.branchId}`} · {a.role}
+        </div>
+      ))}
       {assignments.map((a, i) => (
         <div key={i} className="flex items-center gap-2">
           <select value={a.branchId} onChange={e => update(i, 'branchId', parseInt(e.target.value, 10))} className={selectCls}>
@@ -523,11 +536,11 @@ function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
             ))}
           </select>
           <select value={a.role} onChange={e => update(i, 'role', e.target.value)} className={selectCls}>
-            {(['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] as const).map(r => (
+            {grantable.map(r => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
-          {assignments.length > 1 && (
+          {assignments.length + kept.length > 1 && (
             <button type="button" onClick={() => setAssignments(prev => prev.filter((_, j) => j !== i))}
               className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 text-xs font-bold px-1 transition-colors" title="Remove">✕</button>
           )}
@@ -537,13 +550,13 @@ function RoleEditor({ currentRoles, branches, onSave, onCancel }: {
         <button type="button"
           onClick={() => {
             const firstBranch = branches[0];
-            if (firstBranch) setAssignments(prev => [...prev, { branchId: firstBranch.id, role: 'Sales' }]);
+            if (firstBranch) setAssignments(prev => [...prev, { branchId: firstBranch.id, role: firstRole }]);
           }}
           disabled={branches.length === 0}
           className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 transition-colors">
           + Add Role
         </button>
-        <button type="button" onClick={() => onSave(assignments)}
+        <button type="button" onClick={() => onSave([...kept, ...assignments])}
           className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg transition-colors">
           Save
         </button>

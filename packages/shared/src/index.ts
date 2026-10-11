@@ -40,6 +40,7 @@ export * from './pos.js';
 export * from './purchaseOrder.js';
 export * from './return.js';
 export * from './receivable.js';
+export * from './staff.js';
 export * from './supplier.js';
 export { Money } from './money.js';
 export type { MoneyInput } from './money.js';

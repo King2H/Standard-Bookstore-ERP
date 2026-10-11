@@ -1,311 +1,199 @@
 import bcrypt from 'bcrypt';
-import { db } from '../../db/index.js';
-import type { Role } from '@bms/shared';
-import {
-  BusinessError,
-  ConflictError,
-  ValidationError,
-} from '../../lib/errors.js';
-import { insertOutbox } from '../../lib/outbox.js';
+import { kysely } from '../../db/kysely.js';
+import { isUniqueViolation } from '../../db/errors.js';
+import { withTransaction, type Queryable } from '../../db/tx.js';
+import { BusinessError, ConflictError, NotFoundError } from '../../lib/errors.js';
+import { insertOutboxEvent } from '../../lib/outbox.js';
+import { insertAuditEntry } from '../audit/audit.repository.js';
+import { assignments, revokeSessionsOf } from '../auth/auth.repository.js';
+import * as policy from './staff.policy.js';
+import * as repo from './staff.repository.js';
+import type { Actor, NewStaff, RoleAssignment, StaffRecord } from './staff.types.js';
 
-// Staff administration, still in its v1 form until auth part 2 (#21).
+// Staff administration (#21, auth part 2). Every change checks, in its
+// transaction, that the actor may manage the account as it is now, and is
+// audited with the actor.
 
 const BCRYPT_ROUNDS = 12;
 
-// Password complexity: min 10 chars, upper, lower, digit, special
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$/;
+type ActorContext = Omit<Actor, 'assignments'>;
 
-// ── Create Staff ─────────────────────────────────────────────────────────────
+async function actorOf(ctx: ActorContext): Promise<Actor> {
+  return { ...ctx, assignments: await assignments(kysely, ctx.staffId) };
+}
 
-export async function createStaff(data: {
-  username: string;
-  password: string;
-  fullName: string;
-}): Promise<{ staffId: number }> {
-  if (!PASSWORD_REGEX.test(data.password)) {
-    throw new ValidationError(
-      'Password must be at least 10 characters and contain uppercase, lowercase, digit, and special character',
-    );
+const rolesOf = (s: StaffRecord): RoleAssignment[] => s.roles.map((r) => ({ branchId: r.branchId, role: r.role }));
+
+/** The account, if the actor may see it; otherwise 404, as if it did not exist. */
+async function visibleStaff(q: Queryable, actor: Actor, id: number, opts: { forUpdate?: boolean } = {}): Promise<StaffRecord> {
+  const staff = await repo.find(q, id, opts);
+  if (!staff || !policy.canView(actor, staff.id, rolesOf(staff))) throw new NotFoundError('Staff');
+  return staff;
+}
+
+/** The account, locked, if the actor may manage it. */
+async function manageable(tx: Queryable, actor: Actor, id: number): Promise<StaffRecord> {
+  const staff = await visibleStaff(tx, actor, id, { forUpdate: true });
+  policy.checkCanManage(actor, staff.id, rolesOf(staff));
+  return staff;
+}
+
+function audit(tx: Queryable, actor: Actor, action: string, entityType: string, staffId: number, meta: Record<string, unknown>) {
+  return insertAuditEntry(tx, {
+    staffId: actor.staffId,
+    staffRole: actor.role,
+    branchId: actor.branchId,
+    action,
+    entityType,
+    entityId: staffId,
+    meta,
+  });
+}
+
+async function checkBranchesExist(tx: Queryable, roles: RoleAssignment[]): Promise<void> {
+  const wanted = [...new Set(roles.map((r) => r.branchId))];
+  const found = await repo.existingBranches(tx, wanted);
+  const missing = wanted.find((b) => !found.includes(b));
+  if (missing !== undefined) throw new NotFoundError(`Branch ${missing}`);
+}
+
+/** Ends the role or the account of the last active Super_Admin? Refused. */
+async function checkKeepsSuperAdmin(tx: Queryable, staffId: number, code: string, message: string): Promise<void> {
+  if (!policy.keepsASuperAdmin(await repo.lockOtherActiveSuperAdmins(tx, staffId))) {
+    throw new BusinessError(code, message);
   }
+}
 
-  const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
+// ── Reading ───────────────────────────────────────────────────────────────────
 
-  const client = await db.connect();
+export async function list(ctx: ActorContext, page: { limit: number; offset: number }) {
+  const actor = await actorOf(ctx);
+  const { items, total } = await repo.list(kysely, policy.visibility(actor), page);
+  return { items: items.map((s) => ({ record: s, canManage: policy.canManage(actor, s.id, rolesOf(s)) })), total };
+}
+
+export async function getById(ctx: ActorContext, id: number) {
+  const actor = await actorOf(ctx);
+  const staff = await visibleStaff(kysely, actor, id);
+  return { record: staff, canManage: policy.canManage(actor, staff.id, rolesOf(staff)) };
+}
+
+// ── Changing ──────────────────────────────────────────────────────────────────
+
+/** Creates the account with its roles and all-branch access, in one step (owner decision 5a). */
+export async function create(ctx: ActorContext, input: NewStaff): Promise<number> {
+  const actor = await actorOf(ctx);
+  policy.checkRoleChanges(actor, input.roles);
+  if (input.isAllBranches) policy.checkCanSetAllBranches(actor);
+  const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
+
   try {
-    await client.query('BEGIN');
+    return await withTransaction({}, async (tx) => {
+      await checkBranchesExist(tx, input.roles);
+      const id = await repo.insert(tx, { username: input.username, passwordHash, fullName: input.fullName, isAllBranches: input.isAllBranches });
+      await repo.addRoles(tx, id, input.roles);
+      await audit(tx, actor, 'CREATE', 'staff', id, { username: input.username, roles: input.roles, isAllBranches: input.isAllBranches });
+      return id;
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new ConflictError('DUPLICATE_USERNAME', `Username '${input.username}' already exists`);
+    throw err;
+  }
+}
 
-    let result;
-    try {
-      result = await client.query(
-        `INSERT INTO staff (username, password_hash, full_name, is_active)
-         VALUES ($1, $2, $3, true)
-         RETURNING id`,
-        [data.username, passwordHash, data.fullName],
-      );
-    } catch (err: unknown) {
-      if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('DUPLICATE_USERNAME', `Username '${data.username}' already exists`);
-      }
-      throw err;
+export async function updateName(ctx: ActorContext, id: number, fullName: string): Promise<void> {
+  const actor = await actorOf(ctx);
+  await withTransaction({}, async (tx) => {
+    const staff = await manageable(tx, actor, id);
+    await repo.setFullName(tx, id, fullName);
+    await audit(tx, actor, 'UPDATE', 'staff', id, { fullName: { from: staff.fullName, to: fullName } });
+  });
+}
+
+/**
+ * Sets the staff member's roles. Only the changes are applied, and each must
+ * be a role the actor may grant in a branch they manage, so roles elsewhere
+ * stay as they are (was: every role in every branch was replaced).
+ */
+export async function setRoles(ctx: ActorContext, id: number, desired: RoleAssignment[]): Promise<void> {
+  const actor = await actorOf(ctx);
+  await withTransaction({}, async (tx) => {
+    const staff = await manageable(tx, actor, id);
+    const { added, removed } = policy.roleChanges(rolesOf(staff), desired);
+    if (added.length === 0 && removed.length === 0) return;
+    policy.checkRoleChanges(actor, [...added, ...removed]);
+    await checkBranchesExist(tx, added);
+
+    const losesSuperAdmin =
+      removed.some((r) => r.role === 'Super_Admin') && !desired.some((r) => r.role === 'Super_Admin');
+    if (losesSuperAdmin && staff.isActive) {
+      await checkKeepsSuperAdmin(tx, id, 'CANNOT_REMOVE_LAST_SUPER_ADMIN', 'The last active Super_Admin keeps the role. Make someone else Super_Admin first.');
     }
 
-    const staffId = result.rows[0].id;
-
-    // Write audit log
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES (NULL, 'SYSTEM', 'CREATE', 'staff', $1, $2)`,
-      [String(staffId), JSON.stringify({ username: data.username })],
-    );
-
-    await client.query('COMMIT');
-    return { staffId };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    await repo.removeRoles(tx, id, removed);
+    await repo.addRoles(tx, id, added);
+    await audit(tx, actor, 'UPDATE', 'staff_roles', id, { added, removed });
+  });
 }
 
-// ── Deactivate ───────────────────────────────────────────────────────────────
-
-export async function deactivateStaff(staffId: number): Promise<void> {
-  const result = await db.query(
-    `UPDATE staff SET is_active = false WHERE id = $1 RETURNING username`,
-    [staffId],
-  );
-  // End every session at once (#21, owner decision 5a)
-  await db.query(
-    `UPDATE staff_sessions SET revoked_at = now(), revoked_reason = 'deactivated' WHERE staff_id = $1 AND revoked_at IS NULL`,
-    [staffId],
-  );
-
-  // Emit notification (non-blocking)
-  try {
-    const username = result.rows[0]?.username ?? String(staffId);
-    const notifClient = await db.connect();
-    try {
-      await notifClient.query('BEGIN');
-      await insertOutbox(notifClient, 'auth.staff_deactivated', { username, branchId: null });
-      await notifClient.query('COMMIT');
-    } catch { await notifClient.query('ROLLBACK'); } finally { notifClient.release(); }
-  } catch { /* non-fatal */ }
+export async function setAllBranches(ctx: ActorContext, id: number, isAllBranches: boolean): Promise<void> {
+  const actor = await actorOf(ctx);
+  policy.checkCanSetAllBranches(actor);
+  await withTransaction({}, async (tx) => {
+    const staff = await manageable(tx, actor, id);
+    if (staff.isAllBranches === isAllBranches) return;
+    await repo.setAllBranches(tx, id, isAllBranches);
+    await audit(tx, actor, 'UPDATE', 'staff', id, { action: 'set_all_branches', isAllBranches });
+  });
 }
 
-// ── Reactivate ───────────────────────────────────────────────────────────────
-
-export async function reactivateStaff(staffId: number): Promise<void> {
-  const result = await db.query(
-    `UPDATE staff SET is_active = true WHERE id = $1 RETURNING id`,
-    [staffId],
-  );
-  if (result.rows.length === 0) {
-    throw new BusinessError('STAFF_NOT_FOUND', `Staff ${staffId} not found`);
-  }
-  // Role assignments are retained (soft deactivation only)
-}
-
-// ── Admin: Reset Password ─────────────────────────────────────────────────────
-// Sets a temporary password and forces must_change_password = true
-
-export async function adminResetPassword(
-  targetStaffId: number,
-  temporaryPassword: string,
-  staffCtx: { staffId: number; role: string },
-): Promise<void> {
-  if (!PASSWORD_REGEX.test(temporaryPassword)) {
-    throw new ValidationError(
-      'Temporary password must be at least 10 characters and contain uppercase, lowercase, digit, and special character',
-    );
-  }
-
-  const newHash = await bcrypt.hash(temporaryPassword, BCRYPT_ROUNDS);
-
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    const result = await client.query(
-      `UPDATE staff
-       SET password_hash = $1,
-           must_change_password = true,
-           failed_login_attempts = 0,
-           locked_until = NULL,
-           password_changed_at = now()
-       WHERE id = $2
-       RETURNING id`,
-      [newHash, targetStaffId],
-    );
-    if (result.rows.length === 0) {
-      throw new BusinessError('STAFF_NOT_FOUND', `Staff ${targetStaffId} not found`);
+/** Deactivates the account and ends its sessions; the roles are kept for a reactivation. */
+export async function deactivate(ctx: ActorContext, id: number): Promise<void> {
+  if (id === ctx.staffId) throw new BusinessError('CANNOT_DEACTIVATE_SELF', 'You cannot deactivate your own account.');
+  const actor = await actorOf(ctx);
+  await withTransaction({}, async (tx) => {
+    const staff = await manageable(tx, actor, id);
+    if (!staff.isActive) return;
+    if (staff.roles.some((r) => r.role === 'Super_Admin')) {
+      await checkKeepsSuperAdmin(tx, id, 'CANNOT_DEACTIVATE_LAST_SUPER_ADMIN', 'Cannot deactivate the last active Super_Admin. Create another Super_Admin first.');
     }
-
-    // End every session — forces re-login with the new password
-    await client.query(
-      `UPDATE staff_sessions SET revoked_at = now(), revoked_reason = 'password_reset' WHERE staff_id = $1 AND revoked_at IS NULL`,
-      [targetStaffId],
-    );
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES ($1, $2, 'UPDATE', 'staff', $3, $4)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(targetStaffId),
-        JSON.stringify({ action: 'admin_password_reset', mustChangePassword: true }),
-      ],
-    );
-
-    // Emit notification (non-blocking)
-    const targetRes = await client.query('SELECT username FROM staff WHERE id = $1', [targetStaffId]);
-    const targetUsername = targetRes.rows[0]?.username ?? String(targetStaffId);
-    const adminRes = await client.query('SELECT username FROM staff WHERE id = $1', [staffCtx.staffId]);
-    const adminName = adminRes.rows[0]?.username ?? String(staffCtx.staffId);
-    await insertOutbox(client, 'auth.password_reset', { username: targetUsername, adminName, branchId: null });
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    await repo.setActive(tx, id, false);
+    await revokeSessionsOf(tx, id, 'deactivated');
+    await audit(tx, actor, 'INACTIVATE', 'staff', id, { username: staff.username });
+    await insertOutboxEvent(tx, 'auth.staff_deactivated', { username: staff.username, branchId: null });
+  });
 }
 
-// ── Admin: Unlock Account ─────────────────────────────────────────────────────
-
-export async function unlockAccount(
-  targetStaffId: number,
-  staffCtx: { staffId: number; role: string },
-): Promise<void> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    const result = await client.query(
-      `UPDATE staff
-       SET failed_login_attempts = 0,
-           locked_until = NULL
-       WHERE id = $1
-       RETURNING id`,
-      [targetStaffId],
-    );
-    if (result.rows.length === 0) {
-      throw new BusinessError('STAFF_NOT_FOUND', `Staff ${targetStaffId} not found`);
-    }
-
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES ($1, $2, 'UPDATE', 'staff', $3, $4)`,
-      [
-        staffCtx.staffId,
-        staffCtx.role,
-        String(targetStaffId),
-        JSON.stringify({ action: 'account_unlocked' }),
-      ],
-    );
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+export async function reactivate(ctx: ActorContext, id: number): Promise<void> {
+  const actor = await actorOf(ctx);
+  await withTransaction({}, async (tx) => {
+    const staff = await manageable(tx, actor, id);
+    if (staff.isActive) return;
+    await repo.setActive(tx, id, true);
+    await audit(tx, actor, 'ACTIVATE', 'staff', id, { username: staff.username });
+  });
 }
 
-// ── Get Staff by ID ───────────────────────────────────────────────────────────
-
-export async function getStaffById(staffId: number): Promise<{
-  id: number;
-  username: string;
-  fullName: string;
-  isActive: boolean;
-  failedLoginAttempts: number;
-  lockedUntil: string | null;
-  mustChangePassword: boolean;
-  lastLoginAt: string | null;
-  passwordChangedAt: string | null;
-  createdAt: string;
-  roles: Array<{ branchId: number; branchName: string | null; role: string }>;
-}> {
-  const result = await db.query(
-    `SELECT s.id, s.username, s.full_name, s.is_active,
-            s.failed_login_attempts, s.locked_until, s.must_change_password,
-            s.last_login_at, s.password_changed_at, s.created_at,
-            COALESCE(json_agg(
-              json_build_object('branchId', sbr.branch_id, 'branchName', b.name, 'role', sbr.role)
-            ) FILTER (WHERE sbr.staff_id IS NOT NULL), '[]') AS roles
-     FROM staff s
-     LEFT JOIN staff_branch_roles sbr ON sbr.staff_id = s.id
-     LEFT JOIN branches b ON b.id = sbr.branch_id
-     WHERE s.id = $1
-     GROUP BY s.id`,
-    [staffId],
-  );
-
-  if (result.rows.length === 0) {
-    throw new BusinessError('STAFF_NOT_FOUND', `Staff ${staffId} not found`);
-  }
-
-  const r = result.rows[0];
-  return {
-    id: r.id,
-    username: r.username,
-    fullName: r.full_name,
-    isActive: r.is_active,
-    failedLoginAttempts: r.failed_login_attempts,
-    lockedUntil: r.locked_until ? new Date(r.locked_until).toISOString() : null,
-    mustChangePassword: r.must_change_password,
-    lastLoginAt: r.last_login_at ? new Date(r.last_login_at).toISOString() : null,
-    passwordChangedAt: r.password_changed_at ? new Date(r.password_changed_at).toISOString() : null,
-    createdAt: new Date(r.created_at).toISOString(),
-    roles: r.roles,
-  };
+/** Sets a temporary password, to change at the next sign-in, and ends the account's sessions. */
+export async function resetPassword(ctx: ActorContext, id: number, temporaryPassword: string): Promise<void> {
+  const actor = await actorOf(ctx);
+  const passwordHash = await bcrypt.hash(temporaryPassword, BCRYPT_ROUNDS);
+  await withTransaction({}, async (tx) => {
+    const staff = await manageable(tx, actor, id);
+    const admin = await repo.find(tx, actor.staffId);
+    await repo.resetPassword(tx, id, passwordHash);
+    await revokeSessionsOf(tx, id, 'password_reset');
+    await audit(tx, actor, 'UPDATE', 'staff', id, { action: 'admin_password_reset', mustChangePassword: true });
+    await insertOutboxEvent(tx, 'auth.password_reset', { username: staff.username, adminName: admin?.username ?? String(actor.staffId), branchId: null });
+  });
 }
 
-// ── Assign Roles ─────────────────────────────────────────────────────────────
-// Replaces ALL role assignments for a staff member with the provided set.
-// Supports multiple roles per branch (e.g. Manager + Finance_Officer at same branch).
-
-export async function assignRoles(
-  staffId: number,
-  roles: Array<{ branchId: number; role: Role }>,
-): Promise<void> {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Delete ALL existing assignments first — this handles removals and branch switches
-    await client.query(
-      `DELETE FROM staff_branch_roles WHERE staff_id = $1`,
-      [staffId],
-    );
-
-    // Insert the new complete set — ON CONFLICT DO NOTHING handles duplicates gracefully
-    for (const { branchId, role } of roles) {
-      await client.query(
-        `INSERT INTO staff_branch_roles (staff_id, branch_id, role)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (staff_id, branch_id, role) DO NOTHING`,
-        [staffId, branchId, role],
-      );
-    }
-
-    // Write audit log
-    await client.query(
-      `INSERT INTO audit_logs (staff_id, staff_role, action, entity_type, entity_id, meta)
-       VALUES (NULL, 'SYSTEM', 'UPDATE', 'staff_roles', $1, $2)`,
-      [String(staffId), JSON.stringify({ assignments: roles })],
-    );
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+export async function unlock(ctx: ActorContext, id: number): Promise<void> {
+  const actor = await actorOf(ctx);
+  await withTransaction({}, async (tx) => {
+    await manageable(tx, actor, id);
+    await repo.unlock(tx, id);
+    await audit(tx, actor, 'UPDATE', 'staff', id, { action: 'account_unlocked' });
+  });
 }
+

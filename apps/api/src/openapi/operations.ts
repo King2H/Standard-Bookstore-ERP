@@ -1,5 +1,14 @@
 import type { z } from 'zod';
 import {
+  CreateStaffRequestSchema,
+  CreateStaffResponseSchema,
+  ResetPasswordRequestSchema,
+  SetAllBranchesRequestSchema,
+  SetStaffRolesRequestSchema,
+  StaffListQuerySchema,
+  StaffListResponseSchema,
+  StaffSchema,
+  UpdateStaffRequestSchema,
   AccessTokenResponseSchema,
   AuthBranchListResponseSchema,
   ChangePasswordRequestSchema,
@@ -211,6 +220,7 @@ export const operations: ApiOperation[] = [
     },
   },
   ...authOperations(),
+  ...staffOperations(),
   ...auditOperations(),
   ...branchOperations(),
   ...catalogOperations(),
@@ -319,6 +329,121 @@ function authOperations(): ApiOperation[] {
       request: { body: ChangePasswordRequestSchema },
       responses: { 200: { description: 'Changed', schema: MessageResponseSchema } },
       errors: [400, 401, 403, 422, 500],
+    },
+  ];
+}
+
+function staffOperations(): ApiOperation[] {
+  const tag = 'Staff';
+  const change = [400, 401, 403, 404, 422, 500];
+  const message = (description: string) => ({ 200: { description, schema: MessageResponseSchema } });
+  const scope =
+    'Super_Admin: everyone; Admin with access to all branches: everyone below them; other Admins: staff whose roles ' +
+    'are all in their Admin branches; nobody acts on themselves or on an equal or higher rank';
+  return [
+    {
+      operationId: 'listStaff',
+      method: 'get',
+      path: '/staff',
+      summary: `Staff the caller may see, with canManage on each (${scope}; Managers: their session branch's staff)`,
+      tag,
+      request: { query: StaffListQuerySchema },
+      responses: { 200: { description: 'One page of staff', schema: StaffListResponseSchema } },
+    },
+    {
+      operationId: 'createStaff',
+      method: 'post',
+      path: '/staff',
+      summary:
+        'Create an account with its roles in one step (Super_Admin, Admin). Roles granted are below the creator\'s own; ' +
+        'all-branch access: Super_Admin only. Usernames are unique ignoring case',
+      tag,
+      request: { body: CreateStaffRequestSchema },
+      responses: { 201: { description: 'The new account', schema: CreateStaffResponseSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+    {
+      operationId: 'getStaff',
+      method: 'get',
+      path: '/staff/{id}',
+      summary: 'One account; 404 when outside what the caller may see',
+      tag,
+      request: { params: IdParamsSchema },
+      responses: { 200: { description: 'The account', schema: StaffSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'updateStaff',
+      method: 'put',
+      path: '/staff/{id}',
+      summary: `Change the full name (Super_Admin, Admin; ${scope})`,
+      tag,
+      request: { params: IdParamsSchema, body: UpdateStaffRequestSchema },
+      responses: message('Updated'),
+      errors: change,
+    },
+    {
+      operationId: 'setStaffRoles',
+      method: 'put',
+      path: '/staff/{id}/roles',
+      summary:
+        'Set the roles: only the differences are applied, each a role below the caller\'s own in a branch they manage ' +
+        "(Super_Admin, Admin; Managers: Sales, Stock_Clerk, Purchasor, Finance_Officer in their session branch). " +
+        'The last active Super_Admin keeps the role',
+      tag,
+      request: { params: IdParamsSchema, body: SetStaffRolesRequestSchema },
+      responses: message('Updated'),
+      errors: change,
+    },
+    {
+      operationId: 'setStaffAllBranches',
+      method: 'put',
+      path: '/staff/{id}/all-branches',
+      summary: 'Grant or remove access to all branches (Super_Admin)',
+      tag,
+      request: { params: IdParamsSchema, body: SetAllBranchesRequestSchema },
+      responses: message('Updated'),
+      errors: change,
+    },
+    {
+      operationId: 'deactivateStaff',
+      method: 'post',
+      path: '/staff/{id}/deactivate',
+      summary: `Deactivate an account and end its sessions; the roles are kept (Super_Admin, Admin; ${scope})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: message('Deactivated'),
+      errors: change,
+    },
+    {
+      operationId: 'reactivateStaff',
+      method: 'post',
+      path: '/staff/{id}/reactivate',
+      summary: `Reactivate an account (Super_Admin, Admin; ${scope})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: message('Reactivated'),
+      errors: change,
+    },
+    {
+      operationId: 'resetStaffPassword',
+      method: 'post',
+      path: '/staff/{id}/reset-password',
+      summary: `Set a temporary password to change at the next sign-in, ending the account's sessions (Super_Admin, Admin; ${scope})`,
+      tag,
+      request: { params: IdParamsSchema, body: ResetPasswordRequestSchema },
+      responses: message('Reset'),
+      errors: change,
+    },
+    {
+      operationId: 'unlockStaff',
+      method: 'post',
+      path: '/staff/{id}/unlock',
+      summary: `Lift a sign-in lockout (Super_Admin, Admin; ${scope})`,
+      tag,
+      request: { params: IdParamsSchema },
+      responses: message('Unlocked'),
+      errors: change,
     },
   ];
 }
