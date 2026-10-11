@@ -1,10 +1,7 @@
 import type { Request, Response } from 'express';
-import { ReportQuerySchema, type ReportQuery } from '@bms/shared';
 import { buildCsv, sendCsv, SALES_COLUMNS } from '../../../lib/csvBuilder.js';
-import { scopedBranchOrAll } from '../../../lib/scope.js';
-import { valid } from '../../../middleware/validate.js';
 import * as service from './sales.service.js';
-import type { ReportFilters } from './sales.types.js';
+import { reportFilters, reportQuery } from '../reportScope.js';
 
 /**
  * HTTP side of the sales reports (A3): validated query -> service -> response.
@@ -12,15 +9,7 @@ import type { ReportFilters } from './sales.types.js';
  * or none for all branches.
  */
 
-export const schemas = {
-  report: { query: ReportQuerySchema },
-};
-
-/** The validated query as the services take it, with the branch from the session's scope. */
-export function reportFilters(req: Request): ReportFilters {
-  const query: ReportQuery = valid(req, schemas.report).query;
-  return { branchId: scopedBranchOrAll(req), dateFrom: query.dateFrom, dateTo: query.dateTo, groupBy: query.groupBy };
-}
+export const schemas = { report: reportQuery };
 
 export async function report(req: Request, res: Response): Promise<void> {
   res.json(await service.getSalesReport(reportFilters(req)));

@@ -36788,6 +36788,747 @@
         }
       }
     },
+    "/reports/customers": {
+      "get": {
+        "operationId": "getCustomerReport",
+        "summary": "Customer counts, repeat and new customers, and top customers by sales in the range (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The customer report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalCustomers": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "activeCustomers": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "repeatCustomers": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "newCustomersInPeriod": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "totalCustomers",
+                        "activeCustomers",
+                        "repeatCustomers",
+                        "newCustomersInPeriod"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "topCustomers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "customerId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "fullName": {
+                            "type": "string"
+                          },
+                          "totalSpend": {
+                            "type": "number"
+                          },
+                          "orderCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "customerId",
+                          "fullName",
+                          "totalSpend",
+                          "orderCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "byPeriod": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "period": {
+                            "type": "string"
+                          },
+                          "newCustomers": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "period",
+                          "newCustomers"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "summary",
+                    "topCustomers",
+                    "byPeriod"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/customers/export": {
+      "get": {
+        "operationId": "exportCustomers",
+        "summary": "The top customers as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/inventory": {
+      "get": {
+        "operationId": "getInventoryReport",
+        "summary": "Stock now, low stock, POS best sellers and stock movement in the range (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The inventory report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalBooks": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "totalStockUnits": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "availableStock": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "reservedStock": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "lowStockItems": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "outOfStockItems": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "totalBooks",
+                        "totalStockUnits",
+                        "availableStock",
+                        "reservedStock",
+                        "lowStockItems",
+                        "outOfStockItems"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "lowStockItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "locationId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationName": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "reorderPoint": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "bookId",
+                          "title",
+                          "locationId",
+                          "locationName",
+                          "quantity",
+                          "reorderPoint"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "topSellingBooks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "unitsSold": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "revenue": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "bookId",
+                          "title",
+                          "unitsSold",
+                          "revenue"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "stockMovement": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "period": {
+                            "type": "string"
+                          },
+                          "stockIn": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "stockOut": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "period",
+                          "stockIn",
+                          "stockOut"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "summary",
+                    "lowStockItems",
+                    "topSellingBooks",
+                    "stockMovement"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/inventory-valuation/export": {
+      "get": {
+        "operationId": "exportInventoryValuation",
+        "summary": "Stock valued at each location's average cost, as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/inventory/export": {
+      "get": {
+        "operationId": "exportInventory",
+        "summary": "Stock per book and location as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reports/kpis": {
       "get": {
         "operationId": "getKpis",
@@ -37125,6 +37866,386 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/receivables-aging": {
+      "get": {
+        "operationId": "getReceivablesAging",
+        "summary": "Open receivables by days past due, now (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The receivables and bucket totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "customer": {
+                            "type": "string"
+                          },
+                          "invoiceNo": {
+                            "type": "string"
+                          },
+                          "invoiceDate": {
+                            "type": "string"
+                          },
+                          "dueDate": {
+                            "type": "string"
+                          },
+                          "outstandingAmount": {
+                            "type": "number"
+                          },
+                          "agingBucket": {
+                            "type": "string",
+                            "enum": [
+                              "Current",
+                              "1-30",
+                              "31-60",
+                              "61-90",
+                              "90+"
+                            ]
+                          },
+                          "lastPaymentDate": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "customer",
+                          "invoiceNo",
+                          "invoiceDate",
+                          "dueDate",
+                          "outstandingAmount",
+                          "agingBucket",
+                          "lastPaymentDate"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "byBucket": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bucket": {
+                            "type": "string",
+                            "enum": [
+                              "Current",
+                              "1-30",
+                              "31-60",
+                              "61-90",
+                              "90+"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "totalOutstanding": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "bucket",
+                          "count",
+                          "totalOutstanding"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "rows",
+                    "byBucket"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/receivables-aging/export": {
+      "get": {
+        "operationId": "exportReceivablesAging",
+        "summary": "Open receivables by days past due as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/receivables/export": {
+      "get": {
+        "operationId": "exportReceivables",
+        "summary": "Receivables raised in the range, of every source, as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
           "400": {
             "description": "Invalid request (`VALIDATION_ERROR`)",
             "content": {

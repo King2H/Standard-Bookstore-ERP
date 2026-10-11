@@ -4,7 +4,7 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
 import { db } from '../db/index.js';
-import { getReceivablesExportRows } from '../modules/reports/reports.service.js';
+import { getReceivableExportRows as getReceivablesExportRows } from '../modules/reports/receivables/receivableReports.service.js';
 
 // Counter sales after the move to the layered structure (#21, POS). Each test
 // names what the endpoint did before.

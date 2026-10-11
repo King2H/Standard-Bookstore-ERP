@@ -18,7 +18,7 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
 import { db } from '../db/index.js';
-import { getInventoryExportRowsV2 } from '../modules/reports/reports.service.js';
+import { getStockExportRows } from '../modules/reports/inventory/inventoryReports.service.js';
 import { getSalesDetail } from '../modules/reports/sales/sales.service.js';
 import * as inventoryService from '../modules/inventory/inventory.service.js';
 import { withTransaction } from '../db/tx.js';
@@ -217,7 +217,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     // service directly — the HTTP export endpoints return CSV and require
     // VIEW_REPORTS (Sales doesn't hold it), neither of which this assertion
     // needs to go through.
-    const exportRows = await getInventoryExportRowsV2({ branchId });
+    const exportRows = await getStockExportRows(branchId);
     const exportRow = exportRows.find(r => r.title === 'Trade-In Novel');
     expect(exportRow).toBeDefined();
     expect(exportRow!.unit_cost).toBeCloseTo(ALLOWANCE, 2);
