@@ -2,8 +2,8 @@ import type { CreateCustomerRequest, MoneyInput, UpdateCustomerRequest } from '@
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
-import { transitionEntityStatus } from '../../lib/lifecycle.js';
-import { insertOutbox } from '../../lib/outbox.js';
+import { nextStatus } from '../../lib/lifecycle.js';
+import { insertOutbox, insertOutboxEvent } from '../../lib/outbox.js';
 import { encryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { getLoyaltyAccrualRate, getLoyaltyMinTransactionAmount } from '../config/config.service.js';
@@ -138,19 +138,22 @@ export async function updateCustomer(actor: Actor, id: number, dto: UpdateCustom
   });
 }
 
+/** A repeat changes nothing and is not audited; an archived customer must be restored first (#96). */
 export async function deactivateCustomer(actor: Actor, id: number): Promise<void> {
-  const customer = await requireCustomer(kysely, id);
-  // The shared lifecycle helper keeps is_active in step with status and
-  // writes the audit entry; it moves to a repository with Catalog (#21).
-  await transitionEntityStatus('customers', 'customer', id, 'INACTIVATE', actor, { syncIsActive: true });
-  await withTransaction({}, (_tx, client) =>
-    insertOutbox(client, 'customer.deactivated', {
+  await withTransaction({}, async (tx) => {
+    const customer = await requireCustomer(tx, id);
+    const previousStatus = (await customers.lockStatus(tx, id))!;
+    const newStatus = nextStatus(previousStatus, 'INACTIVATE');
+    if (newStatus === null) return;
+    await customers.setStatus(tx, id, newStatus, actor.staffId);
+    await audit(tx, actor, 'INACTIVATE', 'customer', id, { previousStatus, newStatus });
+    await insertOutboxEvent(tx, 'customer.deactivated', {
       customerId: id,
       customerName: customer.fullName,
       customerCode: customer.customerCode,
       branchId: customer.branchId ?? actor.branchId,
-    }),
-  ).catch(() => undefined); // a notification never blocks the change
+    });
+  });
 }
 
 // ── Loyalty ───────────────────────────────────────────────────────────────────

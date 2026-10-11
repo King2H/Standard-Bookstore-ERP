@@ -1,5 +1,6 @@
 import type { LifecycleStatus, SupplierListQuery, SupplierType } from '@bms/shared';
 import { BusinessError, ConflictError } from '../../lib/errors.js';
+import { nextStatus, type LifecycleAction } from '../../lib/lifecycle.js';
 
 /**
  * Supplier rules as pure functions (A5): no I/O, so they are unit-tested
@@ -31,20 +32,19 @@ export function typeAfterUpdate(
   };
 }
 
-export type LifecycleAction = 'ACTIVATE' | 'INACTIVATE' | 'ARCHIVE' | 'RESTORE';
+export type { LifecycleAction } from '../../lib/lifecycle.js';
 
 /**
- * The state a lifecycle action leads to. Every action is allowed from every
- * status. is_active follows the status because procurement and other v1
- * code still check is_active.
+ * The state a lifecycle action leads to, by the rule shared with the catalog
+ * (#96); null when the supplier already has it. is_active follows the status
+ * because procurement still checks is_active.
  */
-export function lifecycleTransition(action: LifecycleAction): {
-  status: LifecycleStatus;
-  isActive: boolean;
-  archived: boolean;
-} {
-  const status: LifecycleStatus =
-    action === 'INACTIVATE' ? 'INACTIVE' : action === 'ARCHIVE' ? 'ARCHIVED' : 'ACTIVE';
+export function lifecycleTransition(
+  current: LifecycleStatus,
+  action: LifecycleAction,
+): { status: LifecycleStatus; isActive: boolean; archived: boolean } | null {
+  const status = nextStatus(current, action);
+  if (status === null) return null;
   return { status, isActive: status === 'ACTIVE', archived: status === 'ARCHIVED' };
 }
 

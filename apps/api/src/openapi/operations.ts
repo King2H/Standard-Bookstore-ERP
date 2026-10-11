@@ -892,11 +892,11 @@ function customerOperations(): ApiOperation[] {
       operationId: 'deactivateCustomer',
       method: 'post',
       path: '/customers/{id}/deactivate',
-      summary: 'Set a customer to INACTIVE (Admin, Manager)',
+      summary: 'Set a customer to INACTIVE (Admin, Manager); an archived customer must be restored first, and a repeat changes nothing',
       tag,
       request: byId,
       responses: { 200: { description: 'Deactivated', schema: MessageResponseSchema } },
-      errors: notFound,
+      errors: [400, 401, 403, 404, 422, 500],
     },
     {
       operationId: 'listCustomerGroups',
@@ -1444,6 +1444,9 @@ function supplierOperations(): ApiOperation[] {
     responses: { 200: { description: 'Done', schema: MessageResponseSchema } },
     errors,
   });
+  // The catalog's lifecycle rules (#96): 422 INVALID_LIFECYCLE_TRANSITION otherwise.
+  const repeat = '; an archived supplier must be restored first, and repeating the current status changes nothing';
+  const lifecycleErrors = [400, 401, 403, 404, 422, 500];
   return [
     {
       operationId: 'listSuppliers',
@@ -1494,10 +1497,10 @@ function supplierOperations(): ApiOperation[] {
       responses: { 200: { description: 'Deleted', schema: MessageResponseSchema } },
       errors: [400, 401, 403, 404, 409, 500],
     },
-    action('deactivateSupplier', 'deactivate', 'Set a supplier to INACTIVE', [400, 401, 403, 404, 500]),
-    action('activateSupplier', 'activate', 'Set a supplier to ACTIVE', [400, 401, 403, 404, 500]),
-    action('archiveSupplier', 'archive', 'Archive a supplier', [400, 401, 403, 404, 500]),
-    action('restoreSupplier', 'restore', 'Restore an archived supplier to ACTIVE', [400, 401, 403, 404, 500]),
+    action('deactivateSupplier', 'deactivate', `Set a supplier to INACTIVE${repeat}`, lifecycleErrors),
+    action('activateSupplier', 'activate', `Set a supplier to ACTIVE${repeat}`, lifecycleErrors),
+    action('archiveSupplier', 'archive', `Archive a supplier${repeat}`, lifecycleErrors),
+    action('restoreSupplier', 'restore', `Restore an archived supplier to ACTIVE${repeat}`, lifecycleErrors),
     action('blacklistSupplier', 'blacklist', 'Blacklist a supplier (Admin, Manager)', [400, 401, 403, 404, 500]),
     {
       operationId: 'getSupplierUsage',

@@ -99,12 +99,14 @@ export async function updateSupplier(actor: Actor, id: number, dto: UpdateSuppli
   });
 }
 
+/** A repeat of the current status changes nothing and is not audited. */
 async function transition(actor: Actor, id: number, action: policy.LifecycleAction): Promise<void> {
   await withTransaction({}, async (tx) => {
     const current = await suppliers.findForUpdate(tx, id);
     if (!current) throw new NotFoundError('Supplier');
 
-    const next = policy.lifecycleTransition(action);
+    const next = policy.lifecycleTransition(current.status, action);
+    if (next === null) return;
     await suppliers.setLifecycle(tx, id, next, actor.staffId);
     const meta: { previousStatus: LifecycleStatus; newStatus: LifecycleStatus } = {
       previousStatus: current.status,

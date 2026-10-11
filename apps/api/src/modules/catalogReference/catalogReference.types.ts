@@ -10,7 +10,7 @@ export interface Actor {
 /** The reference data books link to. */
 export type ReferenceKind = 'author' | 'category' | 'publisher';
 
-export type LifecycleAction = 'ACTIVATE' | 'INACTIVATE' | 'ARCHIVE' | 'RESTORE';
+export type { LifecycleAction } from '../../lib/lifecycle.js';
 
 export interface AuthorRecord {
   id: number;
