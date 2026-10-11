@@ -78,3 +78,38 @@ describe('ensureSeedData — does not overwrite operator changes on restart', ()
     expect(row.is_active).toBe(false);
   });
 });
+
+// The startup seed set the id sequences back to MAX(id): after the newest
+// branch or account was deleted, a restart gave its id to the next one, which
+// inherited the old row's audit log.
+describe('ensureSeedData — never hands out an id again', () => {
+  afterAll(async () => {
+    await db.query(`DELETE FROM branches WHERE name LIKE 'Seed Sequence Test %'`);
+    await db.query(`DELETE FROM staff WHERE username LIKE 'seed_sequence_test_%'`);
+  });
+
+  it('gives a new branch a new id after the newest branch was deleted and the server restarted', async () => {
+    const insert = async (name: string) =>
+      Number((await db.query(`INSERT INTO branches (name, address, contact_info, operating_hours) VALUES ($1, '-', '{}', '{}') RETURNING id`, [name])).rows[0].id);
+    const deleted = await insert('Seed Sequence Test A');
+    await db.query(`DELETE FROM branches WHERE id = $1`, [deleted]);
+
+    await ensureSeedData();
+
+    expect(await insert('Seed Sequence Test B')).toBeGreaterThan(deleted);
+  });
+
+  it('gives a new account a new id after the newest account was deleted and the server restarted', async () => {
+    const insert = async (username: string) =>
+      Number((await db.query(
+        `INSERT INTO staff (username, password_hash, full_name) VALUES ($1, $2, 'Seed Sequence Test') RETURNING id`,
+        [username, DEFAULT_ADMIN_PASSWORD_HASH],
+      )).rows[0].id);
+    const deleted = await insert('seed_sequence_test_a');
+    await db.query(`DELETE FROM staff WHERE id = $1`, [deleted]);
+
+    await ensureSeedData();
+
+    expect(await insert('seed_sequence_test_b')).toBeGreaterThan(deleted);
+  });
+});

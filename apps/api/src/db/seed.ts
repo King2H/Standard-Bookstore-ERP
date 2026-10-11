@@ -83,9 +83,12 @@ export async function ensureSeedData(): Promise<void> {
     `);
 
     // ── 4. Advance sequences past seeded IDs ──────────────────────────────────
+    // Only ever forward: rewinding to MAX(id) after the newest row was deleted
+    // would give its id to the next row, which then inherits the old row's
+    // audit log, notifications and other references.
     await client.query(`
-      SELECT setval('branches_id_seq', GREATEST((SELECT COALESCE(MAX(id), 1) FROM branches), 1));
-      SELECT setval('staff_id_seq',    GREATEST((SELECT COALESCE(MAX(id), 2) FROM staff),    2));
+      SELECT setval('branches_id_seq', GREATEST((SELECT COALESCE(MAX(id), 1) FROM branches), 1, (SELECT last_value FROM branches_id_seq)));
+      SELECT setval('staff_id_seq',    GREATEST((SELECT COALESCE(MAX(id), 2) FROM staff),    2, (SELECT last_value FROM staff_id_seq)));
     `);
 
     // ── 5. Default location for Main Branch ───────────────────────────────────
