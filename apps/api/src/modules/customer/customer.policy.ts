@@ -14,9 +14,9 @@ export function statusesFor(status: 'active' | 'inactive' | 'archived' | 'all'):
   return ['ACTIVE'];
 }
 
-/** The next code after the highest CUS-nnnn so far: CUS-0001, CUS-0002, ... */
-export function nextCustomerCode(highest: number): string {
-  return `CUS-${String(highest + 1).padStart(4, '0')}`;
+/** A customer's code from its number in the running series: CUS-0001, CUS-0002, ... */
+export function customerCode(n: number): string {
+  return `CUS-${String(n).padStart(4, '0')}`;
 }
 
 /** A store-credit adjustment must move a positive amount; the direction says which way. */

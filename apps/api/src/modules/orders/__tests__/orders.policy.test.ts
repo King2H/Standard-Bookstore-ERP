@@ -10,7 +10,6 @@ import {
   checkQuantity,
   checkStoreCredit,
   confirmPaymentMethod,
-  dailyNumber,
   normaliseStatus,
   orderTotals,
   priceLine,
@@ -91,10 +90,6 @@ describe('creating an order', () => {
   it('totals the lines, with no tax yet', () => {
     const lines = [priceLine({ bookId: 1, quantity: 1 }, 0.1, 0), priceLine({ bookId: 2, quantity: 1 }, 0.2, 0)];
     expect(orderTotals(lines)).toEqual({ subtotal: '0.30', discountTotal: '0.00', taxRate: '0.0000', taxAmount: '0.00', total: '0.30' });
-  });
-
-  it('numbers records per day', () => {
-    expect(dailyNumber('ORD', '20261008', 41)).toBe('ORD-20261008-0042');
   });
 });
 

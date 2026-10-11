@@ -134,8 +134,7 @@ export async function create(
   }
 
   const orderId = await withTransaction({}, async (tx, client) => {
-    const { count, dateStr } = await orders.countCreatedToday(tx, 'orders');
-    const orderNumber = policy.dailyNumber('ORD', dateStr, count);
+    const orderNumber = await nextDailyNumber(tx, 'ORD');
     const id = await orders.insertOrder(tx, {
       orderNumber,
       customerId: data.customerId ?? null,
