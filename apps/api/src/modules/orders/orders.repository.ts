@@ -317,17 +317,6 @@ export async function hasReceivable(q: Queryable, orderId: string, opts: { openO
   return (await query.limit(1).executeTakeFirst()) !== undefined;
 }
 
-export async function lockReceivableOutstanding(q: Queryable, orderId: string): Promise<string | undefined> {
-  const row = await q
-    .selectFrom('receivables')
-    .select('outstanding_amount')
-    .where('source_type', '=', 'order_credit_sale')
-    .where('source_entity_id', '=', orderId)
-    .forUpdate()
-    .executeTakeFirst();
-  return row?.outstanding_amount;
-}
-
 /** Records that keep an order from being deleted, as readable names. */
 export async function deleteBlockers(q: Queryable, orderId: string): Promise<string[]> {
   const exists = async (query: { executeTakeFirst(): Promise<unknown> }) => (await query.executeTakeFirst()) !== undefined;

@@ -75,7 +75,6 @@ describe('Orders on the shared contracts', () => {
       ['unknown discount mode', auth(api().post('/api/v1/orders')).send({ items: [{ bookId, quantity: 1, discountMode: 'Coupon' }] })],
       ['non-numeric id', auth(api().get('/api/v1/orders/abc'))],
       ['bad date filter', auth(api().get('/api/v1/orders?dateFrom=yesterday'))],
-      ['payment amount as text', auth(api().post('/api/v1/orders/1/collect-payment')).send({ amount: '10' })],
     ];
     for (const [name, req] of cases) {
       const res = await req;

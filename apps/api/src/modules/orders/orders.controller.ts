@@ -1,7 +1,6 @@
 import type { Request, Response } from 'express';
 import {
   CancelOrderRequestSchema,
-  CollectOrderPaymentRequestSchema,
   ConfirmOrderRequestSchema,
   CreateOrderRequestSchema,
   IdParamsSchema,
@@ -29,7 +28,6 @@ export const schemas = {
   create: { body: CreateOrderRequestSchema },
   confirm: { params: IdParamsSchema, body: ConfirmOrderRequestSchema },
   cancel: { params: IdParamsSchema, body: CancelOrderRequestSchema },
-  collectPayment: { params: IdParamsSchema, body: CollectOrderPaymentRequestSchema },
 };
 
 /** The order as the API returns it, with the actions this staff member may take. */
@@ -97,16 +95,6 @@ export async function fulfill(req: Request, res: Response): Promise<void> {
 export async function cancel(req: Request, res: Response): Promise<void> {
   const { params, body } = valid(req, schemas.cancel);
   res.json(toResponse(req, await service.cancel(params.id, body.reason, req.staff!)));
-}
-
-export async function collectPayment(req: Request, res: Response): Promise<void> {
-  const { params, body } = valid(req, schemas.collectPayment);
-  res.json(toResponse(req, await service.collectPayment(params.id, body.amount, req.staff!)));
-}
-
-/** Legacy (#69): returns the order without computing its actions, as before. */
-export async function progress(req: Request, res: Response): Promise<void> {
-  res.json(await service.progress(valid(req, schemas.byId).params.id, req.staff!));
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {

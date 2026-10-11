@@ -1,15 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   amountToInvoice,
-  applyPayment,
   checkCanCancel,
-  checkCanCollectPayment,
   checkCanConfirm,
   checkCanDelete,
   checkCanFulfill,
   checkDueDate,
   checkNewOrder,
-  checkPaymentAmount,
   checkQuantity,
   checkStoreCredit,
   confirmPaymentMethod,
@@ -56,14 +53,6 @@ describe('order lifecycle', () => {
     expect(() => checkCanDelete(draft, ['payments'])).toThrow(
       expect.objectContaining({ code: 'ORDER_HAS_DEPENDENCIES', details: { blockers: ['payments'] } }),
     );
-  });
-
-  it('collects payment only on fulfilled credit orders', () => {
-    expect(() => checkPaymentAmount(0)).toThrow(code('VALIDATION_ERROR'));
-    expect(() => checkCanCollectPayment({ status: 'COMPLETED', saleType: 'credit_sale' })).not.toThrow();
-    expect(() => checkCanCollectPayment({ status: 'CANCELLED', saleType: 'credit_sale' })).toThrow(code('ORDER_CANCELLED'));
-    expect(() => checkCanCollectPayment({ status: 'CONFIRMED', saleType: 'credit_sale' })).toThrow(code('INVALID_STATE'));
-    expect(() => checkCanCollectPayment({ status: 'COMPLETED', saleType: 'cash_sale' })).toThrow(code('INVALID_STATE'));
   });
 });
 
@@ -140,15 +129,5 @@ describe('confirming an order', () => {
   it('invoices what a credit order still owes, if more than 0.01', () => {
     expect(amountToInvoice(100, '30.00')?.toFixed()).toBe('70.00');
     expect(amountToInvoice(100, '99.99')).toBeNull();
-  });
-});
-
-describe('collecting a credit payment', () => {
-  it('reduces the outstanding amount, never below zero', () => {
-    const partial = applyPayment('100.00', 40);
-    expect([partial.newOutstanding.toFixed(), partial.isFullySettled, partial.paymentStatus]).toEqual(['60.00', false, 'partial']);
-    const full = applyPayment('0.30', 0.3);
-    expect([full.newOutstanding.toFixed(), full.isFullySettled, full.paymentStatus]).toEqual(['0.00', true, 'paid']);
-    expect(applyPayment('10.00', 25).newOutstanding.toFixed()).toBe('0.00');
   });
 });

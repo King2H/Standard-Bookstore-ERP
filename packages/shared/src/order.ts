@@ -110,8 +110,3 @@ export const CancelOrderRequestSchema = z.object({
   reason: z.string().default('No reason provided'),
 });
 export type CancelOrderRequest = z.infer<typeof CancelOrderRequestSchema>;
-
-export const CollectOrderPaymentRequestSchema = z.object({
-  amount: z.number().positive(),
-});
-export type CollectOrderPaymentRequest = z.infer<typeof CollectOrderPaymentRequestSchema>;

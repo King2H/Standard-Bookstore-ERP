@@ -2,7 +2,7 @@ import { Money } from '@bms/shared';
 import { BusinessError, ValidationError } from '../../lib/errors.js';
 import { resolveDiscountFields, enforceDiscountCap, type DiscountMode, type DiscountType } from '../../lib/discount.js';
 import type { Permission } from '../../lib/permissions.js';
-import type { OrderLineInput, OrderPaymentStatus, OrderTotals, PricedLine, SaleType } from './orders.types.js';
+import type { OrderLineInput, OrderTotals, PricedLine, SaleType } from './orders.types.js';
 
 /**
  * Order rules as pure functions (A5): the lifecycle, pricing and settlement
@@ -32,16 +32,6 @@ function invalidState(verb: string, status: string): BusinessError {
 
 export function checkCanConfirm(status: string): void {
   if (normaliseStatus(status) !== 'DRAFT') throw invalidState('confirm', status);
-}
-
-/** Legacy transition (#69): CONFIRMED -> PAID. */
-export function checkCanPay(status: string): void {
-  if (!['CONFIRMED', 'Confirmed', 'In_Progress'].includes(status)) throw invalidState('pay', status);
-}
-
-/** Legacy transition (#69): only the pre-migration-33 status 'Confirmed'. */
-export function checkCanProgress(status: string): void {
-  if (status !== 'Confirmed') throw invalidState('progress', status);
 }
 
 /**
@@ -87,24 +77,6 @@ export function checkCanDelete(order: { status: string; orderNumber: string }, b
       `Cannot delete order ${order.orderNumber}: it has ${blockers.join(', ')} on record. Orders with financial or inventory history must be retained.`,
       { blockers },
     );
-  }
-}
-
-export function checkPaymentAmount(amount: number): void {
-  if (amount <= 0) throw new ValidationError('paymentAmount must be positive');
-}
-
-/** Credit orders collect payment after delivery; a cancelled order's finances are frozen. */
-export function checkCanCollectPayment(order: { status: string; saleType: SaleType }): void {
-  const ns = normaliseStatus(order.status);
-  if (ns === 'CANCELLED') {
-    throw new BusinessError('ORDER_CANCELLED', 'Cannot collect payment on a cancelled order. Financial lifecycle is frozen.');
-  }
-  if (!['FULFILLED', 'COMPLETED'].includes(ns)) {
-    throw new BusinessError('INVALID_STATE', `Cannot collect payment for order in status '${order.status}'. Order must be FULFILLED or COMPLETED.`);
-  }
-  if (order.saleType !== 'credit_sale') {
-    throw new BusinessError('INVALID_STATE', 'collectPayment is only valid for credit_sale orders');
   }
 }
 
@@ -261,17 +233,4 @@ export function checkStoreCredit(balance: string | null, total: number): void {
 export function amountToInvoice(total: number, alreadyPaid: string): Money | null {
   const outstanding = Money.of(total).minus(alreadyPaid).round(2);
   return outstanding.greaterThan('0.01') ? outstanding : null;
-}
-
-/**
- * A payment against a credit order's receivable: what is still owed (never
- * below zero) and the order's resulting payment status.
- */
-export function applyPayment(
-  currentOutstanding: string,
-  amount: number,
-): { newOutstanding: Money; isFullySettled: boolean; paymentStatus: OrderPaymentStatus } {
-  const newOutstanding = Money.max(0, Money.of(currentOutstanding).minus(amount));
-  const isFullySettled = newOutstanding.isZero();
-  return { newOutstanding, isFullySettled, paymentStatus: isFullySettled ? 'paid' : 'partial' };
 }
