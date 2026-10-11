@@ -1,7 +1,7 @@
 // ── Shared cost-basis lookup ────────────────────────────────────────────────
 //
 // Single source of truth for "what did this book cost us", used everywhere
-// COGS/profit/valuation needs a per-book unit cost (reports.service.ts,
+// COGS/profit/valuation needs a per-book unit cost (the reports,
 // profit.service.ts). Two sources, in priority order:
 //
 //   1. Most recent procurement unit cost (po_line_items) — authoritative once

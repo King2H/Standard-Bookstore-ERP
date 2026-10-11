@@ -7,19 +7,24 @@ import { DateOnlySchema, IdSchema } from './common.js';
  * branches. Amounts are ETB numbers rounded to cents.
  */
 
+const ReportQueryFields = z.object({
+  branchId: IdSchema.optional(),
+  dateFrom: DateOnlySchema.optional(),
+  dateTo: DateOnlySchema.optional(),
+  groupBy: z.enum(['day', 'week', 'month']).default('day'),
+});
+
+const rangeInOrder = (q: { dateFrom?: string; dateTo?: string }) => !q.dateFrom || !q.dateTo || q.dateFrom <= q.dateTo;
+const rangeMessage = { message: 'dateFrom must not be after dateTo', path: ['dateTo'] };
+
 /** A date range (both ends included) and the bucket size for series. */
-export const ReportQuerySchema = z
-  .object({
-    branchId: IdSchema.optional(),
-    dateFrom: DateOnlySchema.optional(),
-    dateTo: DateOnlySchema.optional(),
-    groupBy: z.enum(['day', 'week', 'month']).default('day'),
-  })
-  .refine((q) => !q.dateFrom || !q.dateTo || q.dateFrom <= q.dateTo, {
-    message: 'dateFrom must not be after dateTo',
-    path: ['dateTo'],
-  });
+export const ReportQuerySchema = ReportQueryFields.refine(rangeInOrder, rangeMessage);
 export type ReportQuery = z.infer<typeof ReportQuerySchema>;
+
+/** The report query and how many rows to list (the top N). */
+export const TopReportQuerySchema = ReportQueryFields.extend({
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+}).refine(rangeInOrder, rangeMessage);
 
 export const KpiQuerySchema = z.object({ branchId: IdSchema.optional() });
 
@@ -236,3 +241,168 @@ export const ReceivablesAgingSchema = z.object({
   byBucket: z.array(z.object({ bucket: AgingBucketSchema, count: z.number().int(), totalOutstanding: z.number() })),
 });
 export type ReceivablesAging = z.infer<typeof ReceivablesAgingSchema>;
+
+// ── Payments ──────────────────────────────────────────────────────────────────
+
+/**
+ * Customer money in and out (owner decision, #22): order, POS and exchange
+ * payments in; order refunds, return refunds and exchange refunds out. Voided
+ * sales and exchanges are left out (their money went back).
+ */
+export const PaymentReportSchema = z.object({
+  summary: z.object({
+    totalCollected: z.number(),
+    totalRefunded: z.number(),
+    netCollected: z.number(),
+    /** Order payments not yet confirmed. */
+    pendingPayments: z.number(),
+  }),
+  /** Money in by method code (cash, bank, mobile, store_credit, ...). */
+  byMethod: z.array(z.object({ method: z.string(), total: z.number(), count: z.number().int() })),
+  byPeriod: z.array(z.object({ period: z.string(), collected: z.number(), refunded: z.number() })),
+});
+export type PaymentReport = z.infer<typeof PaymentReportSchema>;
+
+export const PaymentsLedgerRowSchema = z.object({
+  receiptNo: z.string(),
+  party: z.string(),
+  referenceType: z.enum(['ORDER', 'POS', 'RETURN', 'EXCHANGE', 'PO']),
+  referenceNo: z.string(),
+  paymentMethod: z.string(),
+  amount: z.number(),
+  direction: z.enum(['IN', 'OUT']),
+  date: z.string(),
+  user: z.string(),
+});
+export type PaymentsLedgerRow = z.infer<typeof PaymentsLedgerRowSchema>;
+
+/** Every receipt and payment: customers in and out, suppliers out. */
+export const PaymentsLedgerSchema = z.object({ rows: z.array(PaymentsLedgerRowSchema) });
+
+// ── Exchanges ─────────────────────────────────────────────────────────────────
+
+/** Completed exchanges in the range (voided ones are left out). */
+export const ExchangeReportSchema = z.object({
+  summary: z.object({
+    totalExchanges: z.number().int(),
+    totalIncomingValue: z.number(),
+    totalOutgoingValue: z.number(),
+    netExchangeImpact: z.number(),
+  }),
+  bySettlementType: z.array(z.object({ settlementType: z.string(), count: z.number().int(), totalNetBalance: z.number() })),
+  byPeriod: z.array(z.object({ period: z.string(), count: z.number().int(), incomingValue: z.number(), outgoingValue: z.number() })),
+});
+export type ExchangeReport = z.infer<typeof ExchangeReportSchema>;
+
+export const ExchangeDetailRowSchema = z.object({
+  exchangeNo: z.string(),
+  customer: z.string(),
+  incomingBook: z.string(),
+  incomingValue: z.number(),
+  outgoingBook: z.string(),
+  outgoingValue: z.number(),
+  difference: z.number(),
+  differencePaymentStatus: z.string(),
+  cashCollected: z.number(),
+  receivableBalance: z.number(),
+  date: z.string(),
+  user: z.string(),
+});
+export type ExchangeDetailRow = z.infer<typeof ExchangeDetailRowSchema>;
+
+export const ExchangeDetailResponseSchema = z.object({ rows: z.array(ExchangeDetailRowSchema) });
+
+// ── Returns ───────────────────────────────────────────────────────────────────
+
+export const ReturnReportRowSchema = z.object({
+  returnNo: z.string(),
+  originalInvoiceNo: z.string(),
+  customer: z.string(),
+  book: z.string(),
+  qtyReturned: z.number().int(),
+  refundAmount: z.number(),
+  originalCost: z.number(),
+  /** The margin the sale made, now given back. */
+  profitReversed: z.number(),
+  refundMethod: z.string(),
+  returnDate: z.string(),
+  user: z.string(),
+});
+export type ReturnReportRow = z.infer<typeof ReturnReportRowSchema>;
+
+export const ReturnReportResponseSchema = z.object({ rows: z.array(ReturnReportRowSchema) });
+
+export const TopReturnedBooksSchema = z.array(
+  z.object({ bookId: z.number().int(), title: z.string(), unitsReturned: z.number().int(), refundValue: z.number() }),
+);
+
+// ── Procurement ───────────────────────────────────────────────────────────────
+
+export const OpenPurchaseOrdersSchema = z.array(
+  z.object({
+    poReference: z.string(),
+    supplier: z.string(),
+    orderDate: z.string(),
+    expectedDate: z.string(),
+    orderedQty: z.number().int(),
+    receivedQty: z.number().int(),
+    totalAmount: z.number(),
+    /** What was received less what was paid and credited. */
+    outstandingAmount: z.number(),
+    receiptStatus: z.string(),
+    paymentStatus: z.string(),
+  }),
+);
+
+export const SupplierBalancesSchema = z.array(
+  z.object({
+    supplierId: z.number().int(),
+    supplier: z.string(),
+    openPoCount: z.number().int(),
+    receivedValue: z.number(),
+    paid: z.number(),
+    credited: z.number(),
+    outstandingBalance: z.number(),
+  }),
+);
+
+/** What is owed to suppliers, by days since the goods arrived. */
+export const ApAgingSchema = z.object({
+  rows: z.array(
+    z.object({
+      supplier: z.string(),
+      poReference: z.string(),
+      outstandingAmount: z.number(),
+      agingBucket: AgingBucketSchema,
+      lastReceiptDate: z.string(),
+    }),
+  ),
+  byBucket: z.array(z.object({ bucket: AgingBucketSchema, count: z.number().int(), totalOutstanding: z.number() })),
+});
+
+export const PurchasesBySupplierSchema = z.array(
+  z.object({ supplierId: z.number().int(), supplier: z.string(), poCount: z.number().int(), orderedValue: z.number(), receivedValue: z.number() }),
+);
+
+export const PurchasesByBookSchema = z.array(
+  z.object({
+    bookId: z.number().int(),
+    title: z.string(),
+    isbn: z.string(),
+    orderedQty: z.number().int(),
+    receivedQty: z.number().int(),
+    totalValue: z.number(),
+  }),
+);
+
+export const SupplierPaymentHistorySchema = z.array(
+  z.object({
+    date: z.string(),
+    supplier: z.string(),
+    poReference: z.string(),
+    amount: z.number(),
+    paymentMethod: z.string(),
+    source: z.string(),
+    user: z.string(),
+  }),
+);

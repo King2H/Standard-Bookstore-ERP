@@ -38,8 +38,7 @@ export const LEGACY_SALES_COLUMNS: CsvColumnDef[] = [
 ];
 
 // Prompt 2 Sales Report field list — one row per line item, sourced from
-// getSalesReportRows() (reports.service.ts), which wraps
-// financialReport.service.ts's unified engine.
+// the sales report family (modules/reports/sales).
 export const SALES_COLUMNS: CsvColumnDef[] = [
   { key: 'date',                header: 'Date',                type: 'string'  },
   { key: 'invoice_no',          header: 'Invoice No',          type: 'string'  },

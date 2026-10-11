@@ -341,7 +341,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
   // Bug fix regression: due_date is a DATE column, so CURRENT_DATE - due_date
   // is already an integer day-count in Postgres — wrapping it in
   // EXTRACT(DAY FROM ...) crashed the endpoint with a 500 on every call
-  // (see reports.service.ts's getReceivablesAgingReport). This is the first
+  // (the receivables aging report). This is the first
   // test to actually hit the route end-to-end.
 
   it("12. Receivables aging report buckets a 45-day-overdue receivable into '31-60' and reconciles byBucket totals", async () => {
