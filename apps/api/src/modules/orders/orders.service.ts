@@ -200,7 +200,7 @@ export async function confirm(
           quantity: item.quantity,
           referenceType: 'order_confirmed',
           referenceId: orderId,
-          reasonCode: 'correction',
+          reasonCode: 'sale',
           notes: `Order confirmation – order ${String(orderId)}`,
           staffCtx,
         });

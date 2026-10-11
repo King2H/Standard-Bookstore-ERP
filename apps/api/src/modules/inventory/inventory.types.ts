@@ -120,6 +120,16 @@ export interface StockChange {
   notes?: string;
 }
 
+/**
+ * Why stock leaves in a sale or an issue (#109): a sale is told apart from
+ * shrinkage in stock history and reports, so every caller names its reason.
+ */
+export type IssueReason = 'sale' | 'loss' | 'correction';
+
+export interface StockIssue extends StockChange {
+  reasonCode: IssueReason;
+}
+
 export interface StockReceipt extends StockChange {
   /**
    * What each unit cost, when known (a purchase-order line, the cost a sold

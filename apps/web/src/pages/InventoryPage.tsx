@@ -38,7 +38,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
 };
 
 const REASON_LABELS: Record<string, string> = {
-  damage: 'Damage', loss: 'Loss', return: 'Return', correction: 'Correction',
+  sale: 'Sale', damage: 'Damage', loss: 'Loss', return: 'Return', correction: 'Correction',
   transfer_in: 'Transfer In', transfer_out: 'Transfer Out', initial: 'Initial',
   stock_in: 'Stock In', stock_out: 'Stock Out',
 };
@@ -673,6 +673,7 @@ function HistoryTab() {
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-1">
                     <MovementBadge type={h.movementType} />
+                    <span className="text-xs text-gray-600 dark:text-gray-300">{REASON_LABELS[h.reasonCode] ?? h.reasonCode}</span>
                     {h.referenceType && (
                       <span className="text-xs text-gray-400">{h.referenceType}{h.referenceId ? ` #${h.referenceId}` : ''}</span>
                     )}
