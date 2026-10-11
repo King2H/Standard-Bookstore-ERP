@@ -257,7 +257,7 @@ export default function App() {
               )}
               {currentPage === 'dashboard'    && <DashboardPage userRole={userRole ?? undefined} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
               {currentPage === 'branches'     && <BranchesPage userRole={userRole ?? undefined} />}
-              {currentPage === 'staff'        && <StaffPage />}
+              {currentPage === 'staff'        && <StaffPage userRoles={userRoles} />}
               {currentPage === 'audit-log'    && <AuditLogPage />}
               {currentPage === 'settings'     && <SettingsPage userRole={userRole ?? undefined} />}
               {currentPage === 'bank-accounts'&& <BankAccountsPage userRole={userRole ?? undefined} />}

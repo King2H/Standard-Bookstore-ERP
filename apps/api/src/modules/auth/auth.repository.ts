@@ -9,7 +9,8 @@ export async function findCredentials(q: Queryable, username: string): Promise<S
   const row = await q
     .selectFrom('staff')
     .select(['id', 'password_hash', 'is_active', 'is_all_branches', 'must_change_password', 'locked_until'])
-    .where('username', '=', username)
+    // Usernames are unique ignoring case (migration 064); the index on lower(username) serves this.
+    .where(sql`lower(username)`, '=', username.toLowerCase())
     .executeTakeFirst();
   return (
     row && {
