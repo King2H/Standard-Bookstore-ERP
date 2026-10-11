@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
-import { createTestBranch, createTestStaff } from './helpers/seed.js';
+import { createTestBranch, createTestStaff, signTestToken } from './helpers/seed.js';
 import { db } from '../db/index.js';
 
 // Branch isolation (#12): branch-owned data is read through the session's
@@ -114,11 +113,7 @@ describe('Branch scope', () => {
       const s = await createTestStaff({ username: `${STAFF_PREFIX}multi`, role: 'Sales', branchId: branchA });
       staffId = s.staffId;
       await db.query(`INSERT INTO staff_branch_roles (staff_id, branch_id, role) VALUES ($1, $2, 'Manager')`, [staffId, branchB]);
-      tokenInA = jwt.sign(
-        { staffId, role: 'Sales', roles: ['Sales'], branchId: branchA, permissions: ['CREATE_SALE', 'PROCESS_PAYMENT'] },
-        process.env.JWT_SECRET!,
-        { expiresIn: '15m' },
-      );
+      tokenInA = await signTestToken(staffId, branchA, ['Sales']);
     });
 
     it('cannot read branch B while signed in to branch A, even with a role in B', async () => {

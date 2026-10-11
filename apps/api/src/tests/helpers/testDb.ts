@@ -32,7 +32,7 @@ export async function cleanTestStaff(usernamePrefix: string): Promise<void> {
   );
   const staffIds = staffIdsResult.rows.map(r => r.id);
   if (staffIds.length > 0) {
-    await db.query(`DELETE FROM refresh_tokens WHERE staff_id = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM staff_sessions WHERE staff_id = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM staff_branch_roles WHERE staff_id = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM staff_locations WHERE staff_id = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM inventory_history WHERE staff_id = ANY($1)`, [staffIds]);

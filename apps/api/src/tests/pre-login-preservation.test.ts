@@ -148,19 +148,20 @@ describe('3.1 Valid credentials → 200 OK with expected response shape', () => 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Requirement 3.3 — Unknown username → 400 VALIDATION_ERROR
+// Requirement 3.3 — Unknown username → 401 INVALID_CREDENTIALS
+// Every failed sign-in gets this one answer (#21, owner decision 4a).
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('3.3 Unknown username → 400 VALIDATION_ERROR', () => {
-  it('returns 400 with VALIDATION_ERROR for a username not in the database', async () => {
+describe('3.3 Unknown username → 401 INVALID_CREDENTIALS', () => {
+  it('returns 401 INVALID_CREDENTIALS for a username not in the database', async () => {
     const app = getTestApp();
 
     const res = await request(app)
       .post('/api/auth/pre-login')
       .send({ username: 'definitely_does_not_exist_xyz123', password: 'SomePassword!1' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('INVALID_CREDENTIALS');
     expect(res.body).toHaveProperty('message');
   });
 });
@@ -169,8 +170,8 @@ describe('3.3 Unknown username → 400 VALIDATION_ERROR', () => {
 // Requirement 3.2 — Wrong password below lockout threshold
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('3.2 Wrong password below lockout threshold → 400, counter increments, locked_until stays NULL', () => {
-  it('returns 400 and increments failed_login_attempts from 0 to 1, locked_until remains NULL', async () => {
+describe('3.2 Wrong password below lockout threshold → 401, counter increments, locked_until stays NULL', () => {
+  it('returns 401 and increments failed_login_attempts from 0 to 1, locked_until remains NULL', async () => {
     const app = getTestApp();
     const username = `${STAFF_PREFIX}wrong_pw_0`;
     const staffId = await seedStaff({ username, failedAttempts: 0 });
@@ -179,15 +180,15 @@ describe('3.2 Wrong password below lockout threshold → 400, counter increments
       .post('/api/auth/pre-login')
       .send({ username, password: 'WrongPassword!99' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('INVALID_CREDENTIALS');
 
     const row = await getStaffRow(staffId);
     expect(row.failed_login_attempts).toBe(1);
     expect(row.locked_until).toBeNull();
   });
 
-  it('returns 400 and increments failed_login_attempts from 2 to 3, locked_until remains NULL (threshold=5)', async () => {
+  it('returns 401 and increments failed_login_attempts from 2 to 3, locked_until remains NULL (threshold=5)', async () => {
     const app = getTestApp();
     const username = `${STAFF_PREFIX}wrong_pw_2`;
     const staffId = await seedStaff({ username, failedAttempts: 2 });
@@ -196,8 +197,8 @@ describe('3.2 Wrong password below lockout threshold → 400, counter increments
       .post('/api/auth/pre-login')
       .send({ username, password: 'WrongPassword!99' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('INVALID_CREDENTIALS');
 
     const row = await getStaffRow(staffId);
     expect(row.failed_login_attempts).toBe(3);
@@ -214,8 +215,8 @@ describe('3.2 Wrong password below lockout threshold → 400, counter increments
       .post('/api/auth/pre-login')
       .send({ username, password: 'WrongPasswordProp!1' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('INVALID_CREDENTIALS');
 
     const row = await getStaffRow(staffId);
     expect(row.failed_login_attempts).toBe(MAX_FAILED_ATTEMPTS - 1);
@@ -224,11 +225,11 @@ describe('3.2 Wrong password below lockout threshold → 400, counter increments
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Requirement 3.4 — Already-locked account → 400 with lock message
+// Requirement 3.4 — Already-locked account → 401 ACCOUNT_LOCKED, with the right password only
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('3.4 Already-locked account → 400 with lock message', () => {
-  it('returns 400 VALIDATION_ERROR with lock-related message for locked account', async () => {
+describe('3.4 Already-locked account → 401 ACCOUNT_LOCKED', () => {
+  it('returns 401 ACCOUNT_LOCKED with the minutes left, given the right password', async () => {
     const app = getTestApp();
     const username = `${STAFF_PREFIX}locked_acct`;
     const lockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 min in the future
@@ -238,19 +239,19 @@ describe('3.4 Already-locked account → 400 with lock message', () => {
       .post('/api/auth/pre-login')
       .send({ username, password: 'Test@12345' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('ACCOUNT_LOCKED');
     // The message should mention the lock/minutes
     expect(res.body.message).toMatch(/locked|minute/i);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Requirement 3.5 — Deactivated account → 400 with deactivated message
+// Requirement 3.5 — Deactivated account → 401 ACCOUNT_INACTIVE, with the right password only
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('3.5 Deactivated account → 400 with deactivated message', () => {
-  it('returns 400 VALIDATION_ERROR with deactivation message for inactive staff', async () => {
+describe('3.5 Deactivated account → 401 ACCOUNT_INACTIVE', () => {
+  it('returns 401 ACCOUNT_INACTIVE for inactive staff, given the right password', async () => {
     const app = getTestApp();
     const username = `${STAFF_PREFIX}deactivated`;
     await seedStaff({ username, isActive: false });
@@ -259,8 +260,8 @@ describe('3.5 Deactivated account → 400 with deactivated message', () => {
       .post('/api/auth/pre-login')
       .send({ username, password: 'Test@12345' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('ACCOUNT_INACTIVE');
     expect(res.body.message).toMatch(/deactivated/i);
   });
 });

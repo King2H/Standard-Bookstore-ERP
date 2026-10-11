@@ -616,13 +616,12 @@ export interface Receivables {
 }
 
 export interface RefreshTokens {
-  branch_id: number | null;
-  expires_at: Timestamp;
+  created_at: Generated<Timestamp>;
   id: Generated<Int8>;
-  revoked: Generated<boolean>;
-  role: string | null;
+  session_id: string;
   staff_id: number;
   token_hash: string;
+  used_at: Timestamp | null;
 }
 
 export interface Refunds {
@@ -684,6 +683,16 @@ export interface StaffBranchRoles {
 
 export interface StaffLocations {
   location_id: number;
+  staff_id: number;
+}
+
+export interface StaffSessions {
+  branch_id: number;
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  revoked_at: Timestamp | null;
+  revoked_reason: string | null;
   staff_id: number;
 }
 
@@ -855,6 +864,7 @@ export interface DB {
   staff: Staff;
   staff_branch_roles: StaffBranchRoles;
   staff_locations: StaffLocations;
+  staff_sessions: StaffSessions;
   store_credit_accounts: StoreCreditAccounts;
   store_credit_history: StoreCreditHistory;
   supplier_credit_notes: SupplierCreditNotes;

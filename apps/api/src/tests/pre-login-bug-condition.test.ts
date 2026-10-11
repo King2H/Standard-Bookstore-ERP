@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest';
 import request from 'supertest';
 import { db } from '../db/index.js';
-import * as authService from '../modules/auth/auth.service.js';
+import * as authRepository from '../modules/auth/auth.repository.js';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff } from './helpers/testDb.js';
 
@@ -76,7 +76,7 @@ describe('Bug Condition: Pre-Login 500 Error & Missing Lockout', () => {
     const app = getTestApp();
 
     // Simulate a raw pg error thrown by db.query (e.g. ECONNREFUSED or query failure)
-    vi.spyOn(db, 'query').mockRejectedValueOnce(
+    vi.spyOn(authRepository, 'findCredentials').mockRejectedValueOnce(
       new Error('connection refused — simulated pg error'),
     );
 
@@ -103,15 +103,15 @@ describe('Bug Condition: Pre-Login 500 Error & Missing Lockout', () => {
    *
    * EXPECTED TO FAIL on unfixed code (status is 500, not 503).
    */
-  it('Bug 1b: getBranchesForUser() raw error returns structured 503 with error/message/requestId/timestamp', async () => {
+  it('Bug 1b: branch list raw error returns structured 503 with error/message/requestId/timestamp', async () => {
     const app = getTestApp();
     const username = `${STAFF_PREFIX}branches_err`;
 
     // Seed a valid staff row so credential validation passes
     await seedStaffWithFailedAttempts(username, 0);
 
-    // Spy on getBranchesForUser to throw a raw query error (not an AppError)
-    vi.spyOn(authService, 'getBranchesForUser').mockRejectedValueOnce(
+    // The branch list query throws a raw query error (not an AppError)
+    vi.spyOn(authRepository, 'openBranches').mockRejectedValueOnce(
       new Error('query timeout — simulated pg error'),
     );
 
@@ -154,9 +154,9 @@ describe('Bug Condition: Pre-Login 500 Error & Missing Lockout', () => {
       .post('/api/auth/pre-login')
       .send({ username, password: 'WrongPassword!99' });
 
-    // Expect a 400 error response (regardless of fix status)
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    // The answer to every failed sign-in (#21, owner decision 4a)
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('INVALID_CREDENTIALS');
 
     // On UNFIXED code: locked_until IS NULL → this assertion FAILS.
     // On FIXED code: locked_until IS a future timestamp → assertion passes.

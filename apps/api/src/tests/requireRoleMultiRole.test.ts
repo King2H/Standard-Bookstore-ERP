@@ -19,9 +19,8 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
-import { createTestBranch } from './helpers/seed.js';
+import { createTestBranch, signTestToken } from './helpers/seed.js';
 import { db } from '../db/index.js';
-import { getPermissionsForRoles } from '../lib/permissions.js';
 
 const STAFF_PREFIX = 'rrmr_test_';
 const BRANCH_PREFIX = 'RequireRole MultiRole Test ';
@@ -42,16 +41,10 @@ async function createMultiRoleStaff(username: string, roles: string[], branchId:
   return staffId;
 }
 
-// Mirrors auth.service.ts's login()/switchBranch() JWT payload shape exactly
-// ({ staffId, role, roles, branchId, permissions }) — this is what a real
-// multi-role login actually issues, unlike the single-role-only
-// createTestStaff() helper.
-function signMultiRoleToken(staffId: number, primaryRole: string, roles: string[], branchId: number): string {
-  return jwt.sign(
-    { staffId, role: primaryRole, roles, branchId, permissions: getPermissionsForRoles(roles) },
-    process.env.JWT_SECRET!,
-    { expiresIn: '15m' },
-  );
+// A token for a session, as login issues it; the roles in effect are read
+// from staff_branch_roles on every request (#21).
+function signMultiRoleToken(staffId: number, _primaryRole: string, roles: string[], branchId: number): Promise<string> {
+  return signTestToken(staffId, branchId, roles);
 }
 
 describe('requireRole() — multi-role union fix', () => {
@@ -73,7 +66,7 @@ describe('requireRole() — multi-role union fix', () => {
     const staffId = await createMultiRoleStaff(`${STAFF_PREFIX}multirole1`, ['Sales', 'Stock_Clerk', 'Purchasor'], branchId);
     // 'Sales' listed first — matches login's "picks the first role" rule,
     // reproducing the exact primary-role value from the bug report.
-    const token = signMultiRoleToken(staffId, 'Sales', ['Sales', 'Stock_Clerk', 'Purchasor'], branchId);
+    const token = await signMultiRoleToken(staffId, 'Sales', ['Sales', 'Stock_Clerk', 'Purchasor'], branchId);
 
     const res = await request(getTestApp())
       .post('/api/suppliers')
@@ -88,7 +81,7 @@ describe('requireRole() — multi-role union fix', () => {
 
   it('2. A staff member holding ONLY disallowed roles is still correctly denied (fix does not over-broaden access)', async () => {
     const staffId = await createMultiRoleStaff(`${STAFF_PREFIX}salesonly`, ['Sales'], branchId);
-    const token = signMultiRoleToken(staffId, 'Sales', ['Sales'], branchId);
+    const token = await signMultiRoleToken(staffId, 'Sales', ['Sales'], branchId);
 
     const res = await request(getTestApp())
       .post('/api/suppliers')
@@ -99,11 +92,10 @@ describe('requireRole() — multi-role union fix', () => {
     expect(res.status).toBe(403);
   });
 
-  it('3. Legacy single-role JWT (no roles array at all) still works exactly as before', async () => {
+  it('3. The roles come from the database, not from the token (#21, owner decision 5a)', async () => {
     const staffId = await createMultiRoleStaff(`${STAFF_PREFIX}legacy`, ['Purchasor'], branchId);
-    // Deliberately omit `roles`/`permissions` — simulates an old token
-    // minted before the multi-role refactor.
-    const token = jwt.sign({ staffId, role: 'Purchasor', branchId }, process.env.JWT_SECRET!, { expiresIn: '15m' });
+    // The token claims Sales only; the staff member holds Purchasor.
+    const token = await signTestToken(staffId, branchId, ['Sales']);
 
     const res = await request(getTestApp())
       .post('/api/suppliers')
@@ -115,9 +107,9 @@ describe('requireRole() — multi-role union fix', () => {
     await db.query(`DELETE FROM suppliers WHERE name = 'RR Legacy Token Test Supplier'`);
   });
 
-  it('4. Legacy single-role JWT for a disallowed role is still correctly denied', async () => {
-    const staffId = await createMultiRoleStaff(`${STAFF_PREFIX}legacydenied`, ['Sales'], branchId);
-    const token = jwt.sign({ staffId, role: 'Sales', branchId }, process.env.JWT_SECRET!, { expiresIn: '15m' });
+  it('4. A token without a session, as issued before sessions, is refused', async () => {
+    const staffId = await createMultiRoleStaff(`${STAFF_PREFIX}legacydenied`, ['Admin'], branchId);
+    const token = jwt.sign({ staffId, role: 'Admin', branchId }, process.env.JWT_SECRET!, { expiresIn: '15m' });
 
     const res = await request(getTestApp())
       .post('/api/suppliers')
@@ -125,6 +117,7 @@ describe('requireRole() — multi-role union fix', () => {
       .set('X-Branch-Id', String(branchId))
       .send({ name: 'Should Not Be Created 2', supplierType: 'external', contactInfo: { phone: '555-0000' } });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('INVALID_TOKEN');
   });
 });

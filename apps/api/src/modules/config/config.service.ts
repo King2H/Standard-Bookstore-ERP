@@ -214,6 +214,12 @@ export async function getLoyaltyMinTransactionAmount(): Promise<number> {
   return Number((await systemValue('loyalty_min_transaction_amount')) ?? 0);
 }
 
+/** Failed sign-ins in a row that lock an account, and for how many minutes. */
+export async function getSignInLockoutPolicy(): Promise<{ maxFailedAttempts: number; lockoutMinutes: number }> {
+  const [max, minutes] = await Promise.all([systemValue('max_failed_login_attempts'), systemValue('account_lockout_minutes')]);
+  return { maxFailedAttempts: Number(max ?? 5), lockoutMinutes: Number(minutes ?? 30) };
+}
+
 export async function isNegativeStockAllowed(): Promise<boolean> {
   return (await systemValue('allow_negative_stock')) === true;
 }

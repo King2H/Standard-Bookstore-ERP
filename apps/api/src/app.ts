@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import healthRouter from './routes/health.js';
 import auditLogsRouter from './modules/audit/audit.routes.js';
 import authRouter from './modules/auth/auth.routes.js';
+import staffRouter from './modules/staff/staff.routes.js';
 import branchRouter from './modules/branch/branch.routes.js';
 import configRouter from './modules/config/config.routes.js';
 import bankAccountRouter from './modules/bankAccount/bankAccount.routes.js';
@@ -61,6 +62,8 @@ export function createApp() {
   });
   api.use(healthRouter);
   api.use(authRouter);
+  // After authRouter: /staff/me must match before /staff/:id.
+  api.use(staffRouter);
   api.use(branchRouter);
   api.use(configRouter);
   // Bank Accounts is off unless explicitly enabled. Interim switch until
