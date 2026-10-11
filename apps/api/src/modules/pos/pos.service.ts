@@ -162,6 +162,7 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
         quantity: line.quantity,
         referenceType: 'sale',
         referenceId: id,
+        reasonCode: 'sale',
         staffCtx: actor,
       });
       await pos.insertLine(tx, id, line, unitCost);

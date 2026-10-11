@@ -16,6 +16,7 @@ import type {
   Paged,
   Paging,
   StockChange,
+  StockIssue,
   StockLevelFilter,
   StockLevelRecord,
   StockMovementFilter,
@@ -209,7 +210,7 @@ export async function issueDamaged(tx: Queryable, change: StockChange): Promise<
  * Stock leaving a location: a sale, a confirmed order, an exchange. Returns
  * the average cost it left at, which a sale keeps as its cost of goods.
  */
-export async function issueStock(tx: Queryable, issue: StockChange): Promise<{ unitCost: Money }> {
+export async function issueStock(tx: Queryable, issue: StockIssue): Promise<{ unitCost: Money }> {
   const { bookId, locationId, quantity } = issue;
   checkQuantity(quantity);
   const allowNegative = await isNegativeStockAllowed();
@@ -232,7 +233,7 @@ export async function issueStock(tx: Queryable, issue: StockChange): Promise<{ u
     qtyBefore: before.quantity,
     qtyAfter: after,
     movementType: 'stock_out',
-    reasonCode: issue.reasonCode ?? 'loss',
+    reasonCode: issue.reasonCode,
     referenceType: issue.referenceType ?? null,
     referenceId: issue.referenceId ?? null,
     notes: issue.notes ?? null,
@@ -463,6 +464,7 @@ export async function stockOut(actor: Actor, issue: StockOutRequest): Promise<St
       locationId,
       quantity,
       staffCtx: actor,
+      reasonCode: 'loss',
       referenceType,
       referenceId: issue.referenceId,
       notes: issue.notes,
