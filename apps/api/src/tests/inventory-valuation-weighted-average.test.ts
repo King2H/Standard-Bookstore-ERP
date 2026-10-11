@@ -14,7 +14,7 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch, setBranchPrice } from './helpers/seed.js';
 import { db } from '../db/index.js';
-import { computeNetProfit } from '../lib/profit.service.js';
+import { netProfit as computeNetProfit } from '../modules/reports/sales/sales.service.js';
 
 const STAFF_PREFIX = 'inv_val_test_';
 const BRANCH_PREFIX = 'InvVal Test ';

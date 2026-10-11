@@ -1,19 +1,13 @@
-// ── FinancialReportService ──────────────────────────────────────────────────
+// ── Sales lines ───────────────────────────────────────────────────────────────
 //
-// Dashboard Standardization & Unified Reports Engine (extended by "Prompt 2"
-// — Modern KPI Dashboard, Synchronized Reports & Production-Grade Procurement
-// Lifecycle — to add per-line cost/profit and invoice-level cash/receivable
-// figures).
-//
-// Single calculation engine shared by the Sales CSV export and the
-// Dashboard's Sales Performance cards (Net Sales, Gross Profit, Gross
-// Margin %) — both read from getUnifiedTransactionRows() (or its in-process
-// summary, which is literally SUM() over the same rows), so a dashboard
-// total for a given date range can never mathematically diverge from the
-// CSV export for that same range: they're the same rows.
+// The one calculation behind the Sales Report, its CSV export, the gross
+// profit trend and the Sales Performance KPIs (#22): all of them read these
+// lines (sales.policy sums them), so a dashboard figure for a date range can
+// never differ from the export for the same range.
 //
 // Covers all four revenue-moving channels, one row per line item:
-//   ORDER    — order_line_items (excludes Cancelled/CANCELLED orders)
+//   ORDER    — order_line_items of orders confirmed or later (drafts and
+//              cancelled orders are not sales; owner decision 3a, #22)
 //   POS      — transaction_line_items (excludes voided transactions)
 //   RETURN   — return_line_items (excludes rejected returns); quantity and
 //              netAmount are negative — a return reduces net sales.
@@ -87,11 +81,9 @@
 // RETURN rows: a refund is a completed cash event at creation time (no
 // receivable is ever opened for a return), so both are always 0.
 //
-// This is deliberately additive on top of the pre-existing engine: it does
-// NOT change lib/profit.service.ts's computeNetProfit() (collected-cash
-// revenue recognition for credit sales — an existing, separately-tested
-// accounting policy, still used for Cash & Receivables dashboard metrics
-// and financial-integrity tests). "Net Sales"/"Gross Profit" here are a
+// This is separate from the collected-cash profit (netProfit.repository.ts
+// and sales.policy netProfit(): revenue on credit sales counts when
+// collected), still used for the Cash & Receivables cards. "Net Sales"/"Gross Profit" here are a
 // distinct, invoiced/gross-accrual figure — every qualifying order/POS/
 // return/exchange line for the period, regardless of whether a credit sale
 // has been collected yet. Both are legitimate, commonly-used financial
@@ -100,51 +92,11 @@
 // with, by construction, since Prompt 2 designates accrual as canonical for
 // those specific cards/columns.
 
-import { db } from '../../db/index.js';
-import { costBasisLateralJoin } from '../../lib/costBasis.js';
-
-export interface ReportFilters {
-  branchId?: number;
-  dateFrom?: string;
-  dateTo?: string;
-}
-
-export type TransactionType = 'ORDER' | 'POS' | 'RETURN' | 'EXCHANGE';
-
-export interface UnifiedTransactionRow {
-  transactionDate: string;      // YYYY-MM-DD, local (DB session) date — never a JS Date/toISOString() round-trip
-  transactionType: TransactionType;
-  referenceNumber: string;
-  branch: string;
-  locationName: string;
-  customerName: string;
-  bookTitle: string;
-  bookIsbn: string;
-  quantity: number;             // positive for ORDER/POS/EXCHANGE; negative for RETURN
-  unitPrice: number;
-  discountAmount: number;
-  grossAmount: number;
-  netAmount: number;            // gross − discount for ORDER/POS; −refund for RETURN; ±allowance/sale for EXCHANGE
-  costAmount: number;           // signed to match netAmount — see header comment
-  grossProfit: number;          // netAmount − costAmount
-  paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
-  paymentMethod: string;
-  cashCollected: number;        // invoice-level, repeated per line of that invoice
-  receivableBalance: number;    // invoice-level, repeated per line of that invoice
-  staffUsername: string;
-}
-
-export interface UnifiedFinancialSummary {
-  grossSales: number;
-  discounts: number;
-  returnsValue: number;         // positive magnitude
-  exchangeDifference: number;   // signed: outgoing − incoming across all exchange line items
-  netSalesRevenue: number;      // grossSales − discounts − returnsValue + exchangeDifference
-  costAmount: number;           // SUM of every row's signed costAmount
-  grossProfit: number;          // netSalesRevenue − costAmount (== SUM of every row's grossProfit)
-  grossMarginPct: number;       // grossProfit / netSalesRevenue × 100 (0 when netSalesRevenue is 0)
-  rowCount: number;
-}
+import type { Queryable } from '../../../db/tx.js';
+import { reportRows } from '../../../db/reportDb.js';
+import { costBasisLateralJoin } from '../../../lib/costBasis.js';
+import { NOT_SALE_ORDER_STATUS_LIST } from './sales.policy.js';
+import type { LinePaymentStatus, ReportScope, SalesLineRecord } from './sales.types.js';
 
 // ── Payment method vocabulary mapping ───────────────────────────────────────
 // order_payments/transaction_payments/refunds/exchange settlement entries
@@ -166,24 +118,24 @@ function mapPaymentMethod(raw: string | null | undefined): string {
   return PAYMENT_METHOD_MAP[raw] ?? raw.toUpperCase();
 }
 
-function mapOrderPaymentStatus(raw: string): 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' {
+function mapOrderPaymentStatus(raw: string): LinePaymentStatus {
   if (raw === 'paid') return 'PAID';
   if (raw === 'partial') return 'PARTIALLY_PAID';
   return 'UNPAID'; // unpaid, refunded
 }
-function mapPosPaymentStatus(raw: string): 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' {
+function mapPosPaymentStatus(raw: string): LinePaymentStatus {
   if (raw === 'paid') return 'PAID';
   if (raw === 'partial') return 'PARTIALLY_PAID';
   return 'UNPAID'; // credit
 }
-function mapReceivableStatusToPaymentStatus(status: string | null): 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' {
+function mapReceivableStatusToPaymentStatus(status: string | null): LinePaymentStatus {
   if (!status) return 'PAID'; // no receivable at all (Even, or Store_Refunds) — nothing outstanding on the sale side
   if (status === 'Settled') return 'PAID';
   if (status === 'PartiallyPaid') return 'PARTIALLY_PAID';
   return 'UNPAID'; // Pending, Overdue
 }
 
-function buildDateBranchConditions(filters: ReportFilters, alias: string, dateCol = 'created_at'): { conditions: string[]; params: unknown[] } {
+function buildDateBranchConditions(filters: ReportScope, alias: string, dateCol = 'created_at'): { conditions: string[]; params: unknown[] } {
   const conditions: string[] = [];
   const params: unknown[] = [];
   if (filters.branchId) { params.push(filters.branchId); conditions.push(`${alias}.branch_id = $${params.length}`); }
@@ -233,12 +185,12 @@ const EXCHANGE_CASH_LATERAL = `
 
 // ── ORDER rows ───────────────────────────────────────────────────────────────
 
-async function getOrderRows(filters: ReportFilters): Promise<UnifiedTransactionRow[]> {
+async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
   const { conditions, params } = buildDateBranchConditions(filters, 'o');
-  conditions.unshift(`o.status NOT IN ('Cancelled','CANCELLED')`);
+  conditions.unshift(`o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}`);
   const where = 'WHERE ' + conditions.join(' AND ');
 
-  const res = await db.query(
+  const res = await reportRows(q, 
     `SELECT
        TO_CHAR(o.created_at, 'YYYY-MM-DD') AS transaction_date,
        o.order_number AS reference_number,
@@ -270,7 +222,7 @@ async function getOrderRows(filters: ReportFilters): Promise<UnifiedTransactionR
     params,
   );
 
-  return res.rows.map((row): UnifiedTransactionRow => {
+  return res.map((row): SalesLineRecord => {
     const quantity = row.quantity as number;
     const unitPrice = parseFloat(row.unit_price as string);
     const discountAmount = parseFloat(row.discount_amount as string);
@@ -301,12 +253,12 @@ async function getOrderRows(filters: ReportFilters): Promise<UnifiedTransactionR
 
 // ── POS rows ─────────────────────────────────────────────────────────────────
 
-async function getPosRows(filters: ReportFilters): Promise<UnifiedTransactionRow[]> {
+async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
   const { conditions, params } = buildDateBranchConditions(filters, 't');
   conditions.unshift(`t.status != 'voided'`);
   const where = 'WHERE ' + conditions.join(' AND ');
 
-  const res = await db.query(
+  const res = await reportRows(q, 
     `SELECT
        TO_CHAR(t.created_at, 'YYYY-MM-DD') AS transaction_date,
        t.transaction_number AS reference_number,
@@ -338,7 +290,7 @@ async function getPosRows(filters: ReportFilters): Promise<UnifiedTransactionRow
     params,
   );
 
-  return res.rows.map((row): UnifiedTransactionRow => {
+  return res.map((row): SalesLineRecord => {
     const quantity = row.quantity as number;
     const unitPrice = parseFloat(row.unit_price as string);
     const discountAmount = parseFloat(row.discount_amount as string);
@@ -369,12 +321,12 @@ async function getPosRows(filters: ReportFilters): Promise<UnifiedTransactionRow
 
 // ── RETURN rows ──────────────────────────────────────────────────────────────
 
-async function getReturnRows(filters: ReportFilters): Promise<UnifiedTransactionRow[]> {
+async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
   const { conditions, params } = buildDateBranchConditions(filters, 'r');
   conditions.unshift(`r.status = 'completed'`); // excludes 'rejected'
   const where = 'WHERE ' + conditions.join(' AND ');
 
-  const res = await db.query(
+  const res = await reportRows(q, 
     `SELECT
        TO_CHAR(r.created_at, 'YYYY-MM-DD') AS transaction_date,
        r.return_number AS reference_number,
@@ -400,7 +352,7 @@ async function getReturnRows(filters: ReportFilters): Promise<UnifiedTransaction
     params,
   );
 
-  return res.rows.map((row): UnifiedTransactionRow => {
+  return res.map((row): SalesLineRecord => {
     const quantity = row.quantity as number;
     const unitPrice = parseFloat(row.unit_price as string);
     const grossAmount = parseFloat((unitPrice * quantity).toFixed(2));
@@ -441,7 +393,7 @@ async function getReturnRows(filters: ReportFilters): Promise<UnifiedTransaction
 // query explicitly skips any exchange that has unified exchange_items rows,
 // to avoid double-counting.
 
-async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransactionRow[]> {
+async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
   const legacyIncoming = buildDateBranchConditions(filters, 'e');
   legacyIncoming.conditions.unshift(`e.status IN ('Completed','COMPLETED')`);
   legacyIncoming.conditions.push(`NOT EXISTS (SELECT 1 FROM exchange_items ei2 WHERE ei2.exchange_id = e.id)`);
@@ -475,7 +427,7 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
      ${EXCHANGE_CASH_LATERAL}`;
 
   const [incomingRes, outgoingRes, unifiedRes] = await Promise.all([
-    db.query(
+    reportRows(q, 
       `SELECT
          TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date,
          e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
@@ -493,7 +445,7 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
        ORDER BY e.created_at`,
       legacyIncoming.params,
     ),
-    db.query(
+    reportRows(q, 
       `SELECT
          TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date,
          e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
@@ -513,7 +465,7 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
        ORDER BY e.created_at`,
       legacyOutgoing.params,
     ),
-    db.query(
+    reportRows(q, 
       `SELECT
          TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date,
          e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
@@ -535,7 +487,7 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
     ),
   ]);
 
-  function mapExchangeRow(row: Record<string, unknown>, direction: 'incoming' | 'outgoing'): UnifiedTransactionRow {
+  function mapExchangeRow(row: Record<string, unknown>, direction: 'incoming' | 'outgoing'): SalesLineRecord {
     const quantity = row.quantity as number;
     const unitPrice = parseFloat(row.unit_price as string);
     const totalPrice = parseFloat(row.total_price as string);
@@ -587,60 +539,23 @@ async function getExchangeRows(filters: ReportFilters): Promise<UnifiedTransacti
     };
   }
 
-  const rows: UnifiedTransactionRow[] = [
-    ...incomingRes.rows.map(r => mapExchangeRow(r, 'incoming')),
-    ...outgoingRes.rows.map(r => mapExchangeRow(r, 'outgoing')),
-    ...unifiedRes.rows.map(r => mapExchangeRow(r, (r.type as string) === 'returned' ? 'incoming' : 'outgoing')),
+  const rows: SalesLineRecord[] = [
+    ...incomingRes.map(r => mapExchangeRow(r, 'incoming')),
+    ...outgoingRes.map(r => mapExchangeRow(r, 'outgoing')),
+    ...unifiedRes.map(r => mapExchangeRow(r, (r.type as string) === 'returned' ? 'incoming' : 'outgoing')),
   ];
   return rows;
 }
 
-// ── Unified export ────────────────────────────────────────────────────────────
+// ── All lines ─────────────────────────────────────────────────────────────────
 
-export async function getUnifiedTransactionRows(filters: ReportFilters): Promise<UnifiedTransactionRow[]> {
+export async function salesLines(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
   const [orderRows, posRows, returnRows, exchangeRows] = await Promise.all([
-    getOrderRows(filters),
-    getPosRows(filters),
-    getReturnRows(filters),
-    getExchangeRows(filters),
+    getOrderRows(q, filters),
+    getPosRows(q, filters),
+    getReturnRows(q, filters),
+    getExchangeRows(q, filters),
   ]);
   return [...orderRows, ...posRows, ...returnRows, ...exchangeRows]
     .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
-}
-
-// ── Unified aggregate summary ─────────────────────────────────────────────────
-// Deliberately computed by summing the SAME rows getUnifiedTransactionRows()
-// returns (not a hand-written parallel SQL aggregate) — this is what makes
-// "1:1 reconciliation" between the Dashboard cards and the CSV export a
-// guarantee rather than a hope: they are, quite literally, the same numbers.
-
-export async function getUnifiedFinancialSummary(filters: ReportFilters): Promise<UnifiedFinancialSummary> {
-  const rows = await getUnifiedTransactionRows(filters);
-  let grossSales = 0, discounts = 0, returnsValue = 0, exchangeDifference = 0, costAmount = 0;
-  for (const row of rows) {
-    if (row.transactionType === 'ORDER' || row.transactionType === 'POS') {
-      grossSales += row.grossAmount;
-      discounts += row.discountAmount;
-    } else if (row.transactionType === 'RETURN') {
-      returnsValue += -row.netAmount; // positive magnitude
-    } else if (row.transactionType === 'EXCHANGE') {
-      exchangeDifference += row.netAmount;
-    }
-    costAmount += row.costAmount;
-  }
-  const netSalesRevenue = parseFloat((grossSales - discounts - returnsValue + exchangeDifference).toFixed(2));
-  const roundedCost = parseFloat(costAmount.toFixed(2));
-  const grossProfit = parseFloat((netSalesRevenue - roundedCost).toFixed(2));
-  const grossMarginPct = netSalesRevenue !== 0 ? parseFloat(((grossProfit / netSalesRevenue) * 100).toFixed(2)) : 0;
-  return {
-    grossSales: parseFloat(grossSales.toFixed(2)),
-    discounts: parseFloat(discounts.toFixed(2)),
-    returnsValue: parseFloat(returnsValue.toFixed(2)),
-    exchangeDifference: parseFloat(exchangeDifference.toFixed(2)),
-    netSalesRevenue,
-    costAmount: roundedCost,
-    grossProfit,
-    grossMarginPct,
-    rowCount: rows.length,
-  };
 }

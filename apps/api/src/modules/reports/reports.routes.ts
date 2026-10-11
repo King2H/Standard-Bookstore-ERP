@@ -5,7 +5,7 @@ import { requirePermission } from '../../middleware/rbac.js';
 import { scopedBranchOrAll } from '../../lib/scope.js';
 import {
   buildCsv, sendCsv,
-  SALES_COLUMNS, INVENTORY_COLUMNS, PROCUREMENT_COLUMNS, RECEIVABLES_COLUMNS,
+  INVENTORY_COLUMNS, PROCUREMENT_COLUMNS, RECEIVABLES_COLUMNS,
   RETURN_COLUMNS, EXCHANGE_DETAIL_COLUMNS, PAYMENTS_LEDGER_COLUMNS,
   RECEIVABLES_AGING_COLUMNS, INVENTORY_VALUATION_COLUMNS,
   OPEN_POS_COLUMNS, SUPPLIER_BALANCES_COLUMNS, AP_AGING_COLUMNS,
@@ -38,19 +38,6 @@ function parseFilters(req: Request) {
 
 // All report endpoints require VIEW_REPORTS permission
 const reportAccess = [authenticate, requirePermission('VIEW_REPORTS')];
-
-// ── GET /api/reports/sales ────────────────────────────────────────────────────
-
-router.get(
-  '/reports/sales',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const report = await reportsService.getSalesReport(parseFilters(req));
-      res.json(report);
-    } catch (err) { next(err); }
-  },
-);
 
 // ── GET /api/reports/payments ─────────────────────────────────────────────────
 
@@ -104,87 +91,7 @@ router.get(
   },
 );
 
-// ── GET /api/reports/kpis ─────────────────────────────────────────────────────
-
-router.get(
-  '/reports/kpis',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const kpis = await reportsService.getKpis(scopedBranchOrAll(req));
-      res.json(kpis);
-    } catch (err) { next(err); }
-  },
-);
-
 // ── CSV Export endpoints ──────────────────────────────────────────────────────
-
-// ── GET /api/reports/sales/detail ─────────────────────────────────────────────
-// On-screen detail view backing the same rows the export below streams —
-// lets the frontend show the flat line-item table (with totals row) without
-// downloading the CSV.
-
-router.get(
-  '/reports/sales/detail',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await reportsService.getSalesReportRows(parseFilters(req));
-      res.json(result);
-    } catch (err) { next(err); }
-  },
-);
-
-router.get(
-  '/reports/sales/export',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // Prompt 2: sourced from getSalesReportRows() (reports.service.ts),
-      // which itself wraps FinancialReportService's unified engine — the
-      // same engine backing the Dashboard's Net Sales / Net Profit / Gross
-      // Margin % cards, so CSV totals for a date range always reconcile
-      // 1:1 with those cards for the same range. Covers all four channels
-      // (ORDER/POS/RETURN/EXCHANGE), one row per line item; cancelled/
-      // voided/rejected transactions are excluded automatically. A totals
-      // row is appended so the CSV foots to the same figures on its own.
-      const { rows, totals } = await reportsService.getSalesReportRows(parseFilters(req));
-      const csvRows = rows.map(r => ({
-        date: r.date,
-        invoice_no: r.invoiceNo,
-        source: r.source,
-        customer: r.customer,
-        book: r.book,
-        qty: r.qty,
-        unit_price: r.unitPrice,
-        discount: r.discount,
-        gross_amount: r.grossAmount,
-        return_amount: r.returnAmount,
-        net_sales_amount: r.netSalesAmount,
-        cost_amount: r.costAmount,
-        gross_profit: r.grossProfit,
-        payment_status: r.paymentStatus,
-        cash_collected: r.cashCollected,
-        receivable_balance: r.receivableBalance,
-        branch: r.branch,
-        location: r.location,
-        user: r.user,
-      }));
-      const totalsRow: Record<string, unknown> = {
-        date: '', invoice_no: '', source: '', customer: 'TOTAL', book: '',
-        qty: totals.qty, unit_price: '', discount: '',
-        gross_amount: totals.grossAmount, return_amount: totals.returnAmount,
-        net_sales_amount: totals.netSalesAmount, cost_amount: totals.costAmount,
-        gross_profit: totals.grossProfit, payment_status: '',
-        cash_collected: totals.cashCollected, receivable_balance: totals.receivableBalance,
-        branch: '', location: '', user: '',
-      };
-      const allRows: Record<string, unknown>[] = [...csvRows, totalsRow];
-      const today = new Date().toISOString().slice(0, 10);
-      sendCsv(res, `sales-report-${today}.csv`, buildCsv(allRows, SALES_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
 
 // ── GET /api/reports/returns ───────────────────────────────────────────────────
 
@@ -210,21 +117,6 @@ router.get(
       const limit = qi(req.query.limit) ?? 10;
       const rows = await reportsService.getTopReturnedBooks(parseFilters(req), limit);
       res.json(rows);
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/reports/sales/gross-profit-trend ───────────────────────────────
-// Prompt 2 — dashboard "Gross Profit Trend" chart. Same underlying unified
-// rows as the Sales Report/export, grouped by period.
-
-router.get(
-  '/reports/sales/gross-profit-trend',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const points = await reportsService.getGrossProfitTrend(parseFilters(req));
-      res.json(points);
     } catch (err) { next(err); }
   },
 );
@@ -350,30 +242,6 @@ router.get(
       const rows = await reportsService.getInventoryExportRowsV2(parseFilters(req));
       const today = new Date().toISOString().slice(0, 10);
       sendCsv(res, `inventory-valuation-${today}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], INVENTORY_VALUATION_COLUMNS));
-    } catch (err) { next(err); }
-  },
-);
-
-// ── GET /api/reports/kpis/period ────────────────────────────────────────────────
-// Prompt 2 — Today/Week/Month/Year selector for the Sales Performance
-// dashboard cards, with previous-period comparison.
-
-router.get(
-  '/reports/kpis/period',
-  ...reportAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const rawPeriod = qs(req.query.period);
-      const period: reportsService.KpiPeriod =
-        rawPeriod === 'today' || rawPeriod === 'week' || rawPeriod === 'month' || rawPeriod === 'year'
-          ? rawPeriod : 'today';
-      const branchId = scopedBranchOrAll(req);
-      const salesKpis = await reportsService.getPeriodSalesKpis(branchId, period);
-      const [cashCollected, prevCashCollected] = await Promise.all([
-        reportsService.getPeriodCashCollected(branchId, salesKpis.dateFrom, salesKpis.dateTo),
-        reportsService.getPeriodCashCollected(branchId, salesKpis.previous.dateFrom, salesKpis.previous.dateTo),
-      ]);
-      res.json({ ...salesKpis, cashCollected, previousCashCollected: prevCashCollected });
     } catch (err) { next(err); }
   },
 );

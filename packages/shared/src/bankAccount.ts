@@ -1,19 +1,11 @@
 import { z } from 'zod';
-import { IdSchema, ListPagingQuerySchema, MoneyInputSchema, PaginatedSchema } from './common.js';
+import { DateOnlySchema, IdSchema, ListPagingQuerySchema, MoneyInputSchema, PaginatedSchema } from './common.js';
 
 /**
  * Contracts for a branch's bank accounts and their reconciliation,
  * /api/v1/branches/{branchId}/bank-accounts (#21). The module is on only with
  * FEATURE_BANK_ACCOUNTS=true until feature flags (#27).
  */
-
-const DateOnlySchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a date, YYYY-MM-DD')
-  .refine((s) => {
-    const d = new Date(`${s}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-  }, 'Not a calendar date');
 
 const PositiveMoneySchema = MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be more than zero').refine(
   (v) => /^\d+(\.\d{1,2})?$/.test(String(v)),

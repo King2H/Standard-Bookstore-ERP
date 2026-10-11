@@ -1,29 +1,15 @@
-import { db } from '../db/index.js';
-import { costBasisLateralJoin } from './costBasis.js';
+import type { Queryable } from '../../../db/tx.js';
+import { reportRows } from '../../../db/reportDb.js';
+import { costBasisLateralJoin } from '../../../lib/costBasis.js';
+import type { NetProfitParts, ReportScope } from './sales.types.js';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export interface NetProfitResult {
-  netProfit: number;
-  fulfilledRevenue: number;   // orders (FULFILLED/COMPLETED) + POS grand_total
-  purchaseCost: number;
-  totalDiscounts: number;     // order discount_total + POS discount_total
-  returnsValue: number;
-  returnsCost: number;        // COGS credited back for returned units (Return Posting Rule)
-  exchangeAdjustment: number;
-  cashSalesRevenue: number;
-  creditSalesRevenue: number;
-  collectedCreditRevenue: number;
-  outstandingReceivables: number;
-}
+// The collected-cash view of profit (Cash & Receivables cards): revenue on a
+// credit sale counts as it is collected, not when it is invoiced. The
+// accrual view is salesLines.repository.ts.
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function buildOrderFilters(opts: {
-  branchId?: number;
-  dateFrom?: string;
-  dateTo?: string;
-}): { conditions: string[]; params: unknown[] } {
+function buildOrderFilters(opts: ReportScope): { conditions: string[]; params: unknown[] } {
   const params: unknown[] = [];
   const conditions: string[] = [];
   if (opts.branchId !== undefined) {
@@ -41,32 +27,13 @@ function buildOrderFilters(opts: {
   return { conditions, params };
 }
 
-// ── Single source of truth for net profit ────────────────────────────────────
-
 /**
- * Computes the net profit breakdown for a given date range and/or branch.
- *
- * Covers ALL sales channels:
- *   - Orders (FULFILLED/COMPLETED) from the `orders` table
- *   - POS transactions (completed) from the `transactions` table
- *
- * All 8 sub-queries run in parallel via Promise.all.
- *
- * Formula:
- *   netProfit = (orderRevenue + posRevenue)
- *             - purchaseCost
- *             - returnsValue
- *             + returnsCost
- *             + exchangeAdjustment
- * (orderDiscounts + posDiscounts are already baked into orderRevenue/posRevenue
- * — both are read post-discount — so they are a reporting field only, not
- * subtracted again here; see totalDiscounts below.)
+ * The parts of the collected-cash profit for a branch and date range, each
+ * summed by the database; sales.policy netProfit() combines them. Covers
+ * orders (fulfilled or completed), POS sales, returns, exchanges and credit
+ * collected.
  */
-export async function computeNetProfit(opts: {
-  branchId?: number;
-  dateFrom?: string;
-  dateTo?: string;
-}): Promise<NetProfitResult> {
+export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<NetProfitParts> {
   const FULFILLED_STATUSES = `('FULFILLED','COMPLETED','Fulfilled','Completed')`;
 
   // ── Build per-query filter params ─────────────────────────────────────────
@@ -140,7 +107,7 @@ export async function computeNetProfit(opts: {
     //     is picked up via Q5 (receivable.original_amount − outstanding_amount).
     //     Partially-paid credit: also excluded from o.total — collected portion via Q5.
     //     This prevents double-counting: we never count o.total AND the receivable amount.
-    db.query(
+    reportRows(q, 
       `SELECT
          -- Cash sales: always recognized in full
          COALESCE(SUM(CASE WHEN o.sale_type = 'cash_sale' THEN o.total ELSE 0 END), 0)::NUMERIC AS cash_sales_revenue,
@@ -158,7 +125,7 @@ export async function computeNetProfit(opts: {
     // — never recomputed against whatever procurement has done since. Falls
     // back to costBasis.ts's most-recent-cost lookup only for rows that
     // predate that persistence (oli.unit_cost IS NULL).
-    db.query(
+    reportRows(q, 
       `SELECT COALESCE(SUM(COALESCE(oli.unit_cost, lc.unit_cost, 0) * oli.quantity), 0)::NUMERIC AS purchase_cost
        FROM order_line_items oli
        JOIN orders o ON o.id = oli.order_id
@@ -169,7 +136,7 @@ export async function computeNetProfit(opts: {
     // Q2b: POS-based purchase cost — same preference for the persisted
     // sale-time cost over the historical fallback. Excludes credit POS from
     // cost too (not recognized yet).
-    db.query(
+    reportRows(q, 
       `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, lc.unit_cost, 0) * tli.quantity), 0)::NUMERIC AS purchase_cost
        FROM transaction_line_items tli
        JOIN transactions t ON t.id = tli.transaction_id
@@ -178,7 +145,7 @@ export async function computeNetProfit(opts: {
       posCostParams,
     ),
     // Q3: Returns value
-    db.query(
+    reportRows(q, 
       `SELECT COALESCE(SUM(rli.unit_price * rli.quantity), 0)::NUMERIC AS returns_value
        FROM return_line_items rli
        JOIN returns r ON r.id = rli.return_id
@@ -197,7 +164,7 @@ export async function computeNetProfit(opts: {
     // own fallback boundary (no historical fallback here — the return
     // itself couldn't have used one either, so crediting one back now that
     // Q2b never charged in the first place would be a phantom credit).
-    db.query(
+    reportRows(q, 
       `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, 0) * rli.quantity), 0)::NUMERIC AS returns_cost
        FROM return_line_items rli
        JOIN returns r ON r.id = rli.return_id
@@ -206,7 +173,7 @@ export async function computeNetProfit(opts: {
       returnParams,
     ),
     // Q4: Exchange cash adjustment
-    db.query(
+    reportRows(q, 
       `SELECT COALESCE(SUM(
          CASE WHEN ese.entry_type = 'cash_payment' THEN ese.amount
               WHEN ese.entry_type = 'cash_refund'  THEN -ese.amount
@@ -219,20 +186,20 @@ export async function computeNetProfit(opts: {
     // Q5: Collected credit revenue — the SINGLE source for all credit order revenue.
     //     Covers both 'Settled' (fully paid) and 'PartiallyPaid' receivables.
     //     collected = original_amount − outstanding_amount − written_off_amount − cancelled_amount − credited_amount.
-    db.query(
+    reportRows(q, 
       `SELECT COALESCE(SUM(r.original_amount - r.outstanding_amount - COALESCE(r.written_off_amount, 0) - COALESCE(r.cancelled_amount, 0) - r.credited_amount), 0)::NUMERIC AS collected_credit_revenue
        FROM receivables r WHERE ${recvConds.join(' AND ')}`,
       recvParams,
     ),
     // Q6: Outstanding receivables
-    db.query(
+    reportRows(q, 
       `SELECT COALESCE(SUM(r.outstanding_amount), 0)::NUMERIC AS outstanding_receivables
        FROM receivables r WHERE ${outConds.join(' AND ')}`,
       outParams,
     ),
     // Q7: POS cash-only revenue — EXCLUDE credit POS (payment_status = 'credit').
     //     Credit POS revenue is recognized only when collected (separate mechanism).
-    db.query(
+    reportRows(q, 
       `SELECT
          COALESCE(SUM(t.grand_total),    0)::NUMERIC AS pos_revenue,
          COALESCE(SUM(t.discount_total), 0)::NUMERIC AS pos_discounts
@@ -242,54 +209,18 @@ export async function computeNetProfit(opts: {
     ),
   ]);
 
-  // ── Extract and combine all channels ─────────────────────────────────────
-  const rev                = revenueRes.rows[0];
-  const cashSalesRevenue   = parseFloat(rev.cash_sales_revenue   as string);
-  const orderDiscounts     = parseFloat(rev.total_discounts      as string);
-
-  const purchaseCost       = parseFloat(orderCostRes.rows[0].purchase_cost as string)
-                           + parseFloat(posCostRes.rows[0].purchase_cost   as string);
-  const returnsValue       = parseFloat(returnsRes.rows[0].returns_value               as string);
-  const returnsCost        = parseFloat(returnsCostRes.rows[0].returns_cost             as string);
-  const exchangeAdjustment = parseFloat(exchangeRes.rows[0].exchange_adjustment        as string);
-  const collectedCreditRevenue = parseFloat(collectedRes.rows[0].collected_credit_revenue as string);
-  const outstandingReceivables = parseFloat(outstandingRes.rows[0].outstanding_receivables as string);
-
-  const posRevenue   = parseFloat(posRes.rows[0].pos_revenue   as string);
-  const posDiscounts = parseFloat(posRes.rows[0].pos_discounts as string);
-
-  // Credit order revenue = collected portion from receivables (not from o.total)
-  const creditSalesRevenue = collectedCreditRevenue;
-
-  // Recognized revenue = cash order revenue + collected credit order revenue + cash POS revenue
-  // Credit POS and unpaid/partial credit orders are excluded until payment is collected.
-  const fulfilledRevenue = cashSalesRevenue + collectedCreditRevenue + posRevenue;
-  const totalDiscounts   = orderDiscounts + posDiscounts;
-
-  // Net profit formula:
-  // Revenue (grand_total / o.total) is ALREADY post-discount — the customer
-  // paid the discounted price. Subtracting discounts again would double-count.
-  // Correct formula: Revenue − Cost − Returns + Returns Cost ± Exchange Adjustments
-  // totalDiscounts is kept as a reporting field (shown in KPI card) but NOT subtracted.
-  // Return Posting Rule: a return should reduce gross profit by the ORIGINAL
-  // margin, not by the full revenue amount — returnsValue alone (revenue-only
-  // reversal) would double-penalize profit, since purchaseCost above still
-  // includes the returned units' original cost. +returnsCost credits that
-  // back, leaving the net effect of a return on profit equal to exactly the
-  // margin that sale contributed in the first place.
-  const netProfit = fulfilledRevenue - purchaseCost - returnsValue + returnsCost + exchangeAdjustment;
-
+  const one = (rows: Record<string, unknown>[], column: string): string => String(rows[0][column]);
   return {
-    netProfit,
-    fulfilledRevenue,
-    purchaseCost,
-    totalDiscounts,
-    returnsValue,
-    returnsCost,
-    exchangeAdjustment,
-    cashSalesRevenue,
-    creditSalesRevenue,
-    collectedCreditRevenue,
-    outstandingReceivables,
+    cashSalesRevenue: one(revenueRes, 'cash_sales_revenue'),
+    orderDiscounts: one(revenueRes, 'total_discounts'),
+    orderCost: one(orderCostRes, 'purchase_cost'),
+    posCost: one(posCostRes, 'purchase_cost'),
+    returnsValue: one(returnsRes, 'returns_value'),
+    returnsCost: one(returnsCostRes, 'returns_cost'),
+    exchangeAdjustment: one(exchangeRes, 'exchange_adjustment'),
+    collectedCreditRevenue: one(collectedRes, 'collected_credit_revenue'),
+    outstandingReceivables: one(outstandingRes, 'outstanding_receivables'),
+    posRevenue: one(posRes, 'pos_revenue'),
+    posDiscounts: one(posRes, 'pos_discounts'),
   };
 }
