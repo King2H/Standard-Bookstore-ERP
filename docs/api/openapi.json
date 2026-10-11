@@ -36788,6 +36788,1129 @@
         }
       }
     },
+    "/reports/kpis": {
+      "get": {
+        "operationId": "getKpis",
+        "summary": "Today's and this month's dashboard figures (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The KPIs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dailySales": {
+                      "type": "number"
+                    },
+                    "monthlySales": {
+                      "type": "number"
+                    },
+                    "dailyRevenue": {
+                      "type": "number"
+                    },
+                    "monthlyRevenue": {
+                      "type": "number"
+                    },
+                    "averageOrderValue": {
+                      "type": "number"
+                    },
+                    "totalActiveCustomers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lowStockAlerts": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "pendingOrders": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "totalExchangesToday": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outstandingBalance": {
+                      "type": "number"
+                    },
+                    "netProfit": {
+                      "type": "number"
+                    },
+                    "fulfilledRevenue": {
+                      "type": "number"
+                    },
+                    "outstandingReceivables": {
+                      "type": "number"
+                    },
+                    "cashSalesRevenue": {
+                      "type": "number"
+                    },
+                    "creditSalesRevenue": {
+                      "type": "number"
+                    },
+                    "collectedCreditRevenue": {
+                      "type": "number"
+                    },
+                    "purchaseCost": {
+                      "type": "number"
+                    },
+                    "totalDiscounts": {
+                      "type": "number"
+                    },
+                    "grossProfit": {
+                      "type": "number"
+                    },
+                    "dailyNetProfit": {
+                      "type": "number"
+                    },
+                    "monthlyNetProfit": {
+                      "type": "number"
+                    },
+                    "dailyNetSalesRevenue": {
+                      "type": "number"
+                    },
+                    "monthlyNetSalesRevenue": {
+                      "type": "number"
+                    },
+                    "dailyNetProfitUnified": {
+                      "type": "number"
+                    },
+                    "monthlyNetProfitUnified": {
+                      "type": "number"
+                    },
+                    "dailyGrossMarginPct": {
+                      "type": "number"
+                    },
+                    "monthlyGrossMarginPct": {
+                      "type": "number"
+                    },
+                    "grossProfitUnified": {
+                      "type": "number"
+                    },
+                    "overdueReceivablesAmount": {
+                      "type": "number"
+                    },
+                    "inventoryValue": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "dailySales",
+                    "monthlySales",
+                    "dailyRevenue",
+                    "monthlyRevenue",
+                    "averageOrderValue",
+                    "totalActiveCustomers",
+                    "lowStockAlerts",
+                    "pendingOrders",
+                    "totalExchangesToday",
+                    "outstandingBalance",
+                    "netProfit",
+                    "fulfilledRevenue",
+                    "outstandingReceivables",
+                    "cashSalesRevenue",
+                    "creditSalesRevenue",
+                    "collectedCreditRevenue",
+                    "purchaseCost",
+                    "totalDiscounts",
+                    "grossProfit",
+                    "dailyNetProfit",
+                    "monthlyNetProfit",
+                    "dailyNetSalesRevenue",
+                    "monthlyNetSalesRevenue",
+                    "dailyNetProfitUnified",
+                    "monthlyNetProfitUnified",
+                    "dailyGrossMarginPct",
+                    "monthlyGrossMarginPct",
+                    "grossProfitUnified",
+                    "overdueReceivablesAmount",
+                    "inventoryValue"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/kpis/period": {
+      "get": {
+        "operationId": "getPeriodKpis",
+        "summary": "Sales Performance for today, this week, month or year so far, against the previous period (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "today",
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The period figures",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dateFrom": {
+                      "type": "string"
+                    },
+                    "dateTo": {
+                      "type": "string"
+                    },
+                    "netSales": {
+                      "type": "number"
+                    },
+                    "grossProfit": {
+                      "type": "number"
+                    },
+                    "grossMarginPct": {
+                      "type": "number"
+                    },
+                    "period": {
+                      "type": "string",
+                      "enum": [
+                        "today",
+                        "week",
+                        "month",
+                        "year"
+                      ]
+                    },
+                    "previous": {
+                      "type": "object",
+                      "properties": {
+                        "dateFrom": {
+                          "type": "string"
+                        },
+                        "dateTo": {
+                          "type": "string"
+                        },
+                        "netSales": {
+                          "type": "number"
+                        },
+                        "grossProfit": {
+                          "type": "number"
+                        },
+                        "grossMarginPct": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "dateFrom",
+                        "dateTo",
+                        "netSales",
+                        "grossProfit",
+                        "grossMarginPct"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "netSalesChangePct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "grossProfitChangePct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "cashCollected": {
+                      "type": "number"
+                    },
+                    "previousCashCollected": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "dateFrom",
+                    "dateTo",
+                    "netSales",
+                    "grossProfit",
+                    "grossMarginPct",
+                    "period",
+                    "previous",
+                    "netSalesChangePct",
+                    "grossProfitChangePct",
+                    "cashCollected",
+                    "previousCashCollected"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/sales": {
+      "get": {
+        "operationId": "getSalesReport",
+        "summary": "Sales totals by period and branch, collected-cash profit and accrual figures (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches); orders count once confirmed",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The sales report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalSales": {
+                          "type": "number"
+                        },
+                        "totalOrders": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "averageOrderValue": {
+                          "type": "number"
+                        },
+                        "totalPosSales": {
+                          "type": "number"
+                        },
+                        "totalPosTransactions": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "netProfit": {
+                          "type": "number"
+                        },
+                        "purchaseCost": {
+                          "type": "number"
+                        },
+                        "totalDiscounts": {
+                          "type": "number"
+                        },
+                        "fulfilledRevenue": {
+                          "type": "number"
+                        },
+                        "outstandingReceivables": {
+                          "type": "number"
+                        },
+                        "cashSalesRevenue": {
+                          "type": "number"
+                        },
+                        "creditSalesRevenue": {
+                          "type": "number"
+                        },
+                        "netSales": {
+                          "type": "number"
+                        },
+                        "grossProfit": {
+                          "type": "number"
+                        },
+                        "grossMarginPct": {
+                          "type": "number"
+                        },
+                        "costAmount": {
+                          "type": "number"
+                        },
+                        "grossSales": {
+                          "type": "number"
+                        },
+                        "discounts": {
+                          "type": "number"
+                        },
+                        "returnsValue": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "totalSales",
+                        "totalOrders",
+                        "averageOrderValue",
+                        "totalPosSales",
+                        "totalPosTransactions",
+                        "netProfit",
+                        "purchaseCost",
+                        "totalDiscounts",
+                        "fulfilledRevenue",
+                        "outstandingReceivables",
+                        "cashSalesRevenue",
+                        "creditSalesRevenue",
+                        "netSales",
+                        "grossProfit",
+                        "grossMarginPct",
+                        "costAmount",
+                        "grossSales",
+                        "discounts",
+                        "returnsValue"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "byPeriod": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "period": {
+                            "type": "string"
+                          },
+                          "totalSales": {
+                            "type": "number"
+                          },
+                          "totalOrders": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "averageOrderValue": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "period",
+                          "totalSales",
+                          "totalOrders",
+                          "averageOrderValue"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "byBranch": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "branchId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "branchName": {
+                            "type": "string"
+                          },
+                          "totalSales": {
+                            "type": "number"
+                          },
+                          "totalOrders": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "branchId",
+                          "branchName",
+                          "totalSales",
+                          "totalOrders"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "summary",
+                    "byPeriod",
+                    "byBranch"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/sales/detail": {
+      "get": {
+        "operationId": "getSalesDetail",
+        "summary": "One row per line of a sale, return or exchange, with totals (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The lines and their totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "invoiceNo": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "ORDER",
+                              "POS",
+                              "RETURN",
+                              "EXCHANGE"
+                            ]
+                          },
+                          "customer": {
+                            "type": "string"
+                          },
+                          "book": {
+                            "type": "string"
+                          },
+                          "qty": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "discount": {
+                            "type": "number"
+                          },
+                          "grossAmount": {
+                            "type": "number"
+                          },
+                          "returnAmount": {
+                            "type": "number"
+                          },
+                          "netSalesAmount": {
+                            "type": "number"
+                          },
+                          "costAmount": {
+                            "type": "number"
+                          },
+                          "grossProfit": {
+                            "type": "number"
+                          },
+                          "paymentStatus": {
+                            "type": "string",
+                            "enum": [
+                              "PAID",
+                              "PARTIALLY_PAID",
+                              "UNPAID"
+                            ]
+                          },
+                          "cashCollected": {
+                            "type": "number"
+                          },
+                          "receivableBalance": {
+                            "type": "number"
+                          },
+                          "branch": {
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": "string"
+                          },
+                          "user": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "invoiceNo",
+                          "source",
+                          "customer",
+                          "book",
+                          "qty",
+                          "unitPrice",
+                          "discount",
+                          "grossAmount",
+                          "returnAmount",
+                          "netSalesAmount",
+                          "costAmount",
+                          "grossProfit",
+                          "paymentStatus",
+                          "cashCollected",
+                          "receivableBalance",
+                          "branch",
+                          "location",
+                          "user"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "qty": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "grossAmount": {
+                          "type": "number"
+                        },
+                        "returnAmount": {
+                          "type": "number"
+                        },
+                        "netSalesAmount": {
+                          "type": "number"
+                        },
+                        "costAmount": {
+                          "type": "number"
+                        },
+                        "grossProfit": {
+                          "type": "number"
+                        },
+                        "grossMarginPct": {
+                          "type": "number"
+                        },
+                        "cashCollected": {
+                          "type": "number"
+                        },
+                        "receivableBalance": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "qty",
+                        "grossAmount",
+                        "returnAmount",
+                        "netSalesAmount",
+                        "costAmount",
+                        "grossProfit",
+                        "grossMarginPct",
+                        "cashCollected",
+                        "receivableBalance"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "rows",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/sales/export": {
+      "get": {
+        "operationId": "exportSalesReport",
+        "summary": "The sales lines as CSV, with a totals row (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/sales/gross-profit-trend": {
+      "get": {
+        "operationId": "getGrossProfitTrend",
+        "summary": "Net sales and gross profit per day (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One point per day with sales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "period": {
+                        "type": "string"
+                      },
+                      "netSales": {
+                        "type": "number"
+                      },
+                      "grossProfit": {
+                        "type": "number"
+                      },
+                      "grossMarginPct": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "period",
+                      "netSales",
+                      "grossProfit",
+                      "grossMarginPct"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/returns": {
       "post": {
         "operationId": "createReturn",

@@ -18,7 +18,8 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
 import { db } from '../db/index.js';
-import { getInventoryExportRowsV2, getSalesReportRows } from '../modules/reports/reports.service.js';
+import { getInventoryExportRowsV2 } from '../modules/reports/reports.service.js';
+import { getSalesDetail } from '../modules/reports/sales/sales.service.js';
 import * as inventoryService from '../modules/inventory/inventory.service.js';
 import { withTransaction } from '../db/tx.js';
 
@@ -259,7 +260,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
-    const { rows: exportRows } = await getSalesReportRows({ branchId });
+    const { rows: exportRows } = await getSalesDetail({ branchId });
     const orderRow = exportRows.find(r => r.source === 'ORDER' && r.invoiceNo === orderNumber);
     expect(orderRow).toBeDefined();
     // costBasis.ts fallback — a never-procured book's cost basis is the
@@ -292,7 +293,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     // The trade-in leg alone must be profit-neutral: the allowance is a real
     // inventory purchase (capitalized as average_cost, asserted in test 6),
     // not an expense — so it must not also drag down reported profit here.
-    const { rows: afterTradeIn } = await getSalesReportRows({ branchId });
+    const { rows: afterTradeIn } = await getSalesDetail({ branchId });
     const exchangeRow = afterTradeIn.find(r => r.source === 'EXCHANGE' && r.book === 'Full-Lifecycle Trade-In Novel');
     expect(exchangeRow).toBeDefined();
     expect(exchangeRow!.netSalesAmount).toBeCloseTo(-ALLOWANCE, 2);
@@ -318,7 +319,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
-    const { rows: afterResale } = await getSalesReportRows({ branchId });
+    const { rows: afterResale } = await getSalesDetail({ branchId });
     const orderRow = afterResale.find(r => r.source === 'ORDER' && r.invoiceNo === orderNumber);
     expect(orderRow).toBeDefined();
     expect(orderRow!.costAmount).toBeCloseTo(ALLOWANCE, 2);
@@ -361,7 +362,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     expect(invRes.rows[0]?.quantity ?? 0).toBe(0);
     expect(invRes.rows[0]?.damaged_quantity ?? 0).toBe(1);
 
-    const { rows } = await getSalesReportRows({ branchId });
+    const { rows } = await getSalesDetail({ branchId });
     const exchangeRow = rows.find(r => r.source === 'EXCHANGE' && r.book === 'Damaged Trade-In Novel');
     expect(exchangeRow).toBeDefined();
     expect(exchangeRow!.netSalesAmount).toBeCloseTo(-ALLOWANCE, 2);

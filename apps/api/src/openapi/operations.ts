@@ -1,6 +1,14 @@
 import type { z } from 'zod';
 import {
   BankAccountBranchParamsSchema,
+  GrossProfitTrendSchema,
+  KpiPeriodQuerySchema,
+  KpiQuerySchema,
+  KpiReportSchema,
+  PeriodKpisSchema,
+  ReportQuerySchema,
+  SalesDetailResponseSchema,
+  SalesReportSchema,
   BankAccountListQuerySchema,
   BankAccountListResponseSchema,
   BankAccountParamsSchema,
@@ -255,6 +263,7 @@ export const operations: ApiOperation[] = [
   ...purchaseOrderOperations(),
   ...supplierPayableOperations(),
   ...exchangeOperations(),
+  ...reportOperations(),
 ];
 
 function authOperations(): ApiOperation[] {
@@ -2138,5 +2147,67 @@ function exchangeOperations(): ApiOperation[] {
       responses: {},
       errors: [401, 410],
     })),
+  ];
+}
+
+function reportOperations(): ApiOperation[] {
+  const tag = 'Reports';
+  const roles = 'staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches';
+  const query = { query: ReportQuerySchema };
+  return [
+    {
+      operationId: 'getSalesReport',
+      method: 'get',
+      path: '/reports/sales',
+      summary: `Sales totals by period and branch, collected-cash profit and accrual figures (${roles}); orders count once confirmed`,
+      tag,
+      request: query,
+      responses: { 200: { description: 'The sales report', schema: SalesReportSchema } },
+    },
+    {
+      operationId: 'getSalesDetail',
+      method: 'get',
+      path: '/reports/sales/detail',
+      summary: `One row per line of a sale, return or exchange, with totals (${roles})`,
+      tag,
+      request: query,
+      responses: { 200: { description: 'The lines and their totals', schema: SalesDetailResponseSchema } },
+    },
+    {
+      operationId: 'exportSalesReport',
+      method: 'get',
+      path: '/reports/sales/export',
+      summary: `The sales lines as CSV, with a totals row (${roles})`,
+      tag,
+      request: query,
+      responses: {},
+    },
+    {
+      operationId: 'getGrossProfitTrend',
+      method: 'get',
+      path: '/reports/sales/gross-profit-trend',
+      summary: `Net sales and gross profit per day (${roles})`,
+      tag,
+      request: query,
+      responses: { 200: { description: 'One point per day with sales', schema: GrossProfitTrendSchema } },
+    },
+    {
+      operationId: 'getKpis',
+      method: 'get',
+      path: '/reports/kpis',
+      summary: `Today's and this month's dashboard figures (${roles})`,
+      tag,
+      request: { query: KpiQuerySchema },
+      responses: { 200: { description: 'The KPIs', schema: KpiReportSchema } },
+    },
+    {
+      operationId: 'getPeriodKpis',
+      method: 'get',
+      path: '/reports/kpis/period',
+      summary: `Sales Performance for today, this week, month or year so far, against the previous period (${roles})`,
+      tag,
+      request: { query: KpiPeriodQuerySchema },
+      responses: { 200: { description: 'The period figures', schema: PeriodKpisSchema } },
+    },
   ];
 }

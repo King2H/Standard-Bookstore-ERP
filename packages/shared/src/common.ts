@@ -10,6 +10,15 @@ export const IdSchema = z.coerce.number().int().positive();
 
 /** `/:id` route parameters. */
 export const IdParamsSchema = z.object({ id: IdSchema });
+
+/** A calendar date, YYYY-MM-DD (a real date: 2026-02-30 is refused). */
+export const DateOnlySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a date, YYYY-MM-DD')
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, 'Not a calendar date');
 export type IdParams = z.infer<typeof IdParamsSchema>;
 
 export const DEFAULT_PAGE_SIZE = 25;
