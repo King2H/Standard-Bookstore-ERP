@@ -230,7 +230,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
+      <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
         {/* Layout standardization: Operation (Quick Exchange) tab button shown
             before History (Exchanges) — visual order only. Default active tab
             stays 'list' so Dashboard drill-downs and normal review workflows
@@ -290,14 +290,14 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                           <div className="flex gap-1 flex-wrap">
                             {exc.voidable && canVoid(userRole) && (
                               <button onClick={e => { e.stopPropagation(); voidExchange(exc.id); }} disabled={voidMut.isPending}
-                                className="text-xs px-2 py-0.5 rounded transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-950">
+                                className="text-xs px-2 py-0.5 rounded-sm transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-950">
                                 Void
                               </button>
                             )}
                             {exc.status === 'Cancelled' && <span className="text-xs text-gray-400">{exc.voidReason ? `Voided: ${exc.voidReason}` : 'Cancelled'}</span>}
                             {exc.status === 'Completed' && (
                               <button onClick={e => { e.stopPropagation(); window.print(); }}
-                                className="text-xs px-2 py-0.5 rounded transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+                                className="text-xs px-2 py-0.5 rounded-sm transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
                                 🖨 Print
                               </button>
                             )}
@@ -337,7 +337,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Location <span className="text-red-500">*</span></h3>
             <select required value={locationId} onChange={e => setLocationId(Number(e.target.value) || '')}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
               <option value="">Select location...</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>)}
             </select>
@@ -356,7 +356,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
             ) : (
               <div className="relative">
                 <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="Search customer by name or code..."
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
                 {(customerResults?.items ?? []).length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
                     {(customerResults?.items ?? []).map(c => (
@@ -380,7 +380,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
             </div>
             <div className="relative">
               <input value={bookSearch} onChange={e => setBookSearch(e.target.value)} placeholder={`Search books to add as ${addingTo}...`}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               {(bookResults?.items ?? []).length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
                   {(bookResults?.items ?? []).map(b => (
@@ -434,16 +434,16 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   {incomingItems.map(item => (
                     <div key={item.bookId} className="flex items-center gap-2 text-xs">
                       <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
-                      <input type="number" min="1" value={item.quantity} onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                      <input type="number" min="1" value={item.quantity} onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                       <input
                         type="number" min="0.01" step="0.01" value={item.unitPrice}
                         title="Customer Allowance Value — the trade-in credit granted for this book; becomes its cost basis in inventory"
                         onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, unitPrice: parseFloat(e.target.value) || 0 } : i))}
-                        className={`w-20 px-1 py-0.5 border rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${item.unitPrice > 0 ? 'border-gray-300 dark:border-gray-600' : 'border-red-400 dark:border-red-600'}`}
+                        className={`w-20 px-1 py-0.5 border rounded-sm text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${item.unitPrice > 0 ? 'border-gray-300 dark:border-gray-600' : 'border-red-400 dark:border-red-600'}`}
                       />
                       <select aria-label={`Condition of ${item.bookTitle}`} value={item.condition}
                         onChange={e => setIncomingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, condition: e.target.value as 'resellable' | 'damaged' } : i))}
-                        className="w-24 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                        className="w-24 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
                         <option value="resellable">Resellable</option>
                         <option value="damaged">Damaged</option>
                       </select>
@@ -460,7 +460,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
               {outgoingItems.length === 0 ? <p className="text-xs text-gray-400">No items yet</p> : outgoingItems.map(item => (
                 <div key={item.bookId} className="flex items-center gap-2 text-xs">
                   <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
-                  <input type="number" min="1" value={item.quantity} onChange={e => setOutgoingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                  <input type="number" min="1" value={item.quantity} onChange={e => setOutgoingItems(items => items.map(i => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))} className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                   <span className="w-20 text-right text-gray-700 dark:text-gray-300" title="Catalog price">{currency} {item.unitPrice.toFixed(2)}</span>
                   <button onClick={() => setOutgoingItems(items => items.filter(i => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
                 </div>
@@ -478,12 +478,12 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                 <div className="space-y-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
                   <div className="flex gap-2 items-center">
                     <select aria-label="Payment method" value={payMethod} onChange={e => setPayMethod(e.target.value as PaymentMethodCode)}
-                      className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                      className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
                       {PAY_METHODS.map(m => <option key={m} value={m}>{PAYMENT_METHOD_META[m].icon} {PAYMENT_METHOD_META[m].label}</option>)}
                     </select>
                     <input aria-label="Amount paid" type="number" min="0" step="0.01" value={payAmount} placeholder={netBalance.toFixed(2)}
                       onChange={e => setPayAmount(e.target.value)}
-                      className="w-28 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+                      className="w-28 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
                   </div>
                   {payMethod === 'bank' && bankAccountRequired && (
                     <BankAccountSelect accounts={bankAccounts} value={payBankAccountId} onChange={setPayBankAccountId} />
@@ -498,7 +498,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                 <div className="flex gap-2 items-center bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2 text-sm">
                   <span className="text-gray-600 dark:text-gray-400">Give back {currency} {Math.abs(netBalance).toFixed(2)} as</span>
                   <select aria-label="Refund method" value={refundMethod} onChange={e => setRefundMethod(e.target.value as 'store_credit' | 'cash')}
-                    className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                    className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
                     <option value="store_credit">🎁 Store Credit</option>
                     <option value="cash">💵 Cash</option>
                   </select>
@@ -529,22 +529,22 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
               <div>
                 <label className="text-xs text-gray-500 dark:text-gray-400">ISBN / Barcode</label>
                 <input value={qrIsbn} onChange={e => setQrIsbn(e.target.value)} placeholder="Optional"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-green-500" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 dark:text-gray-400">Title <span className="text-red-500">*</span></label>
                 <input value={qrTitle} onChange={e => setQrTitle(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-green-500" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 dark:text-gray-400">Author</label>
                 <input value={qrAuthor} onChange={e => setQrAuthor(e.target.value)} placeholder="Optional"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-green-500" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 dark:text-gray-400">Base List Price</label>
                 <input type="number" min="0" step="0.01" value={qrPrice} onChange={e => setQrPrice(e.target.value)} placeholder="Optional"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-green-500" />
               </div>
             </div>
             <div className="flex gap-2 pt-1">

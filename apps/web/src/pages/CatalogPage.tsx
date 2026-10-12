@@ -56,7 +56,7 @@ export default function CatalogPage({ userRole, userPermissions }: { userRole?: 
   ];
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950">
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 flex gap-1 flex-shrink-0">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 flex gap-1 shrink-0">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${tab === t.id ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
@@ -213,9 +213,9 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
   return (
     <div className="flex flex-col h-full">
       {/* Compact toolbar: stats + search + filters + add button all in one row */}
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-2 flex-shrink-0 flex-wrap">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-2 shrink-0 flex-wrap">
         {/* KPI chips */}
-        <div className="flex items-center gap-3 pr-3 border-r border-gray-200 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center gap-3 pr-3 border-r border-gray-200 dark:border-gray-700 shrink-0">
           <span className="text-xs text-gray-500 dark:text-gray-400">Total <span className="font-semibold text-gray-900 dark:text-white">{data?.total ?? '—'}</span></span>
           <span className="text-xs text-gray-500 dark:text-gray-400">Active <span className="font-semibold text-emerald-600 dark:text-emerald-400">{kpi?.total ?? '—'}</span></span>
         </div>
@@ -226,27 +226,27 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input value={searchRaw} onChange={e => setSearchRaw(e.target.value)} placeholder="Search title, author, ISBN, SKU…"
-            className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
           {searchRaw && <button onClick={() => setSearchRaw('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">✕</button>}
         </div>
 
         {/* Category dropdown */}
         <select value={catId} onChange={e => { setCatId(e.target.value); setPage(1); }}
-          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[160px]">
+          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 max-w-[160px]">
           <option value="">All Categories</option>
           {allCats.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
 
         {/* Author dropdown */}
         <select value={authorId} onChange={e => { setAuthorId(e.target.value); setPage(1); }}
-          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[160px]">
+          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 max-w-[160px]">
           <option value="">All Authors</option>
           {allAuthors.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
         </select>
 
         {/* Genre */}
         <select value={genre} onChange={e => { setGenre(e.target.value); setPage(1); }}
-          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
           <option value="">All Genres</option>
           {['Fiction','Non-Fiction','Science Fiction','Fantasy','Mystery','Biography','History','Self-Help','Children'].map(g => <option key={g} value={g}>{g}</option>)}
         </select>
@@ -265,13 +265,13 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
         <span className="text-xs text-gray-400 whitespace-nowrap">{isLoading ? '…' : `${data?.total ?? 0} books`}{isFetching && !isLoading && ' ↻'}</span>
         {canWrite(userRole, userPermissions) && (
           <button onClick={() => { setEditBook(null); setShowForm(true); }}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex-shrink-0">
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap shrink-0">
             + Add Book
           </button>
         )}
       </div>
       {selected.size > 0 && (
-        <div className="bg-blue-600 text-white px-6 py-2 flex items-center gap-4 flex-shrink-0 text-sm">
+        <div className="bg-blue-600 text-white px-6 py-2 flex items-center gap-4 shrink-0 text-sm">
           <span className="font-medium">{selected.size} selected</span>
           <button onClick={async () => { for (const id of selected) await api.post(`/books/${id}/reactivate`).catch(() => null); invalidate(); setSelected(new Set()); showToast(`${selected.size} reactivated`, 'success'); }} className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg">Activate</button>
           <button onClick={async () => { for (const id of selected) await api.post(`/books/${id}/deactivate`).catch(() => null); invalidate(); setSelected(new Set()); showToast(`${selected.size} deactivated`, 'success'); }} className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg">Deactivate</button>
@@ -282,7 +282,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
         <table className="w-full text-sm border-collapse">
           <thead className="bg-gray-50 dark:bg-gray-800/80 sticky top-0 z-10">
             <tr>
-              <th className="w-10 px-4 py-3"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded border-gray-300 dark:border-gray-600 text-blue-600" /></th>
+              <th className="w-10 px-4 py-3"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-sm border-gray-300 dark:border-gray-600 text-blue-600" /></th>
               <SortTh label="Title" col="title" sortBy={sortBy} sortDir={sortDir} onSort={doSort} />
               <SortTh label="ISBN / SKU" col="isbn" sortBy={sortBy} sortDir={sortDir} onSort={doSort} />
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Authors</th>
@@ -306,7 +306,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
               </td></tr>
             ) : data.items.map(book => (
               <tr key={book.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors group ${selected.has(book.id) ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}>
-                <td className="px-4 py-3"><input type="checkbox" checked={selected.has(book.id)} onChange={() => toggleOne(book.id)} className="rounded border-gray-300 dark:border-gray-600 text-blue-600" /></td>
+                <td className="px-4 py-3"><input type="checkbox" checked={selected.has(book.id)} onChange={() => toggleOne(book.id)} className="rounded-sm border-gray-300 dark:border-gray-600 text-blue-600" /></td>
                 <td className="px-4 py-3 max-w-[200px]">
                   <button onClick={() => setDetailBook(book)} className="font-medium text-blue-600 dark:text-blue-400 hover:underline text-left line-clamp-2 text-sm">{book.title}</button>
                 </td>
@@ -319,7 +319,7 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {book.categories.slice(0, 2).map(c => <span key={c} className="text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded">{c}</span>)}
+                    {book.categories.slice(0, 2).map(c => <span key={c} className="text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-sm">{c}</span>)}
                     {book.categories.length > 2 && <span className="text-xs text-gray-400">+{book.categories.length - 2}</span>}
                   </div>
                 </td>
@@ -348,12 +348,12 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
           </tbody>
         </table>
       </div>
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between shrink-0">
         <span className="text-xs text-gray-500">{data ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, data.total)} of ${data.total}` : '—'}</span>
         <div className="flex items-center gap-1">
           <PagBtn onClick={() => setPage(1)} disabled={page === 1} label="«" />
           <PagBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} label="‹" />
-          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded font-medium">{page}</span>
+          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded-sm font-medium">{page}</span>
           <PagBtn onClick={() => setPage(p => Math.min(data?.totalPages ?? 1, p + 1))} disabled={page === (data?.totalPages ?? 1)} label="›" />
           <PagBtn onClick={() => setPage(data?.totalPages ?? 1)} disabled={page === (data?.totalPages ?? 1)} label="»" />
         </div>
@@ -390,13 +390,13 @@ function BooksTab({ userRole, userPermissions }: { userRole?: Role; userPermissi
             <DRow label="Default Price" value={fmt(detailBook.defaultPrice)} />
             {detailBook.categories.length > 0 && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-28 flex-shrink-0 text-xs">Categories</span>
+                <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0 text-xs">Categories</span>
                 <div className="flex flex-wrap gap-1">{detailBook.categories.map(c => <span key={c} className="text-xs px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full">{c}</span>)}</div>
               </div>
             )}
             {detailBook.tags.length > 0 && (
               <div className="flex gap-2">
-                <span className="text-gray-500 dark:text-gray-400 w-28 flex-shrink-0 text-xs">Tags</span>
+                <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0 text-xs">Tags</span>
                 <div className="flex flex-wrap gap-1">{detailBook.tags.map(t => <span key={t} className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">{t}</span>)}</div>
               </div>
             )}
@@ -530,7 +530,7 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Publisher</label>
               <select value={publisherId ?? ''} onChange={e => setPublisherId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                 <option value="">— No publisher —</option>
                 {allPubs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
@@ -542,7 +542,7 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
           </>
         )}
@@ -554,7 +554,7 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Book Format *</label>
               <select value={formatId ?? ''} onChange={e => setFormatId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${!formatId ? 'border-amber-400 dark:border-amber-600' : 'border-gray-300 dark:border-gray-600'}`}>
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${!formatId ? 'border-amber-400 dark:border-amber-600' : 'border-gray-300 dark:border-gray-600'}`}>
                 <option value="">— Select format —</option>
                 {allFormats.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
@@ -563,7 +563,7 @@ function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Edition *</label>
               <select value={editionId ?? ''} onChange={e => setEditionId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${!editionId ? 'border-amber-400 dark:border-amber-600' : 'border-gray-300 dark:border-gray-600'}`}>
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${!editionId ? 'border-amber-400 dark:border-amber-600' : 'border-gray-300 dark:border-gray-600'}`}>
                 <option value="">— Select edition —</option>
                 {allEditions.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
               </select>
@@ -805,7 +805,7 @@ function CategoriesTab({ userRole, userPermissions }: { userRole?: Role; userPer
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Parent Category (optional)</label>
               <select value={parentId ?? ''} onChange={e => setParentId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                 <option value="">— Top level —</option>
                 {allCats.filter(c => c.id !== editItem?.id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -920,7 +920,7 @@ function SimpleListTab({ title, icon, total, searchRaw, onSearch, canWrite, onAd
 }) {
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3 flex items-center gap-4 flex-shrink-0">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3 flex items-center gap-4 shrink-0">
         <span className="text-lg">{icon}</span>
         <div>
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h2>
@@ -928,7 +928,7 @@ function SimpleListTab({ title, icon, total, searchRaw, onSearch, canWrite, onAd
         </div>
         <div className="flex-1 max-w-xs">
           <input value={searchRaw} onChange={e => onSearch(e.target.value)} placeholder={`Search ${title.toLowerCase()}…`}
-            className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         {statusFilter && onStatusFilterChange && <StatusFilter value={statusFilter} onChange={onStatusFilterChange} />}
         <div className="flex-1" />
@@ -961,12 +961,12 @@ function SimpleListTab({ title, icon, total, searchRaw, onSearch, canWrite, onAd
           </tbody>
         </table>
       </div>
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-2.5 flex items-center justify-between shrink-0">
         <span className="text-xs text-gray-500">{total ?? 0} total</span>
         <div className="flex items-center gap-1">
           <PagBtn onClick={() => onPage(1)} disabled={page === 1} label="«" />
           <PagBtn onClick={() => onPage(Math.max(1, page - 1))} disabled={page === 1} label="‹" />
-          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded font-medium">{page}</span>
+          <span className="px-3 py-1 text-xs bg-blue-600 text-white rounded-sm font-medium">{page}</span>
           <PagBtn onClick={() => onPage(Math.min(totalPages, page + 1))} disabled={page === totalPages} label="›" />
           <PagBtn onClick={() => onPage(totalPages)} disabled={page === totalPages} label="»" />
         </div>
@@ -985,12 +985,12 @@ function Drawer({ title, onClose, footer, tabs, activeTab, onTabChange, children
     <div className="fixed inset-0 z-40 flex">
       <div className="flex-1 bg-black/30" onClick={onClose} />
       <div className="w-[480px] bg-white dark:bg-gray-900 shadow-2xl flex flex-col h-full border-l border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
           <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">✕</button>
         </div>
         {tabs && tabs.length > 0 && (
-          <div className="flex border-b border-gray-200 dark:border-gray-800 px-5 gap-1 flex-shrink-0">
+          <div className="flex border-b border-gray-200 dark:border-gray-800 px-5 gap-1 shrink-0">
             {tabs.map(t => (
               <button key={t.id} onClick={() => onTabChange?.(t.id)}
                 className={`px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${activeTab === t.id ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
@@ -1000,7 +1000,7 @@ function Drawer({ title, onClose, footer, tabs, activeTab, onTabChange, children
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-5">{children}</div>
-        {footer && <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800 flex gap-3 flex-shrink-0">{footer}</div>}
+        {footer && <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800 flex gap-3 shrink-0">{footer}</div>}
       </div>
     </div>
   );
@@ -1016,12 +1016,12 @@ function MasterSelect({ items, selected, onChange, placeholder }: {
   return (
     <div className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
       <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none" />
+        className="w-full px-3 py-2 text-sm border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden" />
       <div className="max-h-48 overflow-y-auto">
         {filtered.length === 0 ? <p className="px-3 py-3 text-xs text-gray-400 italic">No results</p> :
           filtered.map(item => (
             <label key={item.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-              <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggle(item.id)} className="rounded border-gray-300 dark:border-gray-600 text-blue-600" />
+              <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggle(item.id)} className="rounded-sm border-gray-300 dark:border-gray-600 text-blue-600" />
               <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">{item.label}</span>
               {item.sub && <span className="text-xs text-gray-400">{item.sub}</span>}
             </label>
@@ -1060,7 +1060,7 @@ function SortTh({ label, col, sortBy, sortDir, onSort, align = 'left' }: {
 function PagBtn({ onClick, disabled, label }: { onClick: () => void; disabled: boolean; label: string }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300">
+      className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-sm disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-300">
       {label}
     </button>
   );
@@ -1071,7 +1071,7 @@ function SkeletonRow({ cols }: { cols: number }) {
     <tr className="animate-pulse">
       {[...Array(cols)].map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" style={{ width: `${50 + (i * 17) % 40}%` }} />
+          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-sm" style={{ width: `${50 + (i * 17) % 40}%` }} />
         </td>
       ))}
     </tr>
@@ -1081,7 +1081,7 @@ function SkeletonRow({ cols }: { cols: number }) {
 function DRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex gap-2">
-      <span className="text-gray-500 dark:text-gray-400 w-28 flex-shrink-0 text-xs">{label}</span>
+      <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0 text-xs">{label}</span>
       <span className={`text-gray-800 dark:text-gray-200 text-xs ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
@@ -1096,7 +1096,7 @@ function FField({ label, value, onChange, placeholder, type = 'text', disabled }
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
         step={type === 'number' ? '0.01' : undefined} min={type === 'number' ? '0' : undefined}
-        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
     </div>
   );
 }
@@ -1137,7 +1137,7 @@ function RowMenu({ items }: { items: { label: string; icon: string; onClick: () 
   return (
     <div className="relative" ref={ref}>
       <button ref={btnRef} onClick={handleOpen}
-        className="px-2 py-1 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors opacity-40 group-hover:opacity-100"
+        className="px-2 py-1 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-sm transition-colors opacity-40 group-hover:opacity-100"
         title="Actions">
         ⋯
       </button>

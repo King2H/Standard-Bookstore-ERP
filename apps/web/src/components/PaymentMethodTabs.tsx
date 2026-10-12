@@ -39,7 +39,7 @@ export default function PaymentMethodTabs({ methods, value, onChange, columns = 
             onClick={() => onChange(code)}
             className={`flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg text-xs font-semibold transition-all ${
               active
-                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                ? 'bg-blue-600 text-white shadow-xs shadow-blue-600/30'
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >

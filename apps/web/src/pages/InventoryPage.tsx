@@ -75,7 +75,7 @@ export default function InventoryPage({ userRole, userPermissions, initialContex
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950">
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 flex gap-1 flex-shrink-0">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 flex gap-1 shrink-0">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${tab === t.id ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
@@ -170,19 +170,19 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-2 flex-shrink-0 flex-wrap">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-2 shrink-0 flex-wrap">
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           <input value={q} onChange={e => { setQ(e.target.value); setPage(1); }} placeholder="Search books…"
-            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-          <input type="checkbox" checked={lowOnly} onChange={e => { setLowOnly(e.target.checked); setPage(1); }} className="rounded border-gray-300 dark:border-gray-600 text-amber-500" />
+          <input type="checkbox" checked={lowOnly} onChange={e => { setLowOnly(e.target.checked); setPage(1); }} className="rounded-sm border-gray-300 dark:border-gray-600 text-amber-500" />
           Low stock only
         </label>
         <select value={status} onChange={e => { setStatus(e.target.value as typeof status); setPage(1); }}
           title="Deactivated books are hidden from search and stock actions unless Inactive or All is selected"
-          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="all">All</option>
@@ -195,7 +195,7 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
       {isError && (
         <div className="flex items-center justify-center gap-3 px-4 py-3 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
           <span>Failed to load inventory.</span>
-          <button onClick={() => refetch()} className="px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors font-medium">Retry</button>
+          <button onClick={() => refetch()} className="px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded-sm transition-colors font-medium">Retry</button>
         </div>
       )}
 
@@ -230,7 +230,7 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
                   <div className="flex items-center gap-1.5">
                     <div className="font-medium text-gray-900 dark:text-white text-sm line-clamp-1">{row.bookTitle}</div>
                     {!row.bookIsActive && (
-                      <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 rounded-full font-medium">Inactive</span>
+                      <span className="shrink-0 text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 rounded-full font-medium">Inactive</span>
                     )}
                   </div>
                   <div className="text-xs font-mono text-gray-400">{row.bookIsbn}</div>
@@ -261,9 +261,9 @@ function StockLevelsTab({ userRole, userPermissions, onNavigate, initialLowOnly 
                     {editRow?.bookId === row.bookId && editRow?.locationId === row.locationId ? (
                       <div className="flex items-center gap-1 justify-end">
                         <input type="number" value={newReorder} onChange={e => setNewReorder(e.target.value)} min="0"
-                          className="w-16 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                          className="w-16 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                         <button onClick={() => reorderMut.mutate({ bookId: row.bookId, locId: row.locationId, rp: parseInt(newReorder, 10) })}
-                          className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors">✓</button>
+                          className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-sm transition-colors">✓</button>
                         <button onClick={() => setEditRow(null)} className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
                       </div>
                     ) : (
@@ -359,11 +359,11 @@ function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermiss
   return (
     <div className="flex h-full">
       {/* Left: book selector */}
-      <div className="w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
+      <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Select Book + Location</p>
           <input value={bookSearch} onChange={e => setBookSearch(e.target.value)} placeholder="Search books…"
-            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         <div className="flex-1 overflow-y-auto">
           {stockData?.items.map(row => (
@@ -413,7 +413,7 @@ function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermiss
                 </button>
                 <input type="number" value={delta.replace('-', '')} onChange={e => setDelta(delta.startsWith('-') ? `-${e.target.value}` : e.target.value)}
                   min="1" placeholder="0"
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
               {selectedBook && delta && !isNaN(parseInt(delta, 10)) && (
                 <p className="text-xs text-gray-400 mt-1">
@@ -425,7 +425,7 @@ function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermiss
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason *</label>
               <select value={reasonCode} onChange={e => chooseReason(e.target.value as AdjustReason)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                 <option value="correction">Correction (count discrepancy)</option>
                 <option value="damage">Damage</option>
                 <option value="loss">Loss / Theft</option>
@@ -436,7 +436,7 @@ function AdjustTab({ userRole, userPermissions }: { userRole?: Role; userPermiss
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (optional)</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional context…"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <button type="submit" disabled={saving || !selectedBook}
@@ -520,11 +520,11 @@ function TransferTab({ userRole, userPermissions }: { userRole?: Role; userPermi
   return (
     <div className="flex h-full">
       {/* Left: source selector */}
-      <div className="w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
+      <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Source (Book + Location)</p>
           <input value={bookSearch} onChange={e => setBookSearch(e.target.value)} placeholder="Search books…"
-            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         <div className="flex-1 overflow-y-auto">
           {stockData?.items.map(row => (
@@ -563,7 +563,7 @@ function TransferTab({ userRole, userPermissions }: { userRole?: Role; userPermi
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination Location *</label>
               <select value={toLocationId} onChange={e => setToLocationId(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                 <option value="">— Select destination —</option>
                 {availableLocations.map(l => (
                   <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>
@@ -575,7 +575,7 @@ function TransferTab({ userRole, userPermissions }: { userRole?: Role; userPermi
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity *</label>
               <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="1"
                 placeholder="Units to transfer"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <button type="submit" disabled={saving || !selectedBook || !toLocationId}
@@ -614,22 +614,22 @@ function HistoryTab() {
   return (
     <div className="flex flex-col h-full">
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-3 flex-shrink-0 flex-wrap">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-3 shrink-0 flex-wrap">
         <select value={movementType} onChange={e => { setMovementType(e.target.value); setPage(1); }}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
           <option value="">All Types</option>
           {Object.entries(MOVEMENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <select value={reasonCode} onChange={e => { setReasonCode(e.target.value); setPage(1); }}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
           <option value="">All Reasons</option>
           {Object.entries(REASON_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         <span className="text-xs text-gray-400">to</span>
         <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         {(movementType || reasonCode || dateFrom || dateTo) && (
           <button onClick={() => { setMovementType(''); setReasonCode(''); setDateFrom(''); setDateTo(''); setPage(1); }}
             className="text-xs text-gray-400 hover:text-red-500 transition-colors">Clear</button>
@@ -711,7 +711,7 @@ function AlertsTab({ userRole: _userRole, userPermissions: _userPermissions }: {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-3 flex-shrink-0">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-amber-500 text-lg">⚠️</span>
           <div>
@@ -799,7 +799,7 @@ function SkeletonRow({ cols }: { cols: number }) {
     <tr className="animate-pulse">
       {[...Array(cols)].map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" style={{ width: `${50 + (i * 17) % 40}%` }} />
+          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-sm" style={{ width: `${50 + (i * 17) % 40}%` }} />
         </td>
       ))}
     </tr>
@@ -903,11 +903,11 @@ function StockInTab({ userRole, userPermissions }: { userRole?: Role; userPermis
   return (
     <div className="flex h-full">
       {/* Left: book selector */}
-      <div className="w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
+      <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Select Book + Location</p>
           <input value={bookSearch} onChange={e => setBookSearch(e.target.value)} placeholder="Search books…"
-            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         <div className="flex-1 overflow-y-auto">
           {stockData?.items.map(row => (
@@ -949,7 +949,7 @@ function StockInTab({ userRole, userPermissions }: { userRole?: Role; userPermis
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity *</label>
               <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" placeholder="Units received"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               {selectedRow && quantity && !isNaN(parseInt(quantity, 10)) && (
                 <p className="text-xs text-gray-400 mt-1">New quantity: <strong>{selectedRow.quantity + parseInt(quantity, 10)}</strong></p>
               )}
@@ -959,7 +959,7 @@ function StockInTab({ userRole, userPermissions }: { userRole?: Role; userPermis
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference Type</label>
                 <select value={referenceType} onChange={e => { setReferenceType(e.target.value); setReferenceId(''); }}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                   <option value="">— None —</option>
                   <option value="purchase_order">Purchase Order</option>
                   <option value="return">Customer Return</option>
@@ -973,7 +973,7 @@ function StockInTab({ userRole, userPermissions }: { userRole?: Role; userPermis
                 </label>
                 {referenceType === 'purchase_order' ? (
                   <select value={referenceId} onChange={e => setReferenceId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                     <option value="">Select PO...</option>
                     {(poData?.items ?? []).map(po => (
                       <option key={po.id} value={po.id}>PO #{po.id} — {po.supplierName}</option>
@@ -983,7 +983,7 @@ function StockInTab({ userRole, userPermissions }: { userRole?: Role; userPermis
                   <input type="text" value={referenceId} onChange={e => setReferenceId(e.target.value)}
                     placeholder={referenceType ? 'Reference number' : '—'}
                     disabled={!referenceType}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-40" />
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-40" />
                 )}
               </div>
             </div>
@@ -991,7 +991,7 @@ function StockInTab({ userRole, userPermissions }: { userRole?: Role; userPermis
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (optional)</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional context…"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <button type="submit" disabled={saving || !selectedRow}
@@ -1067,11 +1067,11 @@ function StockOutTab({ userRole, userPermissions }: { userRole?: Role; userPermi
   return (
     <div className="flex h-full">
       {/* Left: book selector */}
-      <div className="w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
+      <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Select Book + Location</p>
           <input value={bookSearch} onChange={e => setBookSearch(e.target.value)} placeholder="Search books…"
-            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         <div className="flex-1 overflow-y-auto">
           {stockData?.items.map(row => (
@@ -1116,7 +1116,7 @@ function StockOutTab({ userRole, userPermissions }: { userRole?: Role; userPermi
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity *</label>
               <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" placeholder="Units to remove"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               {selectedRow && !isNaN(qty) && qty > 0 && (
                 <p className={`text-xs mt-1 ${wouldGoNegative ? 'text-red-500' : wouldGoLow ? 'text-amber-500' : 'text-gray-400'}`}>
                   {wouldGoNegative
@@ -1132,7 +1132,7 @@ function StockOutTab({ userRole, userPermissions }: { userRole?: Role; userPermi
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference Type</label>
                 <select value={referenceType} onChange={e => setReferenceType(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                   <option value="">— None —</option>
                   <option value="sale">Sale</option>
                   <option value="order">Order</option>
@@ -1143,14 +1143,14 @@ function StockOutTab({ userRole, userPermissions }: { userRole?: Role; userPermi
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference ID</label>
                 <input type="number" value={referenceId} onChange={e => setReferenceId(e.target.value)} placeholder="e.g. Order #99"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (optional)</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional context…"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <button type="submit" disabled={saving || !selectedRow || !!wouldGoNegative}

@@ -13,7 +13,7 @@ interface Location {
 
 interface Branch { id: number; name: string; isActive: boolean }
 
-const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
 
 export default function LocationsPage({ userRole }: { userRole?: string }) {
   const queryClient = useQueryClient();
@@ -100,7 +100,7 @@ export default function LocationsPage({ userRole }: { userRole?: string }) {
         </div>
         {canWrite && activeBranchId && (
           <button type="button" onClick={() => { setShowCreateForm(v => !v); setNewName(''); }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-xs">
             {showCreateForm ? 'Cancel' : '+ New Location'}
           </button>
         )}
@@ -110,14 +110,14 @@ export default function LocationsPage({ userRole }: { userRole?: string }) {
         <div className="mb-4">
           <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-2">Branch:</label>
           <select value={activeBranchId ?? ''} onChange={e => { setSelectedBranchId(Number(e.target.value)); setShowCreateForm(false); }}
-            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
       )}
 
       {showCreateForm && canWrite && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-4 shadow-sm">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-4 shadow-xs">
           <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">New Location</h2>
           <div className="flex gap-2">
             <input value={newName} onChange={e => setNewName(e.target.value)}
@@ -141,7 +141,7 @@ export default function LocationsPage({ userRole }: { userRole?: string }) {
           Loading locations...
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-xs">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
               <tr>
@@ -186,7 +186,7 @@ export default function LocationsPage({ userRole }: { userRole?: string }) {
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-red-600 dark:text-red-400">Delete?</span>
                           <button type="button" onClick={() => deleteMutation.mutate(loc.id)} disabled={deleteMutation.isPending}
-                            className="text-xs bg-red-600 hover:bg-red-700 text-white px-2 py-0.5 rounded transition-colors disabled:opacity-50">Yes</button>
+                            className="text-xs bg-red-600 hover:bg-red-700 text-white px-2 py-0.5 rounded-sm transition-colors disabled:opacity-50">Yes</button>
                           <button type="button" onClick={() => setDeleteConfirmId(null)}
                             className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 transition-colors">No</button>
                         </div>

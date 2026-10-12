@@ -344,7 +344,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
         <div className="absolute right-0 top-full mt-2 w-96 max-h-[520px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 flex flex-col overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Notifications</h3>
               {loading && (
@@ -386,7 +386,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                     className={`w-full text-left px-4 py-3 border-b border-gray-50 dark:border-gray-800 border-l-4 ${severityBorder(notif.severity)} transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 ${!notif.isRead ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''}`}
                   >
                     <div className="flex items-start gap-2">
-                      <span className="text-base flex-shrink-0 mt-0.5" aria-hidden="true">
+                      <span className="text-base shrink-0 mt-0.5" aria-hidden="true">
                         {severityIcon(notif.severity)}
                       </span>
                       <div className="flex-1 min-w-0">
@@ -394,7 +394,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                           <p className={`text-xs font-semibold truncate ${!notif.isRead ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'}`}>
                             {notif.title}
                           </p>
-                          <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 whitespace-nowrap">
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0 whitespace-nowrap">
                             {timeAgo(notif.createdAt)}
                           </span>
                         </div>
@@ -408,7 +408,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                         )}
                       </div>
                       {!notif.isRead && (
-                        <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" aria-label="Unread" />
+                        <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-1.5" aria-label="Unread" />
                       )}
                     </div>
                   </button>
@@ -419,7 +419,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
           {/* Footer */}
           {notifications.length > 0 && (
-            <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 flex-shrink-0 text-center">
+            <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 shrink-0 text-center">
               <p className="text-[10px] text-gray-400 dark:text-gray-600">
                 Showing last {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
               </p>

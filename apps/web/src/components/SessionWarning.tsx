@@ -42,7 +42,7 @@ export default function SessionWarning({ secondsLeft, onStayLoggedIn, onLogoutNo
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-warning-title"
@@ -77,7 +77,7 @@ export default function SessionWarning({ secondsLeft, onStayLoggedIn, onLogoutNo
           </button>
           <button
             onClick={handleStay}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm"
+            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-xs"
             autoFocus
           >
             Stay logged in

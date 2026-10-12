@@ -135,10 +135,10 @@ function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; v
   return (
     <div
       onClick={onClick}
-      className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-3 flex flex-col gap-2 min-w-0 ${onClick ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150' : ''}`}
+      className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs p-3 flex flex-col gap-2 min-w-0 ${onClick ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150' : ''}`}
     >
       <div className="flex items-center gap-2">
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${color}`}>{icon}</div>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 ${color}`}>{icon}</div>
         <p className="text-xs text-gray-500 dark:text-gray-400 font-medium leading-tight">{label}</p>
       </div>
       <p className="text-xl font-bold text-gray-900 dark:text-white leading-none pl-1">{value}</p>
@@ -174,10 +174,10 @@ function HighlightKpiCard({ label, value, todayValue, monthlyValue, sub, icon, a
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl border-2 shadow-sm p-4 flex flex-col gap-2 min-w-0 ${colors.card} ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-150' : 'transition-shadow duration-150'}`}
+      className={`rounded-xl border-2 shadow-xs p-4 flex flex-col gap-2 min-w-0 ${colors.card} ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-150' : 'transition-shadow duration-150'}`}
     >
       <div className="flex items-center gap-2">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${colors.badge}`}>{icon}</div>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${colors.badge}`}>{icon}</div>
         <p className="text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 leading-tight">{label}</p>
       </div>
       {todayValue !== undefined && monthlyValue !== undefined ? (
@@ -281,9 +281,9 @@ function Section({ title, icon, children, loading, error, updatedAt, onRefresh }
   updatedAt?: number; onRefresh?: () => void;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs hover:shadow-md transition-shadow duration-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2.5">
-        <span className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">{icon}</span>
+        <span className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">{icon}</span>
         <h2 className="text-sm font-bold text-gray-900 dark:text-white">{title}</h2>
         {updatedAt && updatedAt > 0 && (
           <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">
@@ -518,7 +518,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           <button
             key={action.page}
             onClick={() => onNavigate?.(action.page)}
-            className={`group relative overflow-hidden rounded-xl bg-gradient-to-br ${action.color} p-4 text-left text-white shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0`}
+            className={`group relative overflow-hidden rounded-xl bg-linear-to-br ${action.color} p-4 text-left text-white shadow-xs hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0`}
           >
             <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full bg-white/10 group-hover:bg-white/15 transition-colors" />
             <span className="text-2xl block mb-2">{action.icon}</span>
@@ -532,16 +532,16 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           flex-nowrap keeps Export/Refresh/"Updated" pinned in line with
           the Filters controls instead of dropping to a second row —
           the row scrolls horizontally on overflow rather than wrapping. */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs overflow-hidden">
         <div className="px-4 py-3 flex flex-nowrap items-center gap-2 overflow-x-auto">
-          <span className="flex-shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
+          <span className="shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</span>
           <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-            className="flex-shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
-          <span className="flex-shrink-0 text-xs text-gray-400">to</span>
+            className="shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow scheme-light dark:scheme-dark" />
+          <span className="shrink-0 text-xs text-gray-400">to</span>
           <input type="date" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-            className="flex-shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow [color-scheme:light] dark:[color-scheme:dark]" />
+            className="shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow scheme-light dark:scheme-dark" />
           <select value={filters.groupBy} onChange={e => setFilters(f => ({ ...f, groupBy: e.target.value as GroupBy }))}
-            className="flex-shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow">
+            className="shrink-0 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow">
             <option value="day">Daily</option>
             <option value="week">Weekly</option>
             <option value="month">Monthly</option>
@@ -551,7 +551,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             <select
               value={filters.branchId}
               onChange={e => setFilters(f => ({ ...f, branchId: e.target.value }))}
-              className="flex-shrink-0 w-28 sm:w-36 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow truncate"
+              className="shrink-0 w-28 sm:w-36 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow truncate"
             >
               <option value="">All Branches</option>
               {(branchesData?.items ?? []).map(b => (
@@ -560,21 +560,21 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
             </select>
           )}
           <button onClick={() => setFilters({ dateFrom: '', dateTo: '', groupBy: 'day', branchId: getInitialBranchId() })}
-            className="flex-shrink-0 px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            className="shrink-0 px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             Clear
           </button>
 
           {/* ── Export toggle + Refresh — pinned in line with Filters, never wraps ── */}
-          <div className="ml-auto flex-shrink-0 flex items-center gap-2">
+          <div className="ml-auto shrink-0 flex items-center gap-2">
             {kpiUpdatedAt > 0 && (
-              <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap hidden 2xl:inline">
+              <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap hidden 2xl:inline">
                 Updated {new Date(kpiUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
             <button
               onClick={() => setExportOpen(o => !o)}
               aria-expanded={exportOpen}
-              className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border whitespace-nowrap transition-colors ${
+              className={`shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border whitespace-nowrap transition-colors ${
                 exportOpen
                   ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
                   : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -588,7 +588,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               onClick={handleRefreshAll}
               disabled={isRefreshing}
               title="Refresh all dashboard data"
-              className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm whitespace-nowrap transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs whitespace-nowrap transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -635,7 +635,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
           FinancialReportService for the Primary row's *Unified fields) — the
           same engine and rows that back the Sales CSV export, so these
           totals reconcile 1:1 with it for the same date range. ── */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-4 sm:p-5">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-4">
           <span className="text-sm font-bold text-gray-900 dark:text-white">Live Overview</span>
           <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
@@ -782,7 +782,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
             >
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-amber-600 dark:text-amber-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></span>
+                <span className="text-amber-600 dark:text-amber-400 shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></span>
                 <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Low Stock Items</h3>
                 <span className="ml-auto text-xs font-medium bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full">
                   {kpis?.lowStockAlerts}
@@ -810,7 +810,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
               onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID', ...(filters.branchId ? { branchId: filters.branchId } : {}) })}
             >
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-orange-600 dark:text-orange-400 flex-shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></span>
+                <span className="text-orange-600 dark:text-orange-400 shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></span>
               <h3 className="text-sm font-semibold text-orange-800 dark:text-orange-300">Pending Orders</h3>
                 <span className="ml-auto text-xs font-medium bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 px-2 py-0.5 rounded-full">
                   {kpis?.pendingOrders}
@@ -1076,7 +1076,7 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
                   <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-2">Low Stock Alerts</p>
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {inventory.lowStockItems.slice(0, 6).map(item => (
-                      <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">
+                      <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded-sm px-2 py-1">
                         <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
                         <span className="text-gray-500 dark:text-gray-400 truncate">{item.locationName}</span>
                         <span className="text-amber-700 dark:text-amber-300 font-medium whitespace-nowrap">{item.quantity}/{item.reorderPoint}</span>

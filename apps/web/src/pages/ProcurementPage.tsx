@@ -219,7 +219,7 @@ function BookSearchCombobox({
         autoComplete="off"
         onChange={handleInput}
         onFocus={() => { if (debouncedQuery.trim().length >= 2) setOpen(true); }}
-        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
       />
       {showDropdown && (
         <ul className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg text-sm">
@@ -238,7 +238,7 @@ function BookSearchCombobox({
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{book.title}</span>
                 {book.availability != null && (
-                  <span className={`text-xs font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-full ${book.availability.available === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'}`}>
+                  <span className={`text-xs font-semibold shrink-0 px-1.5 py-0.5 rounded-full ${book.availability.available === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'}`}>
                     {book.availability.available} avail
                   </span>
                 )}
@@ -337,7 +337,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Supplier *</label>
               <select required value={supplierId ?? ''} onChange={e => setSupplierId(Number(e.target.value) || null)}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                 <option value="">Select supplier...</option>
                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -349,7 +349,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Terms</label>
               <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value as 'cash' | 'credit')}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                 <option value="credit">Credit (pay later)</option>
                 <option value="cash">Cash (settles on receipt)</option>
               </select>
@@ -357,17 +357,17 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Delivery</label>
               <input type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
               <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Receiving Branch</label>
               <select value={receivingBranchId ?? ''} onChange={e => { setReceivingBranchId(Number(e.target.value) || null); setReceivingLocationId(null); }}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                 <option value="">Same as order branch (default)</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
@@ -376,7 +376,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Receiving Location</label>
                 <select value={receivingLocationId ?? ''} onChange={e => setReceivingLocationId(Number(e.target.value) || null)}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                   <option value="">Default fulfillment location</option>
                   {receivingLocations.map(l => <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>)}
                 </select>
@@ -407,12 +407,12 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
               <div className="col-span-2">
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Qty</label>
                 <input type="number" min={1} value={li.quantity} onChange={e => updateLine(i, 'quantity', Math.max(1, Number(e.target.value)))}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="col-span-3">
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Unit Cost</label>
                 <input type="number" min={0} step="0.01" value={li.unitCost} onChange={e => updateLine(i, 'unitCost', Math.max(0, Number(e.target.value)))}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400 pb-2">
                 {(li.quantity * li.unitCost).toFixed(2)}
@@ -513,7 +513,7 @@ function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated:
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Destination Location *</label>
             <select required value={locationId ?? ''} onChange={e => setLocationId(Number(e.target.value) || null)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
               <option value="">Select location...</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name}{l.isDefaultFulfillment ? ' (default)' : ''}</option>)}
             </select>
@@ -521,7 +521,7 @@ function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated:
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
             <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 resize-none" />
           </div>
         </div>
 
@@ -548,7 +548,7 @@ function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated:
                   <td className="px-4 py-3">
                     <input type="number" min={0} max={li.remaining} value={quantities[li.id] ?? 0}
                       onChange={e => setQuantities(q => ({ ...q, [li.id]: Math.min(li.remaining, Math.max(0, Number(e.target.value))) }))}
-                      className="w-20 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-20 border border-gray-300 dark:border-gray-600 rounded-sm px-2 py-1 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
                   </td>
                 </tr>
               ))}
@@ -719,12 +719,12 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount ({po.currency})</label>
                 <input type="number" min={0.01} step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Method</label>
                 <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                   <option value="cash">Cash</option>
                   <option value="bank">Bank Transfer</option>
                   <option value="mobile">Telebirr</option>
@@ -762,13 +762,13 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Amount ({po.currency})</label>
                 <input type="number" min={0.01} step="0.01" value={creditAmount} onChange={e => setCreditAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div className="flex-1 min-w-[12rem]">
+              <div className="flex-1 min-w-48">
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Reason</label>
                 <input type="text" value={creditReason} onChange={e => setCreditReason(e.target.value)}
                   placeholder="e.g. damaged goods, price adjustment"
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
               <button
                 onClick={() => {
@@ -891,7 +891,7 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
                   ? <span className="text-xs text-red-600 dark:text-red-400">Reversed: {p.reversalReason}</span>
                   : canRecordPayment(userRole, userPermissions) && (
                     <button onClick={() => reversePayment(p.id)} disabled={reverseMut.isPending}
-                      className="ml-auto text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950 px-2 py-1 rounded transition-colors">Reverse</button>
+                      className="ml-auto text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950 px-2 py-1 rounded-sm transition-colors">Reverse</button>
                   )}
               </div>
             ))}
@@ -1007,12 +1007,12 @@ function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: 
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">From</label>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">To</label>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
         <button onClick={exportCsv} className="px-3 py-2 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
           Export CSV
@@ -1150,12 +1150,12 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
           placeholder="Search by supplier..."
           value={filterSupplier}
           onChange={e => setFilterSupplier(e.target.value)}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-56 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
         />
         <select
           value={filterStatus}
           onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All Statuses</option>
           {['draft','pending_approval','approved','ordered','partially_received','received','closed','cancelled'].map(s => (
@@ -1163,10 +1163,10 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
           ))}
         </select>
         <input type="date" value={dateFromFilter} onChange={e => { setDateFromFilter(e.target.value); setPage(1); }}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         <span className="text-xs text-gray-400">to</span>
         <input type="date" value={dateToFilter} onChange={e => { setDateToFilter(e.target.value); setPage(1); }}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         {(filterStatus || dateFromFilter || dateToFilter) && (
           <button onClick={() => { setFilterStatus(''); setDateFromFilter(''); setDateToFilter(''); setPage(1); }}
             className="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -1218,14 +1218,14 @@ export default function ProcurementPage({ userRole, userPermissions, initialCont
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{po.expectedDeliveryDate ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 text-xs">
-                      <button onClick={() => openDetail(po)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">View</button>
+                      <button onClick={() => openDetail(po)} className="px-2 py-1 rounded-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">View</button>
                       {po.status === 'draft' && canWrite(userRole, userPermissions) && (
-                        <button onClick={() => openEdit(po)} className="px-2 py-1 rounded text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Edit</button>
+                        <button onClick={() => openEdit(po)} className="px-2 py-1 rounded-sm text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Edit</button>
                       )}
                       {['approved', 'ordered', 'partially_received'].includes(po.status) && canReceive(userRole, userPermissions) && (
-                        <button onClick={() => openReceive(po)} className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">Receive</button>
+                        <button onClick={() => openReceive(po)} className="px-2 py-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">Receive</button>
                       )}
-                      <button onClick={() => openLedger(po.supplierId, po.supplierName)} className="px-2 py-1 rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors">Ledger</button>
+                      <button onClick={() => openLedger(po.supplierId, po.supplierName)} className="px-2 py-1 rounded-sm text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors">Ledger</button>
                     </div>
                   </td>
                 </tr>

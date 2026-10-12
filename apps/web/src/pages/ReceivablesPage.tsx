@@ -191,7 +191,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
       {/* Filters */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3 flex flex-wrap gap-3 items-center">
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
           <option value="">All Statuses</option>
           {/* Matches the Dashboard's Outstanding Credit drill-down exactly
               (Module 6/hotfix) — without this explicit option, arriving here
@@ -203,7 +203,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
           {(['Pending', 'PartiallyPaid', 'Settled', 'Overdue', 'WrittenOff', 'Cancelled'] as const).map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
           <option value="">All Types</option>
           <option value="pos_credit_sale">POS Credit Sale</option>
           <option value="order_credit_sale">Order Credit Sale</option>
@@ -211,7 +211,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
         </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
           <input type="checkbox" checked={overdueOnly} onChange={e => { setOverdueOnly(e.target.checked); setPage(1); }}
-            className="rounded border-gray-300 dark:border-gray-600 text-red-500" />
+            className="rounded-sm border-gray-300 dark:border-gray-600 text-red-500" />
           Overdue only
         </label>
         <div className="ml-auto text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} records</div>
@@ -262,10 +262,10 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                       {editingDueDateId === rec.id ? (
                         <div className="flex gap-1 items-center">
                           <input type="date" value={dueDateDraft} onChange={e => setDueDateDraft(e.target.value)}
-                            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-blue-500" />
                           <button onClick={() => dueDateMut.mutate({ id: rec.id, dueDate: dueDateDraft || null })}
                             disabled={dueDateMut.isPending}
-                            className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50">✓</button>
+                            className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-sm transition-colors disabled:opacity-50">✓</button>
                           <button onClick={() => setEditingDueDateId(null)}
                             className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
                         </div>
@@ -290,7 +290,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                             <button
                               onClick={() => { setEditingDueDateId(rec.id); setDueDateDraft(rec.dueDate ?? ''); }}
                               title="Set due date"
-                              className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">
+                              className="px-2 py-1 rounded-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">
                               📅
                             </button>
                           )}
@@ -300,7 +300,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                           <button
                             onClick={() => openInPayments(rec)}
                             title="Open in Payments to collect"
-                            className="px-2 py-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
+                            className="px-2 py-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">
                             ↗ Open in Payments
                           </button>
                           {/* Write off — bad debt only, restricted */}
@@ -308,7 +308,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
                             <button
                               onClick={() => { setWriteOffId(rec.id); setWriteOffReason(''); }}
                               title="Write off (no payment collected)"
-                              className="px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                              className="px-2 py-1 rounded-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                               ✕ Write Off
                             </button>
                           )}
@@ -352,7 +352,7 @@ export default function ReceivablesPage({ userRole, userPermissions, initialCont
               <div>
                 <label htmlFor="write-off-reason" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (required)</label>
                 <input id="write-off-reason" value={writeOffReason} onChange={e => setWriteOffReason(e.target.value)} placeholder="Why is this being written off?"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500" />
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-red-500" />
               </div>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setWriteOffId(null)}

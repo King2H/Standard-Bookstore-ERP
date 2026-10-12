@@ -49,7 +49,7 @@ const createSchema = z.object({
 type CreateFormInput = z.input<typeof createSchema>;
 type CreateForm = z.output<typeof createSchema>;
 
-const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
 
 /**
  * Staff administration (#21, auth part 2). The API decides who may change
@@ -189,7 +189,7 @@ export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) 
         </div>
         {isAdmin && (
           <button type="button" onClick={() => { setShowForm(!showForm); setApiError(null); }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-xs">
             {showForm ? 'Cancel' : '+ New Staff'}
           </button>
         )}
@@ -197,7 +197,7 @@ export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) 
 
       {showForm && isAdmin && (
         <form onSubmit={handleSubmit((data) => { setApiError(null); createMutation.mutate(data); })}
-          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-6 space-y-4 shadow-sm">
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-6 space-y-4 shadow-xs">
           <h2 className="font-semibold text-gray-800 dark:text-gray-100">Create Staff Account</h2>
           {apiError && (
             <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-sm text-red-700 dark:text-red-400">
@@ -226,8 +226,8 @@ export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) 
           <div>
             {/* All Branches toggle: Super_Admin only */}
             {isSuperAdmin && <div className="flex items-center gap-3 mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <label className="flex items-center gap-2 cursor-pointer select-none flex-shrink-0">
-                <input type="checkbox" {...register('isAllBranches')} className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+              <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
+                <input type="checkbox" {...register('isAllBranches')} className="w-4 h-4 rounded-sm border-gray-300 text-amber-600 focus:ring-amber-500" />
                 <span className="text-xs font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">🌐 All Branches</span>
               </label>
               <span className="text-xs text-amber-700 dark:text-amber-400">
@@ -311,7 +311,7 @@ export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) 
           Loading staff...
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-xs">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
               <tr>
@@ -333,7 +333,7 @@ export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) 
                   {/* Branch column */}
                   <td className="px-4 py-3">
                     {staff.isAllBranches ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
                         🌐 All Branches
                       </span>
                     ) : (
@@ -341,7 +341,7 @@ export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) 
                         {staff.roles.map((r, i) => {
                           const displayName = r.branchName ?? `Branch ${r.branchId}`;
                           return (
-                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                               {displayName}
                             </span>
                           );
@@ -362,7 +362,7 @@ export default function StaffPage({ userRoles = [] }: { userRoles?: string[] }) 
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {staff.roles.map((r, i) => (
-                          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
                             {r.role}
                           </span>
                         ))}
@@ -519,7 +519,7 @@ function RoleEditor({ currentRoles, branches, grantable, onSave, onCancel }: {
     ));
   };
 
-  const selectCls = 'flex-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors';
+  const selectCls = 'flex-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 transition-colors';
 
   return (
     <div className="space-y-2 py-1">
@@ -676,11 +676,11 @@ function LocationAccessPanel({ staffId, staffUsername, branchIds, onSave, onClos
                 onClick={() => toggle(loc.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                   isChecked
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400'
                 }`}
               >
-                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
+                <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
                   isChecked ? 'bg-white border-white' : 'border-current'
                 }`}>
                   {isChecked && (
