@@ -10,14 +10,14 @@
  * - An attacker cannot forge the X-CSRF-Token header from a different origin
  *
  * Safe methods (GET, HEAD, OPTIONS) are not checked.
- * The /api/auth/login and /api/auth/refresh endpoints are exempt (they establish the session).
+ * The /api/v1/auth/login and /api/v1/auth/refresh endpoints are exempt (they establish the session).
  */
 import type { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
 import { AppError } from '../lib/errors.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const EXEMPT_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/pre-login', '/api/health']);
+const EXEMPT_PATHS = new Set(['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout', '/api/v1/auth/pre-login', '/api/v1/health']);
 
 /**
  * Generate a CSRF token and set it as a readable cookie.
@@ -45,9 +45,7 @@ export function csrfMiddleware(req: Request, _res: Response, next: NextFunction)
   if (SAFE_METHODS.has(req.method)) { next(); return; }
 
   // Skip exempt paths
-  // The same routes are served under /api/v1 and the deprecated /api alias.
-  const path = req.path.replace(/^\/api\/v1(?=\/|$)/, '/api');
-  if (EXEMPT_PATHS.has(path)) { next(); return; }
+  if (EXEMPT_PATHS.has(req.path)) { next(); return; }
 
   const cookieToken = req.cookies?.['csrf-token'] as string | undefined;
   const headerToken = req.headers['x-csrf-token'] as string | undefined;

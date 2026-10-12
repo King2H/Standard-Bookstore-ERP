@@ -198,7 +198,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     await setInventory(bookId, locationId, 10);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 3 }] });
@@ -226,7 +226,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
 
     // Create a real DRAFT order
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 3 }] });
@@ -260,7 +260,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
 
     // Create a real DRAFT order
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 5 }] });
@@ -281,7 +281,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     await setInventory(bookId, locationId, INITIAL_QTY);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: ORDER_QTY }] });
@@ -290,13 +290,13 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     const orderId = createRes.body.id as number;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Unit test 15.7' });
@@ -329,7 +329,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     await setInventory(bookId, locationId, 10);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 3 }] });
@@ -339,7 +339,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     expect(createRes.body.status).toBe('DRAFT');
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Unit test 15.8 draft cancel' });
@@ -371,7 +371,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
 
     // Create, confirm, and fulfill a CREDIT order
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId, quantity: 2 }] });
@@ -379,13 +379,13 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     const orderId = createRes.body.id as number;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -394,7 +394,7 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     const orderTotal = await db.query(`SELECT total FROM orders WHERE id = $1`, [orderId])
       .then(r => parseFloat(r.rows[0].total as string));
     const payRes = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId, amount: orderTotal, paymentMethod: 'cash' });

@@ -189,7 +189,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
     onError: (e: Error) => showToast(e.message, 'error'),
   });
 
-  // POS credit-sale payment collection (routes to /api/pos/transactions/:id/payment)
+  // POS credit-sale payment collection (routes to /api/v1/pos/transactions/:id/payment)
   const posPayMut = useMutation({
     mutationFn: ({ txId, payments }: { txId: string; payments: { method: string; amount: number; reference?: string; bankAccountId?: number }[] }) =>
       api.post<unknown>(`/pos/transactions/${txId}/payment`, { payments }),

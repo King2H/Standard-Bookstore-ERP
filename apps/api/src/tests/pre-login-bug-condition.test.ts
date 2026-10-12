@@ -82,7 +82,7 @@ describe('Bug Condition: Pre-Login 500 Error & Missing Lockout', () => {
     );
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username: 'any_user', password: 'any_password' });
 
     // The response MUST be a structured error with the standard shape.
@@ -117,7 +117,7 @@ describe('Bug Condition: Pre-Login 500 Error & Missing Lockout', () => {
     );
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'Test@12345' });
 
     // The response MUST be a structured error with the standard shape.
@@ -152,7 +152,7 @@ describe('Bug Condition: Pre-Login 500 Error & Missing Lockout', () => {
 
     // Submit a wrong password — this should be the last allowed attempt and trigger lockout
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'WrongPassword!99' });
 
     // The answer to every failed sign-in (#21, owner decision 4a)

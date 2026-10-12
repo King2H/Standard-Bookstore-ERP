@@ -215,7 +215,7 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/reports/kpis?branchId=${testBranchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${testBranchId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -260,7 +260,7 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
     const today = new Date().toISOString().slice(0, 10);
 
     const res = await request(app)
-      .get(`/api/reports/sales?branchId=${testBranchId}&dateFrom=${today}&dateTo=${today}`)
+      .get(`/api/v1/reports/sales?branchId=${testBranchId}&dateFrom=${today}&dateTo=${today}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -313,14 +313,14 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
 
     // Fetch KPIs for the test branch (monthlySales covers current month)
     const kpiRes = await request(app)
-      .get(`/api/reports/kpis?branchId=${testBranchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${testBranchId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(kpiRes.status).toBe(200);
 
     // Fetch sales report for the test branch scoped to today
     const salesRes = await request(app)
-      .get(`/api/reports/sales?branchId=${testBranchId}&dateFrom=${today}&dateTo=${today}`)
+      .get(`/api/v1/reports/sales?branchId=${testBranchId}&dateFrom=${today}&dateTo=${today}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(salesRes.status).toBe(200);
@@ -513,7 +513,7 @@ describe('Bug 2 -- Profit Calculation Preservation (POS Revenue Must Remain Sepa
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/reports/kpis?branchId=${bug2PosBranchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${bug2PosBranchId}`)
       .set('Authorization', `Bearer ${bug2PosAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -553,7 +553,7 @@ describe('Bug 2 -- Profit Calculation Preservation (POS Revenue Must Remain Sepa
     const today = new Date().toISOString().slice(0, 10);
 
     const res = await request(app)
-      .get(`/api/reports/sales?branchId=${bug2PosBranchId}&dateFrom=${today}&dateTo=${today}`)
+      .get(`/api/v1/reports/sales?branchId=${bug2PosBranchId}&dateFrom=${today}&dateTo=${today}`)
       .set('Authorization', `Bearer ${bug2PosAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -755,7 +755,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/reports/kpis?branchId=${fixBranchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${fixBranchId}`)
       .set('Authorization', `Bearer ${fixAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -780,7 +780,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/reports/kpis?branchId=${fixBranchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${fixBranchId}`)
       .set('Authorization', `Bearer ${fixAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -800,7 +800,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/reports/kpis?branchId=${fixBranchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${fixBranchId}`)
       .set('Authorization', `Bearer ${fixAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -820,7 +820,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/reports/kpis?branchId=${fixBranchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${fixBranchId}`)
       .set('Authorization', `Bearer ${fixAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -844,7 +844,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const today = new Date().toISOString().slice(0, 10);
 
     const res = await request(app)
-      .get(`/api/reports/sales?branchId=${fixBranchId}&dateFrom=${today}&dateTo=${today}`)
+      .get(`/api/v1/reports/sales?branchId=${fixBranchId}&dateFrom=${today}&dateTo=${today}`)
       .set('Authorization', `Bearer ${fixAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -866,7 +866,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const today = new Date().toISOString().slice(0, 10);
 
     const res = await request(app)
-      .get(`/api/reports/sales?branchId=${fixBranchId}&dateFrom=${today}&dateTo=${today}`)
+      .get(`/api/v1/reports/sales?branchId=${fixBranchId}&dateFrom=${today}&dateTo=${today}`)
       .set('Authorization', `Bearer ${fixAdminToken}`);
 
     expect(res.status).toBe(200);
@@ -888,7 +888,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const today = new Date().toISOString().slice(0, 10);
 
     const res = await request(app)
-      .get(`/api/reports/sales?branchId=${fixBranchId}&dateFrom=${today}&dateTo=${today}`)
+      .get(`/api/v1/reports/sales?branchId=${fixBranchId}&dateFrom=${today}&dateTo=${today}`)
       .set('Authorization', `Bearer ${fixAdminToken}`);
 
     expect(res.status).toBe(200);

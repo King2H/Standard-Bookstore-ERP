@@ -89,7 +89,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('1. GET /api/customers/:id with a non-numeric id returns 400 VALIDATION_ERROR, not 500', async () => {
     const res = await request(getTestApp())
-      .get('/api/customers/not-a-number')
+      .get('/api/v1/customers/not-a-number')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -99,7 +99,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('1b. GET /api/orders/:id with a non-numeric id returns 400, not 500', async () => {
     const res = await request(getTestApp())
-      .get('/api/orders/not-a-number')
+      .get('/api/v1/orders/not-a-number')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -111,7 +111,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('2. POST /api/orders with quantity=0 returns 400, not a raw DB constraint 500', async () => {
     const res = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ bookId, quantity: 0 }] });
@@ -122,7 +122,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('2b. POST /api/orders with a negative quantity returns 400, not a raw DB constraint 500', async () => {
     const res = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ bookId, quantity: -3 }] });
@@ -133,7 +133,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('2c. POST /api/pos/transactions with a negative quantity returns 400, not a raw DB constraint 500', async () => {
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -148,7 +148,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('2d. POST /api/exchanges with a negative outgoing quantity returns 400, not a raw DB constraint 500', async () => {
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -164,7 +164,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('3. POST /api/orders with a negative discountAmount is clamped to 0, not subtracted as a negative', async () => {
     const res = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ bookId, quantity: 1, discountAmount: -50 }] });
@@ -177,7 +177,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
 
   it('3b. POST /api/pos/transactions with a negative discountPct is clamped to 0, not subtracted as a negative', async () => {
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -201,7 +201,7 @@ describe('Non-Architectural Bug Sweep — boundary validation & NaN-param guards
       [bookId, locationId],
     );
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({

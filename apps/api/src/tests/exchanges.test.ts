@@ -85,7 +85,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     const price = book1.price;
 
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -111,7 +111,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     await ensureInventory(book2.id, locationId, 20);
 
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -147,7 +147,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     await ensureInventory(book2.id, locationId, 20);
 
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -172,7 +172,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     const before = balBefore.rows.length ? parseFloat(balBefore.rows[0].balance as string) : 0;
 
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -205,7 +205,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     const qty2Before = inv2Before.rows[0].quantity as number;
 
     await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -231,7 +231,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
     await db.query(`UPDATE inventory SET quantity = 0 WHERE book_id = $1 AND location_id = $2`, [book2.id, locationId]);
 
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -251,7 +251,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
 
   it('6. No items → 400 VALIDATION_ERROR', async () => {
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, incomingItems: [], outgoingItems: [] });
@@ -263,7 +263,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
 
   it('6b. Missing locationId → 400 VALIDATION_ERROR (no silent no-op on inventory)', async () => {
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 50 }], outgoingItems: [] });
@@ -275,14 +275,14 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
 
   it('7. Cancel answers 410: an exchange is completed at once and undone by a same-day void', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, customerId, incomingItems: [{ bookId: book1.id, quantity: 1, unitPrice: 50 }], outgoingItems: [] });
     expect(createRes.status).toBe(201);
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/exchanges/${createRes.body.id}/cancel`)
+      .post(`/api/v1/exchanges/${createRes.body.id}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(cancelRes.status).toBe(410);
@@ -292,7 +292,7 @@ describe('Exchanges — Merchant Exchange (In-Kind)', () => {
 
   it('8. GET /api/exchanges → returns list', async () => {
     const res = await request(getTestApp())
-      .get(`/api/exchanges?branchId=${branchId}`)
+      .get(`/api/v1/exchanges?branchId=${branchId}`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 

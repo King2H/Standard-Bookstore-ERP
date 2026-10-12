@@ -33,7 +33,7 @@ async function ensureInventory(bookId: number, locationId: number, qty = 50) {
 async function createSale(token: string, branchId: number, locationId: number, bookId: number, bookPrice: number, qty = 2) {
   const grand = parseFloat((bookPrice * qty).toFixed(2));
   const res = await request(getTestApp())
-    .post('/api/pos/transactions')
+    .post('/api/v1/pos/transactions')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ branchId, locationId, items: [{ bookId, quantity: qty }], payments: [{ method: 'cash', amount: grand }] });
@@ -121,7 +121,7 @@ describe('Returns & Refunds', () => {
     const qtyBefore = invBefore.rows[0].quantity as number;
 
     const res = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), reason: 'Customer changed mind', lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
@@ -147,7 +147,7 @@ describe('Returns & Refunds', () => {
     const qtyBefore = invBefore.rows[0].quantity as number;
 
     const res = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
@@ -167,7 +167,7 @@ describe('Returns & Refunds', () => {
     const lineItemId = tx.lineItems[0].id;
 
     const res = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 5 }] });
@@ -193,7 +193,7 @@ describe('Returns & Refunds', () => {
     await db.query(`INSERT INTO loyalty_accounts (customer_id, points_balance, lifetime_points, updated_at) VALUES ($1, 0, 0, now())`, [customerId]);
 
     const txRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, customerId, items: [{ bookId, quantity: 1 }], payments: [{ method: 'store_credit', amount: grand }] });
@@ -201,7 +201,7 @@ describe('Returns & Refunds', () => {
     const lineItemId = txRes.body.lineItems[0].id;
 
     const res = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(txRes.body.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
@@ -244,7 +244,7 @@ describe('Returns & Refunds', () => {
 
     const grand = parseFloat((9999 * 1).toFixed(2));
     const txRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, items: [{ bookId: expBookId, quantity: 1 }], payments: [{ method: 'cash', amount: grand }] });
@@ -252,7 +252,7 @@ describe('Returns & Refunds', () => {
     const lineItemId = txRes.body.lineItems[0].id;
 
     const res = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(txRes.body.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
@@ -274,12 +274,12 @@ describe('Returns & Refunds', () => {
 
     // Void the transaction
     await request(getTestApp())
-      .post(`/api/pos/transactions/${tx.id}/void`)
+      .post(`/api/v1/pos/transactions/${tx.id}/void`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
     const res = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });
@@ -292,7 +292,7 @@ describe('Returns & Refunds', () => {
 
   it('7. GET /api/returns → returns list for branch', async () => {
     const res = await request(getTestApp())
-      .get(`/api/returns?branchId=${branchId}`)
+      .get(`/api/v1/returns?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -310,7 +310,7 @@ describe('Returns & Refunds', () => {
 
     // First return — 2 units
     const r1 = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 2 }] });
@@ -318,7 +318,7 @@ describe('Returns & Refunds', () => {
 
     // Second return — tries to return again
     const r2 = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ transactionId: parseInt(tx.id), lines: [{ transactionLineItemId: parseInt(lineItemId), quantity: 1 }] });

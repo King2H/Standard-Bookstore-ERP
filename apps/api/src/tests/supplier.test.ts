@@ -74,7 +74,7 @@ describe('Supplier Management', () => {
   describe('POST /api/suppliers', () => {
     it('creates an external supplier', async () => {
       const res = await request(getTestApp())
-        .post('/api/suppliers')
+        .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -99,7 +99,7 @@ describe('Supplier Management', () => {
       }
 
       const res = await request(getTestApp())
-        .post('/api/suppliers')
+        .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -117,7 +117,7 @@ describe('Supplier Management', () => {
 
     it('rejects publisher-type without publisherId (422)', async () => {
       const res = await request(getTestApp())
-        .post('/api/suppliers')
+        .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -136,7 +136,7 @@ describe('Supplier Management', () => {
       if (!publisherId) return;
 
       const res = await request(getTestApp())
-        .post('/api/suppliers')
+        .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -153,7 +153,7 @@ describe('Supplier Management', () => {
 
     it('rejects duplicate name (409)', async () => {
       const res = await request(getTestApp())
-        .post('/api/suppliers')
+        .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -169,7 +169,7 @@ describe('Supplier Management', () => {
 
     it('rejects Sales role (403)', async () => {
       const res = await request(getTestApp())
-        .post('/api/suppliers')
+        .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${salesToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -184,7 +184,7 @@ describe('Supplier Management', () => {
 
     it('Purchasor can create a supplier', async () => {
       const res = await request(getTestApp())
-        .post('/api/suppliers')
+        .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${purchasorToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -203,7 +203,7 @@ describe('Supplier Management', () => {
   describe('GET /api/suppliers', () => {
     it('returns paginated supplier list', async () => {
       const res = await request(getTestApp())
-        .get('/api/suppliers?pageSize=50')
+        .get('/api/v1/suppliers?pageSize=50')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -214,7 +214,7 @@ describe('Supplier Management', () => {
 
     it('filters by supplierType=external', async () => {
       const res = await request(getTestApp())
-        .get('/api/suppliers?supplierType=external')
+        .get('/api/v1/suppliers?supplierType=external')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -225,7 +225,7 @@ describe('Supplier Management', () => {
     });
 
     it('rejects unauthenticated (401)', async () => {
-      const res = await request(getTestApp()).get('/api/suppliers');
+      const res = await request(getTestApp()).get('/api/v1/suppliers');
       expect(res.status).toBe(401);
     });
   });
@@ -236,7 +236,7 @@ describe('Supplier Management', () => {
     it('updates supplier name and lead time', async () => {
       // Get the external supplier we created
       const listRes = await request(getTestApp())
-        .get('/api/suppliers?q=Test+Supplier+External')
+        .get('/api/v1/suppliers?q=Test+Supplier+External')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -244,7 +244,7 @@ describe('Supplier Management', () => {
       expect(supplier).toBeDefined();
 
       const res = await request(getTestApp())
-        .put(`/api/suppliers/${supplier.id}`)
+        .put(`/api/v1/suppliers/${supplier.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ leadTimeDays: 3 });
@@ -259,7 +259,7 @@ describe('Supplier Management', () => {
   describe('POST /api/suppliers/:id/deactivate', () => {
     it('deactivates a supplier', async () => {
       const listRes = await request(getTestApp())
-        .get('/api/suppliers?q=Test+Supplier+By+Purchasor')
+        .get('/api/v1/suppliers?q=Test+Supplier+By+Purchasor')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -267,7 +267,7 @@ describe('Supplier Management', () => {
       expect(supplier).toBeDefined();
 
       const res = await request(getTestApp())
-        .post(`/api/suppliers/${supplier.id}/deactivate`)
+        .post(`/api/v1/suppliers/${supplier.id}/deactivate`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -275,7 +275,7 @@ describe('Supplier Management', () => {
 
       // Verify is_active = false
       const getRes = await request(getTestApp())
-        .get(`/api/suppliers/${supplier.id}`)
+        .get(`/api/v1/suppliers/${supplier.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -288,7 +288,7 @@ describe('Supplier Management', () => {
   describe('POST /api/suppliers/:id/blacklist', () => {
     it('blacklists a supplier (Admin only)', async () => {
       const listRes = await request(getTestApp())
-        .get('/api/suppliers?q=Test+Supplier+External')
+        .get('/api/v1/suppliers?q=Test+Supplier+External')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -296,14 +296,14 @@ describe('Supplier Management', () => {
       expect(supplier).toBeDefined();
 
       const res = await request(getTestApp())
-        .post(`/api/suppliers/${supplier.id}/blacklist`)
+        .post(`/api/v1/suppliers/${supplier.id}/blacklist`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
       expect(res.status).toBe(200);
 
       const getRes = await request(getTestApp())
-        .get(`/api/suppliers/${supplier.id}`)
+        .get(`/api/v1/suppliers/${supplier.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -312,14 +312,14 @@ describe('Supplier Management', () => {
 
     it('rejects Purchasor from blacklisting (403)', async () => {
       const listRes = await request(getTestApp())
-        .get('/api/suppliers?q=Test+Supplier+External')
+        .get('/api/v1/suppliers?q=Test+Supplier+External')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
       const supplier = listRes.body.items[0];
 
       const res = await request(getTestApp())
-        .post(`/api/suppliers/${supplier.id}/blacklist`)
+        .post(`/api/v1/suppliers/${supplier.id}/blacklist`)
         .set('Authorization', `Bearer ${purchasorToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -397,20 +397,20 @@ describe('Supplier Management', () => {
 
       // Link both — s2 as primary
       await request(getTestApp())
-        .post(`/api/books/${bookId}/suppliers`)
+        .post(`/api/v1/books/${bookId}/suppliers`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ supplierId: sid1, supplierSku: 'SKU-A', isPrimary: false });
 
       await request(getTestApp())
-        .post(`/api/books/${bookId}/suppliers`)
+        .post(`/api/v1/books/${bookId}/suppliers`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ supplierId: sid2, supplierSku: 'SKU-B', isPrimary: true });
 
       // Fetch linked suppliers
       const res = await request(getTestApp())
-        .get(`/api/books/${bookId}/suppliers`)
+        .get(`/api/v1/books/${bookId}/suppliers`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -443,14 +443,14 @@ describe('Supplier Management', () => {
 
       // Link s1 as primary
       await request(getTestApp())
-        .post(`/api/books/${bookId}/suppliers`)
+        .post(`/api/v1/books/${bookId}/suppliers`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ supplierId: sid1, isPrimary: true });
 
       // Now link s2 as primary — should clear s1
       await request(getTestApp())
-        .post(`/api/books/${bookId}/suppliers`)
+        .post(`/api/v1/books/${bookId}/suppliers`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ supplierId: sid2, isPrimary: true });
@@ -483,7 +483,7 @@ describe('Supplier Management', () => {
       const id = result.rows[0].id as number;
 
       const res = await request(getTestApp())
-        .delete(`/api/suppliers/${id}`)
+        .delete(`/api/v1/suppliers/${id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -516,7 +516,7 @@ describe('Supplier Management', () => {
       const version = inv.rows[0].version as number;
 
       const res = await request(getTestApp())
-        .post('/api/inventory/stock-in')
+        .post('/api/v1/inventory/stock-in')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ bookId: bid, locationId: lid, quantity: 1, version, referenceType: 'manual' });
@@ -538,7 +538,7 @@ describe('Supplier Management', () => {
       const version = inv.rows[0].version as number;
 
       const res = await request(getTestApp())
-        .post('/api/inventory/stock-in')
+        .post('/api/v1/inventory/stock-in')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ bookId: bid, locationId: lid, quantity: 1, version, referenceType: 'purchase_order' });

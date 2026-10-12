@@ -138,7 +138,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('1. Create PO — correct total_amount calculated', async () => {
     const res = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -164,7 +164,7 @@ describe('Procurement — Purchase Orders', () => {
   it('2. Submit below threshold → auto-approved', async () => {
     // Ensure threshold is 1000 (default)
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -177,7 +177,7 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
 
     const submitRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -190,7 +190,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('3. Submit above threshold → pending_approval', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -203,7 +203,7 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
 
     const submitRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -217,7 +217,7 @@ describe('Procurement — Purchase Orders', () => {
   it('4. Approve PO (Admin role)', async () => {
     // A Manager creates and submits above threshold; the Admin approves (nobody approves their own, owner decision 2a).
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -229,12 +229,12 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
     const approveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/approve`)
+      .post(`/api/v1/purchase-orders/${poId}/approve`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -247,7 +247,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('5. Purchasor cannot approve (403)', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${purchasorToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -259,12 +259,12 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${purchasorToken}`)
       .set('X-Branch-Id', String(branchId));
 
     const approveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/approve`)
+      .post(`/api/v1/purchase-orders/${poId}/approve`)
       .set('Authorization', `Bearer ${purchasorToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -276,7 +276,7 @@ describe('Procurement — Purchase Orders', () => {
   it('6. Receive partial → status = partially_received, inventory updated', async () => {
     // Create, submit (auto-approve below threshold), then receive partial
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -291,7 +291,7 @@ describe('Procurement — Purchase Orders', () => {
 
     // Submit (auto-approved)
     const submitRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(submitRes.body.status).toBe('approved');
@@ -305,7 +305,7 @@ describe('Procurement — Purchase Orders', () => {
 
     // Receive 4 of 10
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -329,7 +329,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('7. Over-receive → rejected (422)', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -342,12 +342,12 @@ describe('Procurement — Purchase Orders', () => {
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -363,7 +363,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('8. Receive remaining → status = received', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -376,13 +376,13 @@ describe('Procurement — Purchase Orders', () => {
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
     // Receive all 6
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -398,7 +398,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('9. Cancel draft → succeeds', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -410,7 +410,7 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/cancel`)
+      .post(`/api/v1/purchase-orders/${poId}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -422,7 +422,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('10. Cancel after receipt → rejected', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -435,20 +435,20 @@ describe('Procurement — Purchase Orders', () => {
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
     // Receive some
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ poLineItemId: lineItemId, quantityReceived: 2 }] });
 
     // Try to cancel — should fail
     const cancelRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/cancel`)
+      .post(`/api/v1/purchase-orders/${poId}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -483,7 +483,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('Finance_Officer can list purchase orders', async () => {
     const res = await request(getTestApp())
-      .get('/api/purchase-orders')
+      .get('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -495,13 +495,13 @@ describe('Procurement — Purchase Orders', () => {
 
   it('Stock_Clerk can list POs but cannot create', async () => {
     const listRes = await request(getTestApp())
-      .get('/api/purchase-orders')
+      .get('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${stockClerkToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(listRes.status).toBe(200);
 
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${stockClerkToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, notes: 'proc_test clerk create', lineItems: [{ bookId, quantity: 1, unitCost: 5 }] });
@@ -512,7 +512,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('Manager can approve a pending_approval PO', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -524,12 +524,12 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
     const approveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/approve`)
+      .post(`/api/v1/purchase-orders/${poId}/approve`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -562,7 +562,7 @@ describe('Procurement — Purchase Orders', () => {
 
     // Create PO and submit (auto-approve)
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -576,13 +576,13 @@ describe('Procurement — Purchase Orders', () => {
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
     // Receive at location2 (not the default)
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -641,7 +641,7 @@ describe('Procurement — Purchase Orders', () => {
 
     // Create PO with explicit receivingLocationId
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -658,13 +658,13 @@ describe('Procurement — Purchase Orders', () => {
 
     // Submit (auto-approve)
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/submit`)
+      .post(`/api/v1/purchase-orders/${poId}/submit`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
     // Receive WITHOUT specifying locationId — should fall back to PO's receiving_location_id
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -702,7 +702,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('17. Default (credit) PO stays financialStatus=unpaid through full receipt', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, notes: 'proc_test credit unpaid', lineItems: [{ bookId, quantity: 4, unitCost: 10 }] });
@@ -711,9 +711,9 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 4 }], notes: 'proc_test full receive' });
@@ -726,7 +726,7 @@ describe('Procurement — Purchase Orders', () => {
 
   it('18. Cash-terms PO auto-settles to paid on full receipt', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, paymentTerms: 'cash', notes: 'proc_test cash full', lineItems: [{ bookId, quantity: 5, unitCost: 20 }] });
@@ -734,9 +734,9 @@ describe('Procurement — Purchase Orders', () => {
     const poId = createRes.body.id;
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 5 }], notes: 'proc_test cash full receive' });
@@ -759,16 +759,16 @@ describe('Procurement — Purchase Orders', () => {
     // as a whole is still only partially_received (5 more units still
     // outstanding on the *order*, not the payable).
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, paymentTerms: 'cash', notes: 'proc_test cash partial', lineItems: [{ bookId, quantity: 10, unitCost: 15 }] });
     const poId = createRes.body.id;
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 4 }], notes: 'proc_test cash partial receive' });
@@ -784,22 +784,22 @@ describe('Procurement — Purchase Orders', () => {
 
   it('20. Manual supplier payment on a credit PO moves financialStatus unpaid → partial → paid', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, notes: 'proc_test manual payment', lineItems: [{ bookId, quantity: 2, unitCost: 50 }] });
     const poId = createRes.body.id;
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 2 }], notes: 'proc_test manual receive' });
 
     const partialRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/payments`)
+      .post(`/api/v1/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 40, paymentMethod: 'bank', notes: 'proc_test partial settlement' });
@@ -807,7 +807,7 @@ describe('Procurement — Purchase Orders', () => {
     expect(partialRes.body.financialStatus).toBe('partial');
 
     const fullRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/payments`)
+      .post(`/api/v1/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 60, paymentMethod: 'bank', notes: 'proc_test final settlement' });
@@ -819,14 +819,14 @@ describe('Procurement — Purchase Orders', () => {
 
   it('21. Cannot record a payment against a draft or cancelled PO', async () => {
     const draftRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, notes: 'proc_test draft payment reject', lineItems: [{ bookId, quantity: 1, unitCost: 10 }] });
     const draftPoId = draftRes.body.id;
 
     const draftPayRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${draftPoId}/payments`)
+      .post(`/api/v1/purchase-orders/${draftPoId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 10 });
@@ -834,13 +834,13 @@ describe('Procurement — Purchase Orders', () => {
     expect(draftPayRes.body.error).toBe('PO_NOT_PAYABLE');
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${draftPoId}/cancel`)
+      .post(`/api/v1/purchase-orders/${draftPoId}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(cancelRes.status).toBe(200);
 
     const cancelledPayRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${draftPoId}/payments`)
+      .post(`/api/v1/purchase-orders/${draftPoId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 10 });
@@ -850,22 +850,22 @@ describe('Procurement — Purchase Orders', () => {
 
   it('22. PO close never implies payment completion; financialStatus stays unpaid after close', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, notes: 'proc_test close unpaid', lineItems: [{ bookId, quantity: 1, unitCost: 25 }] });
     const poId = createRes.body.id;
     const lineItemId = Number(createRes.body.lineItems[0].id);
 
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 1 }], notes: 'proc_test close receive' });
 
     const closeRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/close`)
+      .post(`/api/v1/purchase-orders/${poId}/close`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(closeRes.status).toBe(200);
@@ -875,28 +875,28 @@ describe('Procurement — Purchase Orders', () => {
 
   it('23. Stock_Clerk cannot record a supplier payment (403); Finance_Officer can', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId, branchId, notes: 'proc_test rbac payment', lineItems: [{ bookId, quantity: 1, unitCost: 10 }] });
     const poId = createRes.body.id;
     const lineItemId = Number(createRes.body.lineItems[0].id);
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ items: [{ poLineItemId: lineItemId, quantityReceived: 1 }] });
 
     const clerkRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/payments`)
+      .post(`/api/v1/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${stockClerkToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 10 });
     expect(clerkRes.status).toBe(403);
 
     const financeRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/payments`)
+      .post(`/api/v1/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 10 });
@@ -921,7 +921,7 @@ describe('Procurement — Purchase Orders', () => {
 
     it('Selecting 2026-08-08 saves 2026-08-08, and reloading/editing/listing retain it', async () => {
       const createRes = await request(getTestApp())
-        .post('/api/purchase-orders')
+        .post('/api/v1/purchase-orders')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({
@@ -936,7 +936,7 @@ describe('Procurement — Purchase Orders', () => {
 
       // Reload (GET /:id)
       const getRes = await request(getTestApp())
-        .get(`/api/purchase-orders/${poId}`)
+        .get(`/api/v1/purchase-orders/${poId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
       expect(getRes.status).toBe(200);
@@ -944,7 +944,7 @@ describe('Procurement — Purchase Orders', () => {
 
       // Edit (PUT) to a different date, then reload again
       const putRes = await request(getTestApp())
-        .put(`/api/purchase-orders/${poId}`)
+        .put(`/api/v1/purchase-orders/${poId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ expectedDeliveryDate: '2026-08-09' });
@@ -952,7 +952,7 @@ describe('Procurement — Purchase Orders', () => {
       expect(putRes.body.expectedDeliveryDate).toBe('2026-08-09');
 
       const getAfterEdit = await request(getTestApp())
-        .get(`/api/purchase-orders/${poId}`)
+        .get(`/api/v1/purchase-orders/${poId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
       expect(getAfterEdit.body.expectedDeliveryDate).toBe('2026-08-09');
@@ -960,7 +960,7 @@ describe('Procurement — Purchase Orders', () => {
       // List — same row, same field, via a different query path (mapPORow
       // over the paginated list SELECT rather than the single-row SELECT).
       const listRes = await request(getTestApp())
-        .get(`/api/purchase-orders?branchId=${branchId}&pageSize=100`)
+        .get(`/api/v1/purchase-orders?branchId=${branchId}&pageSize=100`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
       expect(listRes.status).toBe(200);

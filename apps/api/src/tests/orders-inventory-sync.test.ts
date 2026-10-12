@@ -148,7 +148,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const res = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 3 }] });
@@ -165,7 +165,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 5 }] });
@@ -173,7 +173,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const orderId = createRes.body.id;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -193,14 +193,14 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     await setInventory(bookId, locationId, 30);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 4 }] });
     const orderId = createRes.body.id;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -234,7 +234,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     // row-locked, authoritative check.
     await setInventory(bookId, locationId, 10);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 10 }] });
@@ -244,7 +244,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -253,7 +253,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
 
     // Transaction must be rolled back: order still DRAFT, inventory unchanged
     const orderAfter = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderAfter.body.status).toBe('DRAFT');
@@ -267,14 +267,14 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 4 }] });
     const orderId = createRes.body.id;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -282,7 +282,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     expect(await getInventoryQty(bookId, locationId)).toBe(qtyBefore - 4);
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Test cancellation' });
@@ -319,14 +319,14 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 3 }] });
     const orderId = createRes.body.id;
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Never confirmed' });
@@ -342,7 +342,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     await setInventory(bookId, locationId, 10);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
@@ -350,13 +350,13 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const orderTotal = parseFloat(createRes.body.total as string);
 
     // confirm → pay (via payments module) → fulfill
-    await request(getTestApp()).post(`/api/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
-    await request(getTestApp()).post('/api/payments').set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ orderId: Number(orderId), amount: orderTotal, paymentMethod: 'cash' });
-    const fulfillRes = await request(getTestApp()).post(`/api/orders/${orderId}/fulfill`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post('/api/v1/payments').set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ orderId: Number(orderId), amount: orderTotal, paymentMethod: 'cash' });
+    const fulfillRes = await request(getTestApp()).post(`/api/v1/orders/${orderId}/fulfill`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
     expect(fulfillRes.status).toBe(200);
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Too late' });
@@ -372,14 +372,14 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBefore = await getInventoryQty(bookId, locationId);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 3 }] });
     const orderId = createRes.body.id as string;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -390,7 +390,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     // POST /api/payments rejects cash_sale orders (paid automatically at
     // confirm; payments.service.ts "Bug 2" guard) — fulfill directly.
     const fulfillRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(fulfillRes.status).toBe(200);
@@ -423,7 +423,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     await setInventory(bookId2, locationId, 10); // enough for create() to accept the draft
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 3 }, { bookId: bookId2, quantity: 5 }] });
@@ -437,7 +437,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
 
     // First confirm: bookId2 has only 2, needs 5 → fail, full rollback
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -462,7 +462,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBefore2b = await getInventoryQty(bookId2, locationId);
 
     const confirmRes2 = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -485,12 +485,12 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     ).catch(() => { /* table may not exist — safe */ });
 
     const cr1 = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 5 }] });
     const cr2 = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 5 }] });
@@ -500,11 +500,11 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
 
     const [conf1, conf2] = await Promise.all([
       request(getTestApp())
-        .post(`/api/orders/${cr1.body.id}/confirm`)
+        .post(`/api/v1/orders/${cr1.body.id}/confirm`)
         .set('Authorization', `Bearer ${managerToken}`)
         .set('X-Branch-Id', String(branchId)),
       request(getTestApp())
-        .post(`/api/orders/${cr2.body.id}/confirm`)
+        .post(`/api/v1/orders/${cr2.body.id}/confirm`)
         .set('Authorization', `Bearer ${managerToken}`)
         .set('X-Branch-Id', String(branchId)),
     ]);
@@ -535,7 +535,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     // stock disappearing before confirm (confirm()'s own check).
     await setInventory(bookId, locationId, 5);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
@@ -549,7 +549,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     ).catch(() => { /* table may not exist */ });
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -567,14 +567,14 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
     const qtyBranch2Before = await getInventoryQty(bookId, locationId2);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 3 }] });
     const orderId = createRes.body.id;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 

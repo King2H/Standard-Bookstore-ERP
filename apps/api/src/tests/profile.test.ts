@@ -38,7 +38,7 @@ describe('Staff Profile', () => {
   it('any authenticated role can view their own profile', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/staff/me')
+      .get('/api/v1/staff/me')
       .set('Authorization', `Bearer ${salesToken}`);
 
     expect(res.status).toBe(200);
@@ -57,7 +57,7 @@ describe('Staff Profile', () => {
   it('Admin can also view their own profile', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/staff/me')
+      .get('/api/v1/staff/me')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -67,7 +67,7 @@ describe('Staff Profile', () => {
 
   it('unauthenticated request returns 401', async () => {
     const app = getTestApp();
-    const res = await request(app).get('/api/staff/me');
+    const res = await request(app).get('/api/v1/staff/me');
     expect(res.status).toBe(401);
   });
 
@@ -76,7 +76,7 @@ describe('Staff Profile', () => {
   it('staff can change their own password with correct current password', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/staff/me/password')
+      .put('/api/v1/staff/me/password')
       .set('Authorization', `Bearer ${salesToken}`)
       .send({
         currentPassword: 'Test@12345',
@@ -88,7 +88,7 @@ describe('Staff Profile', () => {
 
     // Verify the new password works for login
     const loginRes = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ username: 'profile_test_sales', password: 'NewPass@9876', branchId });
     expect(loginRes.status).toBe(200);
     expect(loginRes.body.accessToken).toBeDefined();
@@ -97,7 +97,7 @@ describe('Staff Profile', () => {
   it('wrong current password returns 422', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/staff/me/password')
+      .put('/api/v1/staff/me/password')
       .set('Authorization', `Bearer ${salesToken}`)
       .send({
         currentPassword: 'WrongPassword!1',
@@ -111,7 +111,7 @@ describe('Staff Profile', () => {
   it('weak new password returns 400', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/staff/me/password')
+      .put('/api/v1/staff/me/password')
       .set('Authorization', `Bearer ${salesToken}`)
       .send({
         currentPassword: 'NewPass@9876',
@@ -124,7 +124,7 @@ describe('Staff Profile', () => {
   it('missing currentPassword returns 400', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/staff/me/password')
+      .put('/api/v1/staff/me/password')
       .set('Authorization', `Bearer ${salesToken}`)
       .send({ newPassword: 'ValidPass@123' });
 
@@ -134,7 +134,7 @@ describe('Staff Profile', () => {
   it('unauthenticated password change returns 401', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put('/api/staff/me/password')
+      .put('/api/v1/staff/me/password')
       .send({ currentPassword: 'Test@12345', newPassword: 'NewPass@9876' });
 
     expect(res.status).toBe(401);

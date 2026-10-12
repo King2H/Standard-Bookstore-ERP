@@ -78,23 +78,23 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
     supplierIdOverride?: number,
   ): Promise<{ poId: number; lineItemId: number }> {
     const createRes = await request(getTestApp())
-      .post('/api/purchase-orders')
+      .post('/api/v1/purchase-orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ supplierId: supplierIdOverride ?? supplierId, branchId, paymentTerms, notes: `${NOTES_MARK} PO`, lineItems: [{ bookId, quantity: qty, unitCost }] });
     expect(createRes.status).toBe(201);
     const poId = createRes.body.id;
     const lineItemId = Number(createRes.body.lineItems[0].id);
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/approve`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
-    await request(getTestApp()).post(`/api/purchase-orders/${poId}/order`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/submit`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/approve`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/purchase-orders/${poId}/order`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
     return { poId, lineItemId };
   }
 
   it('1. PO financial fields: receivedValue basis, not full totalAmount, before receiving anything', async () => {
     const { poId } = await createApprovedPO(10, 20); // total_amount = 200
     const res = await request(getTestApp())
-      .get(`/api/purchase-orders/${poId}`)
+      .get(`/api/v1/purchase-orders/${poId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(res.status).toBe(200);
@@ -108,14 +108,14 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
   it('2. Credit note reduces outstanding balance and moves financialStatus to paid', async () => {
     const { poId, lineItemId } = await createApprovedPO(5, 30); // received value will be 150
     const receiveRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ poLineItemId: lineItemId, quantityReceived: 5 }] });
     expect(receiveRes.status).toBe(200);
 
     const afterReceive = await request(getTestApp())
-      .get(`/api/purchase-orders/${poId}`)
+      .get(`/api/v1/purchase-orders/${poId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(Number(afterReceive.body.receivedValue)).toBeCloseTo(150, 2);
@@ -123,7 +123,7 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
 
     // Credit note for damaged goods covering the full received value.
     const cnRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/credit-notes`)
+      .post(`/api/v1/purchase-orders/${poId}/credit-notes`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 150, reason: 'proc2_test damaged goods' });
@@ -138,20 +138,20 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
   it('3. Credit note rejects zero/negative amount and a blank reason', async () => {
     const { poId, lineItemId } = await createApprovedPO(2, 10);
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ poLineItemId: lineItemId, quantityReceived: 2 }] });
 
     const zeroRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/credit-notes`)
+      .post(`/api/v1/purchase-orders/${poId}/credit-notes`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 0, reason: 'proc2_test bad' });
     expect(zeroRes.status).toBe(400);
 
     const blankReasonRes = await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/credit-notes`)
+      .post(`/api/v1/purchase-orders/${poId}/credit-notes`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 5, reason: '' });
@@ -171,19 +171,19 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
     const { poId, lineItemId } = await createApprovedPO(4, 25, 'credit', ledgerSupplierId); // received value 100
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/receive`)
+      .post(`/api/v1/purchase-orders/${poId}/receive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ poLineItemId: lineItemId, quantityReceived: 4 }] });
 
     await request(getTestApp())
-      .post(`/api/purchase-orders/${poId}/payments`)
+      .post(`/api/v1/purchase-orders/${poId}/payments`)
       .set('Authorization', `Bearer ${financeToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 60, paymentMethod: 'bank' });
 
     const ledgerRes = await request(getTestApp())
-      .get(`/api/suppliers/${ledgerSupplierId}/ledger`)
+      .get(`/api/v1/suppliers/${ledgerSupplierId}/ledger`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(ledgerRes.status).toBe(200);
@@ -200,14 +200,14 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
 
   it('5. Procurement reports respond with the expected shape', async () => {
     const openPos = await request(getTestApp())
-      .get(`/api/reports/procurement/open-pos?branchId=${branchId}`)
+      .get(`/api/v1/reports/procurement/open-pos?branchId=${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(openPos.status).toBe(200);
     expect(Array.isArray(openPos.body)).toBe(true);
 
     const balances = await request(getTestApp())
-      .get(`/api/reports/procurement/supplier-balances?branchId=${branchId}`)
+      .get(`/api/v1/reports/procurement/supplier-balances?branchId=${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(balances.status).toBe(200);
@@ -215,20 +215,20 @@ describe('Procurement — Prompt 2 (credit notes, supplier ledger, received-valu
     expect(ours).toBeDefined();
 
     const aging = await request(getTestApp())
-      .get(`/api/reports/procurement/ap-aging?branchId=${branchId}`)
+      .get(`/api/v1/reports/procurement/ap-aging?branchId=${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(aging.status).toBe(200);
     expect(aging.body.byBucket.length).toBe(5);
 
     const byBook = await request(getTestApp())
-      .get(`/api/reports/procurement/purchases-by-book?branchId=${branchId}`)
+      .get(`/api/v1/reports/procurement/purchases-by-book?branchId=${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(byBook.status).toBe(200);
 
     const paymentHistory = await request(getTestApp())
-      .get(`/api/reports/procurement/supplier-payment-history?branchId=${branchId}`)
+      .get(`/api/v1/reports/procurement/supplier-payment-history?branchId=${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(paymentHistory.status).toBe(200);

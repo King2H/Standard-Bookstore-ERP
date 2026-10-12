@@ -172,7 +172,7 @@ describe('Export Integrity (Module 7)', () => {
 
   it('1. Unified sales export: ORDER row has correct gross/discount/net amounts and reference', async () => {
     const res = await request(getTestApp())
-      .get(`/api/reports/sales/export?branchId=${branchId}`)
+      .get(`/api/v1/reports/sales/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -195,7 +195,7 @@ describe('Export Integrity (Module 7)', () => {
 
   it('2. Receivables export includes order_credit_sale, pos_credit_sale, and exchange_difference rows', async () => {
     const res = await request(getTestApp())
-      .get(`/api/reports/receivables/export?branchId=${branchId}`)
+      .get(`/api/v1/reports/receivables/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -227,7 +227,7 @@ describe('Export Integrity (Module 7)', () => {
     );
 
     const res = await request(getTestApp())
-      .get(`/api/reports/inventory/export?branchId=${branchId}`)
+      .get(`/api/v1/reports/inventory/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 

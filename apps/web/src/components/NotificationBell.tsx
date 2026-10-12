@@ -2,8 +2,8 @@
  * NotificationBell — real-time notification UI component.
  *
  * Architecture:
- * - On mount: fetch the last 20 notifications via REST (GET /api/notifications)
- * - Open a persistent SSE stream (GET /api/notifications/stream) using fetch + ReadableStream
+ * - On mount: fetch the last 20 notifications via REST (GET /api/v1/notifications)
+ * - Open a persistent SSE stream (GET /api/v1/notifications/stream) using fetch + ReadableStream
  *   because EventSource doesn't support custom headers in browsers.
  * - On 'connected' event: sync unread count from server
  * - On 'notification' event: prepend to list, increment badge, show toast for warning/error

@@ -33,7 +33,9 @@ silently.
 
 **Negative / costs**
 - `packages/shared` must be built and versioned with care, because both apps depend on it.
-- Existing endpoints move to `/api/v1` with a transition period for the web app.
+- Existing endpoints move to `/api/v1` with a transition period for the web app. The unversioned `/api`
+  alias served that period; it was removed once the web app used `/api/v1` (M6, #23), and its addresses
+  now answer 410 `DEPRECATED` with the new address.
 
 ## Alternatives considered
 

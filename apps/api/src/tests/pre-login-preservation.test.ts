@@ -109,7 +109,7 @@ describe('3.1 Valid credentials → 200 OK with expected response shape', () => 
     const staffId = await seedStaff({ username, branchId: testBranchId });
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'Test@12345' });
 
     expect(res.status).toBe(200);
@@ -136,7 +136,7 @@ describe('3.1 Valid credentials → 200 OK with expected response shape', () => 
     );
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'Test@12345' });
 
     expect(res.status).toBe(200);
@@ -157,7 +157,7 @@ describe('3.3 Unknown username → 401 INVALID_CREDENTIALS', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username: 'definitely_does_not_exist_xyz123', password: 'SomePassword!1' });
 
     expect(res.status).toBe(401);
@@ -177,7 +177,7 @@ describe('3.2 Wrong password below lockout threshold → 401, counter increments
     const staffId = await seedStaff({ username, failedAttempts: 0 });
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'WrongPassword!99' });
 
     expect(res.status).toBe(401);
@@ -194,7 +194,7 @@ describe('3.2 Wrong password below lockout threshold → 401, counter increments
     const staffId = await seedStaff({ username, failedAttempts: 2 });
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'WrongPassword!99' });
 
     expect(res.status).toBe(401);
@@ -212,7 +212,7 @@ describe('3.2 Wrong password below lockout threshold → 401, counter increments
     const staffId = await seedStaff({ username, failedAttempts: MAX_FAILED_ATTEMPTS - 2 });
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'WrongPasswordProp!1' });
 
     expect(res.status).toBe(401);
@@ -236,7 +236,7 @@ describe('3.4 Already-locked account → 401 ACCOUNT_LOCKED', () => {
     await seedStaff({ username, lockedUntil, failedAttempts: MAX_FAILED_ATTEMPTS });
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'Test@12345' });
 
     expect(res.status).toBe(401);
@@ -257,7 +257,7 @@ describe('3.5 Deactivated account → 401 ACCOUNT_INACTIVE', () => {
     await seedStaff({ username, isActive: false });
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username, password: 'Test@12345' });
 
     expect(res.status).toBe(401);
@@ -275,7 +275,7 @@ describe('3.6 Missing required fields → 400 schema validation error', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ password: 'SomePassword!1' });
 
     expect(res.status).toBe(400);
@@ -286,7 +286,7 @@ describe('3.6 Missing required fields → 400 schema validation error', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({ username: 'some_user' });
 
     expect(res.status).toBe(400);
@@ -297,7 +297,7 @@ describe('3.6 Missing required fields → 400 schema validation error', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .send({});
 
     expect(res.status).toBe(400);
@@ -310,7 +310,7 @@ describe('3.6 Missing required fields → 400 schema validation error', () => {
     { body: { username: '', password: '' }, label: 'both fields empty' },
   ])('returns 400 for $label', async ({ body }) => {
     const app = getTestApp();
-    const res = await request(app).post('/api/auth/pre-login').send(body);
+    const res = await request(app).post('/api/v1/auth/pre-login').send(body);
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('VALIDATION_ERROR');
   });

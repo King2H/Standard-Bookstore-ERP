@@ -55,7 +55,7 @@ describe('validate()', () => {
 
 describe('Error envelope', () => {
   it('unknown routes return the full envelope', async () => {
-    const res = await request(getTestApp()).get('/api/no-such-route');
+    const res = await request(getTestApp()).get('/api/v1/no-such-route');
 
     expect(res.status).toBe(404);
     expect(ErrorResponseSchema.parse(res.body)).toMatchObject({ error: 'NOT_FOUND', details: {} });
@@ -64,7 +64,7 @@ describe('Error envelope', () => {
 
   it('middleware rejections use the full envelope too (CSRF)', async () => {
     const res = await request(getTestApp())
-      .post('/api/branches')
+      .post('/api/v1/branches')
       .set('Cookie', 'csrf-token=expected')
       .set('X-CSRF-Token', 'wrong')
       .send({});
@@ -74,7 +74,7 @@ describe('Error envelope', () => {
   });
 
   it('application errors match the shared schema', async () => {
-    const res = await request(getTestApp()).get('/api/branches');
+    const res = await request(getTestApp()).get('/api/v1/branches');
     expect(res.status).toBe(401);
     expect(() => ErrorResponseSchema.parse(res.body)).not.toThrow();
   });

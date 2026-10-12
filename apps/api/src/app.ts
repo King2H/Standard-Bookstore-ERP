@@ -38,7 +38,7 @@ import notificationsRouter from './modules/notifications/notifications.routes.js
 import receivablesRouter from './modules/receivables/receivables.routes.js';
 import { csrfMiddleware } from './middleware/csrf.js';
 import { corsMiddleware } from './middleware/cors.js';
-import { deprecatedAlias } from './middleware/deprecatedAlias.js';
+import { unversionedApiGone } from './middleware/unversionedApi.js';
 import { readHttpConfig } from './lib/env.js';
 import { buildOpenApiDocument } from './openapi/document.js';
 
@@ -59,11 +59,11 @@ export function createApp() {
   app.use(cookieParser());
   app.use(requestIdMiddleware);
   app.use(loggerMiddleware);
+  app.use('/api', unversionedApiGone);
   app.use(csrfMiddleware);
 
   // ── Routes ────────────────────────────────────────────────────────────
-  // Every route is served under /api/v1 (ADR-0004). The unversioned /api
-  // paths stay as a deprecated alias until the web app moves to /api/v1 (M6).
+  // Every route is served under /api/v1 (ADR-0004).
   const api = express.Router();
   api.get('/openapi.json', (_req, res) => {
     res.json(buildOpenApiDocument());
@@ -107,7 +107,6 @@ export function createApp() {
   api.use(auditLogsRouter);
 
   app.use('/api/v1', api);
-  app.use('/api', deprecatedAlias('/api', '/api/v1', api));
 
   // 404 handler
   app.use((req, res) => {

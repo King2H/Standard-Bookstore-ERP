@@ -70,7 +70,7 @@ the name and password in `DATABASE_URL`. The API refuses to start as the owner.
 
 ```powershell
 docker compose up -d postgres   # if not already running
-npm run dev:api                 # terminal 1 → http://localhost:3000/api/health
+npm run dev:api                 # terminal 1 → http://localhost:3000/api/v1/health
 npm run dev:web                 # terminal 2 → http://localhost:5173
 ```
 
