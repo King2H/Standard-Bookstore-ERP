@@ -37,6 +37,7 @@ export interface AuditLogs {
   meta: Json | null;
   staff_id: number | null;
   staff_role: string | null;
+  tenant_id: Generated<number>;
 }
 
 export interface Authors {
@@ -47,6 +48,7 @@ export interface Authors {
   name: string;
   normalized_name: string;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number | null;
 }
@@ -62,6 +64,7 @@ export interface BankAccounts {
   iban: string | null;
   id: Generated<number>;
   is_active: Generated<boolean>;
+  tenant_id: Generated<number>;
 }
 
 export interface BankReconciliation {
@@ -77,6 +80,7 @@ export interface BankReconciliation {
   source_type: string;
   statement_date: Timestamp | null;
   status: Generated<string>;
+  tenant_id: Generated<number>;
 }
 
 export interface BankStatementLines {
@@ -92,12 +96,14 @@ export interface BankStatementLines {
   matched_by: number | null;
   reference: string | null;
   statement_date: Timestamp;
+  tenant_id: Generated<number>;
 }
 
 export interface BookAuthors {
   author_id: number;
   book_id: number;
   sort_order: Generated<number>;
+  tenant_id: Generated<number>;
 }
 
 export interface BookBranchPrices {
@@ -106,11 +112,13 @@ export interface BookBranchPrices {
   edition_id: Generated<number>;
   format_id: Generated<number>;
   price: Numeric;
+  tenant_id: Generated<number>;
 }
 
 export interface BookCategories {
   book_id: number;
   category_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface BookEditHistory {
@@ -121,6 +129,7 @@ export interface BookEditHistory {
   id: Generated<Int8>;
   new_value: string | null;
   old_value: string | null;
+  tenant_id: Generated<number>;
 }
 
 export interface BookEditions {
@@ -128,6 +137,7 @@ export interface BookEditions {
   id: Generated<number>;
   label: string;
   sort_order: Generated<number>;
+  tenant_id: Generated<number>;
 }
 
 export interface BookFormats {
@@ -135,6 +145,7 @@ export interface BookFormats {
   id: Generated<number>;
   label: string;
   sort_order: Generated<number>;
+  tenant_id: Generated<number>;
 }
 
 export interface Books {
@@ -158,6 +169,7 @@ export interface Books {
   search_vector: string | null;
   sku: string | null;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   title: string;
   trade_value: Numeric | null;
   updated_at: Generated<Timestamp>;
@@ -169,16 +181,19 @@ export interface BookSuppliers {
   is_primary: Generated<boolean>;
   supplier_id: number;
   supplier_sku: string | null;
+  tenant_id: Generated<number>;
 }
 
 export interface BookTags {
   book_id: number;
   tag: string;
+  tenant_id: Generated<number>;
 }
 
 export interface BranchConfig {
   branch_id: number;
   key: string;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number;
   value: Json;
@@ -192,6 +207,7 @@ export interface Branches {
   is_active: Generated<boolean>;
   name: string;
   operating_hours: Json;
+  tenant_id: Generated<number>;
 }
 
 export interface Categories {
@@ -203,6 +219,7 @@ export interface Categories {
   normalized_name: string;
   parent_id: number | null;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number | null;
 }
@@ -210,6 +227,7 @@ export interface Categories {
 export interface CustomerGroupMembership {
   customer_id: number;
   group_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface CustomerGroups {
@@ -217,6 +235,7 @@ export interface CustomerGroups {
   discount_pct: Generated<Numeric>;
   id: Generated<number>;
   name: string;
+  tenant_id: Generated<number>;
 }
 
 export interface Customers {
@@ -238,6 +257,7 @@ export interface Customers {
   phone_encrypted: string | null;
   phone_lookup: string | null;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number | null;
 }
@@ -246,6 +266,7 @@ export interface DocumentCounters {
   last_value: number;
   period: string;
   series: string;
+  tenant_id: Generated<number>;
 }
 
 export interface ExchangeIncomingItems {
@@ -255,6 +276,7 @@ export interface ExchangeIncomingItems {
   exchange_id: Int8;
   id: Generated<Int8>;
   quantity: number;
+  tenant_id: Generated<number>;
   total_price: Numeric;
 }
 
@@ -265,6 +287,7 @@ export interface ExchangeItems {
   exchange_id: Int8;
   id: Generated<Int8>;
   quantity: number;
+  tenant_id: Generated<number>;
   total_price: Numeric;
   type: string;
   unit_cost: Numeric | null;
@@ -281,6 +304,7 @@ export interface ExchangeOutgoingItems {
   id: Generated<Int8>;
   quantity: number;
   selling_unit_price: Numeric;
+  tenant_id: Generated<number>;
   total_price: Numeric;
   unit_cost: Numeric | null;
 }
@@ -304,6 +328,7 @@ export interface Exchanges {
   related_payment_id: Int8 | null;
   settlement_type: Generated<string>;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   total_incoming_value: Generated<Numeric>;
   total_outgoing_value: Generated<Numeric>;
   updated_at: Generated<Timestamp>;
@@ -324,6 +349,7 @@ export interface ExchangeSettlementEntries {
   method: string | null;
   note: string | null;
   override_reason: string | null;
+  tenant_id: Generated<number>;
 }
 
 export interface FinancialTransactions {
@@ -339,6 +365,7 @@ export interface FinancialTransactions {
   order_id: Int8 | null;
   receivable_id: Int8 | null;
   staff_id: number;
+  tenant_id: Generated<number>;
   type: string;
 }
 
@@ -349,6 +376,7 @@ export interface IdempotencyKeys {
   key: string;
   request_hash: string;
   response_payload: Json;
+  tenant_id: Generated<number>;
 }
 
 export interface InstallmentPlans {
@@ -360,6 +388,7 @@ export interface InstallmentPlans {
   notes: string | null;
   num_installments: number;
   order_id: Int8;
+  tenant_id: Generated<number>;
   total_amount: Numeric;
 }
 
@@ -373,6 +402,7 @@ export interface Installments {
   paid_at: Timestamp | null;
   plan_id: Int8;
   status: Generated<string>;
+  tenant_id: Generated<number>;
 }
 
 export interface Inventory {
@@ -383,6 +413,7 @@ export interface Inventory {
   location_id: number;
   quantity: Generated<number>;
   reorder_point: Generated<number>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   version: Generated<number>;
 }
@@ -401,6 +432,7 @@ export interface InventoryHistory {
   reference_id: Int8 | null;
   reference_type: string | null;
   staff_id: number;
+  tenant_id: Generated<number>;
   total_cost: Numeric | null;
   unit_cost: Numeric | null;
 }
@@ -413,6 +445,7 @@ export interface InventoryReservations {
   order_id: Int8;
   quantity: number;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
 }
 
@@ -422,12 +455,14 @@ export interface Locations {
   id: Generated<number>;
   is_default_fulfillment: Generated<boolean>;
   name: string;
+  tenant_id: Generated<number>;
 }
 
 export interface LoyaltyAccounts {
   customer_id: number;
   lifetime_points: Generated<Numeric>;
   points_balance: Generated<Numeric>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
 }
 
@@ -437,6 +472,7 @@ export interface LoyaltyHistory {
   id: Generated<Int8>;
   points_delta: Numeric;
   reason: string;
+  tenant_id: Generated<number>;
   transaction_ref: string | null;
 }
 
@@ -447,12 +483,14 @@ export interface Merchants {
   id: Generated<number>;
   is_active: Generated<boolean>;
   name: string;
+  tenant_id: Generated<number>;
 }
 
 export interface NotificationReads {
   notification_id: Int8;
   read_at: Generated<Timestamp>;
   staff_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface Notifications {
@@ -468,6 +506,7 @@ export interface Notifications {
   severity: Generated<string>;
   target_roles: Generated<string[]>;
   target_staff_id: number | null;
+  tenant_id: Generated<number>;
   title: string;
 }
 
@@ -483,6 +522,7 @@ export interface OrderLineItems {
   qty_fulfilled: Generated<number>;
   qty_reserved: Generated<number>;
   quantity: number;
+  tenant_id: Generated<number>;
   total_price: Numeric;
   unit_cost: Numeric | null;
   unit_price: Numeric;
@@ -501,6 +541,7 @@ export interface OrderPayments {
   processed_at: Generated<Timestamp>;
   processed_by: number;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   transaction_reference: string | null;
 }
 
@@ -514,6 +555,7 @@ export interface OrderRefunds {
   processed_by: number;
   reason: string;
   refund_amount: Numeric;
+  tenant_id: Generated<number>;
 }
 
 export interface Orders {
@@ -536,6 +578,7 @@ export interface Orders {
   subtotal: Generated<Numeric>;
   tax_amount: Generated<Numeric>;
   tax_rate: Generated<Numeric>;
+  tenant_id: Generated<number>;
   total: Generated<Numeric>;
   updated_at: Generated<Timestamp>;
 }
@@ -547,6 +590,7 @@ export interface Outbox {
   payload: Json;
   published_at: Timestamp | null;
   status: Generated<string>;
+  tenant_id: Generated<number>;
 }
 
 export interface PoLineItems {
@@ -557,6 +601,7 @@ export interface PoLineItems {
   po_id: Int8;
   quantity: number;
   received_quantity: Generated<number>;
+  tenant_id: Generated<number>;
   unit_cost: Numeric;
 }
 
@@ -565,6 +610,7 @@ export interface PoReceiptItems {
   po_line_item_id: Int8;
   quantity_received: number;
   receipt_id: Int8;
+  tenant_id: Generated<number>;
 }
 
 export interface PoReceipts {
@@ -574,6 +620,7 @@ export interface PoReceipts {
   po_id: Int8;
   received_at: Generated<Timestamp>;
   received_by: number;
+  tenant_id: Generated<number>;
 }
 
 export interface Publishers {
@@ -583,6 +630,7 @@ export interface Publishers {
   id: Generated<number>;
   name: string;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number | null;
 }
@@ -605,6 +653,7 @@ export interface PurchaseOrders {
   receiving_location_id: number | null;
   status: Generated<string>;
   supplier_id: number;
+  tenant_id: Generated<number>;
   total_amount: Generated<Numeric>;
   updated_at: Generated<Timestamp>;
 }
@@ -627,6 +676,7 @@ export interface Receivables {
   source_ref_id: string;
   source_type: string;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   write_off_reason: string | null;
   written_off_amount: Numeric | null;
@@ -650,6 +700,7 @@ export interface Refunds {
   id: Generated<Int8>;
   method: string;
   return_id: Int8;
+  tenant_id: Generated<number>;
 }
 
 export interface ReturnLineItems {
@@ -660,6 +711,7 @@ export interface ReturnLineItems {
   line_refund_amount: Numeric;
   quantity: number;
   return_id: Int8;
+  tenant_id: Generated<number>;
   transaction_line_item_id: Int8;
   unit_price: Numeric;
 }
@@ -675,6 +727,7 @@ export interface Returns {
   refund_method: string;
   return_number: string;
   status: Generated<string>;
+  tenant_id: Generated<number>;
   total_refund_amount: Numeric;
   transaction_id: Int8;
 }
@@ -691,6 +744,7 @@ export interface Staff {
   must_change_password: Generated<boolean>;
   password_changed_at: Timestamp | null;
   password_hash: string;
+  tenant_id: Generated<number>;
   username: string;
 }
 
@@ -699,11 +753,13 @@ export interface StaffBranchRoles {
   id: Generated<number>;
   role: string;
   staff_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface StaffLocations {
   location_id: number;
   staff_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface StaffSessions {
@@ -714,11 +770,13 @@ export interface StaffSessions {
   revoked_at: Timestamp | null;
   revoked_reason: string | null;
   staff_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface StoreCreditAccounts {
   balance: Generated<Numeric>;
   customer_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface StoreCreditHistory {
@@ -729,6 +787,7 @@ export interface StoreCreditHistory {
   id: Generated<Int8>;
   ref_id: string | null;
   ref_type: string | null;
+  tenant_id: Generated<number>;
 }
 
 export interface SupplierCreditNotes {
@@ -741,6 +800,7 @@ export interface SupplierCreditNotes {
   po_id: Int8;
   reason: string;
   supplier_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface SupplierPayments {
@@ -759,6 +819,7 @@ export interface SupplierPayments {
   reversed_by: number | null;
   source: Generated<string>;
   supplier_id: number;
+  tenant_id: Generated<number>;
 }
 
 export interface Suppliers {
@@ -775,15 +836,24 @@ export interface Suppliers {
   publisher_id: number | null;
   status: Generated<string>;
   supplier_type: Generated<string>;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number | null;
 }
 
 export interface SystemConfig {
   key: string;
+  tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number;
   value: Json;
+}
+
+export interface Tenants {
+  created_at: Generated<Timestamp>;
+  id: Generated<number>;
+  name: string;
+  status: Generated<string>;
 }
 
 export interface TransactionLineItems {
@@ -795,6 +865,7 @@ export interface TransactionLineItems {
   id: Generated<Int8>;
   line_total: Numeric;
   quantity: number;
+  tenant_id: Generated<number>;
   transaction_id: Int8;
   unit_cost: Numeric | null;
   unit_price: Numeric;
@@ -807,6 +878,7 @@ export interface TransactionPayments {
   id: Generated<Int8>;
   method: string;
   reference: string | null;
+  tenant_id: Generated<number>;
   transaction_id: Int8;
 }
 
@@ -826,6 +898,7 @@ export interface Transactions {
   status: Generated<string>;
   subtotal: Numeric;
   tax_total: Generated<Numeric>;
+  tenant_id: Generated<number>;
   transaction_number: string;
 }
 
@@ -894,6 +967,7 @@ export interface DB {
   supplier_payments: SupplierPayments;
   suppliers: Suppliers;
   system_config: SystemConfig;
+  tenants: Tenants;
   transaction_line_items: TransactionLineItems;
   transaction_payments: TransactionPayments;
   transactions: Transactions;

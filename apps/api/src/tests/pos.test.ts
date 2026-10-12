@@ -447,7 +447,7 @@ describe('POS — Transactions', () => {
     const bookRes = await db.query(
       `INSERT INTO books (isbn, title, is_active, default_price)
        VALUES ('POS-TEST-INACTIVE', 'POS Test Inactive Book', false, 10.00)
-       ON CONFLICT (isbn) DO UPDATE SET is_active = false RETURNING id`,
+       ON CONFLICT (tenant_id, isbn) DO UPDATE SET is_active = false RETURNING id`,
     );
     const inactiveBookId = bookRes.rows[0].id as number;
 

@@ -179,7 +179,7 @@ describe('Catalog — Books', () => {
     await db.query(
       `INSERT INTO authors (name, normalized_name)
        VALUES ('TEST AUTHOR ONE', 'test author one')
-       ON CONFLICT (normalized_name) DO NOTHING`,
+       ON CONFLICT (tenant_id, normalized_name) DO NOTHING`,
     );
 
     const countAfter = await db.query(

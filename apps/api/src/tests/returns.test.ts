@@ -237,7 +237,7 @@ describe('Returns & Refunds', () => {
     const expBookRes = await db.query(
       `INSERT INTO books (isbn, title, is_active, default_price)
        VALUES ('RET-TEST-EXP', 'Expensive Returns Test Book', true, 9999.00)
-       ON CONFLICT (isbn) DO UPDATE SET default_price = 9999.00, is_active = true RETURNING id`,
+       ON CONFLICT (tenant_id, isbn) DO UPDATE SET default_price = 9999.00, is_active = true RETURNING id`,
     );
     const expBookId = expBookRes.rows[0].id as number;
     await ensureInventory(expBookId, locationId, 10);

@@ -55,7 +55,7 @@ export async function withIdempotency<T>(
   await db.query(
     `INSERT INTO idempotency_keys (key, endpoint, request_hash, response_payload)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (key) DO NOTHING`,
+     ON CONFLICT (tenant_id, key) DO NOTHING`,
     [key, endpoint, requestHash, JSON.stringify(result)],
   ).catch(() => {/* ignore storage failure — idempotency is best-effort */});
 

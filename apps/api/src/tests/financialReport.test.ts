@@ -95,7 +95,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     const custRes = await db.query(
       `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
        VALUES ($1, 'FRCUS-001', 'FinReport Test Customer', true, now())
-       ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
+       ON CONFLICT (tenant_id, customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [branchId],
     );

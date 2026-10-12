@@ -177,7 +177,7 @@ export async function findOrCreateByName(q: Queryable, table: 'authors' | 'categ
     await q
       .insertInto(table)
       .values({ name, normalized_name: normalized })
-      .onConflict((oc) => oc.column('normalized_name').doNothing())
+      .onConflict((oc) => oc.columns(['tenant_id', 'normalized_name']).doNothing())
       .execute();
     const row = await q
       .selectFrom(table)
