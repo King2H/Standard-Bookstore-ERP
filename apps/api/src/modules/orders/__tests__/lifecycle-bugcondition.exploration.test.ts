@@ -74,7 +74,7 @@ async function createCustomer(): Promise<number> {
   const r = await db.query(
     `INSERT INTO customers (full_name, customer_code, is_active)
      VALUES ('Bug Test Customer', 'BUG-TEST-001', true)
-     ON CONFLICT (customer_code) DO UPDATE SET full_name = EXCLUDED.full_name
+     ON CONFLICT (tenant_id, customer_code) DO UPDATE SET full_name = EXCLUDED.full_name
      RETURNING id`,
   );
   return r.rows[0].id as number;

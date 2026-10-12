@@ -96,7 +96,7 @@ describe('Export Integrity (Module 7)', () => {
     const custRes = await db.query(
       `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
        VALUES ($1, 'EXPCUS-001', 'Export Test Customer', true, now())
-       ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
+       ON CONFLICT (tenant_id, customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [branchId],
     );
@@ -129,7 +129,7 @@ describe('Export Integrity (Module 7)', () => {
          payment_status, created_by, created_at, updated_at
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          $4, $5, $6, $6, 0.00, 'paid', $7, now(), now())
-       ON CONFLICT (order_number) DO NOTHING
+       ON CONFLICT (tenant_id, order_number) DO NOTHING
        RETURNING id`,
       [`${ORDER_PREFIX}A`, customerId, branchId, ORDER_TOTAL, ORDER_SUBTOTAL, ORDER_DISCOUNT, staffId],
     );

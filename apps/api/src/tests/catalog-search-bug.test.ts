@@ -107,7 +107,7 @@ async function seedFillerBooks(count: number): Promise<void> {
     await db.query(
       `INSERT INTO books (isbn, title, is_active)
        VALUES ($1, $2, true)
-       ON CONFLICT (isbn) DO NOTHING`,
+       ON CONFLICT (tenant_id, isbn) DO NOTHING`,
       [isbn, `ZZZBUG1FILLER_${seqStr}_PaddingTitle`],
     );
   }
@@ -128,7 +128,7 @@ async function seedTargetBook(): Promise<number> {
   const pubResult = await db.query(
     `INSERT INTO publishers (name)
      VALUES ($1)
-     ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+     ON CONFLICT (tenant_id, name) DO UPDATE SET name = EXCLUDED.name
      RETURNING id`,
     [UNIQUE_PUBLISHER],
   );
@@ -138,7 +138,7 @@ async function seedTargetBook(): Promise<number> {
   const bookResult = await db.query(
     `INSERT INTO books (isbn, title, description, publisher, publisher_id, is_active)
      VALUES ($1, $2, $3, $4, $5, true)
-     ON CONFLICT (isbn) DO UPDATE SET
+     ON CONFLICT (tenant_id, isbn) DO UPDATE SET
        title       = EXCLUDED.title,
        description = EXCLUDED.description,
        publisher   = EXCLUDED.publisher,
@@ -462,7 +462,7 @@ describe('Bug 1 -- Catalog Search Preservation (Existing Search Fields Must Stil
     const authorRes = await db.query(
       `INSERT INTO authors (name, normalized_name)
        VALUES ($1, $2)
-       ON CONFLICT (normalized_name) DO UPDATE SET name = EXCLUDED.name
+       ON CONFLICT (tenant_id, normalized_name) DO UPDATE SET name = EXCLUDED.name
        RETURNING id`,
       [PRSV_AUTHOR, PRSV_AUTHOR.trim().toLowerCase()],
     );
@@ -472,7 +472,7 @@ describe('Bug 1 -- Catalog Search Preservation (Existing Search Fields Must Stil
     const bookRes = await db.query(
       `INSERT INTO books (isbn, sku, title, is_active)
        VALUES ($1, $2, $3, true)
-       ON CONFLICT (isbn) DO UPDATE SET
+       ON CONFLICT (tenant_id, isbn) DO UPDATE SET
          sku   = EXCLUDED.sku,
          title = EXCLUDED.title
        RETURNING id`,
@@ -755,7 +755,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
       await db.query(
         `INSERT INTO books (isbn, title, is_active)
          VALUES ($1, $2, true)
-         ON CONFLICT (isbn) DO NOTHING`,
+         ON CONFLICT (tenant_id, isbn) DO NOTHING`,
         [isbn, `ZZZBUG1FIXFILLER_${seqStr}_PaddingTitle`],
       );
     }
@@ -765,7 +765,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     const pubResult = await db.query(
       `INSERT INTO publishers (name)
        VALUES ($1)
-       ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+       ON CONFLICT (tenant_id, name) DO UPDATE SET name = EXCLUDED.name
        RETURNING id`,
       [FIX_UNIQUE_PUBLISHER],
     );
@@ -774,7 +774,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     await db.query(
       `INSERT INTO books (isbn, title, description, publisher, publisher_id, is_active)
        VALUES ($1, $2, $3, $4, $5, true)
-       ON CONFLICT (isbn) DO UPDATE SET
+       ON CONFLICT (tenant_id, isbn) DO UPDATE SET
          title        = EXCLUDED.title,
          description  = EXCLUDED.description,
          publisher    = EXCLUDED.publisher,

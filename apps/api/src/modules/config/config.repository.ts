@@ -48,7 +48,7 @@ export async function upsertSystem(
     .insertInto('system_config')
     .values({ key: entry.key, value: JSON.stringify(entry.value), updated_by: entry.updatedBy })
     .onConflict((oc) =>
-      oc.column('key').doUpdateSet((eb) => ({
+      oc.columns(['tenant_id', 'key']).doUpdateSet((eb) => ({
         value: eb.ref('excluded.value'),
         updated_by: eb.ref('excluded.updated_by'),
         updated_at: eb.fn('now'),

@@ -115,7 +115,7 @@ export async function ensureSeedData(): Promise<void> {
         ('J.R.R. Tolkien',          'j.r.r. tolkien'),
         ('Gabriel García Márquez',  'gabriel garcía márquez'),
         ('Aldous Huxley',           'aldous huxley')
-      ON CONFLICT (normalized_name) DO NOTHING
+      ON CONFLICT (tenant_id, normalized_name) DO NOTHING
     `);
 
     // Categories
@@ -128,7 +128,7 @@ export async function ensureSeedData(): Promise<void> {
         ('Dystopian',        'dystopian'),
         ('Literary Fiction', 'literary fiction'),
         ('Magical Realism',  'magical realism')
-      ON CONFLICT (normalized_name) DO NOTHING
+      ON CONFLICT (tenant_id, normalized_name) DO NOTHING
     `);
 
     // Books
@@ -143,7 +143,7 @@ export async function ensureSeedData(): Promise<void> {
         ('9780618640157', 'The Lord of the Rings',                   'Fantasy',        'Allen & Unwin',       'English', 'Hardcover', 29.99, 9.00, true),
         ('9780060883287', 'One Hundred Years of Solitude',           'Fiction',        'Harper & Row',        'English', 'Paperback', 13.99, 4.50, true),
         ('9780060850524', 'Brave New World',                         'Science Fiction','Chatto & Windus',     'English', 'Paperback', 11.99, 3.50, true)
-      ON CONFLICT (isbn) DO NOTHING
+      ON CONFLICT (tenant_id, isbn) DO NOTHING
     `);
 
     // Book–author links
@@ -202,7 +202,7 @@ export async function ensureSeedData(): Promise<void> {
       await client.query(
         `INSERT INTO system_config (key, value, updated_by)
          VALUES ($1, $2::jsonb, 1)
-         ON CONFLICT (key) DO NOTHING`,
+         ON CONFLICT (tenant_id, key) DO NOTHING`,
         [key, value],
       );
     }

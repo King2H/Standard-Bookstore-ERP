@@ -11,7 +11,7 @@ export async function nextDailyNumber(q: Queryable, series: string): Promise<str
   const { rows } = await sql<{ period: string; last_value: number }>`
     INSERT INTO document_counters (series, period, last_value)
     VALUES (${series}, TO_CHAR(CURRENT_DATE, 'YYYYMMDD'), 1)
-    ON CONFLICT (series, period) DO UPDATE SET last_value = document_counters.last_value + 1
+    ON CONFLICT (tenant_id, series, period) DO UPDATE SET last_value = document_counters.last_value + 1
     RETURNING period, last_value`.execute(q);
   return `${series}-${rows[0].period}-${String(rows[0].last_value).padStart(4, '0')}`;
 }
@@ -25,7 +25,7 @@ export async function nextRunningNumber(q: Queryable, series: string): Promise<n
   const { rows } = await sql<{ last_value: number }>`
     INSERT INTO document_counters (series, period, last_value)
     VALUES (${series}, '', 1)
-    ON CONFLICT (series, period) DO UPDATE SET last_value = document_counters.last_value + 1
+    ON CONFLICT (tenant_id, series, period) DO UPDATE SET last_value = document_counters.last_value + 1
     RETURNING last_value`.execute(q);
   return rows[0].last_value;
 }

@@ -98,7 +98,7 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
     const custRes = await db.query(
       `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
        VALUES ($1, 'BUG2CUS-001', 'Bug2 Test Customer', true, now())
-       ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
+       ON CONFLICT (tenant_id, customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [testBranchId],
     );
@@ -116,7 +116,7 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
        ) VALUES ($1, $2, $3, 'CONFIRMED', 'credit_sale',
          500.00, 500.00, 0.00, 0.00, 0.00,
          'unpaid', $4, now(), now())
-       ON CONFLICT (order_number) DO NOTHING`,
+       ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${ORDER_PREFIX}A`, testCustomerId, testBranchId, testStaffId],
     );
 
@@ -130,7 +130,7 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          400.00, 500.00, 100.00, 100.00, 0.00,
          'paid', $4, now(), now())
-       ON CONFLICT (order_number) DO NOTHING`,
+       ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${ORDER_PREFIX}B`, testCustomerId, testBranchId, testStaffId],
     );
 
@@ -144,7 +144,7 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          300.00, 300.00, 0.00, 0.00, 0.00,
          'paid', $4, now(), now())
-       ON CONFLICT (order_number) DO NOTHING`,
+       ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${ORDER_PREFIX}C`, testCustomerId, testBranchId, testStaffId],
     );
   });
@@ -442,7 +442,7 @@ describe('Bug 2 -- Profit Calculation Preservation (POS Revenue Must Remain Sepa
        VALUES ($1, $2, NULL, $3,
                $4, $5, 0.00, 0.00, $6,
                'ETB', 'completed', now())
-       ON CONFLICT (transaction_number) DO NOTHING`,
+       ON CONFLICT (tenant_id, transaction_number) DO NOTHING`,
       [
         bug2PosBranchId,
         bug2PosLocationId,
@@ -659,7 +659,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
     const custRes = await db.query(
       `INSERT INTO customers (branch_id, customer_code, full_name, is_active, created_at)
        VALUES ($1, 'BUG2FIX-001', 'Bug2 Fix Verification Customer', true, now())
-       ON CONFLICT (customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
+       ON CONFLICT (tenant_id, customer_code) DO UPDATE SET branch_id = EXCLUDED.branch_id
        RETURNING id`,
       [fixBranchId],
     );
@@ -676,7 +676,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
        ) VALUES ($1, $2, $3, 'CONFIRMED', 'credit_sale',
          500.00, 500.00, 0.00, 0.00, 0.00,
          'unpaid', $4, now(), now())
-       ON CONFLICT (order_number) DO NOTHING`,
+       ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${FIX_VERIFY_ORDER_PREFIX}A`, fixCustomerId, fixBranchId, fixStaffId],
     );
 
@@ -689,7 +689,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          400.00, 500.00, 100.00, 100.00, 0.00,
          'paid', $4, now(), now())
-       ON CONFLICT (order_number) DO NOTHING`,
+       ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${FIX_VERIFY_ORDER_PREFIX}B`, fixCustomerId, fixBranchId, fixStaffId],
     );
 
@@ -702,7 +702,7 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          300.00, 300.00, 0.00, 0.00, 0.00,
          'paid', $4, now(), now())
-       ON CONFLICT (order_number) DO NOTHING`,
+       ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${FIX_VERIFY_ORDER_PREFIX}C`, fixCustomerId, fixBranchId, fixStaffId],
     );
   });
