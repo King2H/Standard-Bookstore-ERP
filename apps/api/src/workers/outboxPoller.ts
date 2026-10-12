@@ -7,6 +7,7 @@
  * The outbox table provides guaranteed delivery even if the process crashes mid-write.
  */
 import { db } from '../db/index.js';
+import { forEachTenant } from '../db/tenants.js';
 import { handleLoyaltyAccrual } from './loyaltyWorker.js';
 import { handleNotification } from './notificationWorker.js';
 
@@ -137,7 +138,8 @@ export function startOutboxPoller(): void {
   const tick = async () => {
     if (!running) return;
     try {
-      await pollOnce();
+      // Each tenant's events, in that tenant, so handlers write to it.
+      await forEachTenant('Outbox poll', pollOnce);
     } catch {
       // ignore — next tick will retry
     }

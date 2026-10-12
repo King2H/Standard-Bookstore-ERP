@@ -15,6 +15,12 @@ if (!process.env.COLUMN_ENCRYPTION_KEY) {
   process.env.COLUMN_ENCRYPTION_KEY = '0000000000000000000000000000000000000000000000000000000000000001';
 }
 
+// Fixtures written straight to the database, outside any request, belong to
+// the default tenant (#13). Requests still work in their account's tenant;
+// tenant-context.test.ts checks the app without this fallback.
+const { setFallbackTenant } = await import('../db/tenantContext.js');
+setFallbackTenant(1);
+
 // Each test file gets a fresh module graph and therefore its own pg Pool.
 // Close it when the file finishes; otherwise idle pools from earlier files
 // pile up and the suite exceeds PostgreSQL's default max_connections (100).

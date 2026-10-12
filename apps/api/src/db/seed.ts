@@ -10,12 +10,21 @@
  * were already recorded as run. Startup seed always executes.
  */
 import { db } from './index.js';
+import { runInTenant } from './tenantContext.js';
 
 // bcrypt hash (cost 12) of the documented default password 'Admin@1234'.
 export const DEFAULT_ADMIN_PASSWORD_HASH =
   '$2b$12$eMHKfE9UzGhT5GvCtB6w4.6/WRde0aH6DzJzluzr0Vzp6KPVA64NK';
 
-export async function ensureSeedData(): Promise<void> {
+/** The tenant every install starts with, an on-premise install's only one (#13). */
+export const DEFAULT_TENANT_ID = 1;
+
+/** The seed data belongs to the default tenant. */
+export function ensureSeedData(): Promise<void> {
+  return runInTenant(DEFAULT_TENANT_ID, seedDefaultTenant);
+}
+
+async function seedDefaultTenant(): Promise<void> {
   const client = await db.connect();
   try {
     await client.query('BEGIN');

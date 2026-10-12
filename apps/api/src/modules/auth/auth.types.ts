@@ -34,6 +34,7 @@ export interface RefreshTokenRecord {
 
 /** What authenticate() needs on every request. */
 export interface SessionState {
+  tenantId: number;
   isActive: boolean;
   isAllBranches: boolean;
   mustChangePassword: boolean;

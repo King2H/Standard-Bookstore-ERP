@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import type { Role } from '@bms/shared';
+import { runInTenant } from '../db/tenantContext.js';
 import { AuthError, BranchAccessError, PasswordChangeRequiredError, ServiceUnavailableError } from '../lib/errors.js';
 import { getPermissionsForRoles } from '../lib/permissions.js';
 import { effectiveRoles } from '../modules/auth/auth.policy.js';
@@ -88,6 +89,8 @@ async function verify(
     branchId,
     permissions: getPermissionsForRoles(roles),
   };
-  req.scope = { staffId, branchId, allBranches: state.isAllBranches };
-  next();
+  req.scope = { tenantId: state.tenantId, staffId, branchId, allBranches: state.isAllBranches };
+  // The rest of the request works in the account's tenant (#13): every
+  // database connection it uses carries it.
+  runInTenant(state.tenantId, next);
 }

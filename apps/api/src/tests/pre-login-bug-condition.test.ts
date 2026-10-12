@@ -76,7 +76,8 @@ describe('Bug Condition: Pre-Login 500 Error & Missing Lockout', () => {
     const app = getTestApp();
 
     // Simulate a raw pg error thrown by db.query (e.g. ECONNREFUSED or query failure)
-    vi.spyOn(authRepository, 'findCredentials').mockRejectedValueOnce(
+    // on the first staff lookup, which finds the account's tenant (#13).
+    vi.spyOn(authRepository, 'tenantOfUsername').mockRejectedValueOnce(
       new Error('connection refused — simulated pg error'),
     );
 

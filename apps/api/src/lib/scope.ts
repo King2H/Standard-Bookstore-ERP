@@ -15,6 +15,7 @@ import { BranchAccessError, NotFoundError } from './errors.js';
  * (staff.is_all_branches) may read any branch.
  */
 export interface Scope {
+  tenantId: number;
   staffId: number;
   branchId: number;
   allBranches: boolean;
