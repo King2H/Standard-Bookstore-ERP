@@ -33,12 +33,13 @@ Claude is the implementer.
 Run from the repository root. The API and its tests need PostgreSQL and a `.env` (copy `.env.example`).
 Full setup guide (Windows): `docs/development.md`.
 In Claude Code on the web, `.claude/hooks/session-start.sh` prepares all of this automatically at session start:
-Node from `.nvmrc`, dependencies, and PostgreSQL 18 on `localhost:5433` with migrations applied (`DATABASE_URL` is exported).
+Node from `.nvmrc`, dependencies, and PostgreSQL 18 on `localhost:5433` with migrations applied (`DATABASE_URL` and `MIGRATION_DATABASE_URL` are exported).
 
 ```bash
 npm install                      # install all workspaces
 docker compose up -d postgres    # start only PostgreSQL 18 (host port 5433)
-npm run migrate                  # apply database migrations
+npm run migrate                  # apply database migrations (as the owner, MIGRATION_DATABASE_URL)
+npm run db:app-role              # create the API's database user (DATABASE_URL) after migrating
 npm run db:types                 # regenerate Kysely types after a migration (CI checks them)
 npm run dev:api                  # API on :3000
 npm run dev:web                  # web on :5173 (proxies /api)
@@ -55,7 +56,8 @@ PostgreSQL 18 for every PR to `main`. Run the same checks locally before asking 
 The Bank Accounts module is off unless `FEATURE_BANK_ACCOUNTS=true` (interim switch until feature flags, #27).
 
 `npm test` runs against its own database (`bms_test`, derived from `DATABASE_URL`, or `TEST_DATABASE_URL`),
-which it creates and migrates automatically. Its name must end in `_test`.
+which it creates and migrates automatically as the owner. Its name must end in `_test`. The tests work as the
+API's user, under row-level security; `tests/helpers/ownerDb.ts` is for fixtures across tenants.
 
 ## Architecture
 
@@ -99,6 +101,9 @@ The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/`
   regenerates `docs/api/openapi.json` (a test fails if it is stale). It is also served at `/api/v1/openapi.json`.
 - The API is served under `/api/v1`. `/api/...` is a deprecated alias (with `Deprecation` and `Link` headers)
   until the web app moves in M6; new code, tests and docs use `/api/v1`.
+- Tenancy (#13): every business table has `tenant_id` (a test checks) and row-level security. Work runs in a
+  tenant (`db/tenantContext.ts`): requests take it from the signed-in account, background jobs go through
+  `forEachTenant`. The API connects as its own user, never the owner, and refuses to start otherwise.
 - Never trust client-supplied scope: branch and tenant come from the authenticated context.
   Branch-owned reads take their branch from `scopedBranch(req)` (or `scopedBranchOrAll(req)` for cross-branch
   views such as reports) in `apps/api/src/lib/scope.ts`, never from `req.query.branchId` directly.

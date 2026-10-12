@@ -26,5 +26,7 @@ setFallbackTenant(1);
 // pile up and the suite exceeds PostgreSQL's default max_connections (100).
 afterAll(async () => {
   const { db } = await import('../db/index.js');
+  const { closeOwnerDb } = await import('./helpers/ownerDb.js');
   await db.end();
+  await closeOwnerDb();
 });

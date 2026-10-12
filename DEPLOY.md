@@ -172,7 +172,8 @@ Once connected to GitHub, every `git push` to `main` automatically:
 
 | Variable | Where | Required | Description |
 |----------|-------|----------|-------------|
-| `DATABASE_URL` | API | ✅ Yes | PostgreSQL connection string |
+| `DATABASE_URL` | API | ✅ Yes | PostgreSQL connection string of the API's own database user (not the owner): row-level security keeps tenants apart only for it, and the API refuses to start as the owner. The start script creates the user from this URL's name and password. |
+| `MIGRATION_DATABASE_URL` | API | ✅ Yes | PostgreSQL connection string of the database owner (Render's Internal Database URL): migrations and creating the API's user run as it. |
 | `JWT_SECRET` | API | ✅ Yes | Secret for signing JWTs (keep secret!) |
 | `COLUMN_ENCRYPTION_KEY` | API | ✅ Yes | 64-char hex key for AES-256-GCM encryption |
 | `NODE_ENV` | API | ✅ Yes | Set to `production` |

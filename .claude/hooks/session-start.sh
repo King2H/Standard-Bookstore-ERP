@@ -21,7 +21,10 @@ PG_PACKAGE_VERSION="18.4.0-beta.17"   # @embedded-postgres/linux-x64: official P
 PG_HOME="/opt/bms-dev/postgres-18"   # outside $HOME: the postgres user must be able to read it
 PG_DATA="/var/tmp/bms-pg18-data"
 PG_LOG="/var/tmp/bms-pg18.log"
-DATABASE_URL="postgres://bms:bms@localhost:${PG_PORT}/bms"
+# The owner runs migrations; the API works as its own user, under row-level
+# security (#13).
+MIGRATION_DATABASE_URL="postgres://bms:bms@localhost:${PG_PORT}/bms"
+DATABASE_URL="postgres://bms_api:bms_api@localhost:${PG_PORT}/bms"
 
 mkdir -p "$CACHE_DIR"
 
@@ -113,11 +116,14 @@ fi
 ' "$PG_PORT")
 
 # ── Schema ───────────────────────────────────────────────────────────────────
-(cd "$PROJECT_DIR/apps/api" && DATABASE_URL="$DATABASE_URL" npx node-pg-migrate up \
-  --database-url-var DATABASE_URL --migrations-dir src/db/migrations >/dev/null)
+(cd "$PROJECT_DIR/apps/api" && MIGRATION_DATABASE_URL="$MIGRATION_DATABASE_URL" npx node-pg-migrate up \
+  --database-url-var MIGRATION_DATABASE_URL --migrations-dir src/db/migrations >/dev/null)
+(cd "$PROJECT_DIR/apps/api" && DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$MIGRATION_DATABASE_URL" \
+  npx tsx scripts/app-role.ts >/dev/null)
 
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export DATABASE_URL=\"${DATABASE_URL}\"" >> "$CLAUDE_ENV_FILE"
+  echo "export MIGRATION_DATABASE_URL=\"${MIGRATION_DATABASE_URL}\"" >> "$CLAUDE_ENV_FILE"
 fi
 
 PG_VERSION="$("${PG_HOME}/bin/postgres" --version | awk '{print $NF}')"

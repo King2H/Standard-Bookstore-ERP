@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import { BranchListResponseSchema, BranchSchema, PublicBranchListResponseSchema } from '@bms/shared';
+import { BranchListResponseSchema, BranchSchema } from '@bms/shared';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
@@ -49,9 +49,6 @@ describe('Branches on the shared contracts', () => {
   afterAll(cleanUp);
 
   it('answers in the shape of the shared schemas', async () => {
-    const pub = await api().get('/api/v1/branches/public');
-    expect(PublicBranchListResponseSchema.strict().parse(pub.body)).toEqual(pub.body);
-
     const list = await as(api().get(`/api/v1/branches?isActive=true&pageSize=100`), managerOfA);
     expect(BranchListResponseSchema.strict().parse(list.body)).toEqual(list.body);
 

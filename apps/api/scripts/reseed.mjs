@@ -11,7 +11,9 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, '../../../.env') });
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+// Maintenance across every tenant: as the database owner, which row-level
+// security does not limit (#13).
+const pool = new pg.Pool({ connectionString: process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL });
 
 async function reseed() {
   const client = await pool.connect();

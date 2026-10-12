@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
 import { db } from '../db/index.js';
+import { ownerDb } from './helpers/ownerDb.js';
 import * as ordersService from '../modules/orders/orders.service.js';
 import type { StaffCtx } from '../modules/orders/orders.service.js';
 
@@ -75,16 +76,17 @@ describe('Orders: one Unit of Work per use case', () => {
     const orderId = await draftCreditOrder();
     const before = await stockOf();
 
-    // Make the last step of confirm() fail: the receivable insert.
-    await db.query(`CREATE FUNCTION uow_test_fail_receivable() RETURNS trigger LANGUAGE plpgsql AS
+    // Make the last step of confirm() fail: the receivable insert. Only the
+    // owner may add a trigger.
+    await ownerDb().query(`CREATE FUNCTION uow_test_fail_receivable() RETURNS trigger LANGUAGE plpgsql AS
       $$ BEGIN RAISE EXCEPTION 'receivable refused by test'; END $$`);
-    await db.query(`CREATE TRIGGER uow_test_fail_receivable BEFORE INSERT ON receivables
+    await ownerDb().query(`CREATE TRIGGER uow_test_fail_receivable BEFORE INSERT ON receivables
       FOR EACH ROW EXECUTE FUNCTION uow_test_fail_receivable()`);
     try {
       await expect(ordersService.confirm(orderId, staff, '2999-12-31')).rejects.toThrow('receivable refused by test');
     } finally {
-      await db.query(`DROP TRIGGER uow_test_fail_receivable ON receivables`);
-      await db.query(`DROP FUNCTION uow_test_fail_receivable()`);
+      await ownerDb().query(`DROP TRIGGER uow_test_fail_receivable ON receivables`);
+      await ownerDb().query(`DROP FUNCTION uow_test_fail_receivable()`);
     }
 
     expect(await stockOf()).toBe(before);

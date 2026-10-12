@@ -53,3 +53,17 @@ export async function checkDbConnection(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Why the API must not run as the user DATABASE_URL names, or undefined if it
+ * may. Row-level security (#13) does not apply to a superuser, to a role that
+ * bypasses it, or to the tables' owner, so the API refuses to start as one of
+ * them: tenants would not be kept apart. Migrations run as the owner through
+ * MIGRATION_DATABASE_URL instead.
+ */
+export async function appRoleProblem(): Promise<string | undefined> {
+  const { rows } = await db.query<{ user: string; applies: boolean }>(
+    `SELECT current_user AS user, row_security_active('branches') AS applies`,
+  );
+  return rows[0].applies ? undefined : `row-level security does not apply to database user "${rows[0].user}"`;
+}

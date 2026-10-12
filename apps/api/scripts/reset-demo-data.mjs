@@ -35,7 +35,9 @@ config({ path: resolve(__dirname, '../../../.env') });
 const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE   = process.argv.includes('--force');
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+// Maintenance across every tenant: as the database owner, which row-level
+// security does not limit (#13).
+const pool = new pg.Pool({ connectionString: process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL });
 
 // ── Tables we will NEVER delete from ─────────────────────────────────────────
 const PRESERVED_TABLES = new Set([

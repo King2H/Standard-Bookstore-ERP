@@ -8,22 +8,19 @@ import type { RefreshTokenRecord, RevokeReason, RoleAssignment, SessionState, St
 /**
  * The tenant of the account with this username, if any. Usernames are unique
  * across tenants (#13, decision 3a), so sign-in finds the tenant first and
- * does the rest of its work in it.
+ * does the rest of its work in it. Row-level security hides every tenant's
+ * rows until then, so this goes through a database function that sees only
+ * this (migration 070).
  */
 export async function tenantOfUsername(q: Queryable, username: string): Promise<number | undefined> {
-  const row = await q.selectFrom('staff').select('tenant_id').where(sql`lower(username)`, '=', username.toLowerCase()).executeTakeFirst();
-  return row?.tenant_id;
+  const { rows } = await sql<{ tenant_id: number | null }>`SELECT auth_tenant_of_username(${username}) AS tenant_id`.execute(q);
+  return rows[0].tenant_id ?? undefined;
 }
 
-/** The tenant of the session a refresh token belongs to, if any. */
+/** The tenant of the session a refresh token belongs to, if any (a database function, as above). */
 export async function tenantOfRefreshToken(q: Queryable, tokenHash: string): Promise<number | undefined> {
-  const row = await q
-    .selectFrom('refresh_tokens as rt')
-    .innerJoin('staff_sessions as ss', 'ss.id', 'rt.session_id')
-    .select('ss.tenant_id')
-    .where('rt.token_hash', '=', tokenHash)
-    .executeTakeFirst();
-  return row?.tenant_id;
+  const { rows } = await sql<{ tenant_id: number | null }>`SELECT auth_tenant_of_refresh_token(${tokenHash}) AS tenant_id`.execute(q);
+  return rows[0].tenant_id ?? undefined;
 }
 
 export async function findCredentials(q: Queryable, username: string): Promise<StaffCredentials | undefined> {

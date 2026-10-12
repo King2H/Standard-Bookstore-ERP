@@ -16,6 +16,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { db } from '../db/index.js';
+import { ownerDb } from './helpers/ownerDb.js';
 import { getPermissionsForRoles, ROLE_PERMISSIONS, Permission } from '../lib/permissions.js';
 import { cleanTestStaff, cleanTestBranches } from './helpers/testDb.js';
 import { createTestStaff, createTestBranch } from './helpers/seed.js';
@@ -396,7 +397,8 @@ describe('P4 — Financial traceability', () => {
   });
 
   it('financial_transactions table has the idempotency_key UNIQUE constraint', async () => {
-    const result = await db.query(
+    // information_schema shows constraint columns to the table owner only.
+    const result = await ownerDb().query(
       `SELECT COUNT(*) AS cnt
        FROM information_schema.table_constraints tc
        JOIN information_schema.constraint_column_usage ccu

@@ -23,12 +23,6 @@ export type BranchListQuery = z.infer<typeof BranchListQuerySchema>;
 export const BranchListResponseSchema = PaginatedSchema(BranchSchema);
 export type BranchListResponse = z.infer<typeof BranchListResponseSchema>;
 
-/** Active branches for the sign-in page: no token needed, so only id and name. */
-export const PublicBranchListResponseSchema = z.object({
-  items: z.array(z.object({ id: z.number().int(), name: z.string() })),
-});
-export type PublicBranchListResponse = z.infer<typeof PublicBranchListResponseSchema>;
-
 const ContactInfoSchema = z.object({ phone: z.string().optional(), email: z.string().optional() });
 
 export const DEFAULT_OPERATING_HOURS: Record<string, string> = {
