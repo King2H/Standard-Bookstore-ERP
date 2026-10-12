@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import type { ProfileResponse } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
-import { runInTenant } from '../../db/tenantContext.js';
+import { runInTenant, runWithoutTenant } from '../../db/tenantContext.js';
 import { withTransaction } from '../../db/tx.js';
 import { AuthError, BranchAccessError, BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
@@ -42,7 +42,7 @@ function invalidCredentials(): AuthError {
  * check, as a wrong password.
  */
 async function tenantSigningIn(username: string, password: string): Promise<number> {
-  const tenantId = await repo.tenantOfUsername(kysely, username);
+  const tenantId = await runWithoutTenant('finding the tenant of an account signing in', () => repo.tenantOfUsername(kysely, username));
   if (tenantId === undefined) {
     await bcrypt.compare(password, NO_SUCH_STAFF_HASH);
     throw invalidCredentials();
@@ -156,7 +156,9 @@ function tokenRevoked(): AuthError {
  * session (owner decision 1a).
  */
 export async function refresh(refreshToken: string): Promise<IssuedTokens> {
-  const tenantId = await repo.tenantOfRefreshToken(kysely, hashRefreshToken(refreshToken));
+  const tenantId = await runWithoutTenant('finding the tenant of a refresh token', () =>
+    repo.tenantOfRefreshToken(kysely, hashRefreshToken(refreshToken)),
+  );
   if (tenantId === undefined) throw tokenRevoked();
   return runInTenant(tenantId, () => rotate(tenantId, refreshToken));
 }

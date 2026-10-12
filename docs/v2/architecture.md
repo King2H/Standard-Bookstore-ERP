@@ -151,23 +151,28 @@ branch-owned rows also carry a branch.
 
 1. **Scope comes from the authenticated context**, never from client input. A single scope
    middleware turns the access token into `ctx = { tenantId, branchId, staffId, permissions }`.
-2. **Repositories require scope.** Every repository function for a tenant- or branch-owned
-   table takes the scope as a parameter. A query without scope cannot be written.
+2. **The tenant travels with the connection; the branch is a parameter.** Work runs in a
+   tenant (a request in the signed-in account's, a background job in the one `forEachTenant`
+   gives it), and the database pool hands every connection that tenant as `app.tenant_id`.
+   Work with no tenant gets no connection unless it names why it needs none
+   (`runWithoutTenant`). Repository functions for branch-owned tables take the branch as a
+   parameter (ADR-0012).
 3. **The database enforces it as well.** Row-level security policies on business tables
-   check `current_setting('app.tenant_id')`, which the Unit of Work sets for every
-   transaction. A missed filter in code still cannot leak another tenant's data.
+   check `current_setting('app.tenant_id')`. The API connects as its own user, which they
+   apply to, and refuses to start as the owner. A missed filter in code still cannot leak
+   another tenant's data.
 4. **On-premise installs have exactly one tenant.** The same code and the same row-level
    security policies apply in every deployment (owner decision, 2026-10-03), so there is one
    code path to test and secure.
 
-This replaces v1's per-endpoint filtering, which caused #12. Details: ADR on hybrid tenancy (#10, #13).
+This replaces v1's per-endpoint filtering, which caused #12. Details: ADR-0003 and ADR-0012 (#13).
 
 ---
 
 ## 6. Transactions and consistency
 
-- **Unit of Work:** `withTransaction(ctx, async (tx) => …)` opens one transaction, sets
-  the tenant for row-level security, and passes `tx` to every repository involved. A sale that
+- **Unit of Work:** `withTransaction(ctx, async (tx) => …)` opens one transaction, on a
+  connection that carries the work's tenant, and passes `tx` to every repository involved. A sale that
   touches orders, inventory and receivables commits or rolls back as a whole (#14).
 - **`Queryable`:** repositories accept either the pool or a transaction, so the same function
   works inside and outside a Unit of Work.

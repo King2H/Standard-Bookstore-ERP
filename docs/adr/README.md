@@ -15,7 +15,7 @@ The overall design they belong to is in [`../v2/architecture.md`](../v2/architec
 |---|---|---|---|
 | [0001](0001-layered-modular-monolith.md) | Layered architecture in a modular monolith | Accepted | 2026-10-03 |
 | [0002](0002-kysely-for-data-access.md) | Kysely for data access, no ORM | Accepted | 2026-10-03 |
-| [0003](0003-hybrid-tenancy-with-row-level-security.md) | Hybrid tenancy with `tenant_id` and row-level security in all deployments | Accepted | 2026-10-03 |
+| [0003](0003-hybrid-tenancy-with-row-level-security.md) | Hybrid tenancy with `tenant_id` and row-level security in all deployments | Accepted; rule 4 superseded by 0012 | 2026-10-03 |
 | [0004](0004-shared-contracts-and-api-versioning.md) | Shared zod contracts, OpenAPI and `/api/v1` | Accepted | 2026-10-03 |
 | [0005](0005-unit-of-work-and-outbox.md) | Unit of Work and transactional outbox | Accepted | 2026-10-03 |
 | [0006](0006-configuration-hierarchy.md) | Configuration hierarchy: system → tenant → branch → user | Accepted | 2026-10-03 |
@@ -24,3 +24,4 @@ The overall design they belong to is in [`../v2/architecture.md`](../v2/architec
 | [0009](0009-nodejs-24-lts.md) | Node.js 24 LTS | Accepted | 2026-10-03 |
 | [0010](0010-configurable-tax-default-zero.md) | Configurable tax per tenant, default 0% | Accepted | 2026-10-03 |
 | [0011](0011-react-19-vite-before-web-migration.md) | React 19, current Vite and React Router before the web migration | Accepted | 2026-10-03 |
+| [0012](0012-tenant-scope-carried-by-the-connection.md) | The tenant scope travels with the database connection | Accepted | 2026-10-12 |
