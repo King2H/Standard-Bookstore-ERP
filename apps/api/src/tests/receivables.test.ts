@@ -88,7 +88,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
 
   async function collect(id: string, body: Record<string, unknown>, token = managerToken) {
     return request(getTestApp())
-      .post(`/api/receivables/${id}/collect`)
+      .post(`/api/v1/receivables/${id}/collect`)
       .set('Authorization', `Bearer ${token}`)
       .set('X-Branch-Id', String(branchId))
       .send(body);
@@ -99,7 +99,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
   it('1. Collecting against an order_credit_sale receivable routes through createPayment (order_payments + receivable both update)', async () => {
     await ensureInventory(book.id, locationId, 20);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId: book.id, quantity: 2 }] });
@@ -107,7 +107,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     const orderId = createRes.body.id;
     const orderTotal = Number(createRes.body.total);
 
-    await request(getTestApp()).post(`/api/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ dueDate: '2099-12-31' });
+    await request(getTestApp()).post(`/api/v1/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ dueDate: '2099-12-31' });
 
     const recRes = await db.query(`SELECT id FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id = $1`, [orderId]);
     expect(recRes.rows.length).toBe(1);
@@ -128,7 +128,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
   it('2. Collecting against a pos_credit_sale receivable routes through recordPayment (transaction_payments + receivable both update)', async () => {
     await ensureInventory(book.id, locationId, 20);
     const txRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, customerId, items: [{ bookId: book.id, quantity: 1 }], payments: [], allowCredit: true });
@@ -159,7 +159,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
   it('2b. Collecting against a pos_credit_sale receivable via Telebirr (mobile) succeeds', async () => {
     await ensureInventory(book.id, locationId, 20);
     const txRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, customerId, items: [{ bookId: book.id, quantity: 1 }], payments: [], allowCredit: true });
@@ -188,7 +188,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     await ensureInventory(book.id, locationId, 20);
     await ensureInventory(book2.id, locationId, 20);
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -275,7 +275,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     const dateFrom = new Date(Date.now() - 60_000).toISOString().slice(0, 10);
 
     const before = await request(getTestApp())
-      .get(`/api/reports/payments?branchId=${branchId}&dateFrom=${dateFrom}`)
+      .get(`/api/v1/reports/payments?branchId=${branchId}&dateFrom=${dateFrom}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     const collectedBefore = Number(before.body.summary.totalCollected);
@@ -283,7 +283,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     await collect(receivableId, { amount: netBalance, paymentMethod: 'cash' });
 
     const after = await request(getTestApp())
-      .get(`/api/reports/payments?branchId=${branchId}&dateFrom=${dateFrom}`)
+      .get(`/api/v1/reports/payments?branchId=${branchId}&dateFrom=${dateFrom}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(Number(after.body.summary.totalCollected)).toBeCloseTo(collectedBefore + netBalance, 2);
@@ -295,14 +295,14 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     const { receivableId } = await createCustomerPaysExchange();
 
     const salesRes = await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/write-off`)
+      .post(`/api/v1/receivables/${receivableId}/write-off`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'trying to write off' });
     expect(salesRes.status).toBe(403);
 
     const mgrRes = await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/write-off`)
+      .post(`/api/v1/receivables/${receivableId}/write-off`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'bad debt write-off' });
@@ -314,7 +314,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     const { receivableId } = await createCustomerPaysExchange();
 
     await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/write-off`)
+      .post(`/api/v1/receivables/${receivableId}/write-off`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'write-off, no payment' });
@@ -347,7 +347,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
   it("12. Receivables aging report buckets a 45-day-overdue receivable into '31-60' and reconciles byBucket totals", async () => {
     await ensureInventory(book.id, locationId, 20);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId: book.id, quantity: 1 }] });
@@ -359,7 +359,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     // confirm with a valid future date, then backdate the resulting
     // receivable directly, simulating one that's since gone overdue.
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -372,7 +372,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     );
 
     const agingRes = await request(getTestApp())
-      .get(`/api/reports/receivables-aging?branchId=${branchId}`)
+      .get(`/api/v1/reports/receivables-aging?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(agingRes.status).toBe(200);

@@ -98,7 +98,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
 
   async function createAuthor(name: string) {
     const res = await request(getTestApp())
-      .post('/api/authors')
+      .post('/api/v1/authors')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ name });
@@ -111,7 +111,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
   it('1. Delete unused author succeeds', async () => {
     const id = await createAuthor(`${NAME_PREFIX} Unused Author`);
     const res = await request(getTestApp())
-      .delete(`/api/authors/${id}`)
+      .delete(`/api/v1/authors/${id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(res.status).toBe(200);
@@ -128,7 +128,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
     );
 
     const res = await request(getTestApp())
-      .delete(`/api/authors/${authorId}`)
+      .delete(`/api/v1/authors/${authorId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(res.status).toBe(409);
@@ -144,14 +144,14 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
     const id = await createAuthor(`${NAME_PREFIX} To Archive`);
 
     const archiveRes = await request(getTestApp())
-      .post(`/api/authors/${id}/archive`)
+      .post(`/api/v1/authors/${id}/archive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(archiveRes.status).toBe(200);
 
     // Default dropdown fetch (no ?status=) — active-only, must not include it.
     const dropdownRes = await request(getTestApp())
-      .get(`/api/authors?pageSize=200`)
+      .get(`/api/v1/authors?pageSize=200`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(dropdownRes.status).toBe(200);
@@ -159,7 +159,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
 
     // Explicit ?status=archived — must include it.
     const archivedRes = await request(getTestApp())
-      .get(`/api/authors?status=archived&pageSize=200`)
+      .get(`/api/v1/authors?status=archived&pageSize=200`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(archivedRes.body.items.some((a: { id: number }) => a.id === id)).toBe(true);
@@ -169,7 +169,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
 
   it('4. Inactive publisher cannot be selected for new book', async () => {
     const pubRes = await request(getTestApp())
-      .post('/api/publishers')
+      .post('/api/v1/publishers')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ name: `${NAME_PREFIX} Inactive Publisher` });
@@ -177,13 +177,13 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
     const publisherId = pubRes.body.id as number;
 
     const deactivateRes = await request(getTestApp())
-      .post(`/api/publishers/${publisherId}/deactivate`)
+      .post(`/api/v1/publishers/${publisherId}/deactivate`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(deactivateRes.status).toBe(200);
 
     const bookRes = await request(getTestApp())
-      .post('/api/books')
+      .post('/api/v1/books')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -201,7 +201,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
 
   it('5-8. Archived book disappears from POS/procurement search, historical order still shows it, restore makes it searchable again', async () => {
     const bookRes = await request(getTestApp())
-      .post('/api/books')
+      .post('/api/v1/books')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -224,7 +224,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
     // Create a credit-sale order referencing the book BEFORE archiving —
     // this is the "historical invoice" for test 7.
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId, quantity: 1 }] });
@@ -234,28 +234,28 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
 
     // Sanity: while ACTIVE, both search surfaces find it.
     const posSearchBefore = await request(getTestApp())
-      .get(`/api/books/with-availability?q=${encodeURIComponent(bookTitle)}&locationId=${locationId}`)
+      .get(`/api/v1/books/with-availability?q=${encodeURIComponent(bookTitle)}&locationId=${locationId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(posSearchBefore.body.items.some((b: { id: number }) => b.id === bookId)).toBe(true);
 
     // ── Archive ──
     const archiveRes = await request(getTestApp())
-      .post(`/api/books/${bookId}/archive`)
+      .post(`/api/v1/books/${bookId}/archive`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(archiveRes.status).toBe(200);
 
     // 5. Disappears from POS search (/books/with-availability, active-only default).
     const posSearchAfter = await request(getTestApp())
-      .get(`/api/books/with-availability?q=${encodeURIComponent(bookTitle)}&locationId=${locationId}`)
+      .get(`/api/v1/books/with-availability?q=${encodeURIComponent(bookTitle)}&locationId=${locationId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(posSearchAfter.body.items.some((b: { id: number }) => b.id === bookId)).toBe(false);
 
     // 6. Disappears from procurement search (/catalog/search, no branch/location context).
     const procSearchAfter = await request(getTestApp())
-      .get(`/api/catalog/search?q=${encodeURIComponent(bookTitle)}`)
+      .get(`/api/v1/catalog/search?q=${encodeURIComponent(bookTitle)}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(procSearchAfter.status).toBe(200);
@@ -263,7 +263,7 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
 
     // 7. Historical invoice (the order created before archiving) still shows the book.
     const orderDetailRes = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderDetailRes.status).toBe(200);
@@ -273,13 +273,13 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
 
     // 8. Restore makes it searchable again.
     const restoreRes = await request(getTestApp())
-      .post(`/api/books/${bookId}/restore`)
+      .post(`/api/v1/books/${bookId}/restore`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(restoreRes.status).toBe(200);
 
     const posSearchRestored = await request(getTestApp())
-      .get(`/api/books/with-availability?q=${encodeURIComponent(bookTitle)}&locationId=${locationId}`)
+      .get(`/api/v1/books/with-availability?q=${encodeURIComponent(bookTitle)}&locationId=${locationId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(posSearchRestored.body.items.some((b: { id: number }) => b.id === bookId)).toBe(true);
@@ -292,12 +292,12 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
     const inactiveId = await createAuthor(`${NAME_PREFIX} StatusInactive`);
     const archivedId = await createAuthor(`${NAME_PREFIX} StatusArchived`);
 
-    await request(getTestApp()).post(`/api/authors/${inactiveId}/deactivate`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
-    await request(getTestApp()).post(`/api/authors/${archivedId}/archive`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/authors/${inactiveId}/deactivate`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/authors/${archivedId}/archive`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
 
     async function fetchStatus(status: string): Promise<number[]> {
       const res = await request(getTestApp())
-        .get(`/api/authors?status=${status}&q=${encodeURIComponent(NAME_PREFIX + ' Status')}&pageSize=200`)
+        .get(`/api/v1/authors?status=${status}&q=${encodeURIComponent(NAME_PREFIX + ' Status')}&pageSize=200`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
       return res.body.items.map((a: { id: number }) => a.id);
@@ -316,11 +316,11 @@ describe('Master Data Lifecycle (Prompt 3)', () => {
   it('10. Audit log records ARCHIVE and RESTORE actions with the correct entity/user/timestamp', async () => {
     const id = await createAuthor(`${NAME_PREFIX} Audit Author`);
 
-    await request(getTestApp()).post(`/api/authors/${id}/archive`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
-    await request(getTestApp()).post(`/api/authors/${id}/restore`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/authors/${id}/archive`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/authors/${id}/restore`).set('Authorization', `Bearer ${adminToken}`).set('X-Branch-Id', String(branchId));
 
     const res = await request(getTestApp())
-      .get(`/api/audit-logs?entityType=author&pageSize=100`)
+      .get(`/api/v1/audit-logs?entityType=author&pageSize=100`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(res.status).toBe(200);

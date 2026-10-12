@@ -91,7 +91,7 @@ describe('Orders — Lifecycle', () => {
 
   it('1. Create order → status=Pending, correct totals, ETB currency', async () => {
     const res = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, channel: 'in_store', items: [{ bookId, quantity: 2 }] });
@@ -110,7 +110,7 @@ describe('Orders — Lifecycle', () => {
   it('2. Confirm order → soft reservation created; inventory.quantity UNCHANGED', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 3 }] });
@@ -121,7 +121,7 @@ describe('Orders — Lifecycle', () => {
     const qtyBefore = invBefore.rows[0].quantity as number;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -140,7 +140,7 @@ describe('Orders — Lifecycle', () => {
   it('3. cash_sale: confirm deducts stock immediately; fulfill does not deduct again', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 2 }] });
@@ -152,7 +152,7 @@ describe('Orders — Lifecycle', () => {
     // Confirm — deducts inventory immediately via stockOut() (order-payment-
     // unification spec, 3.5); also sets payment_status='paid' for cash_sale.
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -162,7 +162,7 @@ describe('Orders — Lifecycle', () => {
     // POST /api/payments rejects cash_sale orders (paid automatically at
     // confirm; payments.service.ts "Bug 2" guard) — fulfill directly.
     const fulfillRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -179,7 +179,7 @@ describe('Orders — Lifecycle', () => {
   it('4. Cancel confirmed order → reservation released; inventory.quantity UNCHANGED (no stockIn)', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 2 }] });
@@ -189,7 +189,7 @@ describe('Orders — Lifecycle', () => {
     const qtyBeforeConfirm = invBefore.rows[0].quantity as number;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -198,7 +198,7 @@ describe('Orders — Lifecycle', () => {
     expect(invAfterConfirm.rows[0].quantity).toBe(qtyBeforeConfirm - 2);
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Customer changed mind' });
@@ -217,7 +217,7 @@ describe('Orders — Lifecycle', () => {
   it('5. Cannot cancel COMPLETED order → 422 ORDER_ALREADY_FULFILLED', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
@@ -225,12 +225,12 @@ describe('Orders — Lifecycle', () => {
     const orderTotal = createRes.body.total as number;
 
     // confirm → pay → fulfill
-    await request(getTestApp()).post(`/api/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
-    await request(getTestApp()).post('/api/payments').set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ orderId: Number(orderId), amount: orderTotal, paymentMethod: 'cash' });
-    await request(getTestApp()).post(`/api/orders/${orderId}/fulfill`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post(`/api/v1/orders/${orderId}/confirm`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
+    await request(getTestApp()).post('/api/v1/payments').set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId)).send({ orderId: Number(orderId), amount: orderTotal, paymentMethod: 'cash' });
+    await request(getTestApp()).post(`/api/v1/orders/${orderId}/fulfill`).set('Authorization', `Bearer ${managerToken}`).set('X-Branch-Id', String(branchId));
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Too late' });
@@ -243,14 +243,14 @@ describe('Orders — Lifecycle', () => {
 
   it('6. Invalid state transition (fulfill Pending) → 422 INVALID_STATE', async () => {
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
     const orderId = createRes.body.id;
 
     const res = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -270,7 +270,7 @@ describe('Orders — Lifecycle', () => {
     await db.query(`UPDATE inventory SET quantity = 0, version = 0 WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 5 }] });
@@ -285,7 +285,7 @@ describe('Orders — Lifecycle', () => {
     await ensureInventory(bookId, locationId, 5);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 5 }] });
@@ -297,7 +297,7 @@ describe('Orders — Lifecycle', () => {
     await db.query(`UPDATE inventory SET quantity = 0, version = version + 1 WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -306,7 +306,7 @@ describe('Orders — Lifecycle', () => {
 
     // Order status must remain DRAFT (transaction was rolled back)
     const orderAfter = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderAfter.body.status).toBe('DRAFT');
@@ -318,7 +318,7 @@ describe('Orders — Lifecycle', () => {
 
   it('8. GET /api/orders → returns paginated list', async () => {
     const res = await request(getTestApp())
-      .get(`/api/orders?branchId=${branchId}`)
+      .get(`/api/v1/orders?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -333,14 +333,14 @@ describe('Orders — Lifecycle', () => {
   it('9. Confirm cash_sale with paymentMethod=bank → persisted on order_payments and surfaced on GET', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
     const orderId = createRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ paymentMethod: 'bank' });
@@ -354,7 +354,7 @@ describe('Orders — Lifecycle', () => {
     expect(payRow.rows[0].status).toBe('success');
 
     const getRes = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(getRes.body.paymentMethod).toBe('bank');
@@ -363,14 +363,14 @@ describe('Orders — Lifecycle', () => {
   it('9b. Confirm cash_sale with no paymentMethod → defaults to cash (backward compatible)', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
     const orderId = createRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -381,14 +381,14 @@ describe('Orders — Lifecycle', () => {
   it('9c. Confirm cash_sale with an invalid paymentMethod → 400 ValidationError', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 1 }] });
     const orderId = createRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ paymentMethod: 'card' }); // 'card' is a valid order_payments value but not one of this ticket's 4 options
@@ -401,7 +401,7 @@ describe('Orders — Lifecycle', () => {
     await db.query(`INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 500) ON CONFLICT (customer_id) DO UPDATE SET balance = 500`, [customerId]);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ customerId, locationId, items: [{ bookId, quantity: 1 }] });
@@ -409,7 +409,7 @@ describe('Orders — Lifecycle', () => {
     const orderTotal = Number(createRes.body.total);
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ paymentMethod: 'store_credit' });
@@ -434,14 +434,14 @@ describe('Orders — Lifecycle', () => {
     await db.query(`INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0.5) ON CONFLICT (customer_id) DO UPDATE SET balance = 0.5`, [customerId]);
 
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ customerId, locationId, items: [{ bookId, quantity: 1 }] });
     const orderId = createRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ paymentMethod: 'store_credit' });
@@ -453,7 +453,7 @@ describe('Orders — Lifecycle', () => {
     expect(parseFloat(balRes.rows[0].balance as string)).toBeCloseTo(0.5, 2);
 
     const orderAfter = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderAfter.body.status).toBe('DRAFT');
@@ -464,14 +464,14 @@ describe('Orders — Lifecycle', () => {
   it('10. Confirm credit_sale with a past due date → 400 ValidationError; order stays DRAFT', async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ customerId, locationId, saleType: 'credit_sale', items: [{ bookId, quantity: 1 }] });
     const orderId = createRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2020-01-01' });
@@ -479,7 +479,7 @@ describe('Orders — Lifecycle', () => {
     expect(confirmRes.status).toBe(400);
 
     const orderAfter = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderAfter.body.status).toBe('DRAFT');
@@ -488,7 +488,7 @@ describe('Orders — Lifecycle', () => {
   it("10b. Confirm credit_sale with today's date as due date → accepted; dueDate surfaced on GET and receivable", async () => {
     await ensureInventory(bookId, locationId, 50);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ customerId, locationId, saleType: 'credit_sale', items: [{ bookId, quantity: 1 }] });
@@ -498,7 +498,7 @@ describe('Orders — Lifecycle', () => {
     const today = todayRes.rows[0].today as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: today });
@@ -518,7 +518,7 @@ describe('Orders — Lifecycle', () => {
   it('11. Create order for quantity exactly at available stock → succeeds', async () => {
     await ensureInventory(bookId, locationId, 3);
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: 3 }] });

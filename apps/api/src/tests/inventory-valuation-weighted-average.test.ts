@@ -31,7 +31,7 @@ const createdBookIds: number[] = [];
 
 async function createBook(title: string): Promise<number> {
   const res = await request(getTestApp())
-    .post('/api/books')
+    .post('/api/v1/books')
     .set('Authorization', `Bearer ${adminToken}`)
     .send({ title, authors: ['Test Author'], defaultPrice: 20.0 });
   expect(res.status).toBe(201);
@@ -42,7 +42,7 @@ async function createBook(title: string): Promise<number> {
 
 async function createAndReceivePO(bookId: number, quantity: number, unitCost: number): Promise<void> {
   const createRes = await request(getTestApp())
-    .post('/api/purchase-orders')
+    .post('/api/v1/purchase-orders')
     .set('Authorization', `Bearer ${adminToken}`)
     .set('X-Branch-Id', String(branchId))
     .send({
@@ -55,22 +55,22 @@ async function createAndReceivePO(bookId: number, quantity: number, unitCost: nu
   const lineItemId = Number(createRes.body.lineItems[0].id);
 
   await request(getTestApp())
-    .post(`/api/purchase-orders/${poId}/submit`)
+    .post(`/api/v1/purchase-orders/${poId}/submit`)
     .set('Authorization', `Bearer ${adminToken}`)
     .set('X-Branch-Id', String(branchId));
 
   await request(getTestApp())
-    .post(`/api/purchase-orders/${poId}/approve`)
+    .post(`/api/v1/purchase-orders/${poId}/approve`)
     .set('Authorization', `Bearer ${managerToken}`)
     .set('X-Branch-Id', String(branchId));
 
   await request(getTestApp())
-    .post(`/api/purchase-orders/${poId}/order`)
+    .post(`/api/v1/purchase-orders/${poId}/order`)
     .set('Authorization', `Bearer ${adminToken}`)
     .set('X-Branch-Id', String(branchId));
 
   const receiveRes = await request(getTestApp())
-    .post(`/api/purchase-orders/${poId}/receive`)
+    .post(`/api/v1/purchase-orders/${poId}/receive`)
     .set('Authorization', `Bearer ${adminToken}`)
     .set('X-Branch-Id', String(branchId))
     .send({ locationId, items: [{ poLineItemId: lineItemId, quantityReceived: quantity }] });
@@ -82,7 +82,7 @@ async function sellUnits(bookId: number, quantity: number): Promise<{ txId: stri
   const price = parseFloat(priceRes.rows[0].default_price as string);
   const amount = parseFloat((price * quantity).toFixed(2));
   const res = await request(getTestApp())
-    .post('/api/pos/transactions')
+    .post('/api/v1/pos/transactions')
     .set('Authorization', `Bearer ${adminToken}`)
     .set('X-Branch-Id', String(branchId))
     .send({
@@ -267,7 +267,7 @@ describe('Inventory Valuation, Returns, Exchanges & Procurement Accounting Stand
     const invBeforeReturn = await getInventoryRow(bookId);
 
     const returnRes = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -301,7 +301,7 @@ describe('Inventory Valuation, Returns, Exchanges & Procurement Accounting Stand
     await setBranchPrice(bookId, branchId, 80);
 
     const exchangeRes = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -324,7 +324,7 @@ describe('Inventory Valuation, Returns, Exchanges & Procurement Accounting Stand
     const invBefore = await getInventoryRow(bookId);
 
     const patchRes = await request(getTestApp())
-      .put(`/api/books/${bookId}`)
+      .put(`/api/v1/books/${bookId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ defaultPrice: 999.99 });
     expect(patchRes.status).toBe(200);
@@ -345,7 +345,7 @@ describe('Inventory Valuation, Returns, Exchanges & Procurement Accounting Stand
 
     // Catalog price change (selling price, not cost)
     await request(getTestApp())
-      .put(`/api/books/${bookId}`)
+      .put(`/api/v1/books/${bookId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ defaultPrice: 5000 });
 

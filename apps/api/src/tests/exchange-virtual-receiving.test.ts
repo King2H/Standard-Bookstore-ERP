@@ -98,7 +98,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('1. Sales can quick-register a new catalog book (title only) — metadata only, no inventory row', async () => {
     const res = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ title: 'A Never-Procured Book' });
@@ -115,7 +115,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('2. Quick-register accepts ISBN, Author, and Base List Price', async () => {
     const res = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ isbn: '9780306406157', title: 'Quick Add With Details', author: 'Jane Trader', defaultPrice: 25.5 });
@@ -129,7 +129,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('3. Quick-register without a title → 400 ValidationError', async () => {
     const res = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ isbn: '9780306406157' });
@@ -139,7 +139,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('4. A role without CREATE_SALE (Stock_Clerk) cannot quick-register → 403', async () => {
     const res = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${stockClerkToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ title: 'Should Not Be Created' });
@@ -151,7 +151,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('5. Incoming exchange item with a zero allowance → 400 ValidationError; no inventory change', async () => {
     const regRes = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ title: 'Zero Allowance Book' });
@@ -159,7 +159,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     const bookId = regRes.body.id as number;
 
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, incomingItems: [{ bookId, quantity: 1, unitPrice: 0 }], outgoingItems: [] });
@@ -174,7 +174,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('6. Exchanging in a never-procured book: catalog register → exchange in with an allowance → inventory increases with that unit cost, tagged customer_exchange', async () => {
     const regRes = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ title: 'Trade-In Novel', author: 'Some Author' });
@@ -189,7 +189,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
     const ALLOWANCE = 12.5;
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, customerId, incomingItems: [{ bookId, quantity: 3, unitPrice: ALLOWANCE }], outgoingItems: [] });
@@ -225,7 +225,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('7. Reselling the never-procured book now carries a real purchase_cost in the Sales Export (never $0 for a never-procured book)', async () => {
     const regRes = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ title: 'Resold Trade-In Novel', defaultPrice: 40 });
@@ -234,14 +234,14 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
     const ALLOWANCE = 8;
     const excRes = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, customerId, incomingItems: [{ bookId, quantity: 5, unitPrice: ALLOWANCE }], outgoingItems: [] });
     expect(excRes.status).toBe(201);
 
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 1 }] });
@@ -250,13 +250,13 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     const orderNumber = orderRes.body.orderNumber as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ paymentMethod: 'cash' });
     expect(confirmRes.status).toBe(200);
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -271,7 +271,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('7b. A trade-in book is not double-counted as a loss: the exchange leg nets to $0 profit, and the ENTIRE margin lands on the eventual resale (financialReport.service.ts / Unified engine, mapExchangeRow)', async () => {
     const regRes = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ title: 'Full-Lifecycle Trade-In Novel', defaultPrice: 25 });
@@ -284,7 +284,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     // Leg 1: pure buy-back — customer trades in the book for an $8 allowance,
     // takes nothing in return (no outgoingItems).
     const excRes = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, customerId, incomingItems: [{ bookId, quantity: 1, unitPrice: ALLOWANCE }], outgoingItems: [] });
@@ -302,7 +302,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
     // Leg 2: the book is later resold at full price.
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 1, unitPrice: RESALE_PRICE }] });
@@ -310,12 +310,12 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     const orderId = orderRes.body.id as string;
     const orderNumber = orderRes.body.orderNumber as string;
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ paymentMethod: 'cash' });
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -336,7 +336,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
   it('7c. A DAMAGED trade-in has no future resale to defer to — its full allowance is a real loss recognized immediately', async () => {
     const regRes = await request(getTestApp())
-      .post('/api/books/quick-register')
+      .post('/api/v1/books/quick-register')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ title: 'Damaged Trade-In Novel' });
@@ -347,7 +347,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
     // Quick Exchange marks an incoming book damaged (owner decision 1a); the
     // book has no price yet, so a Manager values it, and the store pays cash.
     const res = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -375,7 +375,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
   describe('inventoryService.receiveStock() unitCost', () => {
     it('8. rejects a zero/negative unitCost when explicitly provided', async () => {
       const regRes = await request(getTestApp())
-        .post('/api/books/quick-register')
+        .post('/api/v1/books/quick-register')
         .set('Authorization', `Bearer ${salesToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ title: 'StockIn Unit Test Book' });
@@ -396,7 +396,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
 
     it('9. a stockIn() with no unitCost (the default for every other caller) still works and leaves unit_cost NULL', async () => {
       const regRes = await request(getTestApp())
-        .post('/api/books/quick-register')
+        .post('/api/v1/books/quick-register')
         .set('Authorization', `Bearer ${salesToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ title: 'StockIn No-Cost Test Book' });

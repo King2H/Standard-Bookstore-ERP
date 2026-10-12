@@ -57,7 +57,7 @@ async function createTestCustomer(branchId: number): Promise<number> {
 // cash_sale.
 async function createTestOrder(token: string, branchId: number, locationId: number, bookId: number, customerId: number): Promise<{ id: string; total: number }> {
   const res = await request(getTestApp())
-    .post('/api/orders')
+    .post('/api/v1/orders')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ locationId, channel: 'in_store', saleType: 'credit_sale', customerId, items: [{ bookId, quantity: 2 }] });
@@ -116,7 +116,7 @@ describe('Payments — Order Payment Management', () => {
     const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const res = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: order.total, paymentMethod: 'cash' });
@@ -139,7 +139,7 @@ describe('Payments — Order Payment Management', () => {
     const partialAmount = parseFloat((order.total / 2).toFixed(2));
 
     const res = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: partialAmount, paymentMethod: 'cash' });
@@ -156,7 +156,7 @@ describe('Payments — Order Payment Management', () => {
     const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const res = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: order.total + 1000, paymentMethod: 'cash' });
@@ -171,7 +171,7 @@ describe('Payments — Order Payment Management', () => {
     const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const payRes = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: order.total, paymentMethod: 'cash' });
@@ -179,7 +179,7 @@ describe('Payments — Order Payment Management', () => {
     const paymentId = payRes.body.id;
 
     const refundRes = await request(getTestApp())
-      .post(`/api/payments/${paymentId}/refund`)
+      .post(`/api/v1/payments/${paymentId}/refund`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ refundAmount: order.total, reason: 'Customer returned all items' });
@@ -202,14 +202,14 @@ describe('Payments — Order Payment Management', () => {
     const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     const payRes = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: order.total, paymentMethod: 'cash' });
     const paymentId = payRes.body.id;
 
     const refundRes = await request(getTestApp())
-      .post(`/api/payments/${paymentId}/refund`)
+      .post(`/api/v1/payments/${paymentId}/refund`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ refundAmount: order.total + 500, reason: 'Too much' });
@@ -225,13 +225,13 @@ describe('Payments — Order Payment Management', () => {
     const partialAmount = parseFloat((order.total * 0.6).toFixed(2));
 
     await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: partialAmount, paymentMethod: 'mobile' });
 
     const balRes = await request(getTestApp())
-      .get(`/api/orders/${order.id}/balance`)
+      .get(`/api/v1/orders/${order.id}/balance`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -248,13 +248,13 @@ describe('Payments — Order Payment Management', () => {
     const order = await createTestOrder(salesToken, branchId, locationId, bookId, customerId);
 
     await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: order.total, paymentMethod: 'mobile' });
 
     const listRes = await request(getTestApp())
-      .get(`/api/orders/${order.id}/payments`)
+      .get(`/api/v1/orders/${order.id}/payments`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -272,13 +272,13 @@ describe('Payments — Order Payment Management', () => {
     const remainder = parseFloat((order.total - half).toFixed(2));
 
     await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: half, paymentMethod: 'cash' });
 
     const res2 = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId: parseInt(order.id), amount: remainder, paymentMethod: 'mobile' });
@@ -372,7 +372,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
 
   it('9. Unpaid Orders includes an order_credit_sale order, sourceType=order', async () => {
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, channel: 'in_store', saleType: 'credit_sale', customerId, items: [{ bookId: book1.id, quantity: 1 }] });
@@ -382,14 +382,14 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     // until confirmed) -- confirm it so it actually shows up, same as a real
     // credit sale would before it's collectible.
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderRes.body.id}/confirm`)
+      .post(`/api/v1/orders/${orderRes.body.id}/confirm`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
     expect(confirmRes.status).toBe(200);
 
     const res = await request(getTestApp())
-      .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
+      .get(`/api/v1/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
     expect(res.status).toBe(200);
     const row = res.body.items.find((i: UnpaidRow) => i.id === orderRes.body.id && i.sourceType === 'order');
@@ -399,14 +399,14 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
 
   it('10. Unpaid Orders includes a pos_credit_sale transaction, sourceType=pos', async () => {
     const txRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, customerId, items: [{ bookId: book1.id, quantity: 1 }], payments: [], allowCredit: true });
     expect(txRes.status).toBe(201);
 
     const res = await request(getTestApp())
-      .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
+      .get(`/api/v1/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
     const row = res.body.items.find((i: UnpaidRow) => i.id === txRes.body.id && i.sourceType === 'pos');
     expect(row).toBeDefined();
@@ -417,7 +417,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     await setBranchPrice(book1.id, branchId, 50);
     await setBranchPrice(book2.id, branchId, 150);
     const excRes = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -437,7 +437,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     const receivableId = String(recRes.rows[0].id);
 
     const res = await request(getTestApp())
-      .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
+      .get(`/api/v1/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
     const row = res.body.items.find((i: UnpaidRow) => i.id === receivableId && i.sourceType === 'exchange_difference');
     expect(row).toBeDefined();
@@ -448,7 +448,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
 
     // ── 11b. entityId + sourceType deep-link filter narrows to exactly this row ──
     const filtered = await request(getTestApp())
-      .get(`/api/payments/unpaid-orders?branchId=${branchId}&entityId=${receivableId}&sourceType=exchange_difference`)
+      .get(`/api/v1/payments/unpaid-orders?branchId=${branchId}&entityId=${receivableId}&sourceType=exchange_difference`)
       .set('Authorization', `Bearer ${salesToken}`);
     expect(filtered.status).toBe(200);
     expect(filtered.body.items).toHaveLength(1);
@@ -459,7 +459,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     // branch calls) settles the receivable and drops it out of Unpaid Orders,
     // and the payment shows up in Payment History tagged sourceType=exchange.
     const collectRes = await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/collect`)
+      .post(`/api/v1/receivables/${receivableId}/collect`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 100, paymentMethod: 'cash' });
@@ -468,12 +468,12 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     expect(Number(collectRes.body.outstandingAmount)).toBeCloseTo(0, 2);
 
     const afterCollect = await request(getTestApp())
-      .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
+      .get(`/api/v1/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
     expect(afterCollect.body.items.some((i: UnpaidRow) => i.id === receivableId && i.sourceType === 'exchange_difference')).toBe(false);
 
     const historyRes = await request(getTestApp())
-      .get(`/api/payments?pageSize=100`)
+      .get(`/api/v1/payments?pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
     expect(historyRes.status).toBe(200);
     const historyRow = historyRes.body.items.find((p: { entityNumber?: string }) => p.entityNumber === excRes.body.exchangeReference);
@@ -486,7 +486,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     await setBranchPrice(book1.id, branchId, 20);
     await setBranchPrice(book2.id, branchId, 120);
     const excRes = await request(getTestApp())
-      .post('/api/exchanges')
+      .post('/api/v1/exchanges')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -504,7 +504,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     const receivableId = String(recRes.rows[0].id);
 
     const collectRes = await request(getTestApp())
-      .post(`/api/receivables/${receivableId}/collect`)
+      .post(`/api/v1/receivables/${receivableId}/collect`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ amount: 40, paymentMethod: 'cash' });
@@ -513,7 +513,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     expect(Number(collectRes.body.outstandingAmount)).toBeCloseTo(60, 2);
 
     const res = await request(getTestApp())
-      .get(`/api/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
+      .get(`/api/v1/payments/unpaid-orders?branchId=${branchId}&pageSize=100`)
       .set('Authorization', `Bearer ${salesToken}`);
     const row = res.body.items.find((i: UnpaidRow) => i.id === receivableId && i.sourceType === 'exchange_difference');
     expect(row).toBeDefined();

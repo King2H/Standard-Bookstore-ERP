@@ -28,7 +28,7 @@ describe('Auth — POST /api/auth/login', () => {
 
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ username: 'auth_test_user', password: 'Test@12345', branchId });
 
     expect(res.status).toBe(200);
@@ -42,7 +42,7 @@ describe('Auth — POST /api/auth/login', () => {
 
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ username: 'auth_test_wrong_pw', password: 'WrongPassword!', branchId });
 
     expect(res.status).toBe(401);
@@ -52,7 +52,7 @@ describe('Auth — POST /api/auth/login', () => {
   it('returns 401 on unknown username', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ username: 'auth_test_nonexistent_xyz', password: 'Test@12345', branchId });
 
     expect(res.status).toBe(401);
@@ -64,7 +64,7 @@ describe('Auth — POST /api/auth/login', () => {
 
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ username: 'auth_test_wrong_branch', password: 'Test@12345', branchId: 99999 });
 
     expect(res.status).toBe(401);
@@ -77,11 +77,11 @@ describe('Auth — POST /api/auth/login', () => {
 
     const app = getTestApp();
     await request(app)
-      .post(`/api/staff/${staffId}/deactivate`)
+      .post(`/api/v1/staff/${staffId}/deactivate`)
       .set('Authorization', `Bearer ${token}`);
 
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ username: 'auth_test_inactive', password: 'Test@12345', branchId });
 
     expect(res.status).toBe(401);
@@ -109,7 +109,7 @@ describe('Auth — RBAC enforcement', () => {
 
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/staff')
+      .get('/api/v1/staff')
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(403);
@@ -121,7 +121,7 @@ describe('Auth — RBAC enforcement', () => {
 
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/staff')
+      .get('/api/v1/staff')
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
@@ -130,7 +130,7 @@ describe('Auth — RBAC enforcement', () => {
 
   it('unauthenticated request returns 401', async () => {
     const app = getTestApp();
-    const res = await request(app).get('/api/staff');
+    const res = await request(app).get('/api/v1/staff');
     expect(res.status).toBe(401);
   });
 });

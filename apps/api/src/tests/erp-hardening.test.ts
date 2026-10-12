@@ -157,7 +157,7 @@ describe('P1 — Order status monotonicity', () => {
 
     // Create order (DRAFT)
     const createRes = await request(app)
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ branchId, items: [{ bookId, quantity: 1 }] });
     expect(createRes.status).toBe(201);
@@ -166,7 +166,7 @@ describe('P1 — Order status monotonicity', () => {
 
     // Confirm (DRAFT → CONFIRMED)
     const confirmRes = await request(app)
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send();
     if (confirmRes.status === 200) {
@@ -177,7 +177,7 @@ describe('P1 — Order status monotonicity', () => {
 
     // Pay (CONFIRMED → PAID)
     const payRes = await request(app)
-      .post(`/api/orders/${orderId}/pay`)
+      .post(`/api/v1/orders/${orderId}/pay`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ amount: bookPrice, method: 'cash' });
     if (payRes.status === 200) {
@@ -188,7 +188,7 @@ describe('P1 — Order status monotonicity', () => {
 
     // Fulfill (PAID → FULFILLED/COMPLETED)
     const fulfillRes = await request(app)
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ locationId });
     if (fulfillRes.status === 200) {
@@ -200,20 +200,20 @@ describe('P1 — Order status monotonicity', () => {
   it('attempting to re-confirm a CONFIRMED order returns 409 or 400 (no regression)', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ branchId, items: [{ bookId, quantity: 1 }] });
     expect(createRes.status).toBe(201);
     const orderId = createRes.body.id as string;
 
     await request(app)
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send();
 
     // Second confirm must fail
     const secondConfirm = await request(app)
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send();
     expect([400, 409, 422]).toContain(secondConfirm.status);
@@ -249,14 +249,14 @@ describe('P2 — Inventory conservation', () => {
 
     // Confirm an order for 1 unit
     const createRes = await request(app)
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ branchId, items: [{ bookId, quantity: 1 }] });
     expect(createRes.status).toBe(201);
     const orderId = createRes.body.id as string;
 
     const confirmRes = await request(app)
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send();
 
@@ -285,19 +285,19 @@ describe('P2 — Inventory conservation', () => {
     const availableBefore = parseInt(stockBefore.rows[0]?.available ?? '0', 10);
 
     const createRes = await request(app)
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ branchId, items: [{ bookId, quantity: 1 }] });
     expect(createRes.status).toBe(201);
     const orderId = createRes.body.id as string;
 
     await request(app)
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send();
 
     await request(app)
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ reason: 'PBT test cancel' });
 
@@ -425,7 +425,7 @@ describe('P5 — Idempotency', () => {
     // Create an order to reference
     const app = getTestApp();
     const createRes = await request(app)
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ branchId, items: [{ bookId, quantity: 1 }] });
     expect(createRes.status).toBe(201);
@@ -556,14 +556,14 @@ describe('P7 — Reservation availability', () => {
     const orderIds: string[] = [];
     for (let i = 0; i < testQty; i++) {
       const createRes = await request(app)
-        .post('/api/orders')
+        .post('/api/v1/orders')
         .set('Authorization', `Bearer ${managerToken}`)
         .send({ branchId, items: [{ bookId, quantity: 1 }] });
       expect(createRes.status).toBe(201);
       orderIds.push(createRes.body.id as string);
 
       const confirmRes = await request(app)
-        .post(`/api/orders/${orderIds[i]}/confirm`)
+        .post(`/api/v1/orders/${orderIds[i]}/confirm`)
         .set('Authorization', `Bearer ${managerToken}`)
         .send();
       expect(confirmRes.status).toBe(200);
@@ -581,12 +581,12 @@ describe('P7 — Reservation availability', () => {
 
     // One more confirmation attempt should fail (no stock)
     const overflowCreate = await request(app)
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ branchId, items: [{ bookId, quantity: 1 }] });
     if (overflowCreate.status === 201) {
       const overflowConfirm = await request(app)
-        .post(`/api/orders/${overflowCreate.body.id}/confirm`)
+        .post(`/api/v1/orders/${overflowCreate.body.id}/confirm`)
         .set('Authorization', `Bearer ${managerToken}`)
         .send();
       // Must fail — cannot reserve more than available

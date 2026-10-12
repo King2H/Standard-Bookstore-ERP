@@ -35,7 +35,7 @@ describe('Reports — Slice 16', () => {
 
   it('1. GET /api/reports/sales → returns summary + byPeriod + byBranch', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/sales')
+      .get('/api/v1/reports/sales')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -54,7 +54,7 @@ describe('Reports — Slice 16', () => {
 
   it('2. GET /api/reports/payments → returns summary + byMethod + byPeriod', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/payments')
+      .get('/api/v1/reports/payments')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -72,7 +72,7 @@ describe('Reports — Slice 16', () => {
 
   it('3. GET /api/reports/exchanges → returns summary + bySettlementType + byPeriod', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/exchanges')
+      .get('/api/v1/reports/exchanges')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -90,7 +90,7 @@ describe('Reports — Slice 16', () => {
 
   it('4. GET /api/reports/inventory → returns summary + lowStockItems + topSellingBooks + stockMovement', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/inventory')
+      .get('/api/v1/reports/inventory')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -109,7 +109,7 @@ describe('Reports — Slice 16', () => {
 
   it('5. GET /api/reports/customers → returns summary + topCustomers + byPeriod', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/customers')
+      .get('/api/v1/reports/customers')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -127,7 +127,7 @@ describe('Reports — Slice 16', () => {
 
   it('6. GET /api/reports/kpis → returns all KPI fields', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/kpis')
+      .get('/api/v1/reports/kpis')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -148,7 +148,7 @@ describe('Reports — Slice 16', () => {
 
   it('7. groupBy=month returns period strings', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/sales?groupBy=month')
+      .get('/api/v1/reports/sales?groupBy=month')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -161,7 +161,7 @@ describe('Reports — Slice 16', () => {
 
   it('8. Sales role → 403 on all report endpoints', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/kpis')
+      .get('/api/v1/reports/kpis')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -172,7 +172,7 @@ describe('Reports — Slice 16', () => {
 
   it('9. Future date range returns empty data gracefully', async () => {
     const res = await request(getTestApp())
-      .get('/api/reports/sales?dateFrom=2099-01-01&dateTo=2099-12-31')
+      .get('/api/v1/reports/sales?dateFrom=2099-01-01&dateTo=2099-12-31')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -186,7 +186,7 @@ describe('Reports — Slice 16', () => {
 
   it('10. branchId filter returns scoped inventory report', async () => {
     const res = await request(getTestApp())
-      .get(`/api/reports/inventory?branchId=${branchId}`)
+      .get(`/api/v1/reports/inventory?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 

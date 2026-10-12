@@ -69,7 +69,7 @@ describe('requireRole() — multi-role union fix', () => {
     const token = await signMultiRoleToken(staffId, 'Sales', ['Sales', 'Stock_Clerk', 'Purchasor'], branchId);
 
     const res = await request(getTestApp())
-      .post('/api/suppliers')
+      .post('/api/v1/suppliers')
       .set('Authorization', `Bearer ${token}`)
       .set('X-Branch-Id', String(branchId))
       .send({ name: 'RR MultiRole Test Supplier', supplierType: 'external', contactInfo: { phone: '555-0000' } });
@@ -84,7 +84,7 @@ describe('requireRole() — multi-role union fix', () => {
     const token = await signMultiRoleToken(staffId, 'Sales', ['Sales'], branchId);
 
     const res = await request(getTestApp())
-      .post('/api/suppliers')
+      .post('/api/v1/suppliers')
       .set('Authorization', `Bearer ${token}`)
       .set('X-Branch-Id', String(branchId))
       .send({ name: 'Should Not Be Created', supplierType: 'external', contactInfo: { phone: '555-0000' } });
@@ -98,7 +98,7 @@ describe('requireRole() — multi-role union fix', () => {
     const token = await signTestToken(staffId, branchId, ['Sales']);
 
     const res = await request(getTestApp())
-      .post('/api/suppliers')
+      .post('/api/v1/suppliers')
       .set('Authorization', `Bearer ${token}`)
       .set('X-Branch-Id', String(branchId))
       .send({ name: 'RR Legacy Token Test Supplier', supplierType: 'external', contactInfo: { phone: '555-0000' } });
@@ -112,7 +112,7 @@ describe('requireRole() — multi-role union fix', () => {
     const token = jwt.sign({ staffId, role: 'Admin', branchId }, process.env.JWT_SECRET!, { expiresIn: '15m' });
 
     const res = await request(getTestApp())
-      .post('/api/suppliers')
+      .post('/api/v1/suppliers')
       .set('Authorization', `Bearer ${token}`)
       .set('X-Branch-Id', String(branchId))
       .send({ name: 'Should Not Be Created 2', supplierType: 'external', contactInfo: { phone: '555-0000' } });

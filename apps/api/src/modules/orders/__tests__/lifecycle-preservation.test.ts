@@ -247,7 +247,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // Create a DRAFT order — do NOT confirm it
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId, quantity: ORDER_QTY }] });
@@ -299,7 +299,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // ── Step 1: Create a CASH order and confirm it ────────────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -314,7 +314,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     // Record a payment so the cash order can be confirmed (cash_sale needs paid status)
     // Actually confirm() handles payment_status internally for cash_sale — just confirm.
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -334,7 +334,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // ── Step 3: Attempt to cancel the now-FULFILLED order via API ─────────────
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Test cancel of fulfilled order' });
@@ -386,7 +386,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // ── Step 1: Create a CASH order with sufficient stock ────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -407,7 +407,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     // is confirmed below). ────────────────────────────────────────────────────
     const OVER_QTY = INITIAL_QTY;
     const overCreateRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -420,7 +420,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // ── Step 2: Confirm the first order — should succeed ─────────────────────
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -430,7 +430,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // ── Assertion 1: order is now CONFIRMED ──────────────────────────────────
     const orderRes = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderRes.status).toBe(200);
@@ -444,7 +444,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     // INITIAL_QTY) must now fail at its own confirm.
     // requirement 3.13: confirm() SHALL CONTINUE TO enforce hard stock rejection
     const overConfirmRes = await request(getTestApp())
-      .post(`/api/orders/${overOrderId}/confirm`)
+      .post(`/api/v1/orders/${overOrderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -480,7 +480,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // Create a POS transaction with full cash payment
     const saleRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -615,7 +615,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     const posTotal = parseFloat((bookPrice * POS_QTY).toFixed(2));
 
     const posSaleRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -649,7 +649,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     // ── Step 3: Create a separate CREDIT order ────────────────────────────────
     await setInventory(bookId, locationId, INITIAL_QTY); // refresh stock for order
     const orderCreateRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -665,7 +665,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // ── Step 4: Confirm the CREDIT order ─────────────────────────────────────
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -678,7 +678,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     const partialPayment = parseFloat((orderTotal * 0.5).toFixed(2)); // pay half
 
     const payRes = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -757,7 +757,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     // We use cash_sale to avoid the CREDIT_REQUIRES_CUSTOMER guard. The KPI
     // formula being validated is sale-type-agnostic: available = quantity - reserved.
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -772,7 +772,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
 
     // ── Step 2: Confirm the order — creates a soft reservation ───────────────
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -813,7 +813,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     // under the hood, which uses the same formula. Any "Dashboard KPI" for available
     // stock must use this same formula.
     const availRes = await request(getTestApp())
-      .get(`/api/inventory/book/${bookId}/location/${locationId}`)
+      .get(`/api/v1/inventory/book/${bookId}/location/${locationId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 

@@ -38,7 +38,7 @@ describe('Branches', () => {
   it('Admin can create a branch', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/branches')
+      .post('/api/v1/branches')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         name: 'Branch Test New',
@@ -63,7 +63,7 @@ describe('Branches', () => {
   it('Sales role cannot create a branch (403)', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/branches')
+      .post('/api/v1/branches')
       .set('Authorization', `Bearer ${salesToken}`)
       .send({
         name: 'Branch Test Unauthorized',
@@ -78,12 +78,12 @@ describe('Branches', () => {
   it('Duplicate branch name returns 409', async () => {
     const app = getTestApp();
     await request(app)
-      .post('/api/branches')
+      .post('/api/v1/branches')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Branch Test Duplicate', address: '1 Dup St', contactInfo: {}, operatingHours: {} });
 
     const res = await request(app)
-      .post('/api/branches')
+      .post('/api/v1/branches')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Branch Test Duplicate', address: '2 Dup St', contactInfo: {}, operatingHours: {} });
 
@@ -94,7 +94,7 @@ describe('Branches', () => {
   it('GET /api/branches returns paginated list', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/branches')
+      .get('/api/v1/branches')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -105,20 +105,20 @@ describe('Branches', () => {
 
   it('GET /api/branches returns 401 without token', async () => {
     const app = getTestApp();
-    const res = await request(app).get('/api/branches');
+    const res = await request(app).get('/api/v1/branches');
     expect(res.status).toBe(401);
   });
 
   it('Admin can deactivate a branch', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post('/api/branches')
+      .post('/api/v1/branches')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Branch Test Deactivate', address: '99 Deactivate Rd', contactInfo: {}, operatingHours: {} });
 
     const id = createRes.body.id;
     const deactivateRes = await request(app)
-      .post(`/api/branches/${id}/deactivate`)
+      .post(`/api/v1/branches/${id}/deactivate`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(deactivateRes.status).toBe(200);
@@ -136,7 +136,7 @@ describe('Branches', () => {
   it('Delete branch with staff assignments returns 409', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .delete(`/api/branches/${branchId}`)
+      .delete(`/api/v1/branches/${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(409);

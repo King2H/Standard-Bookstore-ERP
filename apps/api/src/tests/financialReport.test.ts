@@ -271,7 +271,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
 
   it('1. Sales CSV export includes ORDER, POS, RETURN, and EXCHANGE rows for the fixture branch', async () => {
     const res = await request(getTestApp())
-      .get(`/api/reports/sales/export?branchId=${branchId}`)
+      .get(`/api/v1/reports/sales/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -310,7 +310,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
 
   it('2. Sales CSV export excludes cancelled orders, voided POS sales, rejected returns, and cancelled exchanges', async () => {
     const res = await request(getTestApp())
-      .get(`/api/reports/sales/export?branchId=${branchId}`)
+      .get(`/api/v1/reports/sales/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -328,7 +328,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
 
   it('3. Dashboard KPI dailyNetSalesRevenue reconciles 1:1 with the summed Net Sales Amount of the CSV export', async () => {
     const exportRes = await request(getTestApp())
-      .get(`/api/reports/sales/export?branchId=${branchId}`)
+      .get(`/api/v1/reports/sales/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(exportRes.status).toBe(200);
@@ -349,7 +349,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     expect(parseFloat(totalRow!['Net Sales Amount'])).toBeCloseTo(csvNetSum, 2);
 
     const kpiRes = await request(getTestApp())
-      .get(`/api/reports/kpis?branchId=${branchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(kpiRes.status).toBe(200);
@@ -372,7 +372,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
 
   it('4. Gross Profit (single Net Profit KPI) reconciles across the Sales export, /kpis, and /kpis/period', async () => {
     const exportRes = await request(getTestApp())
-      .get(`/api/reports/sales/export?branchId=${branchId}`)
+      .get(`/api/v1/reports/sales/export?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(exportRes.status).toBe(200);
@@ -386,7 +386,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     expect(parseFloat(totalRow!['Gross Profit'])).toBeCloseTo(csvGrossProfitSum, 2);
 
     const kpiRes = await request(getTestApp())
-      .get(`/api/reports/kpis?branchId=${branchId}`)
+      .get(`/api/v1/reports/kpis?branchId=${branchId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(kpiRes.status).toBe(200);
@@ -397,7 +397,7 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     expect(kpiRes.body.procurementExpense).toBeUndefined();
 
     const periodRes = await request(getTestApp())
-      .get(`/api/reports/kpis/period?branchId=${branchId}&period=today`)
+      .get(`/api/v1/reports/kpis/period?branchId=${branchId}&period=today`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(periodRes.status).toBe(200);

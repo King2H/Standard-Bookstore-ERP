@@ -73,7 +73,7 @@ describe('Order delete (Module 9)', () => {
 
   async function createOrder(saleType: 'cash_sale' | 'credit_sale', withCustomer = false) {
     const res = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -91,7 +91,7 @@ describe('Order delete (Module 9)', () => {
     const order = await createOrder('cash_sale');
 
     const res = await request(getTestApp())
-      .delete(`/api/orders/${order.id}`)
+      .delete(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -107,14 +107,14 @@ describe('Order delete (Module 9)', () => {
     const order = await createOrder('cash_sale');
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${order.id}/cancel`)
+      .post(`/api/v1/orders/${order.id}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'test' });
     expect(cancelRes.status).toBe(200);
 
     const res = await request(getTestApp())
-      .delete(`/api/orders/${order.id}`)
+      .delete(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -129,7 +129,7 @@ describe('Order delete (Module 9)', () => {
     const order = await createOrder('cash_sale');
 
     const res = await request(getTestApp())
-      .delete(`/api/orders/${order.id}`)
+      .delete(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -144,7 +144,7 @@ describe('Order delete (Module 9)', () => {
   it('4. Cannot delete a CONFIRMED order → 422 INVALID_STATE', async () => {
     const order = await createOrder('cash_sale');
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${order.id}/confirm`)
+      .post(`/api/v1/orders/${order.id}/confirm`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -152,7 +152,7 @@ describe('Order delete (Module 9)', () => {
     expect(confirmRes.status).toBeLessThan(300);
 
     const res = await request(getTestApp())
-      .delete(`/api/orders/${order.id}`)
+      .delete(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -165,7 +165,7 @@ describe('Order delete (Module 9)', () => {
   it('5. Cannot delete a CANCELLED credit order that left a receivable behind → 422 ORDER_HAS_DEPENDENCIES', async () => {
     const order = await createOrder('credit_sale', true);
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${order.id}/confirm`)
+      .post(`/api/v1/orders/${order.id}/confirm`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -180,14 +180,14 @@ describe('Order delete (Module 9)', () => {
     expect(recCheck.rows.length).toBe(1);
 
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${order.id}/cancel`)
+      .post(`/api/v1/orders/${order.id}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'test' });
     expect(cancelRes.status).toBe(200);
 
     const res = await request(getTestApp())
-      .delete(`/api/orders/${order.id}`)
+      .delete(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId));
 

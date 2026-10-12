@@ -26,7 +26,7 @@ afterEach(() => {
 describe('CORS', () => {
   it('in production without FRONTEND_URL, does not allow any cross-origin caller', async () => {
     const app = withEnv({ NODE_ENV: 'production', FRONTEND_URL: undefined });
-    const res = await request(app).get('/api/health').set('Origin', 'https://evil.example');
+    const res = await request(app).get('/api/v1/health').set('Origin', 'https://evil.example');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
     expect(res.headers['access-control-allow-credentials']).toBeUndefined();
   });
@@ -34,31 +34,31 @@ describe('CORS', () => {
   it('in production, allows only the origins listed in FRONTEND_URL', async () => {
     const app = withEnv({ NODE_ENV: 'production', FRONTEND_URL: 'https://shop.example, https://admin.example/' });
 
-    const allowed = await request(app).get('/api/health').set('Origin', 'https://admin.example');
+    const allowed = await request(app).get('/api/v1/health').set('Origin', 'https://admin.example');
     expect(allowed.headers['access-control-allow-origin']).toBe('https://admin.example');
     expect(allowed.headers['access-control-allow-credentials']).toBe('true');
 
-    const denied = await request(app).get('/api/health').set('Origin', 'https://evil.example');
+    const denied = await request(app).get('/api/v1/health').set('Origin', 'https://evil.example');
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('answers a preflight from a disallowed origin without CORS headers', async () => {
     const app = withEnv({ NODE_ENV: 'production', FRONTEND_URL: 'https://shop.example' });
-    const res = await request(app).options('/api/auth/login').set('Origin', 'https://evil.example');
+    const res = await request(app).options('/api/v1/auth/login').set('Origin', 'https://evil.example');
     expect(res.status).toBe(204);
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('in development without FRONTEND_URL, allows any origin', async () => {
     const app = withEnv({ NODE_ENV: 'development', FRONTEND_URL: undefined });
-    const res = await request(app).get('/api/health').set('Origin', 'http://localhost:5174');
+    const res = await request(app).get('/api/v1/health').set('Origin', 'http://localhost:5174');
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5174');
   });
 });
 
 describe('Security headers', () => {
   it('sets helmet headers and hides the framework', async () => {
-    const res = await request(withEnv({})).get('/api/health');
+    const res = await request(withEnv({})).get('/api/v1/health');
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['x-frame-options']).toBe('SAMEORIGIN');
     expect(res.headers['strict-transport-security']).toBeDefined();
@@ -69,7 +69,7 @@ describe('Security headers', () => {
 describe('Login rate limiter and X-Forwarded-For', () => {
   const attempt = (app: ReturnType<typeof createApp>, username: string, forwardedFor: string) =>
     request(app)
-      .post('/api/auth/pre-login')
+      .post('/api/v1/auth/pre-login')
       .set('X-Forwarded-For', forwardedFor)
       .send({ username, password: 'Wrong-password-1!' });
 

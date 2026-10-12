@@ -146,7 +146,7 @@ describe('POS — Transactions', () => {
     const expectedGrand = expectedSubtotal;
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -173,7 +173,7 @@ describe('POS — Transactions', () => {
     await db.query(`UPDATE inventory SET quantity = 0 WHERE book_id = $1 AND location_id = $2`, [bookId, locationId]);
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -194,7 +194,7 @@ describe('POS — Transactions', () => {
 
   it('3. Payment sum mismatch → 422 PAYMENT_SUM_MISMATCH', async () => {
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -216,7 +216,7 @@ describe('POS — Transactions', () => {
     const discountPct = 99; // way over any limit
     // Payment amount doesn't matter — validation fails before reaching payment check
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -249,7 +249,7 @@ describe('POS — Transactions', () => {
     const balBefore = Number(creditBefore.rows[0].balance);
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -280,7 +280,7 @@ describe('POS — Transactions', () => {
     const expectedGrand = parseFloat((bookPrice * qty).toFixed(2));
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -316,7 +316,7 @@ describe('POS — Transactions', () => {
     const ptsBefore = Number(loyBefore.rows[0].points_balance);
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -349,7 +349,7 @@ describe('POS — Transactions', () => {
     const expectedGrand = expectedSubtotal;
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -386,7 +386,7 @@ describe('POS — Transactions', () => {
 
     // Create transaction
     const createRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -403,7 +403,7 @@ describe('POS — Transactions', () => {
 
     // Void it
     const voidRes = await request(getTestApp())
-      .post(`/api/pos/transactions/${txId}/void`)
+      .post(`/api/v1/pos/transactions/${txId}/void`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -424,7 +424,7 @@ describe('POS — Transactions', () => {
     const expectedGrand = expectedSubtotal;
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -452,7 +452,7 @@ describe('POS — Transactions', () => {
     const inactiveBookId = bookRes.rows[0].id as number;
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -478,7 +478,7 @@ describe('POS — Transactions', () => {
     const dueDate = toLocalDateString(new Date(Date.now() + 86400000 * 7)); // 7 days from now
 
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -530,7 +530,7 @@ describe('POS — Transactions', () => {
 
     // Create full credit sale
     const createRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, customerId, items: [{ bookId, quantity: qty }], payments: [], allowCredit: true, dueDate });
@@ -549,7 +549,7 @@ describe('POS — Transactions', () => {
     // Pay exactly half (less than outstanding)
     const partialPayment = parseFloat((grand / 2).toFixed(2));
     const payRes = await request(getTestApp())
-      .post(`/api/pos/transactions/${txId}/payment`)
+      .post(`/api/v1/pos/transactions/${txId}/payment`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ payments: [{ method: 'cash', amount: partialPayment }] });
@@ -580,7 +580,7 @@ describe('POS — Transactions', () => {
     const dueDate = toLocalDateString(new Date(Date.now() + 86400000 * 14));
 
     const createRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, customerId, items: [{ bookId, quantity: qty }], payments: [], allowCredit: true, dueDate });
@@ -589,7 +589,7 @@ describe('POS — Transactions', () => {
 
     // First partial payment
     const pay1 = await request(getTestApp())
-      .post(`/api/pos/transactions/${txId}/payment`)
+      .post(`/api/v1/pos/transactions/${txId}/payment`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ payments: [{ method: 'cash', amount: firstPayment }] });
@@ -603,7 +603,7 @@ describe('POS — Transactions', () => {
 
     // Second (final) payment clears the balance
     const pay2 = await request(getTestApp())
-      .post(`/api/pos/transactions/${txId}/payment`)
+      .post(`/api/v1/pos/transactions/${txId}/payment`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ payments: [{ method: 'cash', amount: secondPayment }] });
@@ -629,7 +629,7 @@ describe('POS — Transactions', () => {
     const p2 = parseFloat((grand * 0.3).toFixed(2));
 
     const createRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, customerId, items: [{ bookId, quantity: qty }], payments: [], allowCredit: true });
@@ -642,7 +642,7 @@ describe('POS — Transactions', () => {
     const origAmount = Number(originalRec.rows[0].original_amount);
 
     await request(getTestApp())
-      .post(`/api/pos/transactions/${txId}/payment`)
+      .post(`/api/v1/pos/transactions/${txId}/payment`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ payments: [{ method: 'cash', amount: p1 }] });
@@ -654,7 +654,7 @@ describe('POS — Transactions', () => {
     expect(rec1.rows[0].status).toBe('PartiallyPaid');
 
     await request(getTestApp())
-      .post(`/api/pos/transactions/${txId}/payment`)
+      .post(`/api/v1/pos/transactions/${txId}/payment`)
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ payments: [{ method: 'cash', amount: p2 }] });
@@ -674,7 +674,7 @@ describe('POS — Transactions', () => {
 
   it('15. Super_Admin → 403 PERMISSION_DENIED on POST /pos/transactions', async () => {
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${superAdminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ branchId, locationId, items: [{ bookId, quantity: 1 }], payments: [] });
@@ -686,7 +686,7 @@ describe('POS — Transactions', () => {
   it('15b. Sales/Manager/Admin still create a POS sale (permission-based check unaffected)', async () => {
     for (const token of [salesToken, managerToken, adminToken]) {
       const res = await request(getTestApp())
-        .post('/api/pos/transactions')
+        .post('/api/v1/pos/transactions')
         .set('Authorization', `Bearer ${token}`)
         .set('X-Branch-Id', String(branchId))
         .send({ branchId, locationId, items: [{ bookId, quantity: 1 }], payments: [{ method: 'cash', amount: bookPrice }] });

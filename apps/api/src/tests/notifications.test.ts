@@ -117,7 +117,7 @@ describe('Notification System', () => {
     );
 
     const res = await request(getTestApp())
-      .get('/api/notifications')
+      .get('/api/v1/notifications')
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
@@ -151,7 +151,7 @@ describe('Notification System', () => {
     );
 
     const res = await request(getTestApp())
-      .get('/api/notifications?isRead=false')
+      .get('/api/v1/notifications?isRead=false')
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
@@ -172,13 +172,13 @@ describe('Notification System', () => {
     const notifId = insertRes.rows[0].id as number;
 
     await request(getTestApp())
-      .put(`/api/notifications/${notifId}/read`)
+      .put(`/api/v1/notifications/${notifId}/read`)
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
     // Read state is per person (#85): read for this Manager, as they see it.
     const list = await request(getTestApp())
-      .get('/api/notifications?pageSize=100')
+      .get('/api/v1/notifications?pageSize=100')
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
     const mine = list.body.data.find((n: { id: string }) => n.id === String(notifId));
@@ -200,13 +200,13 @@ describe('Notification System', () => {
     );
 
     await request(getTestApp())
-      .put('/api/notifications/read-all')
+      .put('/api/v1/notifications/read-all')
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
     // Read state is per person (#85): nothing is left unread for this Manager.
     const count = await request(getTestApp())
-      .get('/api/notifications/unread-count')
+      .get('/api/v1/notifications/unread-count')
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
     expect(count.body.count).toBe(0);
@@ -217,7 +217,7 @@ describe('Notification System', () => {
   it('Test 6: GET /api/notifications/unread-count returns correct count', async () => {
     // All notifications should be read now (from Test 5)
     const res1 = await request(getTestApp())
-      .get('/api/notifications/unread-count')
+      .get('/api/v1/notifications/unread-count')
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
@@ -233,7 +233,7 @@ describe('Notification System', () => {
     );
 
     const res2 = await request(getTestApp())
-      .get('/api/notifications/unread-count')
+      .get('/api/v1/notifications/unread-count')
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
 
@@ -257,7 +257,7 @@ describe('Notification System', () => {
           {
             hostname: '127.0.0.1',
             port,
-            path: '/api/notifications/stream',
+            path: '/api/v1/notifications/stream',
             method: 'GET',
             headers: {
               Authorization: `Bearer ${managerToken}`,
@@ -303,7 +303,7 @@ describe('Notification System', () => {
 
     // Manager B (in branch B) should NOT see branch A's notifications
     const res = await request(getTestApp())
-      .get('/api/notifications')
+      .get('/api/v1/notifications')
       .set('Authorization', `Bearer ${managerBToken}`)
       .expect(200);
 
@@ -358,13 +358,13 @@ describe('Notification System', () => {
 
   it('Test 11: GET /api/notifications without auth returns 401', async () => {
     await request(getTestApp())
-      .get('/api/notifications')
+      .get('/api/v1/notifications')
       .expect(401);
   });
 
   it('Test 11b: GET /api/notifications/stream without auth returns 401', async () => {
     await request(getTestApp())
-      .get('/api/notifications/stream')
+      .get('/api/v1/notifications/stream')
       .expect(401);
   });
 });

@@ -97,7 +97,7 @@ async function createDraftOrder(
   };
   if (customerId) body.customerId = customerId;
   const res = await request(getTestApp())
-    .post('/api/orders')
+    .post('/api/v1/orders')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send(body);
@@ -109,7 +109,7 @@ async function confirmOrder(token: string, branchId: number, orderId: string) {
   // Module 4: credit_sale orders require a due date to confirm. Every call
   // site in this file confirms a credit_sale order, so default it here.
   return request(getTestApp())
-    .post(`/api/orders/${orderId}/confirm`)
+    .post(`/api/v1/orders/${orderId}/confirm`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ dueDate: '2099-12-31' });
@@ -117,7 +117,7 @@ async function confirmOrder(token: string, branchId: number, orderId: string) {
 
 async function fulfillOrder(token: string, branchId: number, orderId: string) {
   return request(getTestApp())
-    .post(`/api/orders/${orderId}/fulfill`)
+    .post(`/api/v1/orders/${orderId}/fulfill`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({});
@@ -125,7 +125,7 @@ async function fulfillOrder(token: string, branchId: number, orderId: string) {
 
 async function cancelOrder(token: string, branchId: number, orderId: string, reason = 'Test cancellation') {
   return request(getTestApp())
-    .post(`/api/orders/${orderId}/cancel`)
+    .post(`/api/v1/orders/${orderId}/cancel`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ reason });
@@ -133,7 +133,7 @@ async function cancelOrder(token: string, branchId: number, orderId: string, rea
 
 async function createPayment(token: string, branchId: number, orderId: string, amount: number) {
   return request(getTestApp())
-    .post('/api/payments')
+    .post('/api/v1/payments')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ orderId: Number(orderId), amount, paymentMethod: 'cash' });
@@ -141,7 +141,7 @@ async function createPayment(token: string, branchId: number, orderId: string, a
 
 async function listUnpaidOrders(token: string, branchId: number) {
   return request(getTestApp())
-    .get('/api/payments/unpaid-orders')
+    .get('/api/v1/payments/unpaid-orders')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId));
 }
@@ -242,7 +242,7 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
     
     // Check order payment_status
     const orderRes = await request(getTestApp())
-      .get(`/api/orders/${order.id}`)
+      .get(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     
@@ -315,7 +315,7 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
     
     // Check order status and payment_status
     const orderRes = await request(getTestApp())
-      .get(`/api/orders/${order.id}`)
+      .get(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     
@@ -392,7 +392,7 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
     const saleQty = 2;
     const saleTotal = parseFloat((bookPrice * saleQty).toFixed(2));
     const saleRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -413,7 +413,7 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
     // On UNFIXED code: ReturnLineInput has no disposition field, so it is silently ignored
     // and invTxSvc.stockIn() is called unconditionally → sellable stock is restored
     const returnRes = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({

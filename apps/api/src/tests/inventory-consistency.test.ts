@@ -164,7 +164,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Act: POS sale of qty=2 at location A
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         branchId,
@@ -214,7 +214,7 @@ describe('Inventory Consistency Scenarios', () => {
     // code path where a reservation exists without the matching deduction,
     // so that's the scenario this test needs to exercise to mean anything.
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 3 }] });
@@ -222,7 +222,7 @@ describe('Inventory Consistency Scenarios', () => {
     const orderId = orderRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send();
@@ -233,7 +233,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Act: POS tries to sell qty=1 — nothing physically left on hand
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -266,7 +266,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Act: confirm an order (creates stock deduction + reservation)
     const confirmRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         branchId,
@@ -280,7 +280,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Confirm the order
     const confirmStep = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({});
     expect(confirmStep.status).toBe(200);
@@ -291,7 +291,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Cancel the order
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ reason: 'Test cancellation' });
     expect(cancelRes.status).toBe(200);
@@ -315,7 +315,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Create + confirm + fulfill an order
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         branchId,
@@ -327,12 +327,12 @@ describe('Inventory Consistency Scenarios', () => {
     const orderId = createRes.body.id ?? createRes.body.order?.id;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({});
 
     const fulfillRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({});
     expect(fulfillRes.status).toBe(200);
@@ -342,7 +342,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Act: attempt to cancel the fulfilled order
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ reason: 'Test' });
 
@@ -363,7 +363,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Create a completed POS transaction first
     const txRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         branchId,
@@ -388,7 +388,7 @@ describe('Inventory Consistency Scenarios', () => {
 
     // Act: process a return
     const returnRes = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         transactionId: txId,

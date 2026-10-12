@@ -608,142 +608,145 @@ Generate encryption key: node -e "console.log(require('crypto').randomBytes(32).
 
 ## API Reference
 
+Every path is under `/api/v1`; unversioned `/api/...` addresses answer 410 `DEPRECATED` with the new address.
+The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, also served at `/api/v1/openapi.json`.
+
 ### Auth & Staff
-- POST /api/auth/pre-login — step 1: validate credentials, return available branches (no auth required)
-- POST /api/auth/login — step 2: complete login with selected branch
-- POST /api/auth/logout / POST /api/auth/refresh
-- GET /api/auth/branches — branches for authenticated user (branch switcher)
-- POST /api/auth/switch-branch — issue new access token for a different branch
-- GET/POST /api/staff — list / create (Super_Admin, Admin, Manager)
-- GET /api/staff/me — own profile + location access scope (all roles)
-- PUT /api/staff/me/password — change own password (all roles)
-- GET/PUT /api/staff/:id / POST .../deactivate|reactivate|reset-password|unlock
-- GET/PUT /api/staff/:id/locations — location access assignments
-- PUT /api/staff/:id/roles — update branch-role assignments
-- PUT /api/staff/:id/all-branches — grant/revoke all-branch access (Admin/Super_Admin)
+- POST /api/v1/auth/pre-login — step 1: validate credentials, return available branches (no auth required)
+- POST /api/v1/auth/login — step 2: complete login with selected branch
+- POST /api/v1/auth/logout / POST /api/v1/auth/refresh
+- GET /api/v1/auth/branches — branches for authenticated user (branch switcher)
+- POST /api/v1/auth/switch-branch — issue new access token for a different branch
+- GET/POST /api/v1/staff — list / create (Super_Admin, Admin, Manager)
+- GET /api/v1/staff/me — own profile + location access scope (all roles)
+- PUT /api/v1/staff/me/password — change own password (all roles)
+- GET/PUT /api/v1/staff/:id / POST .../deactivate|reactivate|reset-password|unlock
+- GET/PUT /api/v1/staff/:id/locations — location access assignments
+- PUT /api/v1/staff/:id/roles — update branch-role assignments
+- PUT /api/v1/staff/:id/all-branches — grant/revoke all-branch access (Admin/Super_Admin)
 
 ### Branches & Locations
-- GET /api/branches/public — no auth, for login dropdown
-- GET/POST /api/branches / GET/PUT /api/branches/:id
-- POST /api/branches/:id/deactivate|reactivate / DELETE /api/branches/:id
-- GET/POST /api/branches/:branchId/locations
-- PUT /api/branches/:branchId/locations/:id — rename
-- PUT /api/branches/:branchId/locations/:id/set-default
-- DELETE /api/branches/:branchId/locations/:id
+- GET /api/v1/branches/public — no auth, for login dropdown
+- GET/POST /api/v1/branches / GET/PUT /api/v1/branches/:id
+- POST /api/v1/branches/:id/deactivate|reactivate / DELETE /api/v1/branches/:id
+- GET/POST /api/v1/branches/:branchId/locations
+- PUT /api/v1/branches/:branchId/locations/:id — rename
+- PUT /api/v1/branches/:branchId/locations/:id/set-default
+- DELETE /api/v1/branches/:branchId/locations/:id
 
 ### Configuration
-- GET /api/config/system (Super_Admin, Admin, Manager)
-- PUT /api/config/system/:key (Super_Admin only)
-- GET /api/config/currency — effective currency for authenticated user's branch (all authenticated)
-- GET/PUT /api/config/branches/:branchId/:key (Admin, Manager)
-- DELETE /api/config/branches/:branchId/:key (Admin)
+- GET /api/v1/config/system (Super_Admin, Admin, Manager)
+- PUT /api/v1/config/system/:key (Super_Admin only)
+- GET /api/v1/config/currency — effective currency for authenticated user's branch (all authenticated)
+- GET/PUT /api/v1/config/branches/:branchId/:key (Admin, Manager)
+- DELETE /api/v1/config/branches/:branchId/:key (Admin)
 
 ### Bank Accounts
 > **Currently disabled at the API layer** ("disabled for this deployment phase" — see `app.ts`). Routes below exist in code and are still covered by tests, but `bankAccountRouter` is not mounted, so every request 404s. The sidebar UI page is still reachable but non-functional until this module is re-enabled.
-- GET/POST /api/branches/:branchId/bank-accounts
+- GET/POST /api/v1/branches/:branchId/bank-accounts
 - PUT/POST .../deactivate
-- GET/POST /api/branches/:branchId/reconciliation/import
-- PUT /api/branches/:branchId/reconciliation/:entryId
+- GET/POST /api/v1/branches/:branchId/reconciliation/import
+- PUT /api/v1/branches/:branchId/reconciliation/:entryId
 
 ### Catalog
-- GET /api/books — full-text search (all authenticated)
-- POST /api/books / GET/PUT /api/books/:id / POST .../deactivate|reactivate
-- GET /api/books/:id/history — field-level edit history
-- PUT /api/books/:id/prices/:branchId — branch price override
-- POST /api/books/quick-register — lightweight catalog-only registration (metadata, no inventory row) for a book encountered via Exchange trade-in that isn't already in the catalog (Sales, Manager, Admin)
-- GET/POST /api/authors|categories|publishers / PUT/DELETE .../:id
-- GET /api/book-formats / GET /api/book-editions
+- GET /api/v1/books — full-text search (all authenticated)
+- POST /api/v1/books / GET/PUT /api/v1/books/:id / POST .../deactivate|reactivate
+- GET /api/v1/books/:id/history — field-level edit history
+- PUT /api/v1/books/:id/prices/:branchId — branch price override
+- POST /api/v1/books/quick-register — lightweight catalog-only registration (metadata, no inventory row) for a book encountered via Exchange trade-in that isn't already in the catalog (Sales, Manager, Admin)
+- GET/POST /api/v1/authors|categories|publishers / PUT/DELETE .../:id
+- GET /api/v1/book-formats / GET /api/v1/book-editions
 
 ### Inventory
-- GET /api/inventory — paginated stock levels
-- GET /api/inventory/low-stock / GET /api/inventory/history
-- POST /api/inventory/stock-in|stock-out|adjust|transfer
-- PUT /api/inventory/reorder-point / POST /api/inventory/initialize
+- GET /api/v1/inventory — paginated stock levels
+- GET /api/v1/inventory/low-stock / GET /api/v1/inventory/history
+- POST /api/v1/inventory/stock-in|stock-out|adjust|transfer
+- PUT /api/v1/inventory/reorder-point / POST /api/v1/inventory/initialize
 
 ### Suppliers
-- GET/POST /api/suppliers / GET/PUT /api/suppliers/:id
-- POST /api/suppliers/:id/deactivate|blacklist / DELETE /api/suppliers/:id
-- GET/POST /api/books/:bookId/suppliers / DELETE .../suppliers/:supplierId
+- GET/POST /api/v1/suppliers / GET/PUT /api/v1/suppliers/:id
+- POST /api/v1/suppliers/:id/deactivate|blacklist / DELETE /api/v1/suppliers/:id
+- GET/POST /api/v1/books/:bookId/suppliers / DELETE .../suppliers/:supplierId
 
 ### Procurement
-- GET/POST /api/purchase-orders / GET/PUT /api/purchase-orders/:id
-- POST /api/purchase-orders/:id/submit|approve|order|receive|close|cancel
+- GET/POST /api/v1/purchase-orders / GET/PUT /api/v1/purchase-orders/:id
+- POST /api/v1/purchase-orders/:id/submit|approve|order|receive|close|cancel
 
 ### POS Transactions
-- POST /api/pos/transactions — body: { branchId, locationId, customerId?, items, payments, allowCredit? }
-- GET /api/pos/transactions — filters: branchId, customerId, staffId, transactionNumber, status, paymentStatus
-- GET /api/pos/transactions/:id
-- POST /api/pos/transactions/:id/payment — collect outstanding balance
-- POST /api/pos/transactions/:id/void
+- POST /api/v1/pos/transactions — body: { branchId, locationId, customerId?, items, payments, allowCredit? }
+- GET /api/v1/pos/transactions — filters: branchId, customerId, staffId, transactionNumber, status, paymentStatus
+- GET /api/v1/pos/transactions/:id
+- POST /api/v1/pos/transactions/:id/payment — collect outstanding balance
+- POST /api/v1/pos/transactions/:id/void
 
 ### Returns
-- POST /api/returns — body: { transactionId, refundMethod, reason?, lines, approvedBy? }
-- GET /api/returns — filters: branchId, customerId, transactionId, status
-- GET /api/returns/:id
-- POST /api/returns/:id/reject
+- POST /api/v1/returns — body: { transactionId, refundMethod, reason?, lines, approvedBy? }
+- GET /api/v1/returns — filters: branchId, customerId, transactionId, status
+- GET /api/v1/returns/:id
+- POST /api/v1/returns/:id/reject
 
 ### Orders
-- POST /api/orders — body: { customerId?, locationId?, channel?, notes?, items: [{bookId, quantity, discountAmount?}] }
-- GET /api/orders — filters: branchId, customerId, status, paymentStatus, channel
-- GET /api/orders/:id
-- POST /api/orders/:id/confirm — reserve stock (Manager, Admin)
-- POST /api/orders/:id/progress — mark in progress (Manager, Admin, Stock_Clerk)
-- POST /api/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk)
-- POST /api/orders/:id/cancel — body: { reason } (Manager, Admin)
-- GET /api/orders/:id/payments — list payments for order
-- GET /api/orders/:id/balance — { orderTotal, totalPaid, totalRefunded, outstanding, paymentStatus }
+- POST /api/v1/orders — body: { customerId?, locationId?, channel?, notes?, items: [{bookId, quantity, discountAmount?}] }
+- GET /api/v1/orders — filters: branchId, customerId, status, paymentStatus, channel
+- GET /api/v1/orders/:id
+- POST /api/v1/orders/:id/confirm — reserve stock (Manager, Admin)
+- POST /api/v1/orders/:id/progress — mark in progress (Manager, Admin, Stock_Clerk)
+- POST /api/v1/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk)
+- POST /api/v1/orders/:id/cancel — body: { reason } (Manager, Admin)
+- GET /api/v1/orders/:id/payments — list payments for order
+- GET /api/v1/orders/:id/balance — { orderTotal, totalPaid, totalRefunded, outstanding, paymentStatus }
 
 ### Payments (Slice 14) — Single Authoritative Payment Collection Workflow
-- GET /api/payments/unpaid-orders — the Payments module's worklist: unified, paginated view across ALL credit-balance sources (order credit sales, POS credit sales, exchange differences), not orders alone; filters: branchId, customerId, entityId + sourceType (deep-link pre-fill from Sales History/Receivables)
-- POST /api/payments — record payment against an order specifically; body: { orderId, amount, paymentMethod, transactionReference?, bankAccountId? (required for bank method) }. See `POST /api/receivables/:id/collect` below for the source-type-agnostic entry point the unpaid-orders worklist actually posts to — it dispatches to this same endpoint's logic under the hood for `order_credit_sale` rows.
-- GET /api/payments — list; filters: orderId, status, paymentMethod, dateFrom, dateTo
-- GET /api/payments/:id — detail with refunds
-- POST /api/payments/:id/refund — process refund; body: { refundAmount, reason, bankAccountId? }
-- GET /api/payments/:id/refunds — list refunds for payment
-- POST /api/orders/:id/installment-plan — create installment plan; body: { numInstallments, depositAmount?, firstDueDate?, notes? }
-- GET /api/orders/:id/installment-plan — get plan with installment schedule
-- GET /api/installment-plans/:id — get plan by ID
-- POST /api/installments/:id/pay — record installment payment; body: { amount }
+- GET /api/v1/payments/unpaid-orders — the Payments module's worklist: unified, paginated view across ALL credit-balance sources (order credit sales, POS credit sales, exchange differences), not orders alone; filters: branchId, customerId, entityId + sourceType (deep-link pre-fill from Sales History/Receivables)
+- POST /api/v1/payments — record payment against an order specifically; body: { orderId, amount, paymentMethod, transactionReference?, bankAccountId? (required for bank method) }. See `POST /api/v1/receivables/:id/collect` below for the source-type-agnostic entry point the unpaid-orders worklist actually posts to — it dispatches to this same endpoint's logic under the hood for `order_credit_sale` rows.
+- GET /api/v1/payments — list; filters: orderId, status, paymentMethod, dateFrom, dateTo
+- GET /api/v1/payments/:id — detail with refunds
+- POST /api/v1/payments/:id/refund — process refund; body: { refundAmount, reason, bankAccountId? }
+- GET /api/v1/payments/:id/refunds — list refunds for payment
+- POST /api/v1/orders/:id/installment-plan — create installment plan; body: { numInstallments, depositAmount?, firstDueDate?, notes? }
+- GET /api/v1/orders/:id/installment-plan — get plan with installment schedule
+- GET /api/v1/installment-plans/:id — get plan by ID
+- POST /api/v1/installments/:id/pay — record installment payment; body: { amount }
 
 ### Exchanges (Slice 15)
-- POST /api/exchanges — create exchange, "Quick Exchange" (Sales, Manager, Admin); body: { locationId?, customerId?, notes?, incomingItems, outgoingItems }. Incoming items require a positive `evaluatedUnitPrice` (Acquisition Allowance) — see "Non-Destructive Catalog Search & Virtual Receiving" above.
-- GET /api/exchanges — list; filters: branchId, customerId, status, dateFrom, dateTo
-- GET /api/exchanges/:id — detail with incoming/outgoing items
-- POST /api/exchanges/:id/cancel — cancel exchange (Manager, Admin)
-- POST /api/exchanges/initiate / POST /api/exchanges/:id/review / POST /api/exchanges/:id/approve / POST /api/exchanges/:id/settle — a separate `INITIATED → REVIEWED → APPROVED → SETTLED → COMPLETED` lifecycle with multi-entry hybrid settlement, writing to the unified `exchange_items` table. API-reachable but not yet wired into the Exchanges UI (which uses the "Quick Exchange" endpoints above).
+- POST /api/v1/exchanges — create exchange, "Quick Exchange" (Sales, Manager, Admin); body: { locationId?, customerId?, notes?, incomingItems, outgoingItems }. Incoming items require a positive `evaluatedUnitPrice` (Acquisition Allowance) — see "Non-Destructive Catalog Search & Virtual Receiving" above.
+- GET /api/v1/exchanges — list; filters: branchId, customerId, status, dateFrom, dateTo
+- GET /api/v1/exchanges/:id — detail with incoming/outgoing items
+- POST /api/v1/exchanges/:id/cancel — cancel exchange (Manager, Admin)
+- POST /api/v1/exchanges/initiate / POST /api/v1/exchanges/:id/review / POST /api/v1/exchanges/:id/approve / POST /api/v1/exchanges/:id/settle — a separate `INITIATED → REVIEWED → APPROVED → SETTLED → COMPLETED` lifecycle with multi-entry hybrid settlement, writing to the unified `exchange_items` table. API-reachable but not yet wired into the Exchanges UI (which uses the "Quick Exchange" endpoints above).
 
 ### Receivables — Unified Credit-Balance Collection Surface
-- GET /api/receivables/summary — outstanding/overdue totals across all source types (Manager, Admin, Finance_Officer)
-- GET /api/receivables — list; filters: branchId, customerId, sourceType (order_credit_sale | pos_credit_sale | exchange_difference), status (Pending | PartiallyPaid | Overdue | Settled)
-- GET /api/receivables/:id — detail
-- POST /api/receivables/:id/collect — record a payment against ANY receivable regardless of source (routes internally to the Payments module for order credit sales, POS's payment recording for POS credit sales, or its own ledger update for exchange differences); body: { amount, paymentMethod, bankAccountId?, notes? }
-- POST /api/receivables/:id/settle — write off as bad debt, no money movement (Manager, Admin, Finance_Officer — distinct from `/collect`, which requires `PROCESS_PAYMENT`)
+- GET /api/v1/receivables/summary — outstanding/overdue totals across all source types (Manager, Admin, Finance_Officer)
+- GET /api/v1/receivables — list; filters: branchId, customerId, sourceType (order_credit_sale | pos_credit_sale | exchange_difference), status (Pending | PartiallyPaid | Overdue | Settled)
+- GET /api/v1/receivables/:id — detail
+- POST /api/v1/receivables/:id/collect — record a payment against ANY receivable regardless of source (routes internally to the Payments module for order credit sales, POS's payment recording for POS credit sales, or its own ledger update for exchange differences); body: { amount, paymentMethod, bankAccountId?, notes? }
+- POST /api/v1/receivables/:id/settle — write off as bad debt, no money movement (Manager, Admin, Finance_Officer — distinct from `/collect`, which requires `PROCESS_PAYMENT`)
 - `status = 'Overdue'` is maintained by a scheduled job (`markOverdueReceivables()`), not derived on read.
 
 ### Reports (Slice 16) — FinancialReportService (Dashboard KPIs ↔ CSV Export, unified)
-- GET /api/reports/sales — total sales, orders, AOV; by period + by branch (Manager, Admin)
-- GET /api/reports/payments — collected/refunded/pending; by method + by period (Manager, Admin)
-- GET /api/reports/exchanges — exchange totals; by settlement type + by period (Manager, Admin)
-- GET /api/reports/inventory — stock summary, low-stock list, top-selling books, movement (Manager, Admin)
-- GET /api/reports/customers — totals, repeat customers, top spenders, new by period (Manager, Admin)
-- GET /api/reports/kpis — Manager/Admin/Finance_Officer/Super_Admin. Existing collected-cash fields: daily/monthly revenue & sales, AOV, active customers, low-stock/pending-order/exchange alerts, netProfit, grossProfit, dailyNetProfit, monthlyNetProfit, procurementExpense, outstandingBalance. Plus the additive, gross-accrual `FinancialReportService` fields introduced by Dashboard Standardization: `dailyNetSalesRevenue`, `monthlyNetSalesRevenue`, `dailyNetProfitUnified`, `monthlyNetProfitUnified`, `grossProfitUnified`, `overdueReceivablesAmount` — these are the figures that reconcile 1:1 with the sales export below, and are what the Dashboard's Primary/Secondary KPI rows display.
+- GET /api/v1/reports/sales — total sales, orders, AOV; by period + by branch (Manager, Admin)
+- GET /api/v1/reports/payments — collected/refunded/pending; by method + by period (Manager, Admin)
+- GET /api/v1/reports/exchanges — exchange totals; by settlement type + by period (Manager, Admin)
+- GET /api/v1/reports/inventory — stock summary, low-stock list, top-selling books, movement (Manager, Admin)
+- GET /api/v1/reports/customers — totals, repeat customers, top spenders, new by period (Manager, Admin)
+- GET /api/v1/reports/kpis — Manager/Admin/Finance_Officer/Super_Admin. Existing collected-cash fields: daily/monthly revenue & sales, AOV, active customers, low-stock/pending-order/exchange alerts, netProfit, grossProfit, dailyNetProfit, monthlyNetProfit, procurementExpense, outstandingBalance. Plus the additive, gross-accrual `FinancialReportService` fields introduced by Dashboard Standardization: `dailyNetSalesRevenue`, `monthlyNetSalesRevenue`, `dailyNetProfitUnified`, `monthlyNetProfitUnified`, `grossProfitUnified`, `overdueReceivablesAmount` — these are the figures that reconcile 1:1 with the sales export below, and are what the Dashboard's Primary/Secondary KPI rows display.
 - Common filters: ?branchId=&dateFrom=&dateTo=&groupBy=day|week|month
-- GET /api/reports/sales/export — CSV download (Manager, Admin). Sourced from `FinancialReportService`: one row per line item across all four channels (ORDER/POS/RETURN/EXCHANGE) — see "Dashboard Standardization & Unified Reports Engine" above for the full column list. Not order-only.
-- GET /api/reports/payments/export — CSV download (Manager, Admin)
-- GET /api/reports/inventory/export — CSV download (Manager, Admin)
-- GET /api/reports/customers/export — CSV download (Manager, Admin)
-- GET /api/reports/exchanges/export — CSV download (Manager, Admin)
-- GET /api/reports/procurement/export / GET /api/reports/receivables/export — CSV download (Manager, Admin)
+- GET /api/v1/reports/sales/export — CSV download (Manager, Admin). Sourced from `FinancialReportService`: one row per line item across all four channels (ORDER/POS/RETURN/EXCHANGE) — see "Dashboard Standardization & Unified Reports Engine" above for the full column list. Not order-only.
+- GET /api/v1/reports/payments/export — CSV download (Manager, Admin)
+- GET /api/v1/reports/inventory/export — CSV download (Manager, Admin)
+- GET /api/v1/reports/customers/export — CSV download (Manager, Admin)
+- GET /api/v1/reports/exchanges/export — CSV download (Manager, Admin)
+- GET /api/v1/reports/procurement/export / GET /api/v1/reports/receivables/export — CSV download (Manager, Admin)
 
 ### Notifications (Phase 5)
-- GET /api/notifications/stream — SSE endpoint; `Content-Type: text/event-stream`; sends `connected` event with unread count; heartbeat every 30s (all authenticated roles)
-- GET /api/notifications — paginated list for authenticated staff's role + branch; filters: `?isRead=`, `?severity=`, `?page=`, `?pageSize=`
-- GET /api/notifications/unread-count — `{ count }` for bell badge (all authenticated roles)
-- PUT /api/notifications/:id/read — mark single notification as read
-- PUT /api/notifications/read-all — mark all unread as read for the authenticated staff
+- GET /api/v1/notifications/stream — SSE endpoint; `Content-Type: text/event-stream`; sends `connected` event with unread count; heartbeat every 30s (all authenticated roles)
+- GET /api/v1/notifications — paginated list for authenticated staff's role + branch; filters: `?isRead=`, `?severity=`, `?page=`, `?pageSize=`
+- GET /api/v1/notifications/unread-count — `{ count }` for bell badge (all authenticated roles)
+- PUT /api/v1/notifications/:id/read — mark single notification as read
+- PUT /api/v1/notifications/read-all — mark all unread as read for the authenticated staff
 
 ### Audit Log
-- GET /api/audit-logs — paginated; filter by entityType (Super_Admin, Admin)
+- GET /api/v1/audit-logs — paginated; filter by entityType (Super_Admin, Admin)
 
 ---
 

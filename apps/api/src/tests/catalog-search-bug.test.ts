@@ -233,7 +233,7 @@ describe('Bug 1 -- Catalog Search Bug Condition Exploration', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .get('/api/books?q=ZZZBUG1FILLER&page=1&pageSize=25')
+      .get('/api/v1/books?q=ZZZBUG1FILLER&page=1&pageSize=25')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -261,13 +261,13 @@ describe('Bug 1 -- Catalog Search Bug Condition Exploration', () => {
     expect(dbCheck.rows.length).toBe(1);
 
     const resPage1 = await request(app)
-      .get(`/api/books?q=${encodeURIComponent(TARGET_ISBN)}&page=1&pageSize=25`)
+      .get(`/api/v1/books?q=${encodeURIComponent(TARGET_ISBN)}&page=1&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(resPage1.status).toBe(200);
     expect((resPage1.body.items as Array<{ isbn: string }>).map((b) => b.isbn)).toContain(TARGET_ISBN);
 
     const resPage3 = await request(app)
-      .get(`/api/books?q=${encodeURIComponent(TARGET_ISBN)}&page=3&pageSize=25`)
+      .get(`/api/v1/books?q=${encodeURIComponent(TARGET_ISBN)}&page=3&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(resPage3.status).toBe(200);
     expect(resPage3.body.items).toHaveLength(0);
@@ -308,7 +308,7 @@ describe('Bug 1 -- Catalog Search Bug Condition Exploration', () => {
 
     const res = await request(app)
       .get(
-        `/api/books?q=${encodeURIComponent(UNIQUE_PUBLISHER)}&page=1&pageSize=25`,
+        `/api/v1/books?q=${encodeURIComponent(UNIQUE_PUBLISHER)}&page=1&pageSize=25`,
       )
       .set('Authorization', `Bearer ${adminToken}`);
 
@@ -362,7 +362,7 @@ describe('Bug 1 -- Catalog Search Bug Condition Exploration', () => {
     // The search should return 0 items (bug: description field not searched)
     const res = await request(app)
       .get(
-        `/api/books?q=${encodeURIComponent(UNIQUE_DESCRIPTION_TOKEN)}&page=1&pageSize=25`,
+        `/api/v1/books?q=${encodeURIComponent(UNIQUE_DESCRIPTION_TOKEN)}&page=1&pageSize=25`,
       )
       .set('Authorization', `Bearer ${adminToken}`);
 
@@ -577,7 +577,7 @@ describe('Bug 1 -- Catalog Search Preservation (Existing Search Fields Must Stil
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/books?q=${encodeURIComponent(PRSV_TITLE_FRAGMENT)}&page=1&pageSize=25`)
+      .get(`/api/v1/books?q=${encodeURIComponent(PRSV_TITLE_FRAGMENT)}&page=1&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -615,7 +615,7 @@ describe('Bug 1 -- Catalog Search Preservation (Existing Search Fields Must Stil
     const authorFragment = 'Preservation Author UniqueXYZ';
 
     const res = await request(app)
-      .get(`/api/books?q=${encodeURIComponent(authorFragment)}&page=1&pageSize=25`)
+      .get(`/api/v1/books?q=${encodeURIComponent(authorFragment)}&page=1&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -648,7 +648,7 @@ describe('Bug 1 -- Catalog Search Preservation (Existing Search Fields Must Stil
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/books?q=${encodeURIComponent(PRSV_ISBN)}&page=1&pageSize=25`)
+      .get(`/api/v1/books?q=${encodeURIComponent(PRSV_ISBN)}&page=1&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -683,7 +683,7 @@ describe('Bug 1 -- Catalog Search Preservation (Existing Search Fields Must Stil
     const skuFragment = 'PRSV-SKU-9001';
 
     const res = await request(app)
-      .get(`/api/books?q=${encodeURIComponent(skuFragment)}&page=1&pageSize=25`)
+      .get(`/api/v1/books?q=${encodeURIComponent(skuFragment)}&page=1&pageSize=25`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -844,7 +844,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     expect(dbCheck.rows.length).toBe(1);
 
     const res = await request(app)
-      .get(`/api/catalog/search?q=${encodeURIComponent(FIX_TARGET_ISBN)}`)
+      .get(`/api/v1/catalog/search?q=${encodeURIComponent(FIX_TARGET_ISBN)}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -875,7 +875,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .get(`/api/catalog/search?q=${encodeURIComponent(FIX_UNIQUE_PUBLISHER)}`)
+      .get(`/api/v1/catalog/search?q=${encodeURIComponent(FIX_UNIQUE_PUBLISHER)}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -913,7 +913,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     const publisherFragment = 'Zephyr Unique Publisher Bug1Fix';
 
     const res = await request(app)
-      .get(`/api/catalog/search?q=${encodeURIComponent(publisherFragment)}`)
+      .get(`/api/v1/catalog/search?q=${encodeURIComponent(publisherFragment)}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -938,7 +938,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .get('/api/catalog/search?q=a')
+      .get('/api/v1/catalog/search?q=a')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(400);
@@ -948,7 +948,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     const app = getTestApp();
 
     const res = await request(app)
-      .get('/api/catalog/search')
+      .get('/api/v1/catalog/search')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(400);
@@ -970,7 +970,7 @@ describe('Bug 1 Fix Verification — GET /api/catalog/search', () => {
     const noMatchQuery = 'XYZNONEXISTENT_BUG1FIX_NOBOOK_99887766';
 
     const res = await request(app)
-      .get(`/api/catalog/search?q=${encodeURIComponent(noMatchQuery)}`)
+      .get(`/api/v1/catalog/search?q=${encodeURIComponent(noMatchQuery)}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);

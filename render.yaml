@@ -27,7 +27,7 @@ services:
         sync: false
       - key: FRONTEND_URL
         value: https://bms-web.onrender.com
-    healthCheckPath: /api/health
+    healthCheckPath: /api/v1/health
 
   # ── Frontend (Static Site) ───────────────────────────────────────────────────
   - type: web

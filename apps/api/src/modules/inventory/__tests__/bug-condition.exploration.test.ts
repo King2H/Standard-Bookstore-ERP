@@ -264,21 +264,21 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
     await clearReservations(bookId, locationId);
 
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 5 }] });
     expect(orderRes.status).toBe(201);
     const orderId = orderRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send();
     expect(confirmRes.status).toBe(200);
 
     // Act: attempt a POS sale for qty=1 — nothing physically left
     const res = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         branchId,
@@ -317,14 +317,14 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
     await clearReservations(bookId, locationId);
 
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: 5 }] });
     expect(orderRes.status).toBe(201);
     const orderId = orderRes.body.id as string;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send();
     expect(confirmRes.status).toBe(200);
@@ -334,7 +334,7 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
 
     // Act: attempt a stockOut for qty=1 via API — nothing physically left
     const res = await request(getTestApp())
-      .post('/api/inventory/stock-out')
+      .post('/api/v1/inventory/stock-out')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, locationId, quantity: 1, version });
 
@@ -366,7 +366,7 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
 
     // Act: call adjustStock with referenceType and referenceId
     const res = await request(getTestApp())
-      .post('/api/inventory/adjust')
+      .post('/api/v1/inventory/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         bookId,
@@ -429,7 +429,7 @@ describe('Bug Conditions — Integration (reservation-awareness)', () => {
 
     // Act: transfer qty=3 from locationId to locationId2
     const res = await request(getTestApp())
-      .post('/api/inventory/transfer')
+      .post('/api/v1/inventory/transfer')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ bookId, fromLocationId: locationId, toLocationId: locationId2, quantity: 3, fromVersion: version });
 

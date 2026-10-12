@@ -41,7 +41,7 @@ async function createTestBankAccount(branchId: number): Promise<number> {
 
 async function createTestOrder(token: string, branchId: number, bookId: number): Promise<string> {
   const res = await request(getTestApp())
-    .post('/api/orders')
+    .post('/api/v1/orders')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ items: [{ bookId, quantity: 1 }] });
@@ -58,7 +58,7 @@ async function createTestOrder(token: string, branchId: number, bookId: number):
 // order with a customer instead.
 async function createCreditTestOrder(token: string, branchId: number, bookId: number, customerId: number): Promise<string> {
   const res = await request(getTestApp())
-    .post('/api/orders')
+    .post('/api/v1/orders')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ items: [{ bookId, quantity: 1 }], saleType: 'credit_sale', customerId });
@@ -142,7 +142,7 @@ describe('Post-MVP Hardening', () => {
 
     it('4. Customer created with encrypted PII columns populated', async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'PII Test Customer', phone: '+251900000001', email: 'piitest1@example.com' });
@@ -161,7 +161,7 @@ describe('Post-MVP Hardening', () => {
 
     it('5. Customer search works via lookup hash', async () => {
       const res = await request(getTestApp())
-        .get('/api/customers?q=piitest1@example.com')
+        .get('/api/v1/customers?q=piitest1@example.com')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -178,12 +178,12 @@ describe('Post-MVP Hardening', () => {
       const orderId = await createTestOrder(adminToken, branchId, bookId);
       // Confirm order first
       await request(getTestApp())
-        .post(`/api/orders/${orderId}/confirm`)
+        .post(`/api/v1/orders/${orderId}/confirm`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
       const res = await request(getTestApp())
-        .post('/api/payments')
+        .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ orderId, amount: bookPrice, paymentMethod: 'bank' });
@@ -208,7 +208,7 @@ describe('Post-MVP Hardening', () => {
       const orderId = await createCreditTestOrder(adminToken, branchId, bookId, customerId);
 
       const res = await request(getTestApp())
-        .post('/api/payments')
+        .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ orderId, amount: bookPrice, paymentMethod: 'bank', bankAccountId });
@@ -239,7 +239,7 @@ describe('Post-MVP Hardening', () => {
       const orderId = await createTestOrder(adminToken, branchId, bookId);
 
       const res = await request(getTestApp())
-        .post('/api/payments')
+        .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ orderId, amount: bookPrice, paymentMethod: 'bank', bankAccountId: otherBaId });
@@ -262,7 +262,7 @@ describe('Post-MVP Hardening', () => {
       const body = { orderId, amount: bookPrice, paymentMethod: 'cash' };
 
       const res1 = await request(getTestApp())
-        .post('/api/payments')
+        .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .set('Idempotency-Key', idempotencyKey)
@@ -272,7 +272,7 @@ describe('Post-MVP Hardening', () => {
       expect(res1.headers['x-idempotent-replayed']).toBeUndefined();
 
       const res2 = await request(getTestApp())
-        .post('/api/payments')
+        .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .set('Idempotency-Key', idempotencyKey)
@@ -287,7 +287,7 @@ describe('Post-MVP Hardening', () => {
       const orderId = await createCreditTestOrder(adminToken, branchId, bookId, customerId);
 
       const res = await request(getTestApp())
-        .post('/api/payments')
+        .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ orderId, amount: bookPrice, paymentMethod: 'cash' });

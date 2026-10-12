@@ -68,7 +68,7 @@ describe('Location Access Control', () => {
   it('returns empty assignments (fallback mode) when no locations assigned', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get(`/api/staff/${restrictedStaffId}/locations`)
+      .get(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -78,14 +78,14 @@ describe('Location Access Control', () => {
 
   it('unauthenticated request returns 401', async () => {
     const app = getTestApp();
-    const res = await request(app).get(`/api/staff/${restrictedStaffId}/locations`);
+    const res = await request(app).get(`/api/v1/staff/${restrictedStaffId}/locations`);
     expect(res.status).toBe(401);
   });
 
   it('Stock_Clerk cannot read staff location assignments (403)', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get(`/api/staff/${restrictedStaffId}/locations`)
+      .get(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${restrictedToken}`);
     expect(res.status).toBe(403);
   });
@@ -95,7 +95,7 @@ describe('Location Access Control', () => {
   it('Admin can assign specific locations to staff', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put(`/api/staff/${restrictedStaffId}/locations`)
+      .put(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send([locAId]);
 
@@ -104,7 +104,7 @@ describe('Location Access Control', () => {
 
     // Verify assignment persisted
     const getRes = await request(app)
-      .get(`/api/staff/${restrictedStaffId}/locations`)
+      .get(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(getRes.body.items).toHaveLength(1);
@@ -115,7 +115,7 @@ describe('Location Access Control', () => {
   it('cross-branch location assignment is rejected (403)', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put(`/api/staff/${restrictedStaffId}/locations`)
+      .put(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send([otherBranchLocId]);
 
@@ -125,7 +125,7 @@ describe('Location Access Control', () => {
   it('invalid payload (non-array) returns 400', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .put(`/api/staff/${restrictedStaffId}/locations`)
+      .put(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ locationIds: [locAId] });
 
@@ -136,13 +136,13 @@ describe('Location Access Control', () => {
     const app = getTestApp();
     // First assign
     await request(app)
-      .put(`/api/staff/${restrictedStaffId}/locations`)
+      .put(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send([locAId]);
 
     // Then clear
     const clearRes = await request(app)
-      .put(`/api/staff/${restrictedStaffId}/locations`)
+      .put(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send([]);
 
@@ -150,7 +150,7 @@ describe('Location Access Control', () => {
     expect(clearRes.body.message).toContain('full branch access');
 
     const getRes = await request(app)
-      .get(`/api/staff/${restrictedStaffId}/locations`)
+      .get(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(getRes.body.items).toHaveLength(0);
@@ -239,7 +239,7 @@ describe('Location Access Control', () => {
   it('assigning locations produces an audit log entry', async () => {
     const app = getTestApp();
     await request(app)
-      .put(`/api/staff/${restrictedStaffId}/locations`)
+      .put(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send([locAId, locBId]);
 
@@ -258,7 +258,7 @@ describe('Location Access Control', () => {
   it('clearing locations produces an audit log entry', async () => {
     const app = getTestApp();
     await request(app)
-      .put(`/api/staff/${restrictedStaffId}/locations`)
+      .put(`/api/v1/staff/${restrictedStaffId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send([]);
 

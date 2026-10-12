@@ -95,7 +95,7 @@ async function createDraftOrder(
   const body: Record<string, unknown> = { locationId, channel: 'in_store', items: [{ bookId, quantity }], saleType };
   if (customerId) body.customerId = customerId;
   const res = await request(getTestApp())
-    .post('/api/orders')
+    .post('/api/v1/orders')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send(body);
@@ -105,7 +105,7 @@ async function createDraftOrder(
 
 async function confirmOrder(token: string, branchId: number, orderId: string) {
   return request(getTestApp())
-    .post(`/api/orders/${orderId}/confirm`)
+    .post(`/api/v1/orders/${orderId}/confirm`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({});
@@ -113,7 +113,7 @@ async function confirmOrder(token: string, branchId: number, orderId: string) {
 
 async function payOrder(token: string, branchId: number, orderId: string, amount: number) {
   return request(getTestApp())
-    .post('/api/payments')
+    .post('/api/v1/payments')
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ orderId: Number(orderId), amount, paymentMethod: 'cash' });
@@ -121,7 +121,7 @@ async function payOrder(token: string, branchId: number, orderId: string, amount
 
 async function fulfillOrder(token: string, branchId: number, orderId: string) {
   return request(getTestApp())
-    .post(`/api/orders/${orderId}/fulfill`)
+    .post(`/api/v1/orders/${orderId}/fulfill`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({});
@@ -129,7 +129,7 @@ async function fulfillOrder(token: string, branchId: number, orderId: string) {
 
 async function cancelOrder(token: string, branchId: number, orderId: string, reason = 'Test cancellation') {
   return request(getTestApp())
-    .post(`/api/orders/${orderId}/cancel`)
+    .post(`/api/v1/orders/${orderId}/cancel`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
     .send({ reason });
@@ -261,7 +261,7 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     expect(await getReservedQty(bookId, locationId)).toBe(reservedBefore);
 
     const orderCheck = await request(getTestApp())
-      .get(`/api/orders/${order.id}`)
+      .get(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderCheck.body.status).toBe('DRAFT');
@@ -304,7 +304,7 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
 
     // Order is COMPLETED
     const orderCheck = await request(getTestApp())
-      .get(`/api/orders/${order.id}`)
+      .get(`/api/v1/orders/${order.id}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(orderCheck.body.status).toBe('COMPLETED');
@@ -452,7 +452,7 @@ describe('Order â†” Inventory Synchronization (corrected lifecycle)', () =>
     await setInventory(bookB, locationId, 10); // enough for create() to accept the draft
 
     const orderRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, items: [{ bookId: bookA, quantity: 3 }, { bookId: bookB, quantity: 5 }] });

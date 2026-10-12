@@ -9,7 +9,7 @@ delete process.env.FEATURE_BANK_ACCOUNTS;
 
 describe('Bank Accounts feature switch', () => {
   it('is off by default: bank account routes return 404', async () => {
-    const res = await request(getTestApp()).get('/api/branches/1/bank-accounts');
+    const res = await request(getTestApp()).get('/api/v1/branches/1/bank-accounts');
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('NOT_FOUND');
   });

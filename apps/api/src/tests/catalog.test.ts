@@ -72,7 +72,7 @@ describe('Catalog — Books', () => {
   it('Admin can create a book with relational authors and categories', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/books')
+      .post('/api/v1/books')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         isbn: VALID_ISBN_1,
@@ -100,7 +100,7 @@ describe('Catalog — Books', () => {
   it('Sales role cannot create a book (403)', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/books')
+      .post('/api/v1/books')
       .set('Authorization', `Bearer ${salesToken}`)
       .send({
         isbn: VALID_ISBN_2,
@@ -113,7 +113,7 @@ describe('Catalog — Books', () => {
   it('Duplicate ISBN returns 409', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/books')
+      .post('/api/v1/books')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         isbn: VALID_ISBN_1,
@@ -127,7 +127,7 @@ describe('Catalog — Books', () => {
   it('Invalid ISBN-13 check digit returns 400', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post('/api/books')
+      .post('/api/v1/books')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         isbn: '9780000000000', // invalid check digit
@@ -139,7 +139,7 @@ describe('Catalog — Books', () => {
 
   it('Unauthenticated request returns 401', async () => {
     const app = getTestApp();
-    const res = await request(app).post('/api/books').send({
+    const res = await request(app).post('/api/v1/books').send({
       isbn: VALID_ISBN_2,
       title: 'No Auth Book',
       authors: ['Test Author One'],
@@ -154,7 +154,7 @@ describe('Catalog — Books', () => {
 
     // Create second book with same author
     await request(app)
-      .post('/api/books')
+      .post('/api/v1/books')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         isbn: VALID_ISBN_2,
@@ -195,7 +195,7 @@ describe('Catalog — Books', () => {
   it('Any authenticated role can list books', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/books')
+      .get('/api/v1/books')
       .set('Authorization', `Bearer ${salesToken}`);
 
     expect(res.status).toBe(200);
@@ -208,7 +208,7 @@ describe('Catalog — Books', () => {
   it('Search by title returns matching books', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/books?q=Test+Book+Alpha')
+      .get('/api/v1/books?q=Test+Book+Alpha')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -219,7 +219,7 @@ describe('Catalog — Books', () => {
   it('Search by author name returns matching books', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/books?q=Test+Author+Two')
+      .get('/api/v1/books?q=Test+Author+Two')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -230,7 +230,7 @@ describe('Catalog — Books', () => {
   it('Filter by category returns matching books', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/books?category=Test+Category+A')
+      .get('/api/v1/books?category=Test+Category+A')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -242,7 +242,7 @@ describe('Catalog — Books', () => {
   it('Filter by tag returns matching books', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/books?tag=test-tag-1')
+      .get('/api/v1/books?tag=test-tag-1')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -253,7 +253,7 @@ describe('Catalog — Books', () => {
   it('Exact ISBN search returns the correct book', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_1}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_1}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -267,12 +267,12 @@ describe('Catalog — Books', () => {
     const app = getTestApp();
     // Find the book ID
     const listRes = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_1}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_1}`)
       .set('Authorization', `Bearer ${adminToken}`);
     const bookId = listRes.body.items[0].id;
 
     const res = await request(app)
-      .get(`/api/books/${bookId}`)
+      .get(`/api/v1/books/${bookId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -287,12 +287,12 @@ describe('Catalog — Books', () => {
   it('Admin can update book authors — removes old, adds new', async () => {
     const app = getTestApp();
     const listRes = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_1}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_1}`)
       .set('Authorization', `Bearer ${adminToken}`);
     const bookId = listRes.body.items[0].id;
 
     const res = await request(app)
-      .put(`/api/books/${bookId}`)
+      .put(`/api/v1/books/${bookId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         authors: ['Test Author One', 'Test Author Three'],
@@ -307,17 +307,17 @@ describe('Catalog — Books', () => {
   it('Update produces edit history entries', async () => {
     const app = getTestApp();
     const listRes = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_1}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_1}`)
       .set('Authorization', `Bearer ${adminToken}`);
     const bookId = listRes.body.items[0].id;
 
     await request(app)
-      .put(`/api/books/${bookId}`)
+      .put(`/api/v1/books/${bookId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ title: 'Test Book Alpha Updated' });
 
     const histRes = await request(app)
-      .get(`/api/books/${bookId}/history`)
+      .get(`/api/v1/books/${bookId}/history`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(histRes.status).toBe(200);
@@ -333,12 +333,12 @@ describe('Catalog — Books', () => {
   it('Admin can set a branch-specific price', async () => {
     const app = getTestApp();
     const listRes = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_1}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_1}`)
       .set('Authorization', `Bearer ${adminToken}`);
     const bookId = listRes.body.items[0].id;
 
     const res = await request(app)
-      .put(`/api/books/${bookId}/prices/${branchId}`)
+      .put(`/api/v1/books/${bookId}/prices/${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ price: 18.99 });
 
@@ -346,7 +346,7 @@ describe('Catalog — Books', () => {
 
     // Verify branch price appears in book detail
     const detailRes = await request(app)
-      .get(`/api/books/${bookId}?branchId=${branchId}`)
+      .get(`/api/v1/books/${bookId}?branchId=${branchId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(detailRes.body.branchPrice).toBe(18.99);
@@ -357,25 +357,25 @@ describe('Catalog — Books', () => {
   it('Admin can deactivate a book', async () => {
     const app = getTestApp();
     const listRes = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_2}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_2}`)
       .set('Authorization', `Bearer ${adminToken}`);
     const bookId = listRes.body.items[0].id;
 
     const res = await request(app)
-      .post(`/api/books/${bookId}/deactivate`)
+      .post(`/api/v1/books/${bookId}/deactivate`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
 
     // Deactivated book not returned in default list (is_active=true filter)
     const listAfter = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_2}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_2}`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(listAfter.body.items.length).toBe(0);
 
     // Explicit is_active=false finds it...
     const listInactive = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_2}&is_active=false`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_2}&is_active=false`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(listInactive.body.items.map((b: { id: number }) => b.id)).toContain(bookId);
 
@@ -384,7 +384,7 @@ describe('Catalog — Books', () => {
     // omitted param gets — active-only — so a deactivated book never
     // actually showed up under "All").
     const listAll = await request(app)
-      .get(`/api/books?isbn=${VALID_ISBN_2}&is_active=all`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_2}&is_active=all`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(listAll.body.items.map((b: { id: number }) => b.id)).toContain(bookId);
   });
@@ -394,7 +394,7 @@ describe('Catalog — Books', () => {
   it('Author suggest returns matching names', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/catalog/authors/suggest?q=test+author')
+      .get('/api/v1/catalog/authors/suggest?q=test+author')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -405,7 +405,7 @@ describe('Catalog — Books', () => {
   it('Category suggest returns matching names', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get('/api/catalog/categories/suggest?q=test+cat')
+      .get('/api/v1/catalog/categories/suggest?q=test+cat')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -417,7 +417,7 @@ describe('Catalog — Books', () => {
 
   it('Create book produces audit log entry', async () => {
     const listRes = await request(getTestApp())
-      .get(`/api/books?isbn=${VALID_ISBN_1}`)
+      .get(`/api/v1/books?isbn=${VALID_ISBN_1}`)
       .set('Authorization', `Bearer ${adminToken}`);
     const bookId = listRes.body.items[0].id;
 

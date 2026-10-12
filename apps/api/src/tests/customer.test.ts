@@ -58,7 +58,7 @@ describe('Customer Management', () => {
   describe('POST /api/customers', () => {
     it('creates customer with loyalty and store credit accounts auto-created', async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer Alpha', phone: '555-9001', email: 'alpha@test.com' });
@@ -80,13 +80,13 @@ describe('Customer Management', () => {
 
     it('customer_code auto-increments in CUS-XXXX format', async () => {
       const res1 = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer Beta' });
 
       const res2 = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer Gamma' });
@@ -106,7 +106,7 @@ describe('Customer Management', () => {
 
     it('duplicate phone returns 409 DUPLICATE_CONTACT', async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer DupPhone', phone: '555-9001' });
@@ -120,7 +120,7 @@ describe('Customer Management', () => {
 
     it('duplicate email returns 409 DUPLICATE_CONTACT', async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer DupEmail', email: 'alpha@test.com' });
@@ -134,7 +134,7 @@ describe('Customer Management', () => {
 
     it('Sales role can create a customer', async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${salesToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer BySales' });
@@ -147,7 +147,7 @@ describe('Customer Management', () => {
     it('Sales role cannot deactivate a customer (403)', async () => {
       // First create a customer to deactivate
       const createRes = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer ToDeactivate' });
@@ -155,7 +155,7 @@ describe('Customer Management', () => {
       const cid = createRes.body.id as number;
 
       const res = await request(getTestApp())
-        .post(`/api/customers/${cid}/deactivate`)
+        .post(`/api/v1/customers/${cid}/deactivate`)
         .set('Authorization', `Bearer ${salesToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -170,7 +170,7 @@ describe('Customer Management', () => {
 
     beforeAll(async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer LoyaltyTest' });
@@ -225,7 +225,7 @@ describe('Customer Management', () => {
       const balance = Number(la.rows[0].points_balance);
 
       const res = await request(getTestApp())
-        .post(`/api/customers/${customerId}/loyalty/redeem`)
+        .post(`/api/v1/customers/${customerId}/loyalty/redeem`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ points: balance + 9999, reason: 'Test correction' });
@@ -247,7 +247,7 @@ describe('Customer Management', () => {
 
       const redeemAmt = 1;
       const res = await request(getTestApp())
-        .post(`/api/customers/${customerId}/loyalty/redeem`)
+        .post(`/api/v1/customers/${customerId}/loyalty/redeem`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ points: redeemAmt, transactionRef: 'TXN-REDEEM', reason: 'Test correction' });
@@ -266,7 +266,7 @@ describe('Customer Management', () => {
 
     beforeAll(async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer CreditTest' });
@@ -277,7 +277,7 @@ describe('Customer Management', () => {
 
     it('store credit credit → balance increases', async () => {
       const res = await request(getTestApp())
-        .post(`/api/customers/${customerId}/store-credit/adjust`)
+        .post(`/api/v1/customers/${customerId}/store-credit/adjust`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ amount: 50.00, direction: 'credit', refType: 'manual', refId: 'REF-001', reason: 'Test correction' });
@@ -292,7 +292,7 @@ describe('Customer Management', () => {
 
     it('store credit debit insufficient → 422 INSUFFICIENT_STORE_CREDIT', async () => {
       const res = await request(getTestApp())
-        .post(`/api/customers/${customerId}/store-credit/adjust`)
+        .post(`/api/v1/customers/${customerId}/store-credit/adjust`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ amount: 9999.00, direction: 'debit', reason: 'Test correction' });
@@ -309,7 +309,7 @@ describe('Customer Management', () => {
 
     beforeAll(async () => {
       const res = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer SearchTarget', phone: '555-SRCH', email: 'search@test.com' });
@@ -320,7 +320,7 @@ describe('Customer Management', () => {
 
     it('search by name returns correct customer', async () => {
       const res = await request(getTestApp())
-        .get('/api/customers?q=SearchTarget')
+        .get('/api/v1/customers?q=SearchTarget')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -332,7 +332,7 @@ describe('Customer Management', () => {
 
     it('search by phone returns correct customer', async () => {
       const res = await request(getTestApp())
-        .get('/api/customers?q=555-SRCH')
+        .get('/api/v1/customers?q=555-SRCH')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 
@@ -346,7 +346,7 @@ describe('Customer Management', () => {
   describe('POST /api/customers/:id/deactivate', () => {
     it('deactivates customer → is_active=false', async () => {
       const createRes = await request(getTestApp())
-        .post('/api/customers')
+        .post('/api/v1/customers')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({ fullName: 'Test Customer DeactivateMe' });
@@ -354,7 +354,7 @@ describe('Customer Management', () => {
       const cid = createRes.body.id as number;
 
       const res = await request(getTestApp())
-        .post(`/api/customers/${cid}/deactivate`)
+        .post(`/api/v1/customers/${cid}/deactivate`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId));
 

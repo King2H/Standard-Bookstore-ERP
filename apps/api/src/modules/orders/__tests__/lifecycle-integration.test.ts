@@ -260,7 +260,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 1: Create DRAFT CASH order ──────────────────────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -278,7 +278,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 2: Confirm — creates soft reservation, inventory unchanged ───────
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -310,7 +310,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // run" -- meaning fulfill() is callable directly from CONFIRMED for cash
     // orders, which is the real, current flow this test needs to exercise.
     const fulfillRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -335,7 +335,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 5: Assert order is COMPLETED ────────────────────────────────────
     const finalOrderRes = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -402,7 +402,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 1: Create DRAFT CREDIT order ─────────────────────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -419,7 +419,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 2: Confirm — reservation created, receivable created ────────────
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -451,7 +451,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // ── Step 3: Fulfill — no stock change, receivable unchanged ──────────────
     // CREDIT orders are fulfillable from CONFIRMED without payment (fix C1)
     const fulfillRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -475,7 +475,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // Order → COMPLETED with payment_status still 'unpaid'
     const orderAfterFulfill = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(String(orderAfterFulfill.body.status ?? '').toUpperCase()).toBe('COMPLETED');
@@ -491,7 +491,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 4: Post-fulfillment payment — reduces receivable ─────────────────
     const payRes = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId, amount: orderTotal, paymentMethod: 'cash' });
@@ -509,7 +509,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // Order payment_status = 'paid'
     const finalOrderRes = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(String(finalOrderRes.body.paymentStatus ?? '').toLowerCase()).toBe('paid');
@@ -553,7 +553,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 1: Create and confirm CREDIT order ───────────────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId, quantity: ORDER_QTY }] });
@@ -562,7 +562,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     const orderId = createRes.body.id as number;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -584,7 +584,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // ── Step 2: Record partial payment → payment_status = 'partially_paid' ───
     const partialAmount = parseFloat((orderTotal * 0.4).toFixed(2)); // pay 40%
     const partPayRes = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId, amount: partialAmount, paymentMethod: 'cash' });
@@ -594,7 +594,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // Assert payment_status = 'partially_paid' (or 'partial')
     const orderAfterPartial = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -613,7 +613,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 3: Fulfill from PARTIALLY_PAID (fix C1 — was blocked pre-fix) ───
     const fulfillRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -623,7 +623,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // Order → COMPLETED
     const orderAfterFulfill = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
 
@@ -641,7 +641,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 4: Pay remaining balance → receivable Settled ────────────────────
     const remainingRes = await request(getTestApp())
-      .post('/api/payments')
+      .post('/api/v1/payments')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ orderId, amount: expectedRemaining, paymentMethod: 'cash' });
@@ -659,7 +659,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // Final order payment_status = 'paid'
     const finalOrder = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(String(finalOrder.body.paymentStatus ?? '').toLowerCase()).toBe('paid');
@@ -696,7 +696,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 1: Create and confirm CREDIT order ───────────────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId, quantity: ORDER_QTY }] });
@@ -705,7 +705,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     const orderId = createRes.body.id as number;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -729,7 +729,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 2: Cancel the confirmed order ────────────────────────────────────
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Test cancellation 14.4' });
@@ -804,7 +804,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 1: Create, confirm and fulfill a CREDIT order ────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId, quantity: ORDER_QTY }] });
@@ -813,7 +813,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     const orderId = createRes.body.id as number;
 
     const confirmRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
@@ -821,7 +821,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     expect(confirmRes.status).toBeLessThan(300);
 
     const fulfillRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -830,7 +830,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // Confirm order is now COMPLETED
     const orderAfterFulfill = await request(getTestApp())
-      .get(`/api/orders/${orderId}`)
+      .get(`/api/v1/orders/${orderId}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId));
     expect(String(orderAfterFulfill.body.status ?? '').toUpperCase()).toBe('COMPLETED');
@@ -839,7 +839,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 2: Attempt to cancel the COMPLETED order ─────────────────────────
     const cancelRes = await request(getTestApp())
-      .post(`/api/orders/${orderId}/cancel`)
+      .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ reason: 'Test cancel after fulfill' });
@@ -890,7 +890,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // ── Step 1: Create a POS cash transaction to generate a returnable line ───
     const saleTotal = parseFloat((bookPrice * SALE_QTY).toFixed(2));
     const saleRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -916,7 +916,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 2: Return with disposition='SELLABLE' ────────────────────────────
     const returnRes = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -969,7 +969,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // ── Step 1: POS cash sale ─────────────────────────────────────────────────
     const saleTotal = parseFloat((bookPrice * SALE_QTY).toFixed(2));
     const saleRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -994,7 +994,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Step 2: Return with disposition='DAMAGED' ─────────────────────────────
     const returnRes = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -1048,7 +1048,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
 
     // ── Create, confirm, fulfill CREDIT order ─────────────────────────────────
     const createRes = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'credit_sale', customerId, items: [{ bookId, quantity: ORDER_QTY }] });
@@ -1056,13 +1056,13 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     const orderId = createRes.body.id as number;
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/confirm`)
+      .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ dueDate: '2099-12-31' });
 
     await request(getTestApp())
-      .post(`/api/orders/${orderId}/fulfill`)
+      .post(`/api/v1/orders/${orderId}/fulfill`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({});
@@ -1082,7 +1082,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // (createReturn requires a transactionLineItemId — use POS sale as return vehicle)
     const saleTotal = parseFloat((bookPrice * RETURN_QTY).toFixed(2));
     const posSaleRes = await request(getTestApp())
-      .post('/api/pos/transactions')
+      .post('/api/v1/pos/transactions')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -1110,7 +1110,7 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     const unitPrice = parseFloat(txLineItemRes.rows[0].unit_price as string);
     const returnTotal = parseFloat((unitPrice * RETURN_QTY).toFixed(2));
     const returnRes = await request(getTestApp())
-      .post('/api/returns')
+      .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({
@@ -1154,12 +1154,12 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // Create two DRAFT orders for the same book/qty — sequential to avoid
     // order_number collision (concurrent COUNT(*) can produce duplicates)
     const cr1 = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: STOCK_QTY }] });
     const cr2 = await request(getTestApp())
-      .post('/api/orders')
+      .post('/api/v1/orders')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
       .send({ locationId, saleType: 'cash_sale', items: [{ bookId, quantity: STOCK_QTY }] });
@@ -1172,12 +1172,12 @@ describe('Integration Tests: Order–Payment–Inventory Lifecycle', () => {
     // Fire both confirms concurrently
     const [conf1, conf2] = await Promise.all([
       request(getTestApp())
-        .post(`/api/orders/${orderId1}/confirm`)
+        .post(`/api/v1/orders/${orderId1}/confirm`)
         .set('Authorization', `Bearer ${managerToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({}),
       request(getTestApp())
-        .post(`/api/orders/${orderId2}/confirm`)
+        .post(`/api/v1/orders/${orderId2}/confirm`)
         .set('Authorization', `Bearer ${managerToken}`)
         .set('X-Branch-Id', String(branchId))
         .send({}),

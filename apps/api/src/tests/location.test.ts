@@ -54,7 +54,7 @@ describe('Locations', () => {
   it('any authenticated role can list locations', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .get(`/api/branches/${branchId}/locations`)
+      .get(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${salesToken}`);
 
     expect(res.status).toBe(200);
@@ -64,7 +64,7 @@ describe('Locations', () => {
 
   it('unauthenticated request returns 401', async () => {
     const app = getTestApp();
-    const res = await request(app).get(`/api/branches/${branchId}/locations`);
+    const res = await request(app).get(`/api/v1/branches/${branchId}/locations`);
     expect(res.status).toBe(401);
   });
 
@@ -73,7 +73,7 @@ describe('Locations', () => {
   it('Admin can create a location', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Test Floor A' });
 
@@ -86,7 +86,7 @@ describe('Locations', () => {
   it('Manager can create a location', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ name: 'Test Floor B' });
 
@@ -97,7 +97,7 @@ describe('Locations', () => {
   it('Sales role cannot create a location (403)', async () => {
     const app = getTestApp();
     const res = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${salesToken}`)
       .send({ name: 'Unauthorized Floor' });
 
@@ -108,13 +108,13 @@ describe('Locations', () => {
     const app = getTestApp();
     // Create once
     await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Duplicate Floor' });
 
     // Try again with same name
     const res = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Duplicate Floor' });
 
@@ -126,7 +126,7 @@ describe('Locations', () => {
     const app = getTestApp();
     // Create in branch
     await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Shared Name Floor' });
 
@@ -138,7 +138,7 @@ describe('Locations', () => {
     });
 
     const res = await request(app)
-      .post(`/api/branches/${otherBranchId}/locations`)
+      .post(`/api/v1/branches/${otherBranchId}/locations`)
       .set('Authorization', `Bearer ${otherAdmin.token}`)
       .send({ name: 'Shared Name Floor' });
 
@@ -151,13 +151,13 @@ describe('Locations', () => {
     const app = getTestApp();
     // Create a location to rename
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'To Be Renamed' });
     const locId = createRes.body.id;
 
     const res = await request(app)
-      .put(`/api/branches/${branchId}/locations/${locId}`)
+      .put(`/api/v1/branches/${branchId}/locations/${locId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Renamed Successfully' });
 
@@ -169,18 +169,18 @@ describe('Locations', () => {
     const app = getTestApp();
     // Create two locations
     const a = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Rename Source' });
 
     await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Rename Target Exists' });
 
     // Try to rename source to target's name
     const res = await request(app)
-      .put(`/api/branches/${branchId}/locations/${a.body.id}`)
+      .put(`/api/v1/branches/${branchId}/locations/${a.body.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Rename Target Exists' });
 
@@ -194,18 +194,18 @@ describe('Locations', () => {
 
     // Get current default
     const listRes = await request(app)
-      .get(`/api/branches/${branchId}/locations`)
+      .get(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`);
     const currentDefault = listRes.body.items.find((l: { isDefaultFulfillment: boolean }) => l.isDefaultFulfillment);
 
     // Create a new location to set as default
     const newLoc = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'New Default Location' });
 
     const setRes = await request(app)
-      .put(`/api/branches/${branchId}/locations/${newLoc.body.id}/set-default`)
+      .put(`/api/v1/branches/${branchId}/locations/${newLoc.body.id}/set-default`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(setRes.status).toBe(200);
@@ -213,7 +213,7 @@ describe('Locations', () => {
 
     // Verify only one default exists
     const afterRes = await request(app)
-      .get(`/api/branches/${branchId}/locations`)
+      .get(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     const defaults = afterRes.body.items.filter((l: { isDefaultFulfillment: boolean }) => l.isDefaultFulfillment);
@@ -223,7 +223,7 @@ describe('Locations', () => {
     // Restore original default if it existed
     if (currentDefault) {
       await request(app)
-        .put(`/api/branches/${branchId}/locations/${currentDefault.id}/set-default`)
+        .put(`/api/v1/branches/${branchId}/locations/${currentDefault.id}/set-default`)
         .set('Authorization', `Bearer ${adminToken}`);
     }
   });
@@ -233,28 +233,28 @@ describe('Locations', () => {
 
     // Create two locations
     const locA = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Concurrency Test A' });
 
     const locB = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Concurrency Test B' });
 
     // Fire both set-default requests sequentially (simulates rapid UI clicks)
     await Promise.all([
       request(app)
-        .put(`/api/branches/${branchId}/locations/${locA.body.id}/set-default`)
+        .put(`/api/v1/branches/${branchId}/locations/${locA.body.id}/set-default`)
         .set('Authorization', `Bearer ${adminToken}`),
       request(app)
-        .put(`/api/branches/${branchId}/locations/${locB.body.id}/set-default`)
+        .put(`/api/v1/branches/${branchId}/locations/${locB.body.id}/set-default`)
         .set('Authorization', `Bearer ${adminToken}`),
     ]);
 
     // Exactly one default must remain
     const listRes = await request(app)
-      .get(`/api/branches/${branchId}/locations`)
+      .get(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     const defaults = listRes.body.items.filter((l: { isDefaultFulfillment: boolean }) => l.isDefaultFulfillment);
@@ -266,12 +266,12 @@ describe('Locations', () => {
   it('Admin can delete a non-default location with no inventory', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'To Be Deleted' });
 
     const res = await request(app)
-      .delete(`/api/branches/${branchId}/locations/${createRes.body.id}`)
+      .delete(`/api/v1/branches/${branchId}/locations/${createRes.body.id}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -281,12 +281,12 @@ describe('Locations', () => {
   it('Sales role cannot delete a location (403)', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Sales Cannot Delete' });
 
     const res = await request(app)
-      .delete(`/api/branches/${branchId}/locations/${createRes.body.id}`)
+      .delete(`/api/v1/branches/${branchId}/locations/${createRes.body.id}`)
       .set('Authorization', `Bearer ${salesToken}`);
 
     expect(res.status).toBe(403);
@@ -298,7 +298,7 @@ describe('Locations', () => {
   it('refuses to delete a location whose only orders are completed (409, history)', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Completed Orders Location' });
     const locationId = createRes.body.id as number;
@@ -311,7 +311,7 @@ describe('Locations', () => {
 
     try {
       const res = await request(app)
-        .delete(`/api/branches/${branchId}/locations/${locationId}`)
+        .delete(`/api/v1/branches/${branchId}/locations/${locationId}`)
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(409);
@@ -326,7 +326,7 @@ describe('Locations', () => {
   it('refuses to delete a location with POS sales and no stock (409, not a database error)', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'POS History Location' });
     const locationId = createRes.body.id as number;
@@ -339,7 +339,7 @@ describe('Locations', () => {
 
     try {
       const res = await request(app)
-        .delete(`/api/branches/${branchId}/locations/${locationId}`)
+        .delete(`/api/v1/branches/${branchId}/locations/${locationId}`)
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(409);
@@ -354,7 +354,7 @@ describe('Locations', () => {
   it('create location produces audit log entry', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Audit Test Location' });
 
@@ -373,14 +373,14 @@ describe('Locations', () => {
   it('rename produces audit log entry', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Audit Rename Source' });
 
     const locId = createRes.body.id;
 
     await request(app)
-      .put(`/api/branches/${branchId}/locations/${locId}`)
+      .put(`/api/v1/branches/${branchId}/locations/${locId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Audit Rename Target' });
 
@@ -396,14 +396,14 @@ describe('Locations', () => {
   it('set-default produces audit log entry', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Audit Default Location' });
 
     const locId = createRes.body.id;
 
     await request(app)
-      .put(`/api/branches/${branchId}/locations/${locId}/set-default`)
+      .put(`/api/v1/branches/${branchId}/locations/${locId}/set-default`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     const audit = await db.query(
@@ -419,14 +419,14 @@ describe('Locations', () => {
   it('delete produces audit log entry', async () => {
     const app = getTestApp();
     const createRes = await request(app)
-      .post(`/api/branches/${branchId}/locations`)
+      .post(`/api/v1/branches/${branchId}/locations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Audit Delete Location' });
 
     const locId = createRes.body.id;
 
     await request(app)
-      .delete(`/api/branches/${branchId}/locations/${locId}`)
+      .delete(`/api/v1/branches/${branchId}/locations/${locId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     const audit = await db.query(
