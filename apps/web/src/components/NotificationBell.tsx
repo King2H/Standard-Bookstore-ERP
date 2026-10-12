@@ -23,13 +23,8 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getAccessToken } from '../lib/api.js';
+import { api, apiUrl, authHeaders, getAccessToken } from '../lib/api.js';
 import { useToast } from './Toast.js';
-
-// Use the same base URL as the main API client
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)
-  ? `${import.meta.env.VITE_API_URL as string}/api`
-  : '/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -125,15 +120,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/notifications?pageSize=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        console.warn('[NotificationBell] fetchList failed:', res.status, res.statusText);
-        return;
-      }
-      const data = await res.json() as { data: Notification[] };
+      const data = await api.get<{ data: Notification[] }>('/notifications?pageSize=50');
       if (mountedRef.current) {
         const list = data.data ?? [];
         setNotifications(list);
@@ -168,9 +155,9 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/notifications/stream`, {
+        const res = await fetch(apiUrl('/notifications/stream'), {
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...authHeaders(),
             Accept: 'text/event-stream',
             'Cache-Control': 'no-cache',
           },
@@ -283,13 +270,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     // Optimistic update
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     setUnreadCount(c => Math.max(0, c - 1));
-    try {
-      await fetch(`${API_BASE}/notifications/${id}/read`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: 'include',
-      });
-    } catch { /* ignore — optimistic update already applied */ }
+    await api.put(`/notifications/${id}/read`).catch(() => { /* optimistic update already applied */ });
   }, []);
 
   const markAllRead = useCallback(async () => {
@@ -298,13 +279,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     // Optimistic update
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     setUnreadCount(0);
-    try {
-      await fetch(`${API_BASE}/notifications/read-all`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: 'include',
-      });
-    } catch { /* ignore */ }
+    await api.put('/notifications/read-all').catch(() => {});
   }, []);
 
   // ── Click handler ───────────────────────────────────────────────────────────

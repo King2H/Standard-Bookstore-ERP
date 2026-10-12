@@ -1,9 +1,22 @@
 // Typed API client — all requests go through here
 // In production, VITE_API_URL points to the deployed backend (e.g. https://bms-api.onrender.com)
-// In development, requests go to /api (proxied by Vite to localhost:3000)
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)
-  ? `${import.meta.env.VITE_API_URL as string}/api`
-  : '/api';
+// In development, requests go to /api/v1 (proxied by Vite to localhost:3000)
+const API_BASE = `${(import.meta.env.VITE_API_URL as string | undefined) ?? ''}/api/v1`;
+
+/** The full URL of an API path, for the few requests that cannot go through `api` (the notification stream). */
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
+/** A query string from the set values of `params`, with its `?`, or '' when none is set. */
+export function toQuery(params: Record<string, string | number | boolean | null | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') q.set(key, String(value));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
 
 let accessToken: string | null = null;
 let currentBranchId: number | null = null;
@@ -65,24 +78,21 @@ export function setSessionEndedHandler(fn: (() => void) | null) {
   _onSessionEnded = fn;
 }
 
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  headers?: Record<string, string>,
-): Promise<T> {
+/** The headers every API request carries: the session, the branch and, on changes, the CSRF token. */
+export function authHeaders(method = 'GET'): Record<string, string> {
   const csrfToken = !SAFE_METHODS.has(method) ? getCsrfToken() : null;
+  return {
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(currentBranchId ? { 'X-Branch-Id': String(currentBranchId) } : {}),
+    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+  };
+}
 
+async function request<T>(method: string, path: string, body?: unknown, as: 'json' | 'blob' = 'json'): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(currentBranchId ? { 'X-Branch-Id': String(currentBranchId) } : {}),
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      ...headers,
-    },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(method) },
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -100,7 +110,7 @@ async function request<T>(
   // Any successful API call counts as user activity
   _notifyActivity?.();
 
-  return res.json() as Promise<T>;
+  return (as === 'blob' ? res.blob() : res.json()) as Promise<T>;
 }
 
 export const api = {
@@ -109,4 +119,16 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
+  /** A file the API sends (CSV exports). */
+  download: (path: string) => request<Blob>('GET', path, undefined, 'blob'),
 };
+
+/** Saves a file the API sends under `filename`. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const blob = await api.download(path);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}

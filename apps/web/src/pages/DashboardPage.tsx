@@ -5,7 +5,7 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { api, getAccessToken, getCurrentBranchId } from '../lib/api.js';
+import { api, downloadFile, getCurrentBranchId, toQuery } from '../lib/api.js';
 
 type Role = string;
 interface DashboardPageProps { userRole?: Role; onNavigate?: (page: string, context?: Record<string, string>) => void; }
@@ -385,21 +385,12 @@ export default function DashboardPage({ userRole, onNavigate }: DashboardPagePro
 
   // F-026: CSV export function
   const exportReport = async (type: string) => {
-    const token = getAccessToken();
-    const params = new URLSearchParams();
-    if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
-    if (filters.dateTo) params.set('dateTo', filters.dateTo);
-    if (filters.branchId) params.set('branchId', filters.branchId);
-    params.set('format', 'csv');
-    const url = `/api/reports/${type}/export?${params.toString()}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token ?? ''}` } });
-    if (!res.ok) { alert('Export failed'); return; }
-    const blob = await res.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${type}-report-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const qs = toQuery({ dateFrom: filters.dateFrom, dateTo: filters.dateTo, branchId: filters.branchId, format: 'csv' });
+    try {
+      await downloadFile(`/reports/${type}/export${qs}`, `${type}-report-${new Date().toISOString().slice(0,10)}.csv`);
+    } catch {
+      alert('Export failed');
+    }
   };
 
   const { data: kpis, isLoading: kpiLoading, dataUpdatedAt: kpiUpdatedAt } = useQuery<KpiReport>({
