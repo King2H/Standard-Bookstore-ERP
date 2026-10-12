@@ -1,15 +1,7 @@
 /**
  * Layout — hierarchical, accordion-style sidebar + top bar.
  *
- * Sidebar structure:
- *   Dashboard (standalone)
- *   Sales      → POS, Orders, Returns, Exchanges, Customers
- *   Stock      → Inventory, Procurement, Suppliers, Catalog
- *   Finance    → Payments, Receivables
- *     (Bank Accounts is not an active module for this version: hidden
- *      from the nav, route/page left intact.)
- *   Organization → Branches, Locations, Staff
- *   System     → Settings, Audit Log
+ * Sidebar structure and who sees what: app/navigation.ts.
  *
  * Accordion: only one section open at a time.
  * Auto-expand: the section containing the active page opens on mount / page change.
@@ -20,100 +12,12 @@ import { useTheme } from '../lib/theme.js';
 import { logout } from '../lib/auth.js';
 import { api } from '../lib/api.js';
 import NotificationBell from './NotificationBell.js';
-
-type Page =
-  | 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings'
-  | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers'
-  | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments'
-  | 'exchanges' | 'profile' | 'receivables';
+import {
+  NAV_SECTIONS, canSeeDashboard, canSeeItem, findSectionForPage,
+  type NavLeaf, type NavSection, type Page,
+} from '../app/navigation.js';
 
 type Role = string;
-
-// ── Permission → menu mapping ─────────────────────────────────────────────────
-// Each menu item lists which permissions grant access to it.
-// A user sees an item if they have ANY of the listed permissions.
-// This supports multi-role users: permissions are the union of all their roles.
-
-interface NavLeaf {
-  id: Page;
-  label: string;
-  icon: string;
-  roles: Role[];           // kept for backward compat / role-badge display
-  permissions?: string[];  // if set, used instead of roles for visibility
-}
-
-interface NavSection {
-  id: string;
-  label: string;
-  icon: string;
-  roles: Role[];
-  permissions?: string[];
-  items: NavLeaf[];
-}
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    id: 'sales', label: 'Sales', icon: '🛒',
-    roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],
-    permissions: ['CREATE_SALE', 'PROCESS_PAYMENT', 'APPROVE_EXCHANGE', 'PROCESS_REFUND'],
-    items: [
-      { id: 'pos',       label: 'POS',       icon: '🛒', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE'] },
-      { id: 'orders',    label: 'Orders',    icon: '📦', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_PAYMENT'] },
-      { id: 'returns',   label: 'Returns',   icon: '↩',  roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_REFUND'] },
-      { id: 'exchanges', label: 'Exchanges', icon: '🔁', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE', 'APPROVE_EXCHANGE'] },
-      { id: 'customers', label: 'Customers', icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer', 'Stock_Clerk', 'Purchasor'], permissions: ['CREATE_SALE', 'PROCESS_PAYMENT', 'MANAGE_INVENTORY', 'VIEW_REPORTS'] },
-    ],
-  },
-  {
-    id: 'stock', label: 'Stock', icon: '📦',
-    roles: ['Admin', 'Manager', 'Stock_Clerk', 'Purchasor', 'Finance_Officer', 'Sales'],
-    permissions: ['MANAGE_INVENTORY', 'VIEW_REPORTS'],
-    items: [
-      { id: 'inventory',   label: 'Inventory',   icon: '📦', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'], permissions: ['MANAGE_INVENTORY', 'VIEW_REPORTS'] },
-      { id: 'procurement', label: 'Procurement', icon: '📋', roles: ['Admin', 'Manager', 'Purchasor', 'Stock_Clerk', 'Finance_Officer'],           permissions: ['MANAGE_INVENTORY'] },
-      { id: 'suppliers',   label: 'Suppliers',   icon: '🚚', roles: ['Admin', 'Manager', 'Purchasor'],                                             permissions: ['MANAGE_INVENTORY'] },
-      { id: 'catalog',     label: 'Catalog',     icon: '📚', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'],  permissions: ['MANAGE_INVENTORY', 'VIEW_REPORTS', 'CREATE_SALE'] },
-    ],
-  },
-  {
-    id: 'finance', label: 'Finance', icon: '💳',
-    roles: ['Admin', 'Manager', 'Finance_Officer', 'Sales'],
-    permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'],
-    items: [
-      { id: 'payments',      label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND'] },
-      { id: 'receivables',   label: 'Receivables',   icon: '🧾', roles: ['Admin', 'Manager', 'Finance_Officer'],             permissions: ['PROCESS_PAYMENT'] },
-      // 'bank-accounts' intentionally omitted — not an active module for
-      // this version. The page/route still exists; only the nav entry is
-      // hidden. (Installments were retired.)
-    ],
-  },
-  {
-    id: 'organization', label: 'Organization', icon: '🏢',
-    roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'],
-    items: [
-      { id: 'branches',  label: 'Branches',  icon: '🏪', roles: ['Super_Admin', 'Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'] },
-      { id: 'locations', label: 'Locations', icon: '📍', roles: ['Admin', 'Manager', 'Finance_Officer', 'Stock_Clerk', 'Sales', 'Purchasor'],               permissions: ['MANAGE_BRANCH', 'MANAGE_INVENTORY', 'CREATE_SALE'] },
-      { id: 'staff',     label: 'Staff',     icon: '👥', roles: ['Super_Admin', 'Admin', 'Manager'],                                                        permissions: ['MANAGE_STAFF'] },
-    ],
-  },
-  {
-    id: 'system', label: 'System', icon: '⚙️',
-    roles: ['Super_Admin', 'Admin', 'Manager'],
-    permissions: ['MANAGE_BRANCH', 'MANAGE_STAFF'],
-    items: [
-      { id: 'settings',  label: 'Settings',  icon: '⚙️', roles: ['Super_Admin', 'Admin', 'Manager'], permissions: ['MANAGE_BRANCH'] },
-      { id: 'audit-log', label: 'Audit Log', icon: '📋', roles: ['Super_Admin', 'Admin'],             permissions: ['MANAGE_STAFF', 'MANAGE_BRANCH'] },
-    ],
-  },
-];
-
-/** Returns the section id that contains the given page, or null. */
-function findSectionForPage(page: Page): string | null {
-  for (const section of NAV_SECTIONS) {
-    if (section.items.some(i => i.id === page)) return section.id;
-  }
-  return null;
-}
 
 // ── Role badge colours ────────────────────────────────────────────────────────
 
@@ -167,26 +71,6 @@ interface SidebarSectionProps {
   sidebarExpanded: boolean;
   onToggle: () => void;
   onNavigate: (page: Page) => void;
-}
-
-/** Returns true if the user can see this item based on their role OR permissions. */
-function canSeeItem(item: NavLeaf, userRole: Role | null, userPermissions: string[]): boolean {
-  // Super_Admin is a governance-only role: Dashboard, Organization, System only.
-  // Block all operational sections regardless of any permission union.
-  if (userRole === 'Super_Admin') {
-    const SUPER_ADMIN_ALLOWED: Page[] = [
-      'dashboard', 'branches', 'locations', 'staff', 'settings', 'audit-log', 'profile',
-    ];
-    return SUPER_ADMIN_ALLOWED.includes(item.id);
-  }
-
-  // Permission-based check (preferred — supports multi-role union)
-  if (item.permissions && item.permissions.length > 0) {
-    if (userPermissions.some(p => item.permissions!.includes(p))) return true;
-  }
-  // Role-based fallback (for items without permission mapping, or when permissions not yet loaded)
-  if (userRole && item.roles.includes(userRole)) return true;
-  return false;
 }
 
 function SidebarSection({
@@ -342,8 +226,7 @@ export default function Layout({
         <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
 
           {/* Dashboard — standalone, visible to roles with VIEW_REPORTS or Admin/Manager */}
-          {(userPermissions.some(p => ['VIEW_REPORTS', 'MANAGE_BRANCH'].includes(p)) ||
-            (userRole && ['Admin', 'Manager', 'Finance_Officer', 'Super_Admin'].includes(userRole))) && (
+          {canSeeDashboard(userRole, userPermissions) && (
             <button
               onClick={() => onNavigate('dashboard')}
               title={!sidebarExpanded ? 'Dashboard' : undefined}

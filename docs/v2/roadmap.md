@@ -132,7 +132,8 @@ even with an application filter removed.
 
 | Order | Step |
 |---|---|
-| 1 | React 19, current Vite and React Router upgrade, as one PR (ADR-0011). Includes the web toolchain: Vitest, Tailwind CSS and esbuild, clearing their audit advisories |
+| 1 | React 19, current Vite and Vitest, and React Router: one URL per page, with permission route guards (ADR-0011) |
+| 1b | Tailwind CSS 4. Together with step 1, clears the web toolchain's audit advisories |
 | 2 | App shell, typed API client on `/api/v1`, query-key factories; then remove the deprecated `/api` alias (#15) |
 | 3 | Features migrated one per PR, following the API modules already refactored (Suppliers first) |
 

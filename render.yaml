@@ -36,6 +36,11 @@ services:
     buildCommand: npm install && VITE_API_URL=https://bms-api-gwf2.onrender.com npm run build --workspace=apps/web
     staticPublishPath: ./apps/web/dist
     plan: free
+    # Each page has its own URL (/orders, /payments, …): serve the app for all of them.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: VITE_API_URL
         value: https://bms-api-gwf2.onrender.com
