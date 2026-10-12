@@ -126,7 +126,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
   return (
     <div className="flex flex-col h-full">
       {/* Tab bar */}
-      <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
+      <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
         {(['new', 'list'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
             {t === 'new' ? '↩ New Return' : '📋 Returns History'}
@@ -147,7 +147,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
                 onChange={e => setTxSearchInput(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 placeholder="Enter transaction number (e.g. POS-20250101-0001)"
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />
               <button onClick={handleSearch} disabled={txLoading}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg transition-colors">
@@ -195,7 +195,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
                       <span className="text-xs text-gray-500 dark:text-gray-400">Return:</span>
                       <input type="number" min="0" max={li.quantity} value={quantities[li.id] ?? 0}
                         onChange={e => setQty(li.id, parseInt(e.target.value) || 0, li.quantity)}
-                        className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-center focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-center focus:outline-hidden focus:ring-1 focus:ring-blue-500" />
                       <span className="text-xs text-gray-400">/ {li.quantity}</span>
                     </div>
                     <div className="text-sm font-medium text-gray-900 dark:text-white w-24 text-right">
@@ -218,7 +218,7 @@ export default function ReturnsPage({ userRole, userPermissions }: ReturnsPagePr
               </p>
 
               <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for return (optional)"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
 
               {/* Approval section */}
               {canApprove(userRole) ? (

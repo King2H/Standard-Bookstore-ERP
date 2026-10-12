@@ -17,7 +17,7 @@ export default function BankAccountSelect({ accounts, value, onChange, className
       aria-label="Bank account"
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-      className={className ?? 'w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'}
+      className={className ?? 'w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500'}
     >
       <option value="">Select bank account…</option>
       {accounts.map((a) => (

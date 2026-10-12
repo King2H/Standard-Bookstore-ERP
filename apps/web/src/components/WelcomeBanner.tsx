@@ -26,7 +26,7 @@ export default function WelcomeBanner() {
 
   return (
     <div
-      className="relative overflow-hidden border-b border-blue-100 dark:border-blue-900/50 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-purple-950/40 px-5 py-2.5 flex items-center gap-3 flex-shrink-0"
+      className="relative overflow-hidden border-b border-blue-100 dark:border-blue-900/50 bg-linear-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-purple-950/40 px-5 py-2.5 flex items-center gap-3 shrink-0"
       style={{ animation: 'bms-slide-in 0.5s ease-out both' }}
     >
       {/* Decorative background circles */}
@@ -35,7 +35,7 @@ export default function WelcomeBanner() {
 
       {/* Book icon with gentle pulse */}
       <div
-        className="flex-shrink-0 w-8 h-8 rounded-lg bg-white dark:bg-gray-900 shadow-sm border border-blue-100 dark:border-blue-900/50 flex items-center justify-center text-lg"
+        className="shrink-0 w-8 h-8 rounded-lg bg-white dark:bg-gray-900 shadow-xs border border-blue-100 dark:border-blue-900/50 flex items-center justify-center text-lg"
         style={{ animation: 'bms-pulse-soft 3s ease-in-out infinite' }}
         aria-hidden="true"
       >
@@ -56,7 +56,7 @@ export default function WelcomeBanner() {
       {/* Dismiss */}
       <button
         onClick={handleDismiss}
-        className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-white/60 dark:hover:bg-gray-800/60 transition-colors"
+        className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-white/60 dark:hover:bg-gray-800/60 transition-colors"
         aria-label="Dismiss banner"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

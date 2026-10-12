@@ -51,12 +51,12 @@ function SidebarItem({ item, isActive, expanded, onClick }: SidebarItemProps) {
           : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
         }`}
     >
-      <span className="text-sm flex-shrink-0 w-4 text-center">{item.icon}</span>
+      <span className="text-sm shrink-0 w-4 text-center">{item.icon}</span>
       {expanded && (
         <span className="truncate flex-1 min-w-0 text-left">{item.label}</span>
       )}
       {expanded && isActive && (
-        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
       )}
     </button>
   );
@@ -93,12 +93,12 @@ function SidebarSection({
             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50'
           }`}
       >
-        <span className="text-base flex-shrink-0 w-4 text-center">{section.icon}</span>
+        <span className="text-base shrink-0 w-4 text-center">{section.icon}</span>
         {sidebarExpanded && (
           <>
             <span className="flex-1 text-left">{section.label}</span>
             <svg
-              className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+              className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
@@ -205,12 +205,12 @@ export default function Layout({
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
-        className={`${sidebarExpanded ? 'w-56' : 'w-14'} flex-shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 ease-in-out`}
+        className={`${sidebarExpanded ? 'w-56' : 'w-14'} shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 ease-in-out`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-3 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+        <div className="h-16 flex items-center px-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-md">
+            <div className="w-8 h-8 rounded-lg bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
               <span className="text-white text-sm font-bold">B</span>
             </div>
             {sidebarExpanded && (
@@ -236,16 +236,16 @@ export default function Layout({
                   : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                 }`}
             >
-              <span className="text-base flex-shrink-0 w-4 text-center">📊</span>
+              <span className="text-base shrink-0 w-4 text-center">📊</span>
               {sidebarExpanded && <span className="truncate">Dashboard</span>}
               {sidebarExpanded && currentPage === 'dashboard' && (
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
               )}
             </button>
           )}
 
           {/* Divider */}
-          {sidebarExpanded && <div className="h-px bg-gray-100 dark:bg-gray-800 my-2 mx-1" />}
+          {sidebarExpanded && <div className="h-px bg-gray-100 dark:bg-gray-800 mx-1" />}
 
           {/* Grouped sections */}
           {NAV_SECTIONS.map(section => (
@@ -264,7 +264,7 @@ export default function Layout({
         </nav>
 
         {/* Footer */}
-        <div className="p-2 border-t border-gray-200 dark:border-gray-800 space-y-0.5 flex-shrink-0">
+        <div className="p-2 border-t border-gray-200 dark:border-gray-800 space-y-0.5 shrink-0">
           {/* My Profile */}
           <button
             onClick={() => onNavigate('profile')}
@@ -275,7 +275,7 @@ export default function Layout({
                 : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
               }`}
           >
-            <span className="text-sm flex-shrink-0 w-4 text-center">👤</span>
+            <span className="text-sm shrink-0 w-4 text-center">👤</span>
             {sidebarExpanded && <span className="truncate">My Profile</span>}
           </button>
 
@@ -285,7 +285,7 @@ export default function Layout({
             title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
-            <span className="text-sm flex-shrink-0 w-4 text-center">{theme === 'dark' ? '☀️' : '🌙'}</span>
+            <span className="text-sm shrink-0 w-4 text-center">{theme === 'dark' ? '☀️' : '🌙'}</span>
             {sidebarExpanded && <span className="truncate">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
           </button>
 
@@ -295,7 +295,7 @@ export default function Layout({
             title={!sidebarExpanded ? 'Sign Out' : undefined}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
           >
-            <span className="text-sm flex-shrink-0 w-4 text-center">🚪</span>
+            <span className="text-sm shrink-0 w-4 text-center">🚪</span>
             {sidebarExpanded && <span className="truncate">Sign Out</span>}
           </button>
         </div>
@@ -305,7 +305,7 @@ export default function Layout({
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* Top bar */}
-        <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-4 flex-shrink-0">
+        <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-4 shrink-0">
 
           {/* Sidebar toggle */}
           <button
@@ -336,7 +336,7 @@ export default function Layout({
                 <span className="max-w-[120px] truncate text-xs font-medium">
                   {switchingBranch ? 'Switching…' : (activeBranch?.branchName ?? 'Branch')}
                 </span>
-                <svg className={`w-3 h-3 flex-shrink-0 transition-transform ${branchMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-3 h-3 shrink-0 transition-transform ${branchMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -368,7 +368,7 @@ export default function Layout({
                           )}
                         </div>
                         {b.branchId === activeBranchId && (
-                          <svg className="w-4 h-4 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <svg className="w-4 h-4 shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
                         )}
@@ -381,7 +381,7 @@ export default function Layout({
           )}
 
           {/* ── Role tags (informational — all roles for active branch) ── */}
-          <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
+          <div className="hidden sm:flex items-center gap-1 shrink-0">
             {(userRoles.length > 0 ? userRoles : (userRole ? [userRole] : [])).map(r => (
               <span key={r} className={`text-xs font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[r] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>
                 {r.replace('_', ' ')}

@@ -82,7 +82,7 @@ export function parseStatement(text: string): StatementLineInput[] {
     });
 }
 
-const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -203,7 +203,7 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
             {showForm && (
               <form
                 onSubmit={handleSubmit(data => { setApiError(null); createMutation.mutate(data); })}
-                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-4 space-y-3 shadow-sm"
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-4 space-y-3 shadow-xs"
               >
                 {apiError && (
                   <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-sm text-red-700 dark:text-red-400">
@@ -254,7 +254,7 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
             {accountsLoading ? (
               <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>
             ) : (
-              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-xs">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                     <tr>
@@ -320,7 +320,7 @@ export default function BankAccountsPage({ userRole }: { userRole?: string }) {
           <div>
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Reconciliation</h2>
             {!selectedAccountId ? (
-              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center shadow-sm">
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center shadow-xs">
                 <p className="text-sm text-gray-400 dark:text-gray-500">Select an account to reconcile its statement</p>
               </div>
             ) : (
@@ -394,7 +394,7 @@ function Reconciliation({ branchId, accountId, canReconcile }: { branchId: numbe
   return (
     <div className="space-y-4">
       {canReconcile && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-sm space-y-2">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-xs space-y-2">
           <label htmlFor="statement" className="block text-xs font-medium text-gray-600 dark:text-gray-400">
             Import statement lines: date, amount, in/out, bank reference, description (one per line)
           </label>
@@ -407,7 +407,7 @@ function Reconciliation({ branchId, accountId, canReconcile }: { branchId: numbe
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-xs">
         <h3 className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">Statement lines</h3>
         <table className="w-full text-sm">
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -420,14 +420,14 @@ function Reconciliation({ branchId, accountId, canReconcile }: { branchId: numbe
                 <td className="px-4 py-2 text-xs">
                   {l.entryId !== null ? (
                     <span className="inline-flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400">Matched</span>
+                      <span className="px-2 py-0.5 rounded-sm bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400">Matched</span>
                       {canReconcile && (
                         <button onClick={() => unmatchMutation.mutate(l.id)} className="text-gray-500 hover:text-red-600">Unmatch</button>
                       )}
                     </span>
                   ) : matching === l.id ? (
                     <select aria-label="Movement to match" defaultValue="" onChange={(e) => e.target.value && matchMutation.mutate({ lineId: l.id, entryId: e.target.value })}
-                      className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 text-xs">
+                      className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm px-1 py-0.5 text-xs">
                       <option value="">{candidates(l).length ? 'Choose a movement…' : 'No open movement fits'}</option>
                       {candidates(l).map((e) => (
                         <option key={e.id} value={e.id}>{new Date(e.createdAt).toLocaleDateString()} · {e.notes ?? e.sourceType}</option>
@@ -446,7 +446,7 @@ function Reconciliation({ branchId, accountId, canReconcile }: { branchId: numbe
         {(lines?.items ?? []).length === 0 && <p className="text-center text-gray-500 dark:text-gray-400 text-sm py-6">No statement lines imported</p>}
       </div>
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-xs">
         <h3 className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
           Open movements (not yet on a statement)
         </h3>

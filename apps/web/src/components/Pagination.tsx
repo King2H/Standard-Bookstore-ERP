@@ -65,7 +65,7 @@ export default function Pagination({
           <select
             value={pageSize}
             onChange={e => onPageSizeChange(Number(e.target.value))}
-            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           >
             {pageSizeOptions.map(n => <option key={n} value={n}>{n}</option>)}
           </select>

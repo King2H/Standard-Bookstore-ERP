@@ -107,14 +107,14 @@ function ConfigRowItem({
         <p className="text-xs text-gray-400 dark:text-gray-500">{meta?.description}</p>
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {editing ? (
           <>
             {row.key === 'default_discount_type' ? (
               <select
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32"
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-32"
               >
                 <option value="Normal">Normal</option>
                 <option value="Merchant">Merchant</option>
@@ -124,7 +124,7 @@ function ConfigRowItem({
               <select
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32"
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-32"
               >
                 <option value="Percentage">Percentage</option>
                 <option value="Amount">Amount</option>
@@ -133,7 +133,7 @@ function ConfigRowItem({
               <select
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-24"
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-24"
               >
                 <option value="true">true</option>
                 <option value="false">false</option>
@@ -143,7 +143,7 @@ function ConfigRowItem({
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
                 rows={3}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-64"
               />
             ) : (
               <input
@@ -151,7 +151,7 @@ function ConfigRowItem({
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
                 step={meta?.type === 'number' ? 'any' : undefined}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-36"
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-36"
               />
             )}
             <button onClick={handleSave} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors">Save</button>
@@ -159,7 +159,7 @@ function ConfigRowItem({
           </>
         ) : (
           <>
-            <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-mono max-w-[200px] truncate block">
+            <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-sm font-mono max-w-[200px] truncate block">
               {formatValue(row.value)}
             </code>
             {isSuperAdmin && (
@@ -218,35 +218,35 @@ function BranchConfigRowItem({
         <p className="text-xs text-gray-400 dark:text-gray-500">{meta?.description}</p>
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {editing ? (
           <>
             {row.key === 'default_discount_type' ? (
               <select value={draft} onChange={e => setDraft(e.target.value)}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32">
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-32">
                 <option value="Normal">Normal</option>
                 <option value="Merchant">Merchant</option>
                 <option value="Special">Special</option>
               </select>
             ) : row.key === 'default_discount_mode' || row.key.startsWith('default_discount_mode_') ? (
               <select value={draft} onChange={e => setDraft(e.target.value)}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32">
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-32">
                 <option value="Percentage">Percentage</option>
                 <option value="Amount">Amount</option>
               </select>
             ) : meta?.type === 'boolean' ? (
               <select value={draft} onChange={e => setDraft(e.target.value)}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-24">
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-24">
                 <option value="true">true</option>
                 <option value="false">false</option>
               </select>
             ) : meta?.type === 'json' ? (
               <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" />
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-64" />
             ) : (
               <input type={meta?.type === 'number' ? 'number' : 'text'} value={draft}
                 onChange={e => setDraft(e.target.value)} step={meta?.type === 'number' ? 'any' : undefined}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-36" />
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-36" />
             )}
             <button onClick={handleSave} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors">Save</button>
             <button onClick={() => { setEditing(false); setDraft(formatValue(row.value)); }}
@@ -254,7 +254,7 @@ function BranchConfigRowItem({
           </>
         ) : (
           <>
-            <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-mono max-w-[200px] truncate block">
+            <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-sm font-mono max-w-[200px] truncate block">
               {formatValue(row.value)}
             </code>
             {canEdit && (
@@ -391,7 +391,7 @@ export default function SettingsPage({ userRole }: { userRole?: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* ── System Defaults panel ─────────────────────────────────────────── */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xs">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">System Defaults</h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
@@ -417,7 +417,7 @@ export default function SettingsPage({ userRole }: { userRole?: string }) {
         </div>
 
         {/* ── Branch Overrides panel ────────────────────────────────────────── */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xs">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Branch Overrides</h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Per-branch values take precedence over system defaults</p>
@@ -426,7 +426,7 @@ export default function SettingsPage({ userRole }: { userRole?: string }) {
             <select
               value={selectedBranchId ?? ''}
               onChange={e => setSelectedBranchId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3 transition-colors"
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 mb-3 transition-colors"
             >
               <option value="">Select a branch...</option>
               {branches.map(b => (

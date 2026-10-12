@@ -110,7 +110,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
   // ── Shared UI wrapper ─────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 flex items-center justify-center relative overflow-hidden transition-colors duration-500">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 flex items-center justify-center relative overflow-hidden transition-colors duration-500">
 
       {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -121,7 +121,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
       {/* Theme toggle */}
       <button onClick={toggleTheme}
-        className="absolute top-4 right-4 p-2.5 rounded-xl bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 shadow-sm transition-all duration-200"
+        className="absolute top-4 right-4 p-2.5 rounded-xl bg-white/70 dark:bg-gray-800/70 backdrop-blur-xs text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 shadow-xs transition-all duration-200"
         title="Toggle theme">
         {theme === 'dark' ? (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,7 +137,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
       <div className="relative w-full max-w-md mx-4 animate-slide-down">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-linear-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30 mb-4">
             <span className="text-white text-2xl font-bold">B</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bookstore Management</h1>
@@ -154,14 +154,14 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Username</label>
                 <input {...register('username')} type="text" autoComplete="username" placeholder="Enter your username" autoFocus
-                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
+                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                 {errors.username && <p className="text-red-500 dark:text-red-400 text-xs mt-1.5">{errors.username.message}</p>}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
                 <input {...register('password')} type="password" autoComplete="current-password" placeholder="Enter your password"
-                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
+                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                 {errors.password && <p className="text-red-500 dark:text-red-400 text-xs mt-1.5">{errors.password.message}</p>}
               </div>
 
@@ -172,7 +172,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
               )}
 
               <button type="submit" disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-2.5 text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">
+                className="w-full bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-2.5 text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
                     <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -216,7 +216,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                           )}
                         </div>
                         {isSelected && (
-                          <span className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                          <span className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
                             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>
@@ -240,7 +240,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                   ← Back
                 </button>
                 <button type="submit" disabled={loading || !selectedBranchId}
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-2.5 text-sm font-semibold shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">
+                  className="flex-1 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-2.5 text-sm font-semibold shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
                       <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">

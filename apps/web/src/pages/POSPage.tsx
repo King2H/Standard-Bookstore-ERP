@@ -515,7 +515,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
       <div className="flex items-center justify-center min-h-full bg-gray-50 dark:bg-gray-950 p-6">
         <div className="w-full max-w-md">
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl overflow-hidden">
-            <div className={`px-6 py-5 text-center ${receipt.paymentStatus === 'paid' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
+            <div className={`px-6 py-5 text-center ${receipt.paymentStatus === 'paid' ? 'bg-linear-to-br from-emerald-500 to-teal-600' : 'bg-linear-to-br from-amber-500 to-orange-600'}`}>
               <div className="text-4xl mb-2">{receipt.paymentStatus === 'paid' ? '✅' : '🟡'}</div>
               <div className="flex items-center justify-center gap-1.5">
                 <h2 className="text-xl font-bold text-white">{receipt.transactionNumber}</h2>
@@ -535,7 +535,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
               <p className="text-sm text-white/80 mt-1">{new Date(receipt.createdAt).toLocaleString()}</p>
               {receipt.paymentStatus !== 'paid' && (
                 <div className="space-y-1 mt-2">
-                  <span className="inline-block text-xs font-semibold px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur">
+                  <span className="inline-block text-xs font-semibold px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm">
                     {receipt.paymentStatus === 'partial' ? `Partial — ${currency} ${Number(receipt.amountDue).toFixed(2)} due` : `Credit — ${currency} ${Number(receipt.amountDue).toFixed(2)} due`}
                   </span>
                   {receipt.dueDate && (
@@ -602,7 +602,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 select-none">
 
       {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 px-4 pt-1.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0">
+      <div className="flex items-center gap-1 px-4 pt-1.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
         {(['pos', 'history'] as Tab[]).map(t => (
           <button
             key={t}
@@ -618,9 +618,9 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-gray-400 dark:text-gray-600 font-mono">
-          <span><kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs">F8</kbd> Books</span>
-          <span><kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs">F9</kbd> Customer</span>
-          <span><kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs">Ctrl+↵</kbd> Checkout</span>
+          <span><kbd className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs">F8</kbd> Books</span>
+          <span><kbd className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs">F9</kbd> Customer</span>
+          <span><kbd className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs">Ctrl+↵</kbd> Checkout</span>
         </div>
       </div>
 
@@ -629,10 +629,10 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
         <div className="flex-1 overflow-auto p-4">
           <div className="flex items-center gap-2 mb-3">
             <input type="date" value={histDateFrom} onChange={e => { setHistDateFrom(e.target.value); setHistPage(1); }}
-              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             <span className="text-xs text-gray-400">to</span>
             <input type="date" value={histDateTo} onChange={e => { setHistDateTo(e.target.value); setHistPage(1); }}
-              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             {(histDateFrom || histDateTo) && (
               <button onClick={() => { setHistDateFrom(''); setHistDateTo(''); setHistPage(1); }}
                 className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -640,7 +640,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
               </button>
             )}
           </div>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs overflow-hidden">
             {histLoading ? (
               <div className="p-12 text-center">
                 <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
@@ -738,10 +738,10 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
           {/* ══════════════════════════════════════════════════
               LEFT PANEL — Customer + Book Search (22%)
           ══════════════════════════════════════════════════ */}
-          <div className="w-64 xl:w-72 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+          <div className="w-64 xl:w-72 shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
 
             {/* Customer */}
-            <div className="flex-shrink-0 px-3 pt-2.5 pb-2 border-b border-gray-100 dark:border-gray-800">
+            <div className="shrink-0 px-3 pt-2.5 pb-2 border-b border-gray-100 dark:border-gray-800">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Customer</span>
                 {!selectedCustomer && !showQuickAdd && (
@@ -766,7 +766,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
 
               {!showQuickAdd && selectedCustomer ? (
                 <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-lg px-2.5 py-2">
-                  <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
                     <span className="text-xs font-bold text-white">{selectedCustomer.fullName.charAt(0).toUpperCase()}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -777,7 +777,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                       <span className="text-xs text-emerald-600 dark:text-emerald-400">💳{Number(selectedCustomer.storeCreditBalance).toFixed(0)}</span>
                     </div>
                   </div>
-                  <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-red-500 p-0.5 rounded transition-colors" aria-label="Remove customer">
+                  <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-red-500 p-0.5 rounded-sm transition-colors" aria-label="Remove customer">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -791,7 +791,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                     value={customerSearch}
                     onChange={e => setCustomerSearch(e.target.value)}
                     placeholder="Search customer… (F9)"
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-750 transition-colors"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-750 transition-colors"
                   />
                   {(customerResults?.items ?? []).length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden">
@@ -808,7 +808,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
             </div>
 
             {/* Book search */}
-            <div className="px-3 pt-2 pb-2 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+            <div className="px-3 pt-2 pb-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Books (F8)</span>
               <div className="relative">
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -820,7 +820,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                   onChange={e => setBookSearch(e.target.value)}
                   placeholder="Title, ISBN, Author…"
                   autoFocus
-                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-750 transition-colors"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-750 transition-colors"
                 />
               </div>
             </div>
@@ -838,7 +838,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                   >
                     <div className="flex items-start justify-between gap-1.5">
                       <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight flex-1 min-w-0">{b.title}</p>
-                      <p className="text-xs font-bold text-blue-700 dark:text-blue-400 tabular-nums flex-shrink-0">{(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
+                      <p className="text-xs font-bold text-blue-700 dark:text-blue-400 tabular-nums shrink-0">{(b.branchPrice ?? b.defaultPrice ?? 0).toFixed(2)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
                       <p className="text-xs text-gray-400 truncate">{b.isbn}</p>
@@ -865,7 +865,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
           <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 min-w-0">
 
             {/* Cart header */}
-            <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-between flex-shrink-0">
+            <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-gray-900 dark:text-white">Cart</span>
                 {cart.length > 0 && (
@@ -894,7 +894,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
               <div className="flex-1 overflow-auto">
                 {/* Cart table — compact rows */}
                 <table className="w-full text-sm" style={{ minWidth: '600px' }}>
-                  <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-gray-800/90 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700">
+                  <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-gray-800/90 backdrop-blur-xs border-b border-gray-200 dark:border-gray-700">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Book</th>
                       <th className="px-2 py-2 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-24">Qty</th>
@@ -917,9 +917,9 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                         {/* Qty */}
                         <td className="px-2 py-2">
                           <div className="flex items-center justify-center gap-0.5">
-                            <button onClick={() => updateQty(item.bookId, -1)} className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">−</button>
+                            <button onClick={() => updateQty(item.bookId, -1)} className="w-6 h-6 flex items-center justify-center rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">−</button>
                             <span className="w-7 text-center font-bold text-gray-900 dark:text-white tabular-nums text-xs">{item.quantity}</span>
-                            <button onClick={() => updateQty(item.bookId, 1)} className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">＋</button>
+                            <button onClick={() => updateQty(item.bookId, 1)} className="w-6 h-6 flex items-center justify-center rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">＋</button>
                           </div>
                         </td>
 
@@ -935,7 +935,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                             <select
                               value={item.discountType}
                               onChange={e => updateDiscountType(item.bookId, e.target.value)}
-                              className="w-20 px-1 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              className="w-20 px-1 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="Normal">Normal</option>
                               <option value="Merchant">Merchant</option>
@@ -963,7 +963,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                                 step="0.01"
                                 value={item.discountMode === 'Percentage' ? item.discountPct : item.discountAmount}
                                 onChange={e => updateDiscountValue(item.bookId, Number(e.target.value))}
-                                className={`w-full px-1.5 py-1 text-xs border rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 tabular-nums ${
+                                className={`w-full px-1.5 py-1 text-xs border rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 tabular-nums ${
                                   item.isDivergent ? 'border-amber-400 dark:border-amber-600' : 'border-gray-200 dark:border-gray-700'
                                 }`}
                               />
@@ -996,7 +996,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                         <td className="pr-1">
                           <button
                             onClick={() => removeFromCart(item.bookId)}
-                            className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-all"
+                            className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-sm transition-all"
                             aria-label="Remove"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -1013,17 +1013,17 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
           {/* ══════════════════════════════════════════════════
               RIGHT PANEL — Summary + Payment + Actions (28%)
           ══════════════════════════════════════════════════ */}
-          <div className="w-72 xl:w-80 flex-shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+          <div className="w-72 xl:w-80 shrink-0 flex flex-col border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
 
             {/* Location — compact single row */}
-            <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+            <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
               <div className="flex items-center gap-2">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Location</label>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider shrink-0">Location</label>
                 <select
                   id="pos-location"
                   value={locationId ?? ''}
                   onChange={e => setLocationId(Number(e.target.value) || null)}
-                  className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 truncate"
+                  className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 truncate"
                 >
                   <option value="">Select…</option>
                   {locations.map(l => (
@@ -1039,7 +1039,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
             </div>
 
             {/* Totals — no tax */}
-            <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-800 flex-shrink-0 bg-gray-50/40 dark:bg-gray-900/60">
+            <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-gray-50/40 dark:bg-gray-900/60">
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                   <span>Subtotal</span>
@@ -1096,18 +1096,18 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                   onChange={e => setPayAmount(e.target.value)}
                   placeholder={remaining > 0 ? remaining.toFixed(2) : '0.00'}
                   onKeyDown={e => e.key === 'Enter' && addPayment()}
-                  className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
+                  className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 tabular-nums"
                 />
                 {remaining > 0.01 && (
                   <button
                     onClick={() => setPayAmount(remaining.toFixed(2))}
-                    className="text-xs px-2 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 hover:bg-blue-100 transition-colors font-semibold flex-shrink-0 whitespace-nowrap"
+                    className="text-xs px-2 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 hover:bg-blue-100 transition-colors font-semibold shrink-0 whitespace-nowrap"
                     title="Fill remaining amount"
                   >↙ All</button>
                 )}
                 <button
                   onClick={addPayment}
-                  className="px-3 py-1.5 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-bold rounded-lg hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors flex-shrink-0"
+                  className="px-3 py-1.5 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-bold rounded-lg hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors shrink-0"
                 >Add</button>
               </div>
 
@@ -1148,7 +1148,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
 
             {/* ── Action buttons — always pinned to bottom ── */}
             {canCreate(userRole, userPermissions) && (
-              <div className="px-3 py-2.5 space-y-1.5 flex-shrink-0 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+              <div className="px-3 py-2.5 space-y-1.5 shrink-0 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
 
                 {/* Inline hints (compact) */}
                 {!locationId && cart.length > 0 && (
@@ -1182,7 +1182,7 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                       value={dueDate}
                       min={new Date().toISOString().slice(0, 10)}
                       onChange={e => setDueDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 )}

@@ -109,7 +109,7 @@ export default function AuditLogPage() {
           <select
             value={entityTypeFilter}
             onChange={e => { setEntityTypeFilter(e.target.value); setPage(1); }}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-1.5 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors"
           >
             <option value="">All entities</option>
             {entityTypes.map(t => <option key={t} value={t}>{t}</option>)}
@@ -127,7 +127,7 @@ export default function AuditLogPage() {
         </div>
       ) : (
         <>
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-xs">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                 <tr>
@@ -150,7 +150,7 @@ export default function AuditLogPage() {
                       <div className="text-xs text-gray-400 dark:text-gray-500">{entry.staffRole}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ACTION_COLORS[entry.action] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'}`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium ${ACTION_COLORS[entry.action] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'}`}>
                         {entry.action}
                       </span>
                     </td>

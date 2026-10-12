@@ -344,7 +344,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
   return (
     <div className="flex flex-col h-full">
       {/* Tab bar */}
-      <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0">
+      <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
         <button onClick={() => setTab('pending')} className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2 ${tab === 'pending' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
           ⏳ Pending Payments
           {unpaidData && unpaidData.total > 0 && (
@@ -396,10 +396,10 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
                       <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
                         {order.orderNumber}
                         {order.sourceType === 'pos' && (
-                          <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded font-semibold">POS Credit</span>
+                          <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded-sm font-semibold">POS Credit</span>
                         )}
                         {order.sourceType === 'exchange_difference' && (
-                          <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] rounded font-semibold">Exchange</span>
+                          <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] rounded-sm font-semibold">Exchange</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
@@ -503,7 +503,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
                   accounts={bankAccounts}
                   value={selectedBankAccountId}
                   onChange={setSelectedBankAccountId}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             )}
@@ -562,7 +562,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{`Amount (${currency})`}</label>
               <div className="flex gap-2">
                 <input type="number" min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
                 {orderBalance && orderBalance.outstanding > 0 && (
                   <button onClick={() => setAmount(orderBalance.outstanding.toFixed(2))}
                     className="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors whitespace-nowrap">
@@ -575,7 +575,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Transaction Reference (optional)</label>
               <input value={txRef} onChange={e => setTxRef(e.target.value)} placeholder="Bank ref, mobile money code..."
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <button onClick={submitPayment} disabled={
@@ -598,7 +598,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
         <div className="flex-1 overflow-auto p-4 space-y-3">
           <div className="flex gap-2 items-center flex-wrap">
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setHistoryPage(1); }}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
               <option value="">All statuses</option>
               {['success', 'pending', 'failed', 'refunded', 'partially_refunded'].map(s => (
                 <option key={s} value={s}>{s.replace('_', ' ')}</option>
@@ -627,10 +627,10 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
                         <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
                           {pay.paymentReference}
                           {pay.sourceType === 'pos' && (
-                            <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded font-semibold">POS</span>
+                            <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] rounded-sm font-semibold">POS</span>
                           )}
                           {pay.sourceType === 'exchange' && (
-                            <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] rounded font-semibold">Exchange</span>
+                            <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] rounded-sm font-semibold">Exchange</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{pay.entityNumber ?? `#${pay.orderId}`}</td>
@@ -647,16 +647,16 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
                             refundingId === pay.id ? (
                               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                                 <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="Amount"
-                                  className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-20" />
+                                  className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-20" />
                                 <input value={refundReason} onChange={e => setRefundReason(e.target.value)} placeholder="Reason"
-                                  className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-24" />
+                                  className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-24" />
                                 <button onClick={() => refundMut.mutate({ id: pay.id, body: { refundAmount: parseFloat(refundAmount), reason: refundReason || 'Refund' } })}
-                                  className="text-xs bg-red-600 text-white px-2 py-0.5 rounded">OK</button>
+                                  className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-sm">OK</button>
                                 <button onClick={() => setRefundingId(null)} className="text-xs text-gray-500 px-1">✕</button>
                               </div>
                             ) : (
                               <button onClick={e => { e.stopPropagation(); setRefundingId(pay.id); setRefundAmount(Number(pay.amount).toFixed(2)); }}
-                                className="text-xs text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 px-2 py-0.5 rounded transition-colors">
+                                className="text-xs text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 px-2 py-0.5 rounded-sm transition-colors">
                                 Refund
                               </button>
                             )

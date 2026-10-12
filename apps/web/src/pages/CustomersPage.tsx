@@ -216,7 +216,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
         <div className="flex flex-wrap items-center gap-3">
           <input type="text" placeholder="Search by name, phone, code..." value={q}
             onChange={e => { setQ(e.target.value); setPage(1); }}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-64 focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
           <StatusFilter value={statusFilter} onChange={v => { setStatusFilter(v); setPage(1); }} />
           <div className="ml-auto flex items-center gap-2">
             <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} customers</span>
@@ -254,10 +254,10 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 text-xs">
-                        <button onClick={() => openProfile(c)} className="px-2 py-1 rounded text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">View</button>
+                        <button onClick={() => openProfile(c)} className="px-2 py-1 rounded-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">View</button>
                         {canDeactivate(userRole, userPermissions) && c.isActive && (
                           <button onClick={() => { if (confirm(`Deactivate "${c.fullName}"?`)) deactivateMut.mutate(c.id); }}
-                            className="px-2 py-1 rounded text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Deactivate</button>
+                            className="px-2 py-1 rounded-sm text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950 transition-colors">Deactivate</button>
                         )}
                       </div>
                     </td>
@@ -286,25 +286,25 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
               </div>
               <form onSubmit={e => { e.preventDefault(); createMut.mutate(form); }} className="flex-1 p-6 space-y-4">
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
-                  <input required value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input required value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
-                    <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                    <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                   <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                    <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                    <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Gender</label>
-                    <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                       <option value="">Select...</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
                     </select></div>
                   <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Date of Birth</label>
-                    <input type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                    <input type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 </div>
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
-                  <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">City</label>
-                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setDrawerOpen(false)} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Cancel</button>
                   <button type="submit" disabled={createMut.isPending} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors">{createMut.isPending ? 'Saving...' : 'Create Customer'}</button>
@@ -324,7 +324,7 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
       {/* Header */}
       <div className="flex items-center gap-4">
         <button onClick={() => setView('list')} className="text-sm text-blue-600 hover:underline">← Back to List</button>
-        <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded">{c.customerCode}</span>
+        <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded-sm">{c.customerCode}</span>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{c.fullName}</h2>
         <StatusBadge status={c.status} />
         {canDeactivate(userRole, userPermissions) && c.isActive && (
@@ -361,25 +361,25 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
           <form onSubmit={e => { e.preventDefault(); updateMut.mutate({ id: c.id, b: editForm }); }} className="space-y-4">
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
-              <input required value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+              <input required value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
-                <input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+                <input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Gender</label>
-                <select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+                <select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
                   <option value="">Select...</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
                 </select></div>
               <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Date of Birth</label>
-                <input type="date" value={editForm.dateOfBirth} onChange={e => setEditForm(f => ({ ...f, dateOfBirth: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+                <input type="date" value={editForm.dateOfBirth} onChange={e => setEditForm(f => ({ ...f, dateOfBirth: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             </div>
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
-              <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+              <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">City</label>
-              <input value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
+              <input value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} disabled={!canWrite(userRole, userPermissions)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-60" /></div>
             {canWrite(userRole, userPermissions) && (
               <button type="submit" disabled={updateMut.isPending} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-6 py-2 rounded-lg transition-colors">
                 {updateMut.isPending ? 'Saving...' : 'Save Changes'}
@@ -408,11 +408,11 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Redeem Points</h3>
               <div className="flex gap-3 items-end">
                 <div className="flex-1"><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Points</label>
-                  <input type="number" min="1" value={redeemPoints} onChange={e => setRedeemPoints(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input type="number" min="1" value={redeemPoints} onChange={e => setRedeemPoints(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div className="flex-1"><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Transaction Ref</label>
-                  <input value={redeemRef} onChange={e => setRedeemRef(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input value={redeemRef} onChange={e => setRedeemRef(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div className="flex-1"><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason *</label>
-                  <input value={redeemReason} onChange={e => setRedeemReason(e.target.value)} placeholder="Why are points taken off?" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input value={redeemReason} onChange={e => setRedeemReason(e.target.value)} placeholder="Why are points taken off?" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <button disabled={!redeemPoints || !redeemReason.trim() || redeemMut.isPending}
                   onClick={() => redeemMut.mutate({ id: c.id, points: Number(redeemPoints), ref: redeemRef, reason: redeemReason.trim() })}
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
@@ -487,18 +487,18 @@ export default function CustomersPage({ userRole, userPermissions }: CustomersPa
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Manual Adjustment</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Amount</label>
-                  <input type="number" min="0.01" step="0.01" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input type="number" min="0.01" step="0.01" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Direction</label>
-                  <select value={creditDirection} onChange={e => setCreditDirection(e.target.value as 'credit' | 'debit')} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select value={creditDirection} onChange={e => setCreditDirection(e.target.value as 'credit' | 'debit')} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
                     <option value="credit">Credit (Add)</option>
                     <option value="debit">Debit (Subtract)</option>
                   </select></div>
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ref Type</label>
-                  <input value={creditRefType} onChange={e => setCreditRefType(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input value={creditRefType} onChange={e => setCreditRefType(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ref ID</label>
-                  <input value={creditRefId} onChange={e => setCreditRefId(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input value={creditRefId} onChange={e => setCreditRefId(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
                 <div className="col-span-2"><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Reason *</label>
-                  <input value={creditReason} onChange={e => setCreditReason(e.target.value)} placeholder="Why is the balance changed?" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                  <input value={creditReason} onChange={e => setCreditReason(e.target.value)} placeholder="Why is the balance changed?" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" /></div>
               </div>
               <button disabled={!creditAmount || !creditReason.trim() || adjustCreditMut.isPending}
                 onClick={() => adjustCreditMut.mutate({ id: c.id, amount: Number(creditAmount), direction: creditDirection, refType: creditRefType, refId: creditRefId, reason: creditReason.trim() })}

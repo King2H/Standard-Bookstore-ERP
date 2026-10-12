@@ -20,7 +20,7 @@ export function StatusFilter({ value, onChange, className }: {
     <select
       value={value}
       onChange={e => onChange(e.target.value as StatusFilterValue)}
-      className={className ?? 'px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'}
+      className={className ?? 'px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500'}
     >
       <option value="active">Active</option>
       <option value="inactive">Inactive</option>

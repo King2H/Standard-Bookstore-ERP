@@ -62,7 +62,7 @@ const ROLE_COLORS: Record<string, string> = {
   Purchasor:       'bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-200',
 };
 
-const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
       {/* Must-change-password banner */}
       {profile.mustChangePassword && (
         <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-xl px-4 py-3 flex items-start gap-3">
-          <span className="text-yellow-500 text-lg flex-shrink-0">⚠</span>
+          <span className="text-yellow-500 text-lg shrink-0">⚠</span>
           <div>
             <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-300">Password change required</p>
             <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
@@ -149,11 +149,11 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
       )}
 
       {/* Profile card */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden mb-6">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xs overflow-hidden mb-6">
 
         {/* Avatar + name header */}
         <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-md">
+          <div className="w-14 h-14 rounded-full bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
             <span className="text-white text-xl font-bold">
               {profile.fullName.charAt(0).toUpperCase()}
             </span>
@@ -224,7 +224,7 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
                 <div key={i} className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5">
                   <span className="text-xs text-gray-600 dark:text-gray-400">{r.branchName ?? `Branch ${r.branchId}`}</span>
                   <span className="text-gray-300 dark:text-gray-600">·</span>
-                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r.role] ?? 'bg-gray-100 text-gray-700'}`}>
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded-sm ${ROLE_COLORS[r.role] ?? 'bg-gray-100 text-gray-700'}`}>
                     {r.role}
                   </span>
                 </div>
@@ -269,7 +269,7 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
       </div>
 
       {/* Security section */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xs overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Security</h3>
