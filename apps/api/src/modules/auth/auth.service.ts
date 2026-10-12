@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import type { ProfileResponse } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
+import { runInTenant } from '../../db/tenantContext.js';
 import { withTransaction } from '../../db/tx.js';
 import { AuthError, BranchAccessError, BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
@@ -35,6 +36,20 @@ function invalidCredentials(): AuthError {
  * with the right password does it say the account is locked or deactivated
  * (owner decision 4a, OWASP Authentication Cheat Sheet).
  */
+/**
+ * The tenant of the account signing in (#13): sign-in works in it from there
+ * on. An unknown username gets the same answer, after the same slow hash
+ * check, as a wrong password.
+ */
+async function tenantSigningIn(username: string, password: string): Promise<number> {
+  const tenantId = await repo.tenantOfUsername(kysely, username);
+  if (tenantId === undefined) {
+    await bcrypt.compare(password, NO_SUCH_STAFF_HASH);
+    throw invalidCredentials();
+  }
+  return tenantId;
+}
+
 async function checkCredentials(username: string, password: string): Promise<StaffCredentials> {
   const staff = await repo.findCredentials(kysely, username);
   if (!staff) {
@@ -95,14 +110,22 @@ export async function preLogin(
   username: string,
   password: string,
 ): Promise<{ staffId: number; branches: BranchOption[]; isAllBranches: boolean; autoSelectBranchId: number | null }> {
-  const staff = await checkCredentials(username, password);
-  const branches = await branchesOf(staff.staffId, staff.isAllBranches);
-  const autoSelect = branches.length === 1 || (staff.isAllBranches && branches.length > 0) ? branches[0].branchId : null;
-  return { staffId: staff.staffId, branches, isAllBranches: staff.isAllBranches, autoSelectBranchId: autoSelect };
+  const tenantId = await tenantSigningIn(username, password);
+  return runInTenant(tenantId, async () => {
+    const staff = await checkCredentials(username, password);
+    const branches = await branchesOf(staff.staffId, staff.isAllBranches);
+    const autoSelect = branches.length === 1 || (staff.isAllBranches && branches.length > 0) ? branches[0].branchId : null;
+    return { staffId: staff.staffId, branches, isAllBranches: staff.isAllBranches, autoSelectBranchId: autoSelect };
+  });
 }
 
 /** Signs in to a branch: opens a session and hands out its first tokens. */
 export async function login(username: string, password: string, branchId: number): Promise<IssuedTokens> {
+  const tenantId = await tenantSigningIn(username, password);
+  return runInTenant(tenantId, () => openSession(tenantId, username, password, branchId));
+}
+
+async function openSession(tenantId: number, username: string, password: string, branchId: number): Promise<IssuedTokens> {
   const staff = await checkCredentials(username, password);
   const roles = await branchRoles(staff.staffId, branchId, staff.isAllBranches);
 
@@ -116,7 +139,7 @@ export async function login(username: string, password: string, branchId: number
   });
 
   return {
-    accessToken: signAccessToken({ sid: sessionId, staffId: staff.staffId, branchId }, roles),
+    accessToken: signAccessToken({ sid: sessionId, staffId: staff.staffId, branchId, tenantId }, roles),
     refreshToken,
     sessionExpiresAt,
     mustChangePassword: staff.mustChangePassword,
@@ -133,6 +156,12 @@ function tokenRevoked(): AuthError {
  * session (owner decision 1a).
  */
 export async function refresh(refreshToken: string): Promise<IssuedTokens> {
+  const tenantId = await repo.tenantOfRefreshToken(kysely, hashRefreshToken(refreshToken));
+  if (tenantId === undefined) throw tokenRevoked();
+  return runInTenant(tenantId, () => rotate(tenantId, refreshToken));
+}
+
+async function rotate(tenantId: number, refreshToken: string): Promise<IssuedTokens> {
   const result = await withTransaction({}, async (tx) => {
     const token = await repo.findRefreshToken(tx, hashRefreshToken(refreshToken));
     if (!token || token.revokedAt || token.expiresAt <= token.now || !token.staffActive) return { kind: 'revoked' as const };
@@ -167,7 +196,7 @@ export async function refresh(refreshToken: string): Promise<IssuedTokens> {
   const { token, next } = result;
   const roles = await branchRoles(token.staffId, token.branchId, token.isAllBranches);
   return {
-    accessToken: signAccessToken({ sid: token.sessionId, staffId: token.staffId, branchId: token.branchId }, roles),
+    accessToken: signAccessToken({ sid: token.sessionId, staffId: token.staffId, branchId: token.branchId, tenantId }, roles),
     refreshToken: next,
     sessionExpiresAt: token.expiresAt,
     mustChangePassword: token.mustChangePassword,
@@ -191,7 +220,7 @@ export async function switchBranch(
   if (!branch.isActive) throw new BusinessError('BRANCH_INACTIVE', 'This branch is closed');
 
   await repo.setSessionBranch(kysely, ctx.sessionId, ctx.staffId, branchId);
-  return { accessToken: signAccessToken({ sid: ctx.sessionId, staffId: ctx.staffId, branchId }, roles) };
+  return { accessToken: signAccessToken({ sid: ctx.sessionId, staffId: ctx.staffId, branchId, tenantId: state.tenantId }, roles) };
 }
 
 /** The open branches the staff member can work in, with the roles held in each. */

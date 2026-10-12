@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { assertEnvironment } from './lib/env.js';
 import { checkDbConnection } from './db/index.js';
 import { ensureSeedData } from './db/seed.js';
+import { forEachTenant } from './db/tenants.js';
 import { startOutboxPoller, stopOutboxPoller } from './workers/outboxPoller.js';
 import { markOverdueReceivables } from './modules/receivables/receivables.service.js';
 
@@ -38,10 +39,12 @@ async function start() {
   // Marks Pending/PartiallyPaid receivables as Overdue when their due_date has passed.
   const runOverdueJob = async () => {
     try {
-      const count = await markOverdueReceivables();
-      if (count > 0) {
-        console.log(JSON.stringify({ level: 'info', msg: 'Marked overdue receivables', count }));
-      }
+      await forEachTenant('Overdue receivables job', async (tenantId) => {
+        const count = await markOverdueReceivables();
+        if (count > 0) {
+          console.log(JSON.stringify({ level: 'info', msg: 'Marked overdue receivables', tenantId, count }));
+        }
+      });
     } catch (err) {
       console.error(JSON.stringify({ level: 'error', msg: 'Overdue receivables job failed', error: (err as Error).message }));
     }

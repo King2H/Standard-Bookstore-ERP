@@ -5,6 +5,27 @@ import type { RefreshTokenRecord, RevokeReason, RoleAssignment, SessionState, St
 // Signing in, sessions and refresh tokens (#21). Sessions belong to one staff
 // member; every query that touches one names the staff member or the session.
 
+/**
+ * The tenant of the account with this username, if any. Usernames are unique
+ * across tenants (#13, decision 3a), so sign-in finds the tenant first and
+ * does the rest of its work in it.
+ */
+export async function tenantOfUsername(q: Queryable, username: string): Promise<number | undefined> {
+  const row = await q.selectFrom('staff').select('tenant_id').where(sql`lower(username)`, '=', username.toLowerCase()).executeTakeFirst();
+  return row?.tenant_id;
+}
+
+/** The tenant of the session a refresh token belongs to, if any. */
+export async function tenantOfRefreshToken(q: Queryable, tokenHash: string): Promise<number | undefined> {
+  const row = await q
+    .selectFrom('refresh_tokens as rt')
+    .innerJoin('staff_sessions as ss', 'ss.id', 'rt.session_id')
+    .select('ss.tenant_id')
+    .where('rt.token_hash', '=', tokenHash)
+    .executeTakeFirst();
+  return row?.tenant_id;
+}
+
 export async function findCredentials(q: Queryable, username: string): Promise<StaffCredentials | undefined> {
   const row = await q
     .selectFrom('staff')
@@ -143,6 +164,7 @@ export async function sessionState(q: Queryable, staffId: number, sessionId: str
     .selectFrom('staff as s')
     .leftJoin('staff_sessions as ss', (j) => j.onRef('ss.staff_id', '=', 's.id').on('ss.id', '=', sessionId))
     .select([
+      's.tenant_id',
       's.is_active',
       's.is_all_branches',
       's.must_change_password',
@@ -155,6 +177,7 @@ export async function sessionState(q: Queryable, staffId: number, sessionId: str
     .executeTakeFirst();
   return (
     row && {
+      tenantId: row.tenant_id,
       isActive: row.is_active,
       isAllBranches: row.is_all_branches,
       mustChangePassword: row.must_change_password,

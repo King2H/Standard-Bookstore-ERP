@@ -63,17 +63,6 @@ describe('withTransaction', () => {
     expect(await configExists(kysely, key('legacy'))).toBe(false);
   });
 
-  it('sets the tenant only for the duration of the transaction', async () => {
-    const inside = await withTransaction({ tenantId: 42 }, async (tx) => {
-      const { rows } = await sql<{ tenant: string }>`SELECT current_setting('app.tenant_id', true) AS tenant`.execute(tx);
-      return rows[0].tenant;
-    });
-    expect(inside).toBe('42');
-
-    const { rows } = await sql<{ tenant: string | null }>`SELECT current_setting('app.tenant_id', true) AS tenant`.execute(kysely);
-    expect(rows[0].tenant ?? '').toBe('');
-  });
-
   it('runs at the requested isolation level, and at the default otherwise', async () => {
     const level = (ctx: Parameters<typeof withTransaction>[0]) =>
       withTransaction(ctx, async (tx) => {

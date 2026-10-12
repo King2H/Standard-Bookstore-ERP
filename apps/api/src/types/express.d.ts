@@ -17,6 +17,8 @@ declare global {
       };
       /** Which branches this request may touch; set by authenticate(). */
       scope?: {
+        /** The signed-in account's tenant, read from the database (#13). */
+        tenantId: number;
         staffId: number;
         /** The active branch, from the access token. */
         branchId: number;

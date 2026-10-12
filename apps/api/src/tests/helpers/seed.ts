@@ -45,12 +45,14 @@ export async function createTestStaff(opts: {
  * `roles` only fills the token's informational claims.
  */
 export async function signTestToken(staffId: number, branchId: number, roles: string[] = []): Promise<string> {
+  // The session belongs to the staff member's tenant.
   const session = await db.query(
-    `INSERT INTO staff_sessions (staff_id, branch_id, expires_at) VALUES ($1, $2, now() + interval '8 hours') RETURNING id`,
+    `INSERT INTO staff_sessions (tenant_id, staff_id, branch_id, expires_at)
+     SELECT tenant_id, id, $2, now() + interval '8 hours' FROM staff WHERE id = $1 RETURNING id, tenant_id`,
     [staffId, branchId],
   );
   return jwt.sign(
-    { sid: session.rows[0].id, staffId, branchId, role: roles[0], roles },
+    { sid: session.rows[0].id, staffId, branchId, tenantId: session.rows[0].tenant_id, role: roles[0], roles },
     process.env.JWT_SECRET!,
     { algorithm: 'HS256', expiresIn: '15m' },
   );

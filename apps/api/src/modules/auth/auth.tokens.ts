@@ -14,6 +14,8 @@ export interface AccessTokenClaims {
   sid: string;
   staffId: number;
   branchId: number;
+  /** For the web app; the server reads the tenant from the database. */
+  tenantId: number;
 }
 
 function secret(): string {
