@@ -1,14 +1,17 @@
 import { resolve } from 'path';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
-import { resolveTestDatabaseUrl } from './testDatabaseUrl.js';
+import { ensureAppLogin } from '../db/appRole.js';
+import { resolveTestDatabaseUrl, resolveTestMigrationUrl } from './testDatabaseUrl.js';
 
 /**
  * Runs once before the API test suite: creates the test database if it does
- * not exist yet and applies all migrations, so `npm test` needs no manual setup.
+ * not exist yet, applies all migrations and makes sure the API's user works
+ * in it, all as the owner, so `npm test` needs no manual setup. The tests
+ * then work as the API's user, under row-level security (#13).
  */
 export default async function setup(): Promise<void> {
-  const testUrl = resolveTestDatabaseUrl();
+  const testUrl = resolveTestMigrationUrl();
   const dbName = decodeURIComponent(new URL(testUrl).pathname.slice(1));
 
   const maintenanceUrl = new URL(testUrl);
@@ -36,4 +39,6 @@ export default async function setup(): Promise<void> {
     count: Infinity,
     log: () => {},
   });
+
+  await ensureAppLogin(testUrl, resolveTestDatabaseUrl());
 }

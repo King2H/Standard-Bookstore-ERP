@@ -70,7 +70,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://bms:bms@localhost:5433/bms
+      # The API (and the tests) work as their own user, under row-level
+      # security; the owner creates and migrates the test database (#13).
+      DATABASE_URL: postgres://bms_api:bms_api@localhost:5433/bms
+      MIGRATION_DATABASE_URL: postgres://bms:bms@localhost:5433/bms
       # Test-only values; never used outside CI.
       JWT_SECRET: ci_test_jwt_secret_not_for_production
       # Quoted, or YAML reads it as the number 1.

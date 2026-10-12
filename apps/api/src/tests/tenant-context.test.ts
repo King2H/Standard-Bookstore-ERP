@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { sql } from 'kysely';
 import { getTestApp } from './helpers/testApp.js';
 import { db } from '../db/index.js';
+import { ownerDb } from './helpers/ownerDb.js';
 import { kysely } from '../db/kysely.js';
 import { DEFAULT_ADMIN_PASSWORD_HASH, ensureSeedData } from '../db/seed.js';
 import { runInTenant, setFallbackTenant } from '../db/tenantContext.js';
@@ -13,7 +14,8 @@ import { withTransaction } from '../db/tx.js';
 // #13, part 2: the tenant of every piece of work comes from the signed-in
 // account (or the background job's tenant), never from the client, and every
 // database connection it uses carries it. These tests switch off the test
-// fallback tenant, so work that loses its tenant fails here.
+// fallback tenant, so work that loses its tenant fails here. Fixtures for
+// the second tenant are written by the owner.
 
 const PREFIX = 'tenant_ctx_test_';
 const TENANT_NAME = 'Tenant Context Test B';
@@ -29,36 +31,38 @@ describe('Tenant context', () => {
   const api = () => request(getTestApp());
 
   async function cleanUp() {
-    setFallbackTenant(1);
     const tenant = `SELECT id FROM tenants WHERE name = '${TENANT_NAME}'`;
     for (const table of [
       'audit_logs', 'outbox', 'loyalty_accounts', 'store_credit_accounts', 'customers', 'document_counters',
       'staff_branch_roles', 'staff_sessions', 'staff', 'locations', 'branches',
     ]) {
-      if (table === 'staff_sessions') await db.query(`DELETE FROM refresh_tokens WHERE session_id IN (SELECT id FROM staff_sessions WHERE tenant_id IN (${tenant}))`);
-      await db.query(`DELETE FROM ${table} WHERE tenant_id IN (${tenant})`);
+      if (table === 'staff_sessions') await ownerDb().query(`DELETE FROM refresh_tokens WHERE session_id IN (SELECT id FROM staff_sessions WHERE tenant_id IN (${tenant}))`);
+      await ownerDb().query(`DELETE FROM ${table} WHERE tenant_id IN (${tenant})`);
     }
-    await db.query(`DELETE FROM tenants WHERE name = '${TENANT_NAME}'`);
+    await ownerDb().query(`DELETE FROM tenants WHERE name = '${TENANT_NAME}'`);
   }
 
   beforeAll(async () => {
     await cleanUp();
-    tenantB = (await db.query(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [TENANT_NAME])).rows[0].id;
-    branchB = (await db.query(
+    tenantB = (await ownerDb().query(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [TENANT_NAME])).rows[0].id;
+    branchB = (await ownerDb().query(
       `INSERT INTO branches (tenant_id, name, address, contact_info, operating_hours) VALUES ($1, 'Main Branch', '-', '{}', '{}') RETURNING id`,
       [tenantB],
     )).rows[0].id;
-    staffB = (await db.query(
+    staffB = (await ownerDb().query(
       `INSERT INTO staff (tenant_id, username, password_hash, full_name, is_active, must_change_password)
        VALUES ($1, $2, $3, 'Tenant B Manager', true, false) RETURNING id`,
       [tenantB, `${PREFIX}mgr`, DEFAULT_ADMIN_PASSWORD_HASH],
     )).rows[0].id;
-    await db.query(`INSERT INTO staff_branch_roles (tenant_id, staff_id, branch_id, role) VALUES ($1, $2, $3, 'Manager')`, [tenantB, staffB, branchB]);
+    await ownerDb().query(`INSERT INTO staff_branch_roles (tenant_id, staff_id, branch_id, role) VALUES ($1, $2, $3, 'Manager')`, [tenantB, staffB, branchB]);
     // From here on, work with no tenant has none.
     setFallbackTenant(undefined);
   });
 
-  afterAll(cleanUp);
+  afterAll(async () => {
+    setFallbackTenant(1);
+    await cleanUp();
+  });
 
   describe('database connections', () => {
     it('carry the tenant of the work that checks them out, and never the previous one\'s', async () => {
@@ -79,8 +83,9 @@ describe('Tenant context', () => {
     });
 
     it('refuse a new row written with no tenant (was: it landed in tenant 1)', async () => {
+      // Row-level security refuses it before the missing tenant_id would.
       await expect(db.query(`INSERT INTO customer_groups (name) VALUES ($1)`, [`${PREFIX}no tenant`]))
-        .rejects.toMatchObject({ code: '23502', column: 'tenant_id' });
+        .rejects.toMatchObject({ code: '42501' });
     });
 
     it('write a new row to the tenant of the work', async () => {

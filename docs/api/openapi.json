@@ -9647,52 +9647,15 @@
     "/branches/public": {
       "get": {
         "operationId": "listPublicBranches",
-        "summary": "Active branches for the sign-in page (no token needed)",
+        "summary": "Retired: POST /auth/pre-login lists the branches to sign in to",
         "tags": [
           "Branches"
         ],
         "security": [],
         "parameters": [],
         "responses": {
-          "200": {
-            "description": "Id and name of each active branch",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    }
-                  },
-                  "required": [
-                    "items"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Unexpected server error",
+          "410": {
+            "description": "Retired; the message names the replacement (`DEPRECATED`)",
             "content": {
               "application/json": {
                 "schema": {

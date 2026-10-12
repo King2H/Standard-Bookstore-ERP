@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { AppError } from '../../lib/errors.js';
 import { authenticate } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
@@ -16,8 +17,13 @@ const { schemas } = branch;
 const canEdit = requireRole('Super_Admin', 'Admin', 'Manager');
 const canOpenOrClose = requireRole('Super_Admin', 'Admin');
 
-// Active branches for the sign-in page, before there is a token.
-router.get('/branches/public', branch.publicList);
+// Retired (#13): it listed branches to anyone, before sign-in, which no
+// longer means anything when branches belong to tenants; the web app never
+// used it. Sign-in lists the account's branches after the password check
+// (POST /auth/pre-login).
+router.get('/branches/public', () => {
+  throw new AppError('DEPRECATED', 'GET /branches/public is no longer supported. POST /auth/pre-login lists the branches to sign in to.', 410);
+});
 
 router.get('/branches', authenticate, validate(schemas.list), branch.list);
 router.get('/branches/:id', authenticate, validate(schemas.byId), branch.get);

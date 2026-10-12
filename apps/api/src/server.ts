@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { createApp } from './app.js';
 import { assertEnvironment } from './lib/env.js';
-import { checkDbConnection } from './db/index.js';
+import { appRoleProblem, checkDbConnection } from './db/index.js';
 import { ensureSeedData } from './db/seed.js';
 import { forEachTenant } from './db/tenants.js';
 import { startOutboxPoller, stopOutboxPoller } from './workers/outboxPoller.js';
@@ -16,6 +16,15 @@ async function start() {
   const dbOk = await checkDbConnection();
   if (!dbOk) {
     console.error(JSON.stringify({ level: 'error', msg: 'Cannot connect to database on startup' }));
+    process.exit(1);
+  }
+
+  const roleProblem = await appRoleProblem();
+  if (roleProblem) {
+    console.error(JSON.stringify({
+      level: 'error',
+      msg: `Refusing to start: ${roleProblem}, so tenants would not be kept apart. DATABASE_URL must name the API's own user (npm run db:app-role); migrations use MIGRATION_DATABASE_URL.`,
+    }));
     process.exit(1);
   }
 

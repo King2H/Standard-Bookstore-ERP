@@ -23,3 +23,20 @@ export function resolveTestDatabaseUrl(env: NodeJS.ProcessEnv = process.env): st
   url.pathname = `/${encodeURIComponent(name)}`;
   return url.toString();
 }
+
+/**
+ * The owner's connection to the test database: MIGRATION_DATABASE_URL's
+ * server and credentials, the test database's name. The suite creates and
+ * migrates the database with it, while the tests themselves work as the
+ * API's user, under row-level security (#13).
+ */
+export function resolveTestMigrationUrl(env: NodeJS.ProcessEnv = process.env): string {
+  if (!env.MIGRATION_DATABASE_URL) {
+    throw new Error(
+      'MIGRATION_DATABASE_URL is not set: the tests need the database owner to create and migrate the test database (docs/development.md).',
+    );
+  }
+  const url = new URL(env.MIGRATION_DATABASE_URL);
+  url.pathname = new URL(resolveTestDatabaseUrl(env)).pathname;
+  return url.toString();
+}

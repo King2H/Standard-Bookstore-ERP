@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 import { config as dotenvConfig } from 'dotenv';
-import { resolveTestDatabaseUrl } from './src/tests/testDatabaseUrl';
+import { resolveTestDatabaseUrl, resolveTestMigrationUrl } from './src/tests/testDatabaseUrl';
 
 // Load .env from workspace root so DATABASE_URL is available in test workers
 const dotenvResult = dotenvConfig({ path: resolve(__dirname, '../../.env') });
@@ -9,6 +9,8 @@ const envVars = dotenvResult.parsed ?? {};
 
 // Tests use their own database (bms_test by default), never the development one.
 const testDatabaseUrl = resolveTestDatabaseUrl({ ...envVars, ...process.env });
+// The owner creates and migrates it; the tests work as the API's user (#13).
+const testMigrationUrl = resolveTestMigrationUrl({ ...envVars, ...process.env });
 
 export default defineConfig({
   test: {
@@ -20,6 +22,7 @@ export default defineConfig({
     env: {
       ...envVars,
       DATABASE_URL: testDatabaseUrl,
+      MIGRATION_DATABASE_URL: testMigrationUrl,
       // Ensure test-safe defaults if not in .env
       JWT_SECRET: envVars.JWT_SECRET ?? 'test_jwt_secret_not_for_production',
       COLUMN_ENCRYPTION_KEY: envVars.COLUMN_ENCRYPTION_KEY ?? '0000000000000000000000000000000000000000000000000000000000000001',

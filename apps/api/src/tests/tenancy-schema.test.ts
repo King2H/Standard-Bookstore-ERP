@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db } from '../db/index.js';
+import { ownerDb } from './helpers/ownerDb.js';
 
 // #13, part 1: every business row belongs to a tenant (ADR-0003, owner
 // decisions 1a and 2a). These tests keep it that way as tables are added.
+// They look across tenants, so they work as the owner.
 
 /** Tables that belong to no tenant: the tenants themselves, the migration log, and refresh tokens (their session has the tenant). */
 const GLOBAL_TABLES = ['pgmigrations', 'refresh_tokens', 'tenants'];
@@ -28,7 +29,7 @@ describe('Tenancy schema', () => {
 
   beforeAll(async () => {
     await cleanUp();
-    otherTenant = (await db.query(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`${TENANT_PREFIX}B`])).rows[0].id;
+    otherTenant = (await ownerDb().query(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`${TENANT_PREFIX}B`])).rows[0].id;
   });
 
   afterAll(cleanUp);
@@ -36,18 +37,18 @@ describe('Tenancy schema', () => {
   async function cleanUp() {
     const tenants = `SELECT id FROM tenants WHERE name LIKE '${TENANT_PREFIX}%'`;
     for (const table of ['books', 'branches', 'document_counters', 'staff']) {
-      await db.query(`DELETE FROM ${table} WHERE tenant_id IN (${tenants})`);
+      await ownerDb().query(`DELETE FROM ${table} WHERE tenant_id IN (${tenants})`);
     }
-    await db.query(`DELETE FROM tenants WHERE name LIKE '${TENANT_PREFIX}%'`);
+    await ownerDb().query(`DELETE FROM tenants WHERE name LIKE '${TENANT_PREFIX}%'`);
   }
 
   it('has tenant 1, "Default", owning the existing data', async () => {
-    expect((await db.query(`SELECT id, name, status FROM tenants WHERE id = 1`)).rows).toEqual([{ id: 1, name: 'Default', status: 'active' }]);
-    expect((await db.query(`SELECT tenant_id FROM branches WHERE id = 1`)).rows).toEqual([{ tenant_id: 1 }]);
+    expect((await ownerDb().query(`SELECT id, name, status FROM tenants WHERE id = 1`)).rows).toEqual([{ id: 1, name: 'Default', status: 'active' }]);
+    expect((await ownerDb().query(`SELECT tenant_id FROM branches WHERE id = 1`)).rows).toEqual([{ tenant_id: 1 }]);
   });
 
   it('gives every table but the global ones a required tenant_id referencing tenants', async () => {
-    const { rows } = await db.query<{ table_name: string; has_column: boolean; not_null: boolean; references_tenants: boolean }>(`
+    const { rows } = await ownerDb().query<{ table_name: string; has_column: boolean; not_null: boolean; references_tenants: boolean }>(`
       SELECT c.relname AS table_name,
              a.attname IS NOT NULL AS has_column,
              COALESCE(a.attnotnull, false) AS not_null,
@@ -65,7 +66,7 @@ describe('Tenancy schema', () => {
   });
 
   it('keeps no business identifier unique across tenants, except the listed ones', async () => {
-    const { rows } = await db.query<{ key: string }>(`
+    const { rows } = await ownerDb().query<{ key: string }>(`
       SELECT c.relname || '.' || ix.relname AS key
       FROM pg_index i
       JOIN pg_class c ON c.oid = i.indrelid
@@ -86,27 +87,27 @@ describe('Tenancy schema', () => {
   });
 
   it('allows the same branch name, ISBN and document counter in another tenant, but not twice in one', async () => {
-    const { rows: [main] } = await db.query(`SELECT name FROM branches WHERE id = 1`);
-    const { rows: [book] } = await db.query(`SELECT isbn, title FROM books WHERE isbn IS NOT NULL ORDER BY id LIMIT 1`);
+    const { rows: [main] } = await ownerDb().query(`SELECT name FROM branches WHERE id = 1`);
+    const { rows: [book] } = await ownerDb().query(`SELECT isbn, title FROM books WHERE isbn IS NOT NULL ORDER BY id LIMIT 1`);
 
-    await db.query(
+    await ownerDb().query(
       `INSERT INTO branches (tenant_id, name, address, contact_info, operating_hours) VALUES ($1, $2, '-', '{}', '{}')`,
       [otherTenant, main.name],
     );
-    await db.query(`INSERT INTO books (tenant_id, isbn, title) VALUES ($1, $2, $3)`, [otherTenant, book.isbn, book.title]);
-    await db.query(`INSERT INTO document_counters (tenant_id, series, period, last_value) VALUES ($1, 'ORD', '20260101', 7)`, [otherTenant]);
+    await ownerDb().query(`INSERT INTO books (tenant_id, isbn, title) VALUES ($1, $2, $3)`, [otherTenant, book.isbn, book.title]);
+    await ownerDb().query(`INSERT INTO document_counters (tenant_id, series, period, last_value) VALUES ($1, 'ORD', '20260101', 7)`, [otherTenant]);
 
-    await expect(db.query(
+    await expect(ownerDb().query(
       `INSERT INTO branches (tenant_id, name, address, contact_info, operating_hours) VALUES ($1, $2, '-', '{}', '{}')`,
       [otherTenant, main.name],
     )).rejects.toMatchObject({ code: '23505' });
-    await expect(db.query(`INSERT INTO books (tenant_id, isbn, title) VALUES ($1, $2, $3)`, [otherTenant, book.isbn, book.title]))
+    await expect(ownerDb().query(`INSERT INTO books (tenant_id, isbn, title) VALUES ($1, $2, $3)`, [otherTenant, book.isbn, book.title]))
       .rejects.toMatchObject({ code: '23505' });
   });
 
   it('keeps usernames unique across tenants', async () => {
-    const { rows: [admin] } = await db.query(`SELECT username FROM staff WHERE id = 1`);
-    await expect(db.query(
+    const { rows: [admin] } = await ownerDb().query(`SELECT username FROM staff WHERE id = 1`);
+    await expect(ownerDb().query(
       `INSERT INTO staff (tenant_id, username, password_hash, full_name) VALUES ($1, $2, 'x', 'Other tenant')`,
       [otherTenant, admin.username.toUpperCase()],
     )).rejects.toMatchObject({ code: '23505' });

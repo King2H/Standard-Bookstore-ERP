@@ -58,7 +58,13 @@ existing encrypted data can no longer be read, so treat it like a password and k
 ```powershell
 docker compose up -d postgres
 npm run migrate
+npm run db:app-role
 ```
+
+The database has two users. Migrations run as the owner (`MIGRATION_DATABASE_URL`, `bms`).
+The API works as its own user (`DATABASE_URL`, `bms_api`), which row-level security applies
+to, so each tenant only ever sees its own rows. `npm run db:app-role` creates that user with
+the name and password in `DATABASE_URL`. The API refuses to start as the owner.
 
 ## Daily workflow
 
@@ -88,7 +94,8 @@ npm run test:web    # web component tests
 
 **The tests use their own database.** `npm test` never touches your development database
 `bms`: it runs against `bms_test` on the same server, which it creates and migrates
-automatically. To use a different test database, set `TEST_DATABASE_URL`; its name must end
+automatically, as the owner. The tests themselves work as the API's user, under row-level
+security. To use a different test database, set `TEST_DATABASE_URL`; its name must end
 in `_test`, so the tests can never run against real data by mistake.
 
 ## Database tasks
@@ -100,6 +107,7 @@ docker compose exec postgres psql -U bms -d bms
 ```
 
 **After adding a migration**, apply it and regenerate the database types that Kysely uses.
+New tables need a `tenant_id` (a test checks); the API's user gets access to them automatically.
 CI fails if `apps/api/src/db/types.generated.ts` does not match the migrations.
 
 ```powershell
@@ -120,6 +128,7 @@ Use it when you want a clean start.
 docker compose down -v
 docker compose up -d postgres
 npm run migrate
+npm run db:app-role
 ```
 
 ## Troubleshooting
@@ -128,12 +137,35 @@ npm run migrate
 |---|---|
 | `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified` | Docker Desktop is not running. Start it and wait for "Engine running". |
 | `ECONNREFUSED 127.0.0.1:5433` from the API or tests | The database container is stopped. Run `docker compose up -d postgres`. |
-| `password authentication failed for user "bms"` | `DATABASE_URL` in `.env` points at the wrong server, usually port 5432 (a native PostgreSQL) instead of 5433. |
+| `password authentication failed for user "bms"` | `MIGRATION_DATABASE_URL` in `.env` points at the wrong server, usually port 5432 (a native PostgreSQL) instead of 5433. |
+| `password authentication failed for user "bms_api"` or `role "bms_api" does not exist` | The API's user is missing or has another password. Run `npm run db:app-role`. |
+| `Refusing to start: row-level security does not apply to database user "bms"` | `DATABASE_URL` still names the owner. Use the API's user, as in `.env.example`, and run `npm run db:app-role`. |
+| `MIGRATION_DATABASE_URL is not set` from `npm test` or `npm run migrate` | Add it to `.env`, as in `.env.example`. |
 | `Bind for 0.0.0.0:5433 failed: port is already allocated` | Another program uses 5433. Find it with `Get-NetTCPConnection -LocalPort 5433 -State Listen`. |
 | Container exits with `Error: in 18+, these Docker images are configured to store database data in a format ...` | A data volume from an older PostgreSQL version is mounted. See "Upgrading from the PostgreSQL 16 setup" below. |
 | `COLUMN_ENCRYPTION_KEY must be set to a 64-character hex string` | Generate the key as in step 2 and put it in `.env`. |
 | `Unsafe configuration, refusing to start` | The API checks its settings at startup. The message lists each problem and how to fix it, usually a missing or example secret in `.env` (step 2). |
 | Warning `... is a published example value` when starting the API | `.env` still has an example secret. It is allowed in development only; generate a real one as in step 2. |
+
+## Moving an existing setup to two database users (#13)
+
+Setups made before row-level security connect as `bms` only. Once:
+
+1. In `.env`, replace the `DATABASE_URL` line with the two lines from `.env.example`:
+
+   ```
+   DATABASE_URL=postgres://bms_api:bms_api@localhost:5433/bms
+   MIGRATION_DATABASE_URL=postgres://bms:bms@localhost:5433/bms
+   ```
+
+2. Apply the migrations and create the API's user:
+
+   ```powershell
+   npm run migrate
+   npm run db:app-role
+   ```
+
+Your data stays as it is. `npm test` creates the API's user in the test database by itself.
 
 ## Upgrading from the PostgreSQL 16 setup
 

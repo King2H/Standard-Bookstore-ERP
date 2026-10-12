@@ -49,8 +49,8 @@ async function verify(
     }
     return next(new AuthError('INVALID_TOKEN', 'Invalid access token'));
   }
-  const { sid, staffId, branchId } = claims;
-  if (typeof sid !== 'string' || typeof staffId !== 'number' || typeof branchId !== 'number') {
+  const { sid, staffId, branchId, tenantId } = claims;
+  if (typeof sid !== 'string' || typeof staffId !== 'number' || typeof branchId !== 'number' || typeof tenantId !== 'number') {
     return next(new AuthError('INVALID_TOKEN', 'Invalid access token'));
   }
 
@@ -60,9 +60,14 @@ async function verify(
   // roles are the ones held now in the token's branch (#12), and no password
   // change is pending (#38). Fails closed: a database error must not grant
   // access.
+  //
+  // The session is looked up in the token's tenant (#13, owner decision 2a):
+  // the server signed that claim, and row-level security shows only that
+  // tenant's rows, so a token whose tenant does not hold its session finds
+  // nothing and is refused.
   let state: SessionState | undefined;
   try {
-    state = await sessionState(staffId, sid);
+    state = await runInTenant(tenantId, () => sessionState(staffId, sid));
   } catch {
     return next(new ServiceUnavailableError('Unable to verify account status — please retry'));
   }
@@ -89,8 +94,8 @@ async function verify(
     branchId,
     permissions: getPermissionsForRoles(roles),
   };
-  req.scope = { tenantId: state.tenantId, staffId, branchId, allBranches: state.isAllBranches };
-  // The rest of the request works in the account's tenant (#13): every
-  // database connection it uses carries it.
-  runInTenant(state.tenantId, next);
+  req.scope = { tenantId, staffId, branchId, allBranches: state.isAllBranches };
+  // The rest of the request works in the account's tenant: every database
+  // connection it uses carries it.
+  runInTenant(tenantId, next);
 }

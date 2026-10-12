@@ -17,7 +17,7 @@ import { randomBytes } from 'crypto';
 import { AppError } from '../lib/errors.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const EXEMPT_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/pre-login', '/api/health', '/api/branches/public']);
+const EXEMPT_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/pre-login', '/api/health']);
 
 /**
  * Generate a CSRF token and set it as a readable cookie.

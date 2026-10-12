@@ -14,7 +14,7 @@ export interface AccessTokenClaims {
   sid: string;
   staffId: number;
   branchId: number;
-  /** For the web app; the server reads the tenant from the database. */
+  /** The account's tenant: the server looks the session up in it (#13, decision 2a). */
   tenantId: number;
 }
 

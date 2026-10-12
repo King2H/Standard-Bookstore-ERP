@@ -7,7 +7,6 @@ import {
   type Branch,
   type BranchListResponse,
   type MessageResponse,
-  type PublicBranchListResponse,
 } from '@bms/shared';
 import { scopeOf } from '../../lib/scope.js';
 import { valid } from '../../middleware/validate.js';
@@ -27,7 +26,7 @@ export const schemas = {
   update: { params: IdParamsSchema, body: UpdateBranchRequestSchema },
 };
 
-/** The signed-in staff member; authenticate() runs before every controller but publicList. */
+/** The signed-in staff member; authenticate() runs before every controller. */
 function actor(req: Request): Actor {
   const { staffId, role, branchId } = req.staff!;
   return { staffId, role, branchId, allBranches: scopeOf(req).allBranches };
@@ -35,12 +34,6 @@ function actor(req: Request): Actor {
 
 function message(res: Response, text: string): void {
   const body: MessageResponse = { message: text };
-  res.json(body);
-}
-
-export async function publicList(_req: Request, res: Response): Promise<void> {
-  const { items } = await service.listBranches({ isActive: true }, { page: 1, pageSize: 100 });
-  const body: PublicBranchListResponse = { items: items.map((b) => ({ id: b.id, name: b.name })) };
   res.json(body);
 }
 
