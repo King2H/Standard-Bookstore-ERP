@@ -23,7 +23,7 @@ flowchart LR
 
 | Component | Technology | Notes |
 |---|---|---|
-| Web app | React 18, Vite, TanStack Query, react-hook-form + zod, Tailwind | Static files; talks only to the API |
+| Web app | React 19, Vite, React Router, TanStack Query, react-hook-form + zod, Tailwind | Static files; talks only to the API |
 | API | Node.js 24 LTS, Express 5, TypeScript (strict) | One deployable modular monolith |
 | Data access | Kysely on `pg` | Type-safe SQL; no ORM |
 | Database | PostgreSQL 18 | Migrations with `node-pg-migrate`; `numeric` money |

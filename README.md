@@ -86,7 +86,7 @@ Key rules:
 
 ### Phase 0 — Infrastructure
 
-- Monorepo: apps/api (Node.js 20 + TypeScript + Express 5), apps/web (React 18 + Vite + Tailwind)
+- Monorepo: apps/api (Node.js 20 + TypeScript + Express 5), apps/web (React 19 + Vite + React Router + Tailwind)
 - Docker Compose: API + PostgreSQL 16
 - JWT auth (15 min access + httpOnly refresh cookie), 7-role RBAC
 - Audit log: all write actions recorded; real-time viewer UI
@@ -538,7 +538,7 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + TypeScript + Vite |
+| Frontend | React 19 + TypeScript + Vite + React Router |
 | Styling | Tailwind CSS (dark mode: class strategy) |
 | State / Data | TanStack Query v5 |
 | Backend | Node.js 24 LTS from v2 (v1.x: Node.js 20) + Express 5 + TypeScript |

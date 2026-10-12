@@ -3,7 +3,7 @@
 Multi-branch bookstore ERP. Monorepo with npm workspaces:
 
 - `apps/api`: Node 24 LTS (`.nvmrc`), TypeScript (strict), Express 5, PostgreSQL 18 via `pg`, migrations with `node-pg-migrate`
-- `apps/web`: React 18, Vite, TanStack Query, react-hook-form + zod, Tailwind
+- `apps/web`: React 19, Vite, React Router, TanStack Query, react-hook-form + zod, Tailwind
 - `packages/shared`: types shared by the API and the web app
 
 v1 is maintained on `release/1.x`. `main` is the v2.0.0 line: an incremental move to a layered architecture.
@@ -85,6 +85,8 @@ Contracts (request/response schemas) live in `packages/shared` as zod schemas, u
 
 Frontend: pages compose feature components. Data access goes through `features/<domain>/{api,queries}`.
 Pages never call `fetch` directly.
+Each page has its own URL (React Router). `apps/web/src/app/navigation.ts` decides who may open it: one rule for
+the sidebar and the route guards.
 
 The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/` (ADR-0001 to ADR-0012). They take precedence over this summary.
 

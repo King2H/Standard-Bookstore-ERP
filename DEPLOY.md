@@ -130,7 +130,9 @@ After the API deploys, run migrations to create all tables and seed data.
 
    > ⚠️ **Critical:** Vite bakes environment variables into the bundle at **build time**. Simply setting `VITE_API_URL` as a runtime env var is NOT enough — it must be present when `vite build` runs. That's why it's in the build command above.
 
-5. Click **"Create Static Site"**
+5. Click **"Create Static Site"**, then open its **"Redirects/Rewrites"** tab and add a rule:
+   **Source** `/*`, **Destination** `/index.html`, **Action** `Rewrite`.
+   Each page has its own URL (`/orders`, `/payments`, …); without the rule, reloading one gives "Not Found".
 6. Render builds the React app (~3 minutes)
 7. Your frontend URL will be something like `https://bms-web.onrender.com`
 

@@ -32,5 +32,10 @@
     "prettier": "^3.2.5",
     "tsx": "^4.11.0",
     "typescript": "^5.4.5"
+  },
+  "overrides": {
+    "recharts": {
+      "react-is": "^19.3.0"
+    }
   }
 }

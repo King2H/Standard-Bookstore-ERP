@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import LoginPage from './pages/LoginPage.js';
 import BranchesPage from './pages/BranchesPage.js';
 import StaffPage from './pages/StaffPage.js';
@@ -28,12 +29,12 @@ import { getAccessToken } from './lib/api.js';
 import { logout as doLogout, restoreSession, switchBranch } from './lib/auth.js';
 import { setPasswordChangeRequiredHandler, setSessionEndedHandler } from './lib/api.js';
 import { startInactivityTimer, stopInactivityTimer } from './lib/session.js';
+import { canOpenPage, isPage, landingPage, pagePath, type Page } from './app/navigation.js';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } },
 });
 
-type Page = 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings' | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers' | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments' | 'exchanges' | 'profile' | 'receivables';
 type Role = 'Super_Admin' | 'Admin' | 'Manager' | 'Finance_Officer' | 'Stock_Clerk' | 'Sales' | 'Purchasor';
 
 /** Parse all fields needed from the JWT in one pass. */
@@ -52,17 +53,24 @@ function parseTokenPayload(): { role: Role | null; roles: string[]; branchId: nu
 }
 
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Read through a ref by the long-lived callbacks below, so a new page does
+  // not restart the inactivity timer.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionRestoring, setSessionRestoring] = useState(true);
-  const [currentPage, setCurrentPage] = useState<Page>('branches');
-  // pageContext carries filter state from KPI card clicks to the target page
-  const [pageContext, setPageContext] = useState<Record<string, string>>({});
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);       // all roles for active branch
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [activeBranchId, setActiveBranchId] = useState<number | null>(null);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [warningSeconds, setWarningSeconds] = useState(0);
+
+  // The page is the first part of the URL (#23): /orders, /payments?orderId=…
+  const urlPage = location.pathname.split('/')[1] ?? '';
+  const currentPage: Page = isPage(urlPage) ? urlPage : landingPage(userRole);
 
   // ── Session restore on app load ────────────────────────────────────────────
   // Always attempt a silent token refresh on mount. The refresh token lives in
@@ -74,6 +82,9 @@ export default function App() {
   // This is the standard industry pattern. The session cookie being a
   // "session cookie" (no maxAge) means it is automatically cleared when the
   // browser window closes, so a fresh browser launch always requires login.
+  //
+  // A restored session stays on the page in the URL (a reload, a bookmark);
+  // only the bare address goes to the role's landing page.
   //
   // hasAttemptedRestore guards against React StrictMode's dev-only double
   // effect invocation (mount → cleanup → mount), which would otherwise fire
@@ -93,7 +104,7 @@ export default function App() {
         setActiveBranchId(branchId);
         setIsAuthenticated(true);
         if (mustChange) requirePasswordChange();
-        else applyRoleLanding(role);
+        else if (!isPage(urlPage)) applyRoleLanding(role);
       }
       setSessionRestoring(false);
     });
@@ -115,7 +126,7 @@ export default function App() {
     setUserRoles([]);
     setActiveBranchId(null);
     setMustChangePassword(false);
-    setCurrentPage('branches');
+    navigateRef.current('/', { replace: true });
     setWarningSeconds(0);
   }, []);
 
@@ -144,7 +155,7 @@ export default function App() {
 
   function requirePasswordChange() {
     setMustChangePassword(true);
-    setCurrentPage('profile');
+    navigateRef.current(pagePath('profile'), { replace: true });
   }
 
   const handlePasswordChanged = () => {
@@ -155,12 +166,7 @@ export default function App() {
   };
 
   function applyRoleLanding(role: Role | null) {
-    if (role === 'Super_Admin' || role === 'Admin') setCurrentPage('dashboard');
-    else if (role === 'Manager' || role === 'Finance_Officer') setCurrentPage('dashboard');
-    else if (role === 'Sales') setCurrentPage('pos');
-    else if (role === 'Stock_Clerk') setCurrentPage('inventory');
-    else if (role === 'Purchasor') setCurrentPage('procurement');
-    else setCurrentPage('branches');
+    navigateRef.current(pagePath(landingPage(role)), { replace: true });
   }
 
   const handleLoginSuccess = (opts?: { mustChangePassword?: boolean; permissions?: string[] }) => {
@@ -174,13 +180,12 @@ export default function App() {
       requirePasswordChange();
       return;
     }
-    applyRoleLanding(role);
+    if (!isPage(urlPage)) applyRoleLanding(role);
   };
 
   const handleNavigate = (page: Page, context?: Record<string, string>) => {
     if (mustChangePassword && page !== 'profile') return;
-    setPageContext(context ?? {});
-    setCurrentPage(page);
+    navigate(pagePath(page, context));
   };
 
   const handleLogout = async () => {
@@ -192,7 +197,7 @@ export default function App() {
     setUserPermissions([]);
     setActiveBranchId(null);
     setMustChangePassword(false);
-    setCurrentPage('branches');
+    navigate('/', { replace: true });
     setWarningSeconds(0);
   };
 
@@ -206,7 +211,7 @@ export default function App() {
       setUserPermissions(permissions);
       setActiveBranchId(branchId);
       // Re-apply landing page for the new role context
-      if (mustChangePassword) setCurrentPage('profile');
+      if (mustChangePassword) navigate(pagePath('profile'), { replace: true });
       else applyRoleLanding(role);
       // Invalidate all cached queries so data refreshes for the new branch
       queryClient.invalidateQueries();
@@ -232,6 +237,10 @@ export default function App() {
     );
   }
 
+  const access: Access = { userRole, userPermissions, mustChangePassword };
+  const onNavigate = (page: string, context?: Record<string, string>) => handleNavigate(page as Page, context);
+  const role = userRole ?? undefined;
+
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
@@ -255,25 +264,30 @@ export default function App() {
                   <span>Your password must be changed before continuing. Please update it in your profile.</span>
                 </div>
               )}
-              {currentPage === 'dashboard'    && <DashboardPage userRole={userRole ?? undefined} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
-              {currentPage === 'branches'     && <BranchesPage userRole={userRole ?? undefined} />}
-              {currentPage === 'staff'        && <StaffPage userRoles={userRoles} />}
-              {currentPage === 'audit-log'    && <AuditLogPage />}
-              {currentPage === 'settings'     && <SettingsPage userRole={userRole ?? undefined} />}
-              {currentPage === 'bank-accounts'&& <BankAccountsPage userRole={userRole ?? undefined} />}
-              {currentPage === 'locations'    && <LocationsPage userRole={userRole ?? undefined} />}
-              {currentPage === 'catalog'      && <CatalogPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'inventory'    && <InventoryPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
-              {currentPage === 'suppliers'    && <SuppliersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'procurement'  && <ProcurementPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
-              {currentPage === 'customers'    && <CustomersPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'pos'          && <POSPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
-              {currentPage === 'returns'      && <ReturnsPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'orders'       && <OrdersPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
-              {currentPage === 'payments'     && <PaymentsPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} />}
-              {currentPage === 'exchanges'    && <ExchangesPage userRole={userRole ?? undefined} userPermissions={userPermissions} />}
-              {currentPage === 'receivables'  && <ReceivablesPage userRole={userRole ?? undefined} userPermissions={userPermissions} initialContext={pageContext} onNavigate={(page, context) => handleNavigate(page as Page, context)} />}
-              {currentPage === 'profile'      && <ProfilePage onPasswordChanged={handlePasswordChanged} />}
+              <Routes>
+                <Route path="/:page" element={<PageRoute access={access} render={(page, initialContext) => <>
+                  {page === 'dashboard'    && <DashboardPage userRole={role} onNavigate={onNavigate} />}
+                  {page === 'branches'     && <BranchesPage userRole={role} />}
+                  {page === 'staff'        && <StaffPage userRoles={userRoles} />}
+                  {page === 'audit-log'    && <AuditLogPage />}
+                  {page === 'settings'     && <SettingsPage userRole={role} />}
+                  {page === 'bank-accounts'&& <BankAccountsPage userRole={role} />}
+                  {page === 'locations'    && <LocationsPage userRole={role} />}
+                  {page === 'catalog'      && <CatalogPage userRole={role} userPermissions={userPermissions} />}
+                  {page === 'inventory'    && <InventoryPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
+                  {page === 'suppliers'    && <SuppliersPage userRole={role} userPermissions={userPermissions} />}
+                  {page === 'procurement'  && <ProcurementPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
+                  {page === 'customers'    && <CustomersPage userRole={role} userPermissions={userPermissions} />}
+                  {page === 'pos'          && <POSPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={onNavigate} />}
+                  {page === 'returns'      && <ReturnsPage userRole={role} userPermissions={userPermissions} />}
+                  {page === 'orders'       && <OrdersPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={onNavigate} />}
+                  {page === 'payments'     && <PaymentsPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
+                  {page === 'exchanges'    && <ExchangesPage userRole={role} userPermissions={userPermissions} />}
+                  {page === 'receivables'  && <ReceivablesPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={onNavigate} />}
+                  {page === 'profile'      && <ProfilePage onPasswordChanged={handlePasswordChanged} />}
+                </>} />} />
+                <Route path="*" element={<Navigate to={pagePath(allowedLanding(access))} replace />} />
+              </Routes>
 
               {/* Inactivity warning overlay */}
               <SessionWarning
@@ -287,4 +301,31 @@ export default function App() {
       </QueryClientProvider>
     </ThemeProvider>
   );
+}
+
+interface Access { userRole: Role | null; userPermissions: string[]; mustChangePassword: boolean }
+
+/** The role's landing page, or the profile when the role may not open even that. */
+function allowedLanding({ userRole, userPermissions, mustChangePassword }: Access): Page {
+  const landing = landingPage(userRole);
+  return !mustChangePassword && canOpenPage(landing, userRole, userPermissions) ? landing : 'profile';
+}
+
+/**
+ * Route guard: the page in the URL renders only when the user may open it
+ * (the rule the sidebar shows it by), and only the profile while the password
+ * must be changed. Anything else goes to the landing page, replacing the
+ * refused address in the history so Back does not return to it.
+ */
+function PageRoute({ access, render }: {
+  access: Access;
+  render: (page: Page, initialContext: Record<string, string>) => React.ReactNode;
+}) {
+  const { page = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const { userRole, userPermissions, mustChangePassword } = access;
+  const allowed = isPage(page) && (mustChangePassword ? page === 'profile' : canOpenPage(page, userRole, userPermissions));
+  if (!allowed) return <Navigate to={pagePath(allowedLanding(access))} replace />;
+  // A new query string (another order to collect, other filters) starts the page afresh.
+  return <Fragment key={searchParams.toString()}>{render(page, Object.fromEntries(searchParams))}</Fragment>;
 }
