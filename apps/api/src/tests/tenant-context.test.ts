@@ -7,7 +7,7 @@ import { db } from '../db/index.js';
 import { ownerDb } from './helpers/ownerDb.js';
 import { kysely } from '../db/kysely.js';
 import { DEFAULT_ADMIN_PASSWORD_HASH, ensureSeedData } from '../db/seed.js';
-import { runInTenant, setFallbackTenant } from '../db/tenantContext.js';
+import { NoTenantError, runInTenant, runWithoutTenant, setFallbackTenant } from '../db/tenantContext.js';
 import { forEachTenant } from '../db/tenants.js';
 import { withTransaction } from '../db/tx.js';
 
@@ -71,7 +71,13 @@ describe('Tenant context', () => {
         (await sql<{ tenant: string }>`SELECT current_setting('app.tenant_id', true) AS tenant`.execute(tx)).rows[0].tenant,
       ))).toBe('8');
       expect(await runInTenant(9, async () => (await db.query(`SELECT current_setting('app.tenant_id', true) AS tenant`)).rows[0].tenant)).toBe('9');
-      expect(await tenantSetting()).toBe('');
+      expect(await runWithoutTenant('test', tenantSetting)).toBe('');
+    });
+
+    it('are refused to work that has no tenant and does not say why it needs none', async () => {
+      await expect(tenantSetting()).rejects.toBeInstanceOf(NoTenantError);
+      await expect(db.query('SELECT 1')).rejects.toBeInstanceOf(NoTenantError);
+      await expect(withTransaction({}, async () => 1)).rejects.toBeInstanceOf(NoTenantError);
     });
 
     it('keep work running at the same time in its own tenant', async () => {
@@ -83,8 +89,10 @@ describe('Tenant context', () => {
     });
 
     it('refuse a new row written with no tenant (was: it landed in tenant 1)', async () => {
-      // Row-level security refuses it before the missing tenant_id would.
       await expect(db.query(`INSERT INTO customer_groups (name) VALUES ($1)`, [`${PREFIX}no tenant`]))
+        .rejects.toBeInstanceOf(NoTenantError);
+      // Work that runs without a tenant on purpose: row-level security refuses it.
+      await expect(runWithoutTenant('test', () => db.query(`INSERT INTO customer_groups (name) VALUES ($1)`, [`${PREFIX}no tenant`])))
         .rejects.toMatchObject({ code: '42501' });
     });
 

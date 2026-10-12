@@ -1,5 +1,5 @@
 import { Pool, type PoolClient } from 'pg';
-import { currentTenant } from './tenantContext.js';
+import { currentWork, NoTenantError, runWithoutTenant } from './tenantContext.js';
 
 // Pool is created lazily — DATABASE_URL is validated at first use, not at import time
 export const db = new Pool({
@@ -10,15 +10,19 @@ export const db = new Pool({
 });
 
 // Every connection handed out carries the tenant of the work that asked for
-// it (#13), or none outside a request or job. Pool connections are shared,
-// so it is set on each checkout, never left from the previous user. Kysely,
-// withTransaction and pool.query all check out through here.
+// it (#13). Pool connections are shared, so it is set on each checkout,
+// never left from the previous user. Kysely, withTransaction and pool.query
+// all check out through here, so this is also where work that forgot its
+// tenant is stopped (ADR-0003): it gets no connection at all, rather than a
+// quietly empty answer from row-level security. Work that needs no tenant
+// says so with runWithoutTenant.
 const checkout = db.connect.bind(db) as () => Promise<PoolClient>;
 async function connectForTenant(): Promise<PoolClient> {
+  const work = currentWork();
+  if (!work) throw new NoTenantError();
   const client = await checkout();
   try {
-    const tenant = currentTenant();
-    await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [tenant === undefined ? '' : String(tenant)]);
+    await client.query(`SELECT set_config('app.tenant_id', $1, false)`, ['tenantId' in work ? String(work.tenantId) : '']);
   } catch (err) {
     client.release(err as Error);
     throw err;
@@ -39,7 +43,11 @@ db.on('error', (err) => {
   console.error(JSON.stringify({ level: 'error', msg: 'Unexpected DB pool error', err: err.message }));
 });
 
-export async function checkDbConnection(): Promise<boolean> {
+export function checkDbConnection(): Promise<boolean> {
+  return runWithoutTenant('checking the database connection', checkConnection);
+}
+
+async function checkConnection(): Promise<boolean> {
   if (!process.env.DATABASE_URL) {
     console.error(JSON.stringify({ level: 'error', msg: 'DATABASE_URL environment variable is not set' }));
     return false;
@@ -62,8 +70,8 @@ export async function checkDbConnection(): Promise<boolean> {
  * MIGRATION_DATABASE_URL instead.
  */
 export async function appRoleProblem(): Promise<string | undefined> {
-  const { rows } = await db.query<{ user: string; applies: boolean }>(
+  const { rows } = await runWithoutTenant('checking the database user', () => db.query<{ user: string; applies: boolean }>(
     `SELECT current_user AS user, row_security_active('branches') AS applies`,
-  );
+  ));
   return rows[0].applies ? undefined : `row-level security does not apply to database user "${rows[0].user}"`;
 }

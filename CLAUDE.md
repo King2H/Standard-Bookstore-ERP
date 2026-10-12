@@ -77,7 +77,7 @@ Layers, top to bottom. Each layer calls only the layer below it.
    (`apps/api/src/db/tx.ts`). Never touches `req`/`res`.
 4. **Domain / policy**: pure functions (state machines, pricing, costing, allowed actions). Unit-tested.
 5. **Repository**: the only code that runs SQL (Kysely). Takes a `Queryable` (transaction or db) as its first argument.
-   Branch-owned and tenant-owned queries require scope parameters.
+   Branch-owned queries take the branch as a parameter; the tenant travels with the connection (ADR-0012).
 6. **Database**: migrations are the only source of schema truth. No DDL or schema checks at runtime.
    `apps/api/src/db/types.generated.ts` is generated from them (`npm run db:types`); never edit it by hand.
 
@@ -86,7 +86,7 @@ Contracts (request/response schemas) live in `packages/shared` as zod schemas, u
 Frontend: pages compose feature components. Data access goes through `features/<domain>/{api,queries}`.
 Pages never call `fetch` directly.
 
-The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/` (ADR-0001 to ADR-0011). They take precedence over this summary.
+The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/` (ADR-0001 to ADR-0012). They take precedence over this summary.
 
 ## Conventions
 
@@ -103,7 +103,8 @@ The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/`
   until the web app moves in M6; new code, tests and docs use `/api/v1`.
 - Tenancy (#13): every business table has `tenant_id` (a test checks) and row-level security. Work runs in a
   tenant (`db/tenantContext.ts`): requests take it from the signed-in account, background jobs go through
-  `forEachTenant`. The API connects as its own user, never the owner, and refuses to start otherwise.
+  `forEachTenant`; work with no tenant gets no database connection unless it names why with `runWithoutTenant`.
+  The API connects as its own user, never the owner, and refuses to start otherwise.
 - Never trust client-supplied scope: branch and tenant come from the authenticated context.
   Branch-owned reads take their branch from `scopedBranch(req)` (or `scopedBranchOrAll(req)` for cross-branch
   views such as reports) in `apps/api/src/lib/scope.ts`, never from `req.query.branchId` directly.

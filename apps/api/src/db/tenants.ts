@@ -1,5 +1,5 @@
 import { kysely } from './kysely.js';
-import { runInTenant } from './tenantContext.js';
+import { runInTenant, runWithoutTenant } from './tenantContext.js';
 
 /**
  * Runs a background job once for each active tenant, in that tenant (#13):
@@ -7,7 +7,9 @@ import { runInTenant } from './tenantContext.js';
  * failure is logged and does not stop the others.
  */
 export async function forEachTenant(job: string, fn: (tenantId: number) => Promise<void>): Promise<void> {
-  const tenants = await kysely.selectFrom('tenants').select('id').where('status', '=', 'active').orderBy('id').execute();
+  const tenants = await runWithoutTenant('listing the tenants for a background job', () =>
+    kysely.selectFrom('tenants').select('id').where('status', '=', 'active').orderBy('id').execute(),
+  );
   for (const { id } of tenants) {
     try {
       await runInTenant(id, () => fn(id));

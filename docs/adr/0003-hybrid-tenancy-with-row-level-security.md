@@ -1,6 +1,6 @@
 # ADR-0003: Hybrid tenancy with `tenant_id` and row-level security in all deployments
 
-- **Status:** Accepted
+- **Status:** Accepted; rule 4 superseded for the tenant scope by [ADR-0012](0012-tenant-scope-carried-by-the-connection.md)
 - **Date:** 2026-10-03
 - **Decision owner:** King2H
 - **Related:** issues #12, #13, `docs/v2/architecture.md` §5

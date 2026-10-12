@@ -6,7 +6,7 @@ import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
 import { db, appRoleProblem } from '../db/index.js';
 import { DEFAULT_ADMIN_PASSWORD_HASH } from '../db/seed.js';
-import { runInTenant, setFallbackTenant } from '../db/tenantContext.js';
+import { runInTenant, runWithoutTenant } from '../db/tenantContext.js';
 
 // #13, part 3: row-level security keeps tenants apart even where the
 // application does not filter. The API (and these tests) work as a user it
@@ -111,12 +111,7 @@ describe('Tenant isolation', () => {
     });
 
     it('shows work without a tenant nothing', async () => {
-      setFallbackTenant(undefined);
-      try {
-        expect((await db.query(`SELECT count(*)::int AS n FROM branches`)).rows[0].n).toBe(0);
-      } finally {
-        setFallbackTenant(1);
-      }
+      expect((await runWithoutTenant('test', () => db.query(`SELECT count(*)::int AS n FROM branches`))).rows[0].n).toBe(0);
     });
   });
 
