@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, getCurrentBranchId, getAccessToken } from '../lib/api.js';
+import { api, downloadFile, getCurrentBranchId } from '../lib/api.js';
 import { paymentMethodPlainLabel } from '../lib/paymentMethods.js';
 import { useToast } from '../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
@@ -965,15 +965,8 @@ function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: 
   const entries = [...(data?.entries ?? [])].reverse();
 
   async function exportCsv() {
-    const token = getAccessToken();
-    const res = await fetch(`/api/suppliers/${supplierId}/ledger/export${qs}`, { headers: { Authorization: `Bearer ${token ?? ''}` } });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `supplier-ledger-${supplierId}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    await downloadFile(`/suppliers/${supplierId}/ledger/export${qs}`, `supplier-ledger-${supplierId}-${new Date().toISOString().slice(0, 10)}.csv`)
+      .catch(() => {});
   }
 
   return (

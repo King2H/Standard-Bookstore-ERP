@@ -3,11 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { login } from '../lib/auth.js';
+import { apiUrl } from '../lib/api.js';
 import { useTheme } from '../lib/theme.js';
-
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)
-  ? `${import.meta.env.VITE_API_URL as string}/api`
-  : '/api';
 
 interface BranchOption {
   branchId: number;
@@ -47,7 +44,8 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/pre-login`, {
+      // Not through `api`: a refused sign-in is an answer here, not a session that ended.
+      const res = await fetch(apiUrl('/auth/pre-login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: data.username, password: data.password }),

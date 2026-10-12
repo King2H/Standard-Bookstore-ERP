@@ -84,7 +84,9 @@ Layers, top to bottom. Each layer calls only the layer below it.
 Contracts (request/response schemas) live in `packages/shared` as zod schemas, used by API validation, web forms and types.
 
 Frontend: pages compose feature components. Data access goes through `features/<domain>/{api,queries}`.
-Pages never call `fetch` directly.
+Pages never call `fetch` directly; every request goes through `apps/web/src/lib/api.ts`, to `/api/v1`.
+`src/app` is the shell (providers, session, routes); `features/suppliers` is the reference feature: typed
+endpoint functions, a query-key factory, and a form checked with the rules of the shared contract.
 Each page has its own URL (React Router). `apps/web/src/app/navigation.ts` decides who may open it: one rule for
 the sidebar and the route guards.
 
@@ -101,8 +103,8 @@ The full design is in `docs/v2/architecture.md` and the decisions in `docs/adr/`
 - Request validation uses `validate(schemas)` with zod schemas from `@bms/shared`.
 - Each endpoint with shared contracts is listed in `apps/api/src/openapi/operations.ts`; `npm run openapi`
   regenerates `docs/api/openapi.json` (a test fails if it is stale). It is also served at `/api/v1/openapi.json`.
-- The API is served under `/api/v1`. `/api/...` is a deprecated alias (with `Deprecation` and `Link` headers)
-  until the web app moves in M6; new code, tests and docs use `/api/v1`.
+- The API is served under `/api/v1`. `/api/...` is a deprecated alias (with `Deprecation` and `Link` headers);
+  the web app uses `/api/v1` since M6 step 2, and the alias goes in step 3. New code, tests and docs use `/api/v1`.
 - Tenancy (#13): every business table has `tenant_id` (a test checks) and row-level security. Work runs in a
   tenant (`db/tenantContext.ts`): requests take it from the signed-in account, background jobs go through
   `forEachTenant`; work with no tenant gets no database connection unless it names why with `runWithoutTenant`.
