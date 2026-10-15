@@ -4,9 +4,10 @@ import { toNotificationRecord } from './notifications.mapper.js';
 import type { NewNotification, NotificationRecord, Recipient } from './notifications.types.js';
 
 // Every read and update is limited to the notifications the recipient may
-// see: those addressed to them, and those for their role in their session
-// branch or system-wide; staff with access to all branches see every branch
-// (#12). Tenant scope arrives with tenancy (#13).
+// see: those addressed to them, and those for any role they hold, in their
+// session branch or system-wide; staff with access to all branches see every
+// branch (#12). Row-level security keeps them to their tenant (#13). The live
+// stream applies the same rule (lib/sseManager.ts).
 //
 // Read state is per person (#85): a notification is read for a recipient when
 // they read it (notification_reads), or when it was read before per-person
@@ -15,7 +16,7 @@ import type { NewNotification, NotificationRecord, Recipient } from './notificat
 function visibleTo(r: Recipient) {
   return sql<boolean>`(
     n.target_staff_id = ${r.staffId}
-    OR (${r.role} = ANY(n.target_roles) AND (n.branch_id IS NULL OR n.branch_id = ${r.branchId} OR ${r.allBranches}))
+    OR (n.target_roles && ${r.roles}::text[] AND (n.branch_id IS NULL OR n.branch_id = ${r.branchId} OR ${r.allBranches}))
   )`;
 }
 

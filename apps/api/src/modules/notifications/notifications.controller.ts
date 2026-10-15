@@ -26,18 +26,18 @@ export const schemas = {
 
 /** The signed-in staff member; authenticate() runs before every controller. */
 function recipient(req: Request): Recipient {
-  const { staffId, role, branchId } = req.staff!;
-  return { staffId, role, branchId, allBranches: scopeOf(req).allBranches };
+  const { staffId, role, roles, branchId } = req.staff!;
+  return { staffId, roles: roles?.length ? roles : [role], branchId, allBranches: scopeOf(req).allBranches };
 }
 
 /** Server-sent events: the unread count on connect, then each new notification. */
 export function stream(req: Request, res: Response): void {
-  const staff = req.staff!;
+  const r = recipient(req);
   // sseManager sets the headers and forgets the connection when it closes.
-  sseManager.register(staff.staffId, staff.branchId, staff.role, res);
+  sseManager.register(r.staffId, { tenantId: scopeOf(req).tenantId, branchId: r.branchId, roles: r.roles, allBranches: r.allBranches }, res);
 
   service
-    .countUnread(recipient(req))
+    .countUnread(r)
     .catch(() => 0)
     .then((unreadCount) => res.write(`event: connected\ndata: ${JSON.stringify({ unreadCount })}\n\n`));
 

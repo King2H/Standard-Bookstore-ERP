@@ -1,7 +1,8 @@
 /** The signed-in staff member reading their notifications. */
 export interface Recipient {
   staffId: number;
-  role: string;
+  /** Every role held in the session branch; any one of them counts. */
+  roles: string[];
   /** The session branch. */
   branchId: number;
   /** Access to all branches (staff.is_all_branches). */
