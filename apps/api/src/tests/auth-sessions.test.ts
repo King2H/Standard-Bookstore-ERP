@@ -91,21 +91,25 @@ describe('Auth sessions', () => {
     }, 60_000);
 
     it('lasts one shift: the cookie and the session end after 8 hours (was: 7 days in the database)', async () => {
-      const s = await createTestStaff({ username: `${STAFF_PREFIX}shift`, role: 'Sales', branchId: branchA });
-      const { res, cookie } = await login(`${STAFF_PREFIX}shift`, branchA);
+      await createTestStaff({ username: `${STAFF_PREFIX}shift`, role: 'Sales', branchId: branchA });
+      const { res, token, cookie } = await login(`${STAFF_PREFIX}shift`, branchA);
+      const { sid } = jwt.decode(token) as { sid: string };
 
       const setCookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('refreshToken='))!;
       const maxAge = Number(/Max-Age=(\d+)/.exec(setCookie)![1]);
       expect(maxAge).toBeGreaterThan(8 * 3600 - 60);
       expect(maxAge).toBeLessThanOrEqual(8 * 3600);
 
+      // The sign-in's own session (the test helper opened another), measured
+      // exactly: its start and end come from one clock (was: the end from the
+      // API's, the start from the database's, so it fell short by the gap).
       const { rows } = await db.query(
-        `SELECT EXTRACT(EPOCH FROM expires_at - created_at)::int AS seconds FROM staff_sessions WHERE staff_id = $1`,
-        [s.staffId],
+        `SELECT EXTRACT(EPOCH FROM expires_at - created_at)::text AS seconds FROM staff_sessions WHERE id = $1`,
+        [sid],
       );
-      expect(rows[0].seconds).toBe(8 * 3600);
+      expect(rows[0].seconds).toBe('28800.000000');
 
-      await db.query(`UPDATE staff_sessions SET expires_at = now() - interval '1 second' WHERE staff_id = $1`, [s.staffId]);
+      await db.query(`UPDATE staff_sessions SET expires_at = now() - interval '1 second' WHERE id = $1`, [sid]);
       expect((await refresh(cookie)).status).toBe(401);
     });
   });

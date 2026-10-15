@@ -116,10 +116,13 @@ export async function openBranches(q: Queryable): Promise<Array<{ id: number; na
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
-export async function createSession(q: Queryable, s: { staffId: number; branchId: number; expiresAt: Date }): Promise<string> {
+export async function createSession(
+  q: Queryable,
+  s: { staffId: number; branchId: number; startedAt: Date; expiresAt: Date },
+): Promise<string> {
   const row = await q
     .insertInto('staff_sessions')
-    .values({ staff_id: s.staffId, branch_id: s.branchId, expires_at: s.expiresAt })
+    .values({ staff_id: s.staffId, branch_id: s.branchId, created_at: s.startedAt, expires_at: s.expiresAt })
     .returning('id')
     .executeTakeFirstOrThrow();
   return row.id;

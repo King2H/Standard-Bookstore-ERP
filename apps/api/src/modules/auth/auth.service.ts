@@ -130,10 +130,12 @@ async function openSession(tenantId: number, username: string, password: string,
   const roles = await branchRoles(staff.staffId, branchId, staff.isAllBranches);
 
   const refreshToken = newRefreshToken();
-  const sessionExpiresAt = policy.sessionExpiry(new Date());
+  // Start and end from one clock, so the session lasts exactly its hours.
+  const startedAt = new Date();
+  const sessionExpiresAt = policy.sessionExpiry(startedAt);
   const sessionId = await withTransaction({}, async (tx) => {
     await repo.recordSignIn(tx, staff.staffId);
-    const id = await repo.createSession(tx, { staffId: staff.staffId, branchId, expiresAt: sessionExpiresAt });
+    const id = await repo.createSession(tx, { staffId: staff.staffId, branchId, startedAt, expiresAt: sessionExpiresAt });
     await repo.insertRefreshToken(tx, { sessionId: id, staffId: staff.staffId, tokenHash: hashRefreshToken(refreshToken) });
     return id;
   });
