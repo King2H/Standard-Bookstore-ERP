@@ -3,7 +3,10 @@ import type { ConfigSource } from '@bms/shared';
 /** The signed-in staff member changing a setting. */
 export interface Actor {
   staffId: number;
+  /** The first role held, recorded in the audit log. */
   role: string;
+  /** Every role held in the session branch; the rules look at all of them. */
+  roles: string[];
   branchId: number;
 }
 
@@ -18,6 +21,3 @@ export interface ConfigRecord {
 export interface EffectiveConfigRecord extends ConfigRecord {
   source: ConfigSource;
 }
-
-/** The JSON type a key's value must have; `jsonb` accepts any JSON value. */
-export type ConfigValueType = 'string' | 'number' | 'boolean' | 'jsonb';

@@ -1,18 +1,13 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { api, getAccessToken } from '../lib/api.js';
+import { useAuditLog } from '../queries.js';
 
-interface AuditEntry {
-  id: number;
-  staffUsername: string;
-  staffRole: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  branchName: string | null;
-  meta: Record<string, unknown> | null;
-  createdAt: string;
-}
+/** Every kind of record the API writes to the audit log (was: 8 of them to filter by). */
+const ENTITY_TYPES = [
+  'author', 'bank_account', 'bank_statement', 'bank_statement_line', 'book', 'book_price', 'book_supplier', 'branch',
+  'branch_config', 'category', 'customer', 'customer_group', 'exchange', 'location', 'order', 'publisher', 'purchase_order',
+  'receivable', 'receivable_payment', 'return', 'staff', 'staff_locations', 'staff_roles', 'staff_session', 'supplier',
+  'system_config', 'transaction',
+];
 
 const ACTION_COLORS: Record<string, string> = {
   CREATE:     'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400',
@@ -29,8 +24,11 @@ const ACTION_COLORS: Record<string, string> = {
   RESTORE:    'bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-400',
 };
 
-function MetaCell({ meta }: { meta: Record<string, unknown> | null }) {
+function MetaCell({ meta: raw }: { meta: unknown }) {
   const [expanded, setExpanded] = useState(false);
+  // Details are an object of named values; anything else is shown under one name.
+  const meta = raw === null || raw === undefined ? null
+    : typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : { value: raw };
   if (!meta || Object.keys(meta).length === 0) return <span className="text-gray-400 dark:text-gray-600">—</span>;
 
   const entries = Object.entries(meta);
@@ -74,22 +72,7 @@ export default function AuditLogPage() {
   const [page, setPage] = useState(1);
   const [entityTypeFilter, setEntityTypeFilter] = useState('');
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['audit-logs', page, entityTypeFilter],
-    queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
-      if (entityTypeFilter) params.set('entityType', entityTypeFilter);
-      return api.get<{ items: AuditEntry[]; total: number; totalPages: number }>(`/audit-logs?${params}`);
-    },
-    enabled: !!getAccessToken(),
-    retry: false,
-    staleTime: 0,
-    refetchInterval: 3_000,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: true,
-  });
-
-  const entityTypes = ['branch', 'staff', 'location', 'book', 'supplier', 'purchase_order', 'customer', 'transaction'];
+  const { data, isLoading, refetch, isFetching } = useAuditLog({ page, pageSize: 25, entityType: entityTypeFilter || undefined });
 
   return (
     <div className="p-6">
@@ -112,7 +95,7 @@ export default function AuditLogPage() {
             className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-1.5 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors"
           >
             <option value="">All entities</option>
-            {entityTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
       </div>

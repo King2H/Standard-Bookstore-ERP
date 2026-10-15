@@ -2,8 +2,8 @@ import { Fragment } from 'react';
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router';
 import BranchesPage from '../features/branches/pages/BranchesPage.js';
 import StaffPage from '../features/staff/pages/StaffPage.js';
-import AuditLogPage from '../pages/AuditLogPage.js';
-import SettingsPage from '../pages/SettingsPage.js';
+import AuditLogPage from '../features/auditLog/pages/AuditLogPage.js';
+import SettingsPage from '../features/settings/pages/SettingsPage.js';
 import BankAccountsPage from '../pages/BankAccountsPage.js';
 import LocationsPage from '../features/locations/pages/LocationsPage.js';
 import CatalogPage from '../pages/CatalogPage.js';
@@ -38,7 +38,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'branches'     && <BranchesPage />}
         {page === 'staff'        && <StaffPage />}
         {page === 'audit-log'    && <AuditLogPage />}
-        {page === 'settings'     && <SettingsPage userRole={role} />}
+        {page === 'settings'     && <SettingsPage />}
         {page === 'bank-accounts'&& <BankAccountsPage userRole={role} />}
         {page === 'locations'    && <LocationsPage />}
         {page === 'catalog'      && <CatalogPage userRole={role} userPermissions={userPermissions} />}
