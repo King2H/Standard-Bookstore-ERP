@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../lib/theme.js';
 import { logout } from '../lib/auth.js';
 import { api } from '../lib/api.js';
-import NotificationBell from './NotificationBell.js';
+import NotificationBell from '../features/notifications/components/NotificationBell.js';
 import {
   NAV_SECTIONS, canSeeDashboard, canSeeItem, findSectionForPage,
   type NavLeaf, type NavSection, type Page,

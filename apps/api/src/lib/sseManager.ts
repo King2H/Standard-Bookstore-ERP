@@ -4,7 +4,10 @@
  * Connections are keyed by staffId. Each staff member may have multiple
  * concurrent connections (e.g. multiple browser tabs).
  *
- * broadcast() filters connections by branchId + role before pushing.
+ * broadcast() pushes to the connections that may see the notification, by
+ * the rule the notification list applies (notifications.repository.ts): the
+ * same tenant, any role held among the target roles, and the notification's
+ * branch, a system-wide one, or every branch for staff with access to all.
  * pushToStaff() sends directly to a specific staff member's connections.
  */
 import type { Response } from 'express';
@@ -22,10 +25,19 @@ export interface NotificationPayload {
   createdAt: string;
 }
 
-interface ConnectionMeta {
-  res: Response;
+/** Who a connection belongs to, fixed when it opens. */
+export interface Listener {
+  tenantId: number;
+  /** The session branch. */
   branchId: number;
-  role: string;
+  /** Every role held in the session branch. */
+  roles: string[];
+  /** Access to all branches (staff.is_all_branches). */
+  allBranches: boolean;
+}
+
+interface ConnectionMeta extends Listener {
+  res: Response;
 }
 
 class SSEManager {
@@ -36,7 +48,7 @@ class SSEManager {
    * Register a new SSE connection for a staff member.
    * Sets the required SSE headers and auto-removes on disconnect.
    */
-  register(staffId: number, branchId: number, role: string, res: Response): void {
+  register(staffId: number, listener: Listener, res: Response): void {
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -44,7 +56,7 @@ class SSEManager {
     res.setHeader('X-Accel-Buffering', 'no'); // Disable Nginx buffering
     res.flushHeaders();
 
-    const meta: ConnectionMeta = { res, branchId, role };
+    const meta: ConnectionMeta = { ...listener, res };
 
     if (!this.connections.has(staffId)) {
       this.connections.set(staffId, new Set());
@@ -64,16 +76,17 @@ class SSEManager {
   }
 
   /**
-   * Broadcast a notification to all staff whose role is in targetRoles
-   * and whose branchId matches (or branchId is null = system-wide).
+   * Broadcast a tenant's notification to its staff holding one of targetRoles,
+   * in its branch (null = system-wide; every branch with access to all).
    */
-  broadcast(branchId: number | null, targetRoles: string[], notification: NotificationPayload): void {
+  broadcast(tenantId: number, branchId: number | null, targetRoles: string[], notification: NotificationPayload): void {
     const data = JSON.stringify(notification);
     for (const [, conns] of this.connections) {
       for (const meta of conns) {
-        const roleMatch = targetRoles.includes(meta.role);
-        const branchMatch = branchId === null || meta.branchId === branchId;
-        if (roleMatch && branchMatch) {
+        const tenantMatch = meta.tenantId === tenantId;
+        const roleMatch = meta.roles.some((r) => targetRoles.includes(r));
+        const branchMatch = branchId === null || meta.allBranches || meta.branchId === branchId;
+        if (tenantMatch && roleMatch && branchMatch) {
           this.writeEvent(meta.res, 'notification', data);
         }
       }

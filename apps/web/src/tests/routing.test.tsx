@@ -53,7 +53,7 @@ vi.mock('../pages/PaymentsPage.js', pageStub('PaymentsPage'));
 vi.mock('../pages/ExchangesPage.js', pageStub('ExchangesPage'));
 vi.mock('../pages/ReceivablesPage.js', pageStub('ReceivablesPage'));
 vi.mock('../features/account/pages/ProfilePage.js', pageStub('ProfilePage'));
-vi.mock('../components/NotificationBell.js', () => ({ default: () => null }));
+vi.mock('../features/notifications/components/NotificationBell.js', () => ({ default: () => null }));
 vi.mock('../lib/auth.js', () => ({
   restoreSession: vi.fn(),
   logout: vi.fn().mockResolvedValue(undefined),

@@ -17,7 +17,7 @@ const API = vi.hoisted(() => {
 
 import { api, setAccessToken, setCsrfToken } from '../lib/api.js';
 import DashboardPage from '../pages/DashboardPage.js';
-import NotificationBell from '../components/NotificationBell.js';
+import NotificationBell from '../features/notifications/components/NotificationBell.js';
 import { ToastProvider } from '../components/Toast.js';
 
 // The dashboard's reports, empty (as in DashboardPage.inventoryAvailableStock.test.tsx).
@@ -122,10 +122,17 @@ describe('CSV exports', () => {
 });
 
 describe('The notification bell', () => {
-  const unread = { id: 7, eventType: 'order.created', title: 'New order', body: 'ORD-1', entityType: null, entityId: null, severity: 'info', isRead: false, createdAt: new Date().toISOString() };
+  const unread = {
+    id: '7', branchId: 1, targetRoles: ['Sales'], targetStaffId: null, eventType: 'order.created', title: 'New order', body: 'ORD-1',
+    entityType: null, entityId: null, severity: 'info', isRead: false, readAt: null, createdAt: new Date().toISOString(),
+  };
+  // The bell reads who is signed in (for the branch), its list and the unread count.
+  const bellAnswers = (url: string) => url.endsWith('/staff/me') ? { currentBranchId: 1 }
+    : url.endsWith('/unread-count') ? { count: 1 }
+    : { data: [unread], total: 1, page: 1, pageSize: 50, totalPages: 1 };
 
   it('marks a notification read with the CSRF token, so the API accepts it (was: 403 CSRF_INVALID)', async () => {
-    stubFetch(() => ({ data: [unread] }));
+    stubFetch(bellAnswers);
     const { unmount } = renderWithProviders(<NotificationBell onNavigate={vi.fn()} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications (1 unread)' }));
@@ -139,7 +146,7 @@ describe('The notification bell', () => {
   });
 
   it('marks them all read with the CSRF token', async () => {
-    stubFetch(() => ({ data: [unread] }));
+    stubFetch(bellAnswers);
     const { unmount } = renderWithProviders(<NotificationBell onNavigate={vi.fn()} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications (1 unread)' }));

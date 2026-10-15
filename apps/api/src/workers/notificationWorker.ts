@@ -15,6 +15,7 @@
  */
 import { createNotification } from '../modules/notifications/notifications.service.js';
 import { sseManager, type NotificationPayload } from '../lib/sseManager.js';
+import { currentWork } from '../db/tenantContext.js';
 
 interface NotificationSpec {
   title: string;
@@ -412,8 +413,9 @@ export async function handleNotification(payload: Record<string, unknown>): Prom
       createdAt: row.createdAt.toISOString(),
     };
 
-    // Broadcast to active SSE connections
-    sseManager.broadcast(branchId, spec.targetRoles, notification);
+    // The poller handles each tenant's events in that tenant; the stream keeps tenants apart.
+    const work = currentWork();
+    if (work && 'tenantId' in work) sseManager.broadcast(work.tenantId, branchId, spec.targetRoles, notification);
   } catch (err) {
     console.error(JSON.stringify({
       level: 'error',
