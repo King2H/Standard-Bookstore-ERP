@@ -47,6 +47,22 @@ describe('Forced password change', () => {
 
   const get = (path: string, token: string) => api().get(path).set('Authorization', `Bearer ${token}`);
 
+  it('refuses the same password as the new one, so a temporary password cannot stay (was: accepted, change no longer asked)', async () => {
+    const staff = await staffWithPendingChange('same');
+    const session = await login(`${STAFF_PREFIX}same`);
+
+    const res = await api().put('/api/v1/staff/me/password').set('Authorization', `Bearer ${session.token}`)
+      .send({ currentPassword: PASSWORD, newPassword: PASSWORD });
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ error: 'PASSWORD_UNCHANGED' });
+    const { rows } = await db.query(`SELECT must_change_password FROM staff WHERE id = $1`, [staff.staffId]);
+    expect(rows[0].must_change_password).toBe(true);
+
+    const changed = await api().put('/api/v1/staff/me/password').set('Authorization', `Bearer ${session.token}`)
+      .send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
+    expect(changed.status).toBe(200);
+  });
+
   it('blocks every other endpoint after login, and says why (was: only the browser blocked it)', async () => {
     await staffWithPendingChange('login');
     const session = await login(`${STAFF_PREFIX}login`);

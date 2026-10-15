@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router';
-import LoginPage from '../pages/LoginPage.js';
+import LoginPage from '../features/auth/pages/LoginPage.js';
 import Layout from '../components/Layout.js';
 import SessionWarning from '../components/SessionWarning.js';
 import { AppProviders } from './providers.js';

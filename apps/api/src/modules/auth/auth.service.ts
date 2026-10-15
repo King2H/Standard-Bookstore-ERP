@@ -284,6 +284,10 @@ export async function changePassword(
   if (!(await bcrypt.compare(currentPassword, hash))) {
     throw new BusinessError('INVALID_CURRENT_PASSWORD', 'Current password is incorrect');
   }
+  // Keeping the password would end a forced change with the temporary one an admin set.
+  if (newPassword === currentPassword) {
+    throw new BusinessError('PASSWORD_UNCHANGED', 'The new password must differ from the current one');
+  }
   const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
   await withTransaction({}, async (tx) => {

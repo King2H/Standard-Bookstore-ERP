@@ -33,7 +33,7 @@ const { pageStub, tokenRef } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../pages/LoginPage.js', pageStub('LoginPage'));
+vi.mock('../features/auth/pages/LoginPage.js', pageStub('LoginPage'));
 vi.mock('../pages/DashboardPage.js', pageStub('DashboardPage'));
 vi.mock('../features/branches/pages/BranchesPage.js', pageStub('BranchesPage'));
 vi.mock('../features/staff/pages/StaffPage.js', pageStub('StaffPage'));
@@ -52,7 +52,7 @@ vi.mock('../pages/OrdersPage.js', pageStub('OrdersPage'));
 vi.mock('../pages/PaymentsPage.js', pageStub('PaymentsPage'));
 vi.mock('../pages/ExchangesPage.js', pageStub('ExchangesPage'));
 vi.mock('../pages/ReceivablesPage.js', pageStub('ReceivablesPage'));
-vi.mock('../pages/ProfilePage.js', pageStub('ProfilePage'));
+vi.mock('../features/account/pages/ProfilePage.js', pageStub('ProfilePage'));
 vi.mock('../components/NotificationBell.js', () => ({ default: () => null }));
 vi.mock('../lib/auth.js', () => ({
   restoreSession: vi.fn(),

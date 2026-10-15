@@ -18,7 +18,7 @@ import PaymentsPage from '../pages/PaymentsPage.js';
 import ExchangesPage from '../pages/ExchangesPage.js';
 import ReceivablesPage from '../pages/ReceivablesPage.js';
 import DashboardPage from '../pages/DashboardPage.js';
-import ProfilePage from '../pages/ProfilePage.js';
+import ProfilePage from '../features/account/pages/ProfilePage.js';
 import { canOpenPage, isPage, landingPage, pagePath, type Page } from './navigation.js';
 import type { Session } from './useSession.js';
 

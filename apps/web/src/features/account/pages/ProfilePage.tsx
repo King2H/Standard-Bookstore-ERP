@@ -1,35 +1,10 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api, getAccessToken } from '../lib/api.js';
-import { useToast } from '../components/Toast.js';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface StaffRole { branchId: number; branchName?: string; role: string }
-
-interface LocationScopeEntry { id: number; name: string; isDefaultFulfillment: boolean }
-
-interface MyProfile {
-  id: number;
-  username: string;
-  fullName: string;
-  isActive: boolean;
-  createdAt: string;
-  roles: StaffRole[];
-  currentRole: string;
-  currentBranchId: number;
-  mustChangePassword?: boolean;
-  lastLoginAt?: string | null;
-  passwordChangedAt?: string | null;
-  isLocked?: boolean;
-  locationAccess: {
-    mode: 'full' | 'restricted';
-    locations: LocationScopeEntry[];
-  };
-}
+import { PasswordSchema } from '@bms/shared';
+import { useToast } from '../../../components/Toast.js';
+import { useChangeMyPassword, useMyProfile } from '../queries.js';
 
 // ── Password change schema ────────────────────────────────────────────────────
 
@@ -41,8 +16,12 @@ const passwordSchema = z.object({
     .regex(/[A-Z]/, 'Must contain an uppercase letter')
     .regex(/[a-z]/, 'Must contain a lowercase letter')
     .regex(/\d/, 'Must contain a digit')
-    .regex(/[^A-Za-z\d]/, 'Must contain a special character'),
+    .regex(/[^A-Za-z\d]/, 'Must contain a special character')
+    .pipe(PasswordSchema),
   confirmPassword: z.string().min(1, 'Please confirm your new password'),
+}).refine(d => d.newPassword !== d.currentPassword, {
+  message: 'Must differ from your current password',
+  path: ['newPassword'],
 }).refine(d => d.newPassword === d.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],
@@ -72,46 +51,34 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
 
   // ── Fetch own profile ──────────────────────────────────────────────────────
 
-  const queryClient = useQueryClient();
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['my-profile'],
-    queryFn: () => api.get<MyProfile>('/staff/me'),
-    enabled: !!getAccessToken(),
-    staleTime: 60_000,
-  });
+  const { data: profile, isLoading } = useMyProfile();
 
   // ── Password change mutation ───────────────────────────────────────────────
 
-  const passwordMutation = useMutation({
-    mutationFn: (body: { currentPassword: string; newPassword: string }) =>
-      api.put('/staff/me/password', body),
-    onSuccess: () => {
-      showToast('Password updated successfully');
-      setShowPasswordForm(false);
-      reset();
-      queryClient.invalidateQueries({ queryKey: ['my-profile'] });
-      onPasswordChanged?.();
-    },
-    onError: (err: unknown) => {
-      const e = err as { message?: string; code?: string };
-      if (e.code === 'INVALID_CURRENT_PASSWORD') {
-        showToast('Current password is incorrect', 'error');
-      } else {
-        showToast(e.message ?? 'Failed to update password', 'error');
-      }
-    },
-  });
+  const passwordMutation = useChangeMyPassword();
+
+  const onSubmit = (data: PasswordForm) => {
+    passwordMutation.mutate({ currentPassword: data.currentPassword, newPassword: data.newPassword }, {
+      onSuccess: () => {
+        showToast('Password updated successfully');
+        setShowPasswordForm(false);
+        reset();
+        onPasswordChanged?.();
+      },
+      onError: (err: unknown) => {
+        const e = err as { message?: string; code?: string };
+        if (e.code === 'INVALID_CURRENT_PASSWORD') {
+          showToast('Current password is incorrect', 'error');
+        } else {
+          showToast(e.message ?? 'Failed to update password', 'error');
+        }
+      },
+    });
+  };
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<PasswordForm>({
     resolver: zodResolver(passwordSchema),
   });
-
-  const onSubmit = (data: PasswordForm) => {
-    passwordMutation.mutate({
-      currentPassword: data.currentPassword,
-      newPassword: data.newPassword,
-    });
-  };
 
   if (isLoading) {
     return (
@@ -163,9 +130,12 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
             <p className="text-sm text-gray-500 dark:text-gray-400">@{profile.username}</p>
           </div>
           <div className="ml-auto">
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ROLE_COLORS[profile.currentRole] ?? 'bg-gray-100 text-gray-700'}`}>
-              {profile.currentRole}
-            </span>
+            {/* Every role held in the session branch (was: only the first). */}
+            {profile.currentRoles.map((role, i) => (
+              <span key={role} className={`${i > 0 ? 'ml-1 ' : ''}text-xs font-medium px-2.5 py-1 rounded-full ${ROLE_COLORS[role] ?? 'bg-gray-100 text-gray-700'}`}>
+                {role}
+              </span>
+            ))}
           </div>
         </div>
 
@@ -288,10 +258,11 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
         {showPasswordForm ? (
           <form onSubmit={handleSubmit(onSubmit)} className="px-6 py-5 space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+              <label htmlFor="profile-currentPassword" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
                 Current Password <span className="text-red-500">*</span>
               </label>
               <input
+                id="profile-currentPassword"
                 {...register('currentPassword')}
                 type="password"
                 autoComplete="current-password"
@@ -304,10 +275,11 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+              <label htmlFor="profile-newPassword" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
                 New Password <span className="text-red-500">*</span>
               </label>
               <input
+                id="profile-newPassword"
                 {...register('newPassword')}
                 type="password"
                 autoComplete="new-password"
@@ -320,10 +292,11 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+              <label htmlFor="profile-confirmPassword" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
                 Confirm New Password <span className="text-red-500">*</span>
               </label>
               <input
+                id="profile-confirmPassword"
                 {...register('confirmPassword')}
                 type="password"
                 autoComplete="new-password"
