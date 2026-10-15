@@ -2,12 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { checkCanEditDetails, checkCanOpenOrClose, checkDeletable } from '../branch.policy.js';
 import type { Actor } from '../branch.types.js';
 
-const staff = (role: string, allBranches = false): Actor => ({ staffId: 1, role, branchId: 10, allBranches });
+const staff = (role: string, allBranches = false): Actor => ({ staffId: 1, role, roles: [role], branchId: 10, allBranches });
 
 describe('checkCanOpenOrClose', () => {
   it('allows Super_Admin, and Admin with access to all branches', () => {
     expect(() => checkCanOpenOrClose(staff('Super_Admin'))).not.toThrow();
     expect(() => checkCanOpenOrClose(staff('Admin', true))).not.toThrow();
+  });
+
+  it('counts every role held, not only the first one given (was: a Manager made Admin was refused)', () => {
+    const promoted: Actor = { ...staff('Manager', true), roles: ['Manager', 'Admin'] };
+    expect(() => checkCanOpenOrClose(promoted)).not.toThrow();
   });
 
   it('refuses an Admin of one branch, and Managers', () => {

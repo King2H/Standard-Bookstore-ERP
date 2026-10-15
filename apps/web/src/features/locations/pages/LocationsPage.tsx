@@ -1,22 +1,16 @@
-﻿import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, getAccessToken } from '../lib/api.js';
-import { useToast } from '../components/Toast.js';
-
-interface Location {
-  id: number;
-  branchId: number;
-  name: string;
-  isDefaultFulfillment: boolean;
-  createdAt: string;
-}
-
-interface Branch { id: number; name: string; isActive: boolean }
+import { useState } from 'react';
+import { useToast } from '../../../components/Toast.js';
+import { useMyProfile } from '../../account/queries.js';
+import { useOpenBranches } from '../../branches/queries.js';
+import { canChangeLocations } from '../../branches/rules.js';
+import { useLocationChanges, useLocations } from '../queries.js';
 
 const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
 
-export default function LocationsPage({ userRole }: { userRole?: string }) {
-  const queryClient = useQueryClient();
+const failed = (fallback: string, showToast: (m: string, t: 'error') => void) => (err: unknown) =>
+  showToast((err as { message?: string }).message ?? fallback, 'error');
+
+export default function LocationsPage() {
   const { showToast } = useToast();
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -25,71 +19,47 @@ export default function LocationsPage({ userRole }: { userRole?: string }) {
   const [editName, setEditName] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
-  const canWrite = userRole && ['Super_Admin', 'Admin', 'Manager'].includes(userRole);
+  const { data: me } = useMyProfile();
+  const { data: branchData } = useOpenBranches();
+  const branches = branchData?.items ?? [];
+  // The session's branch first (was: whichever branch the list started with).
+  const activeBranchId = selectedBranchId ?? me?.currentBranchId ?? null;
+  // Changes are taken in the session's branch, or in any with access to all
+  // branches, as the API decides; other branches can still be looked at.
+  const canWrite = activeBranchId !== null && canChangeLocations(me, activeBranchId);
 
-  const { data: branchData } = useQuery({
-    queryKey: ['branches'],
-    queryFn: () => api.get<{ items: Branch[] }>('/branches'),
-    enabled: !!getAccessToken(),
-    staleTime: 60_000,
-  });
-
-  const branches = branchData?.items.filter(b => b.isActive) ?? [];
-  const activeBranchId = selectedBranchId ?? branches[0]?.id ?? null;
-
-  const { data: locationsData, isLoading } = useQuery({
-    queryKey: ['locations', activeBranchId],
-    queryFn: () => api.get<{ items: Location[]; total: number }>(`/branches/${activeBranchId}/locations`),
-    enabled: !!activeBranchId && !!getAccessToken(),
-    staleTime: 30_000,
-  });
-
+  const { data: locationsData, isLoading } = useLocations(activeBranchId);
   const locations = locationsData?.items ?? [];
+  const changes = useLocationChanges(activeBranchId ?? 0);
 
-  const createMutation = useMutation({
-    mutationFn: (name: string) => api.post<Location>(`/branches/${activeBranchId}/locations`, { name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['locations', activeBranchId] });
-      setShowCreateForm(false);
-      setNewName('');
-      showToast('Location created');
-    },
-    onError: (err: unknown) => showToast((err as { message?: string }).message ?? 'Failed to create location', 'error'),
-  });
-
-  const renameMutation = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) =>
-      api.put<Location>(`/branches/${activeBranchId}/locations/${id}`, { name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['locations', activeBranchId] });
-      setEditingId(null);
-      setEditName('');
-      showToast('Location renamed');
-    },
-    onError: (err: unknown) => showToast((err as { message?: string }).message ?? 'Failed to rename', 'error'),
-  });
-
-  const setDefaultMutation = useMutation({
-    mutationFn: (id: number) => api.put<Location>(`/branches/${activeBranchId}/locations/${id}/set-default`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['locations', activeBranchId] });
-      showToast('Default location updated');
-    },
-    onError: (err: unknown) => showToast((err as { message?: string }).message ?? 'Failed to set default', 'error'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.delete(`/branches/${activeBranchId}/locations/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['locations', activeBranchId] });
-      setDeleteConfirmId(null);
-      showToast('Location deleted');
-    },
-    onError: (err: unknown) => {
-      setDeleteConfirmId(null);
-      showToast((err as { message?: string }).message ?? 'Cannot delete location', 'error');
-    },
-  });
+  const createMutation = {
+    isPending: changes.create.isPending,
+    mutate: (name: string) => changes.create.mutate(name, {
+      onSuccess: () => { setShowCreateForm(false); setNewName(''); showToast('Location created'); },
+      onError: failed('Failed to create location', showToast),
+    }),
+  };
+  const renameMutation = {
+    isPending: changes.rename.isPending,
+    mutate: (v: { id: number; name: string }) => changes.rename.mutate(v, {
+      onSuccess: () => { setEditingId(null); setEditName(''); showToast('Location renamed'); },
+      onError: failed('Failed to rename', showToast),
+    }),
+  };
+  const setDefaultMutation = {
+    isPending: changes.setDefault.isPending,
+    mutate: (id: number) => changes.setDefault.mutate(id, {
+      onSuccess: () => showToast('Default location updated'),
+      onError: failed('Failed to set default', showToast),
+    }),
+  };
+  const deleteMutation = {
+    isPending: changes.remove.isPending,
+    mutate: (id: number) => changes.remove.mutate(id, {
+      onSuccess: () => { setDeleteConfirmId(null); showToast('Location deleted'); },
+      onError: (err: unknown) => { setDeleteConfirmId(null); failed('Cannot delete location', showToast)(err); },
+    }),
+  };
 
   return (
     <div className="p-6">

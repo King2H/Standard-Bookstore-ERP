@@ -1,7 +1,10 @@
 /** The signed-in staff member, with the branches they may manage. */
 export interface Actor {
   staffId: number;
+  /** The first role held in the session branch, as the audit log records it. */
   role: string;
+  /** Every role held in the session branch; the rules look at all of them. */
+  roles: string[];
   /** The session branch. */
   branchId: number;
   /** Access to all branches (staff.is_all_branches). */
