@@ -9,11 +9,25 @@ import {
 import type { ConfigRecord } from '../config.types.js';
 
 describe('checkConfigValue', () => {
-  it('accepts a value of the key\'s type, and any JSON for jsonb keys', () => {
+  it('accepts a value the key takes', () => {
     expect(() => checkConfigValue('base_currency', 'ETB')).not.toThrow();
     expect(() => checkConfigValue('return_window_days', 14)).not.toThrow();
     expect(() => checkConfigValue('allow_negative_stock', false)).not.toThrow();
     expect(() => checkConfigValue('max_line_discount_pct', { Sales: 10 })).not.toThrow();
+    expect(() => checkConfigValue('default_discount_type', 'Merchant')).not.toThrow();
+    expect(() => checkConfigValue('allowed_payment_methods', ['cash', 'mobile'])).not.toThrow();
+    expect(() => checkConfigValue('notification_prefs', {})).not.toThrow();
+  });
+
+  it('refuses JSON settings of the wrong shape, saying what they take', () => {
+    expect(() => checkConfigValue('max_line_discount_pct', '{"Sales": 10')).toThrow(expect.objectContaining({
+      code: 'VALIDATION_ERROR', message: `Config key 'max_line_discount_pct' must be an object of role and percentage, e.g. {"Sales": 10}`,
+    }));
+    expect(() => checkConfigValue('max_line_discount_pct', { Sales: 150 })).toThrow(expect.objectContaining({ statusCode: 400 }));
+    expect(() => checkConfigValue('max_line_discount_pct', { Nobody: 5 })).toThrow(expect.objectContaining({ statusCode: 400 }));
+    expect(() => checkConfigValue('allowed_payment_methods', ['gold'])).toThrow(expect.objectContaining({ statusCode: 400 }));
+    expect(() => checkConfigValue('notification_prefs', [])).toThrow(expect.objectContaining({ statusCode: 400 }));
+    expect(() => checkConfigValue('default_discount_value', -1)).toThrow(expect.objectContaining({ statusCode: 400 }));
   });
 
   it('refuses a value of another type', () => {
@@ -34,18 +48,24 @@ describe('checkConfigValue', () => {
 
 describe('who may change settings', () => {
   it('lets only Super_Admin change system settings', () => {
-    expect(() => checkCanChangeSystemConfig('Super_Admin')).not.toThrow();
-    expect(() => checkCanChangeSystemConfig('Admin')).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(() => checkCanChangeSystemConfig(['Super_Admin'])).not.toThrow();
+    expect(() => checkCanChangeSystemConfig(['Admin'])).toThrow(expect.objectContaining({ statusCode: 403 }));
   });
 
   it('lets Super_Admin, Admin and Manager override a branch setting', () => {
-    for (const role of ['Super_Admin', 'Admin', 'Manager']) expect(() => checkCanChangeBranchConfig(role)).not.toThrow();
-    expect(() => checkCanChangeBranchConfig('Sales')).toThrow(expect.objectContaining({ statusCode: 403 }));
+    for (const role of ['Super_Admin', 'Admin', 'Manager']) expect(() => checkCanChangeBranchConfig([role])).not.toThrow();
+    expect(() => checkCanChangeBranchConfig(['Sales'])).toThrow(expect.objectContaining({ statusCode: 403 }));
   });
 
   it('lets only Super_Admin and Admin remove a branch override', () => {
-    for (const role of ['Super_Admin', 'Admin']) expect(() => checkCanRemoveBranchOverride(role)).not.toThrow();
-    expect(() => checkCanRemoveBranchOverride('Manager')).toThrow(expect.objectContaining({ statusCode: 403 }));
+    for (const role of ['Super_Admin', 'Admin']) expect(() => checkCanRemoveBranchOverride([role])).not.toThrow();
+    expect(() => checkCanRemoveBranchOverride(['Manager'])).toThrow(expect.objectContaining({ statusCode: 403 }));
+  });
+
+  it('counts every role held, whatever order they were given in', () => {
+    expect(() => checkCanChangeSystemConfig(['Manager', 'Super_Admin'])).not.toThrow();
+    expect(() => checkCanRemoveBranchOverride(['Manager', 'Admin'])).not.toThrow();
+    expect(() => checkCanChangeBranchConfig(['Sales', 'Stock_Clerk'])).toThrow(expect.objectContaining({ statusCode: 403 }));
   });
 });
 

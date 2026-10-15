@@ -14,7 +14,7 @@ vi.mock('../lib/redis.js', () => ({
 const configService = await import('../modules/config/config.service.js');
 
 const BRANCH_PREFIX = 'Config Cache ';
-const actor = { staffId: 1, role: 'Admin', branchId: 1 };
+const actor = { staffId: 1, role: 'Admin', roles: ['Admin'], branchId: 1 };
 
 describe('Config cache', () => {
   let branchId: number;

@@ -1,23 +1,17 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, getAccessToken } from '../lib/api.js';
-import { useToast } from '../components/Toast.js';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ConfigRow {
-  key: string;
-  value: unknown;
-  updatedBy: number;
-  updatedAt: string;
-  source?: 'branch' | 'system';
-}
-
-interface Branch { id: number; name: string; isActive: boolean }
+import type { ConfigEntry, EffectiveConfigEntry } from '@bms/shared';
+import { useToast } from '../../../components/Toast.js';
+import { useMyProfile } from '../../account/queries.js';
+import { useOpenBranches } from '../../branches/queries.js';
+import { useBranchConfig, useBranchConfigChanges, useSetSystemConfig, useSystemConfig } from '../queries.js';
+import {
+  canChangeSystemSettings, canOpenBranchSettings, canOverrideBranchSettings, canRemoveBranchOverrides, readSettingValue,
+  type ValueType,
+} from '../rules.js';
 
 // ── Config key metadata for display ──────────────────────────────────────────
 
-const CONFIG_META: Record<string, { label: string; tab: string; type: 'string' | 'number' | 'boolean' | 'json'; description: string }> = {
+const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType; description: string }> = {
   base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. USD)' },
   // tax_rate removed — taxation disabled for this phase
   fiscal_year_start_month:          { label: 'Fiscal Year Start Month',      tab: 'General',      type: 'number',  description: 'Month number 1–12 (1 = January)' },
@@ -59,13 +53,20 @@ function formatValue(value: unknown): string {
   return String(value ?? '');
 }
 
-function parseInputValue(raw: string, type: string): unknown {
-  if (type === 'number') return parseFloat(raw);
-  if (type === 'boolean') return raw === 'true';
-  if (type === 'json') {
-    try { return JSON.parse(raw); } catch { return raw; }
-  }
-  return raw;
+/** Checks what was typed before it is sent (was: invalid JSON sent as text, an empty number as null). */
+function useDraftCheck(key: string) {
+  const [error, setError] = useState<string | null>(null);
+  const check = (draft: string): { value: unknown } | null => {
+    const read = readSettingValue(key, CONFIG_META[key]?.type ?? 'string', draft);
+    if ('error' in read) { setError(read.error); return null; }
+    setError(null);
+    return read;
+  };
+  return { error, check, clear: () => setError(null) };
+}
+
+function DraftError({ error }: { error: string | null }) {
+  return error ? <p role="alert" className="basis-full text-right text-xs text-red-500 dark:text-red-400">{error}</p> : null;
 }
 
 // ── Inline editable config row ────────────────────────────────────────────────
@@ -75,7 +76,7 @@ function ConfigRowItem({
   isSuperAdmin,
   onSave,
 }: {
-  row: ConfigRow & { source?: 'branch' | 'system' };
+  row: ConfigEntry & { source?: 'branch' | 'system' };
   isSuperAdmin: boolean;
   onSave: (key: string, value: unknown) => void;
 }) {
@@ -83,9 +84,12 @@ function ConfigRowItem({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(formatValue(row.value));
 
+  const draftCheck = useDraftCheck(row.key);
+
   const handleSave = () => {
-    const parsed = parseInputValue(draft, meta?.type ?? 'string');
-    onSave(row.key, parsed);
+    const read = draftCheck.check(draft);
+    if (!read) return;
+    onSave(row.key, read.value);
     setEditing(false);
   };
 
@@ -107,7 +111,7 @@ function ConfigRowItem({
         <p className="text-xs text-gray-400 dark:text-gray-500">{meta?.description}</p>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
         {editing ? (
           <>
             {row.key === 'default_discount_type' ? (
@@ -155,7 +159,8 @@ function ConfigRowItem({
               />
             )}
             <button onClick={handleSave} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors">Save</button>
-            <button onClick={() => { setEditing(false); setDraft(formatValue(row.value)); }} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">Cancel</button>
+            <button onClick={() => { setEditing(false); setDraft(formatValue(row.value)); draftCheck.clear(); }} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">Cancel</button>
+            <DraftError error={draftCheck.error} />
           </>
         ) : (
           <>
@@ -185,11 +190,14 @@ function ConfigRowItem({
 function BranchConfigRowItem({
   row,
   canEdit,
+  canRemove,
   onSave,
   onDelete,
 }: {
-  row: ConfigRow & { source: 'branch' | 'system' };
+  row: EffectiveConfigEntry;
   canEdit: boolean;
+  /** Removing an override: Super_Admin and Admin only. */
+  canRemove: boolean;
   onSave: (key: string, value: unknown) => void;
   onDelete: (key: string) => void;
 }) {
@@ -197,8 +205,12 @@ function BranchConfigRowItem({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(formatValue(row.value));
 
+  const draftCheck = useDraftCheck(row.key);
+
   const handleSave = () => {
-    onSave(row.key, parseInputValue(draft, meta?.type ?? 'string'));
+    const read = draftCheck.check(draft);
+    if (!read) return;
+    onSave(row.key, read.value);
     setEditing(false);
   };
 
@@ -218,7 +230,7 @@ function BranchConfigRowItem({
         <p className="text-xs text-gray-400 dark:text-gray-500">{meta?.description}</p>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
         {editing ? (
           <>
             {row.key === 'default_discount_type' ? (
@@ -249,8 +261,9 @@ function BranchConfigRowItem({
                 className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-36" />
             )}
             <button onClick={handleSave} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors">Save</button>
-            <button onClick={() => { setEditing(false); setDraft(formatValue(row.value)); }}
+            <button onClick={() => { setEditing(false); setDraft(formatValue(row.value)); draftCheck.clear(); }}
               className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">Cancel</button>
+            <DraftError error={draftCheck.error} />
           </>
         ) : (
           <>
@@ -265,7 +278,7 @@ function BranchConfigRowItem({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
                   </svg>
                 </button>
-                {row.source === 'branch' && (
+                {canRemove && row.source === 'branch' && (
                   <button onClick={() => onDelete(row.key)}
                     className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Remove override">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -284,78 +297,33 @@ function BranchConfigRowItem({
 
 // ── Main Settings Page ────────────────────────────────────────────────────────
 
-export default function SettingsPage({ userRole }: { userRole?: string }) {
-  const queryClient = useQueryClient();
+export default function SettingsPage() {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('General');
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
 
-  const isSuperAdmin = userRole === 'Super_Admin';
-  const canEditBranch = ['Super_Admin', 'Admin', 'Manager'].includes(userRole ?? '');
+  const { data: me } = useMyProfile();
+  const isSuperAdmin = canChangeSystemSettings(me);
+  const canEditBranch = canOverrideBranchSettings(me);
+  const canRemoveOverride = canRemoveBranchOverrides(me);
 
-  // ── Queries ────────────────────────────────────────────────────────────────
+  const { data: systemData, isLoading: sysLoading } = useSystemConfig();
+  // Open branches whose settings this account may open: its own, or any with access to all branches.
+  const branches = (useOpenBranches().data?.items ?? []).filter(b => canOpenBranchSettings(me, b.id));
+  const { data: branchConfigData, isLoading: branchConfigLoading } = useBranchConfig(selectedBranchId);
 
-  const { data: systemData, isLoading: sysLoading } = useQuery({
-    queryKey: ['config-system'],
-    queryFn: () => api.get<{ items: ConfigRow[] }>('/config/system'),
-    enabled: !!getAccessToken(),
-    staleTime: 30_000,
+  const updateSystemMutation = useSetSystemConfig();
+  const branchChanges = useBranchConfigChanges(selectedBranchId);
+  const failed = (fallback: string) => (err: unknown) => showToast((err as { message?: string }).message ?? fallback, 'error');
+
+  const saveSystem = (key: string, value: unknown) => updateSystemMutation.mutate({ key, value }, {
+    onSuccess: () => showToast('System config updated'), onError: failed('Failed to update config'),
   });
-
-  const { data: branchData } = useQuery({
-    queryKey: ['branches'],
-    queryFn: () => api.get<{ items: Branch[] }>('/branches'),
-    enabled: !!getAccessToken(),
+  const saveBranch = (key: string, value: unknown) => branchChanges.set.mutate({ key, value }, {
+    onSuccess: () => showToast('Branch config updated'), onError: failed('Failed to update branch config'),
   });
-
-  const branches = branchData?.items ?? [];
-
-  const { data: branchConfigData, isLoading: branchConfigLoading } = useQuery({
-    queryKey: ['config-branch', selectedBranchId],
-    queryFn: () => api.get<{ items: Array<ConfigRow & { source: 'branch' | 'system' }> }>(`/config/branches/${selectedBranchId}`),
-    enabled: !!getAccessToken() && selectedBranchId !== null,
-    staleTime: 30_000,
-  });
-
-  // ── Mutations ──────────────────────────────────────────────────────────────
-
-  const updateSystemMutation = useMutation({
-    mutationFn: ({ key, value }: { key: string; value: unknown }) =>
-      api.put(`/config/system/${key}`, { value }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config-system'] });
-      showToast('System config updated');
-    },
-    onError: (err: unknown) => {
-      const e = err as { message?: string };
-      showToast(e.message ?? 'Failed to update config', 'error');
-    },
-  });
-
-  const updateBranchMutation = useMutation({
-    mutationFn: ({ key, value }: { key: string; value: unknown }) =>
-      api.put(`/config/branches/${selectedBranchId}/${key}`, { value }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config-branch', selectedBranchId] });
-      showToast('Branch config updated');
-    },
-    onError: (err: unknown) => {
-      const e = err as { message?: string };
-      showToast(e.message ?? 'Failed to update branch config', 'error');
-    },
-  });
-
-  const deleteBranchOverrideMutation = useMutation({
-    mutationFn: (key: string) =>
-      api.delete(`/config/branches/${selectedBranchId}/${key}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config-branch', selectedBranchId] });
-      showToast('Branch override removed; system default restored');
-    },
-    onError: (err: unknown) => {
-      const e = err as { message?: string };
-      showToast(e.message ?? 'Failed to remove override', 'error');
-    },
+  const removeOverride = (key: string) => branchChanges.remove.mutate(key, {
+    onSuccess: () => showToast('Branch override removed; system default restored'), onError: failed('Failed to remove override'),
   });
 
   // ── Filter rows by active tab ──────────────────────────────────────────────
@@ -409,7 +377,7 @@ export default function SettingsPage({ userRole }: { userRole?: string }) {
                   key={row.key}
                   row={row}
                   isSuperAdmin={isSuperAdmin}
-                  onSave={(key, value) => updateSystemMutation.mutate({ key, value })}
+                  onSave={saveSystem}
                 />
               ))
             )}
@@ -446,8 +414,9 @@ export default function SettingsPage({ userRole }: { userRole?: string }) {
                   key={row.key}
                   row={row}
                   canEdit={canEditBranch}
-                  onSave={(key, value) => updateBranchMutation.mutate({ key, value })}
-                  onDelete={(key) => deleteBranchOverrideMutation.mutate(key)}
+                  canRemove={canRemoveOverride}
+                  onSave={saveBranch}
+                  onDelete={removeOverride}
                 />
               ))
             )}

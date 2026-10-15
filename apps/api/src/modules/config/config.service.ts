@@ -79,7 +79,7 @@ export function listSystemConfig(): Promise<ConfigRecord[]> {
 }
 
 export async function setSystemConfig(actor: Actor, key: string, value: unknown): Promise<ConfigRecord> {
-  policy.checkCanChangeSystemConfig(actor.role);
+  policy.checkCanChangeSystemConfig(actor.roles);
   policy.checkConfigValue(key, value);
 
   // Cached branch values pick up a new system default when they expire.
@@ -113,7 +113,7 @@ export async function setBranchConfig(
   key: string,
   value: unknown,
 ): Promise<ConfigRecord> {
-  policy.checkCanChangeBranchConfig(actor.role);
+  policy.checkCanChangeBranchConfig(actor.roles);
   policy.checkConfigValue(key, value);
 
   const record = await withTransaction({}, async (tx) => {
@@ -141,7 +141,7 @@ export async function setBranchConfig(
 }
 
 export async function deleteBranchConfig(actor: Actor, branchId: number, key: string): Promise<void> {
-  policy.checkCanRemoveBranchOverride(actor.role);
+  policy.checkCanRemoveBranchOverride(actor.roles);
 
   await withTransaction({}, async (tx) => {
     if (!(await config.deleteBranch(tx, branchId, key))) {

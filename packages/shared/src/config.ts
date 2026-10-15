@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { ROLES } from './auth.js';
 import { IdSchema } from './common.js';
+import { OrderPaymentMethodSchema } from './payment.js';
 
 /** Contracts for /api/v1/config (#21). */
 
@@ -64,6 +66,62 @@ export const ConfigKeyParamsSchema = z.object({ key: z.string().min(1) });
 export const BranchConfigParamsSchema = z.object({ branchId: IdSchema });
 export const BranchConfigKeyParamsSchema = z.object({ branchId: IdSchema, key: z.string().min(1) });
 
-/** The value's type is checked per key by the API (string, number, boolean or any JSON). */
+/** The value is checked per key with `CONFIG_VALUE_SCHEMAS`. */
 export const SetConfigValueRequestSchema = z.object({ value: z.unknown() });
 export type SetConfigValueRequest = z.infer<typeof SetConfigValueRequestSchema>;
+
+// ── The settings and the values they take ─────────────────────────────────────
+
+export const DISCOUNT_TYPES = ['Normal', 'Merchant', 'Special'] as const;
+export const DISCOUNT_MODES = ['Percentage', 'Amount'] as const;
+
+const text = z.string({ error: 'must be a string' });
+const number = z.number({ error: 'must be a number' });
+const flag = z.boolean({ error: 'must be a boolean' });
+const discountMode = z.enum(DISCOUNT_MODES, { error: `must be one of ${DISCOUNT_MODES.join(', ')}` });
+const discountValue = number.min(0, 'must not be negative');
+const roles: readonly string[] = ROLES;
+const paymentMethods = `must be a list of payment methods: ${OrderPaymentMethodSchema.options.join(', ')}`;
+
+/**
+ * The value each setting takes (#23). The API refuses any other key or value,
+ * and the Settings page checks with the same rules before sending; a mistyped
+ * value would otherwise be stored and read back as nothing (a discount limit
+ * of 0 for every role). Messages complete "Config key '<key>' …".
+ */
+export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  base_currency: text,
+  fiscal_year_start_month: number,
+  max_line_discount_pct: z
+    .record(z.string(), number.min(0, 'must give each role 0 to 100').max(100, 'must give each role 0 to 100'), {
+      error: 'must be an object of role and percentage, e.g. {"Sales": 10}',
+    })
+    .refine((o) => Object.keys(o).every((k) => roles.includes(k)), `must name only roles: ${ROLES.join(', ')}`),
+  max_transaction_discount_pct: number,
+  discount_approval_threshold_pct: number,
+  default_discount_type: z.enum(DISCOUNT_TYPES, { error: `must be one of ${DISCOUNT_TYPES.join(', ')}` }),
+  default_discount_mode: discountMode,
+  default_discount_value: discountValue,
+  default_discount_mode_normal: discountMode,
+  default_discount_value_normal: discountValue,
+  default_discount_mode_merchant: discountMode,
+  default_discount_value_merchant: discountValue,
+  default_discount_mode_special: discountMode,
+  default_discount_value_special: discountValue,
+  reorder_point_default: number,
+  allow_negative_stock: flag,
+  po_approval_threshold: number,
+  default_supplier_lead_time_days: number,
+  return_window_days: number,
+  max_return_value_without_auth: number,
+  refund_method_after_window: text,
+  loyalty_accrual_rate: number,
+  loyalty_redemption_rate: number,
+  loyalty_min_transaction_amount: number,
+  exchange_cash_adjustment_allowed: flag,
+  notification_prefs: z.record(z.string(), z.unknown(), { error: 'must be an object' }),
+  allowed_payment_methods: z.array(z.enum(OrderPaymentMethodSchema.options, { error: paymentMethods }), { error: paymentMethods }),
+  max_failed_login_attempts: number,
+  account_lockout_minutes: number,
+  password_expiry_days: number,
+};
