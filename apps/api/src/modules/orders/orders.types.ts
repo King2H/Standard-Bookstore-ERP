@@ -1,6 +1,6 @@
 import type { DiscountMode, DiscountType } from '../../lib/discount.js';
 
-export interface StaffCtx { staffId: number; role: string; branchId: number; }
+export interface StaffCtx { staffId: number; role: string; roles?: string[]; branchId: number; }
 
 export type SaleType = 'cash_sale' | 'credit_sale';
 

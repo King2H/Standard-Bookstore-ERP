@@ -8,13 +8,18 @@ import {
 } from '../location.policy.js';
 import type { Actor } from '../location.types.js';
 
-const managerOfA: Actor = { staffId: 1, role: 'Manager', branchId: 10, allBranches: false };
+const managerOfA: Actor = { staffId: 1, role: 'Manager', roles: ['Manager'], branchId: 10, allBranches: false };
 const allBranches: Actor = { ...managerOfA, allBranches: true };
 
 describe('who is limited to their assigned locations', () => {
   it('never limits the roles that manage locations', () => {
-    for (const role of ['Super_Admin', 'Admin', 'Manager']) expect(hasFullLocationAccess(role)).toBe(true);
-    for (const role of ['Sales', 'Stock_Clerk', 'Purchasor', 'Finance_Officer']) expect(hasFullLocationAccess(role)).toBe(false);
+    for (const role of ['Super_Admin', 'Admin', 'Manager']) expect(hasFullLocationAccess([role])).toBe(true);
+    for (const role of ['Sales', 'Stock_Clerk', 'Purchasor', 'Finance_Officer']) expect(hasFullLocationAccess([role])).toBe(false);
+  });
+
+  it('counts every role held, whatever order they were given in', () => {
+    expect(hasFullLocationAccess(['Stock_Clerk', 'Manager'])).toBe(true);
+    expect(hasFullLocationAccess(['Sales', 'Stock_Clerk'])).toBe(false);
   });
 });
 

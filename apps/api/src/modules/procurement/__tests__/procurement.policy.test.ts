@@ -13,7 +13,7 @@ import {
   statusAfterSubmit,
 } from '../procurement.policy.js';
 
-const actor = { staffId: 7, role: 'Manager', branchId: 1 };
+const actor = { staffId: 7, role: 'Manager', roles: ['Manager'], branchId: 1 };
 
 describe('branches', () => {
   it('leaves buying to the ordering branch and receiving to the receiving branch', () => {

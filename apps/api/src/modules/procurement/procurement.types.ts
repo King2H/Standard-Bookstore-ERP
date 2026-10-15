@@ -6,6 +6,8 @@ export type { PurchaseOrderStatus };
 export interface Actor {
   staffId: number;
   role: string;
+  /** Every role held in the session branch (location limits look at all of them). */
+  roles: string[];
   branchId: number;
 }
 
