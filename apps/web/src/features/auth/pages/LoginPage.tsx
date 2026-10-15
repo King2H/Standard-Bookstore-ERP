@@ -2,16 +2,10 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { login } from '../lib/auth.js';
-import { apiUrl } from '../lib/api.js';
-import { useTheme } from '../lib/theme.js';
-
-interface BranchOption {
-  branchId: number;
-  branchName: string;
-  roles: string[];
-  isAllBranches: boolean;
-}
+import type { BranchAccess } from '@bms/shared';
+import { login } from '../../../lib/auth.js';
+import { useTheme } from '../../../lib/theme.js';
+import { preLogin } from '../api.js';
 
 // ── Step 1: credentials ───────────────────────────────────────────────────────
 const credSchema = z.object({
@@ -31,7 +25,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
   // Two-step state
   const [step, setStep] = useState<'credentials' | 'branch'>('credentials');
-  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [branches, setBranches] = useState<BranchAccess[]>([]);
   const [savedCreds, setSavedCreds] = useState<{ username: string; password: string } | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
 
@@ -44,20 +38,13 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     setError(null);
     setLoading(true);
     try {
-      // Not through `api`: a refused sign-in is an answer here, not a session that ended.
-      const res = await fetch(apiUrl('/auth/pre-login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: data.username, password: data.password }),
-        credentials: 'include',
-      });
-      const body = await res.json();
+      const res = await preLogin({ username: data.username, password: data.password });
       if (!res.ok) {
-        setError(body.message ?? 'Invalid credentials');
+        setError(res.message ?? 'Invalid credentials');
         return;
       }
-
-      const availableBranches: BranchOption[] = body.branches ?? [];
+      const body = res.body;
+      const availableBranches = body.branches;
       setSavedCreds({ username: data.username, password: data.password });
 
       if (availableBranches.length === 0) {
@@ -150,15 +137,15 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           {step === 'credentials' && (
             <form onSubmit={handleSubmit(onCredSubmit)} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Username</label>
-                <input {...register('username')} type="text" autoComplete="username" placeholder="Enter your username" autoFocus
+                <label htmlFor="login-username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Username</label>
+                <input id="login-username" {...register('username')} type="text" autoComplete="username" placeholder="Enter your username" autoFocus
                   className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                 {errors.username && <p className="text-red-500 dark:text-red-400 text-xs mt-1.5">{errors.username.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
-                <input {...register('password')} type="password" autoComplete="current-password" placeholder="Enter your password"
+                <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
+                <input id="login-password" {...register('password')} type="password" autoComplete="current-password" placeholder="Enter your password"
                   className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                 {errors.password && <p className="text-red-500 dark:text-red-400 text-xs mt-1.5">{errors.password.message}</p>}
               </div>
@@ -255,7 +242,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         </div>
 
         <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-6">
-          Bookstore ERP · Phase 0
+          Bookstore ERP
         </p>
       </div>
     </div>

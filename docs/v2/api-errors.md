@@ -136,6 +136,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `ORDER_NOT_ELIGIBLE`
 - `OVER_RECEIPT`
 - `OVER_RETURN`
+- `PASSWORD_UNCHANGED`
 - `PAYMENT_EXCEEDS_DUE`
 - `PAYMENT_EXCEEDS_TOTAL`
 - `PAYMENT_FAILED`
