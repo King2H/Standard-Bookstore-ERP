@@ -10,7 +10,9 @@ import type { Actor, LocationRecord, StaffLocationRecord } from './location.type
 
 /** Use cases of the Locations module (A4): one function each, owning its transaction. */
 
-type Staff = Pick<Actor, 'staffId' | 'role' | 'branchId'>;
+type Staff = Pick<Actor, 'staffId' | 'role' | 'branchId'> & { roles?: readonly string[] };
+
+const rolesHeld = (s: Staff): readonly string[] => (s.roles?.length ? s.roles : [s.role]);
 
 function audit(q: Queryable, actor: Staff, action: string, entityType: string, entityId: number, branchId: number, meta: Record<string, unknown>) {
   return insertAuditEntry(q, { staffId: actor.staffId, staffRole: actor.role, branchId, action, entityType, entityId, meta });
@@ -40,7 +42,7 @@ export async function listLocations(
   actor: Staff,
   branchId: number,
 ): Promise<{ items: LocationRecord[]; accessMode: LocationAccessMode }> {
-  if (!policy.hasFullLocationAccess(actor.role)) {
+  if (!policy.hasFullLocationAccess(rolesHeld(actor))) {
     const assigned = await locations.listAssignedInBranch(kysely, actor.staffId, branchId);
     if (assigned.length > 0) return { items: assigned, accessMode: 'restricted' };
   }
@@ -109,7 +111,7 @@ export async function assertLocationAccess(locationId: number, staff: Staff): Pr
  * limited. Null means the branch's default location.
  */
 export async function assertAssignedLocation(locationId: number | null, staff: Staff): Promise<void> {
-  if (policy.hasFullLocationAccess(staff.role)) return;
+  if (policy.hasFullLocationAccess(rolesHeld(staff))) return;
   const assigned = await locations.listAssignedInBranch(kysely, staff.staffId, staff.branchId);
   if (assigned.length === 0) return;
   const id = locationId ?? (await locations.findDefaultId(kysely, staff.branchId));

@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router';
 import BranchesPage from '../features/branches/pages/BranchesPage.js';
-import StaffPage from '../pages/StaffPage.js';
+import StaffPage from '../features/staff/pages/StaffPage.js';
 import AuditLogPage from '../pages/AuditLogPage.js';
 import SettingsPage from '../pages/SettingsPage.js';
 import BankAccountsPage from '../pages/BankAccountsPage.js';
@@ -27,7 +27,7 @@ export function AppRoutes({ session, onNavigate }: {
   session: Session;
   onNavigate: (page: Page, context?: Record<string, string>) => void;
 }) {
-  const { userRole, userRoles, userPermissions } = session;
+  const { userRole, userPermissions } = session;
   const role = userRole ?? undefined;
   const navigateTo = (page: string, context?: Record<string, string>) => onNavigate(page as Page, context);
 
@@ -36,7 +36,7 @@ export function AppRoutes({ session, onNavigate }: {
       <Route path="/:page" element={<PageRoute session={session} render={(page, initialContext) => <>
         {page === 'dashboard'    && <DashboardPage userRole={role} onNavigate={navigateTo} />}
         {page === 'branches'     && <BranchesPage />}
-        {page === 'staff'        && <StaffPage userRoles={userRoles} />}
+        {page === 'staff'        && <StaffPage />}
         {page === 'audit-log'    && <AuditLogPage />}
         {page === 'settings'     && <SettingsPage userRole={role} />}
         {page === 'bank-accounts'&& <BankAccountsPage userRole={role} />}

@@ -9,8 +9,9 @@ import type { Actor, LocationDependency } from './location.types.js';
 /** Roles that manage a branch's locations, so are never limited to some of them. */
 const FULL_ACCESS_ROLES = ['Super_Admin', 'Admin', 'Manager'];
 
-export function hasFullLocationAccess(role: string): boolean {
-  return FULL_ACCESS_ROLES.includes(role);
+/** Any one of these roles held is enough, whatever order the roles were given in. */
+export function hasFullLocationAccess(roles: readonly string[]): boolean {
+  return roles.some((r) => FULL_ACCESS_ROLES.includes(r));
 }
 
 /** The branches whose staff restrictions the actor may change; null means every branch. */
