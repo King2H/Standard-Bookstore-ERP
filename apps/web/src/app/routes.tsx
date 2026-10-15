@@ -1,11 +1,11 @@
 import { Fragment } from 'react';
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router';
-import BranchesPage from '../pages/BranchesPage.js';
+import BranchesPage from '../features/branches/pages/BranchesPage.js';
 import StaffPage from '../pages/StaffPage.js';
 import AuditLogPage from '../pages/AuditLogPage.js';
 import SettingsPage from '../pages/SettingsPage.js';
 import BankAccountsPage from '../pages/BankAccountsPage.js';
-import LocationsPage from '../pages/LocationsPage.js';
+import LocationsPage from '../features/locations/pages/LocationsPage.js';
 import CatalogPage from '../pages/CatalogPage.js';
 import InventoryPage from '../pages/InventoryPage.js';
 import SuppliersPage from '../features/suppliers/pages/SuppliersPage.js';
@@ -35,12 +35,12 @@ export function AppRoutes({ session, onNavigate }: {
     <Routes>
       <Route path="/:page" element={<PageRoute session={session} render={(page, initialContext) => <>
         {page === 'dashboard'    && <DashboardPage userRole={role} onNavigate={navigateTo} />}
-        {page === 'branches'     && <BranchesPage userRole={role} />}
+        {page === 'branches'     && <BranchesPage />}
         {page === 'staff'        && <StaffPage userRoles={userRoles} />}
         {page === 'audit-log'    && <AuditLogPage />}
         {page === 'settings'     && <SettingsPage userRole={role} />}
         {page === 'bank-accounts'&& <BankAccountsPage userRole={role} />}
-        {page === 'locations'    && <LocationsPage userRole={role} />}
+        {page === 'locations'    && <LocationsPage />}
         {page === 'catalog'      && <CatalogPage userRole={role} userPermissions={userPermissions} />}
         {page === 'inventory'    && <InventoryPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
         {page === 'suppliers'    && <SuppliersPage userRole={role} userPermissions={userPermissions} />}

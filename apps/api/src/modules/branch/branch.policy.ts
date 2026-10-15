@@ -8,10 +8,11 @@ import type { Actor, BranchDependency } from './branch.types.js';
 
 /**
  * Opening, closing and deleting a branch are head-office actions: Super_Admin,
- * or Admin with access to all branches.
+ * or Admin with access to all branches. Any role held counts, not only the
+ * first one given (#23).
  */
 export function checkCanOpenOrClose(actor: Actor): void {
-  if (actor.role === 'Super_Admin' || (actor.role === 'Admin' && actor.allBranches)) return;
+  if (actor.roles.includes('Super_Admin') || (actor.roles.includes('Admin') && actor.allBranches)) return;
   throw new ForbiddenError('Only Super_Admin, or Admin with access to all branches, can open, close or delete branches');
 }
 
@@ -21,7 +22,7 @@ export function checkCanOpenOrClose(actor: Actor): void {
  * limits the roles to Super_Admin, Admin and Manager.
  */
 export function checkCanEditDetails(actor: Actor, branchId: number): void {
-  if (actor.role === 'Super_Admin' || actor.allBranches || actor.branchId === branchId) return;
+  if (actor.roles.includes('Super_Admin') || actor.allBranches || actor.branchId === branchId) return;
   throw new BranchAccessError(branchId);
 }
 

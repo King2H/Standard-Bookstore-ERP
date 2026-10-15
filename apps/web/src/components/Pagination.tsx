@@ -23,6 +23,8 @@ export interface PaginationProps {
   onPageSizeChange: (pageSize: number) => void;
   /** Singular/plural noun for the "records" label, e.g. "order", "customer". Defaults to "record". */
   itemLabel?: string;
+  /** The plural, when adding "s" is wrong (e.g. "branches"). */
+  itemPlural?: string;
   /** Override the default [10, 25, 50, 100] option list. */
   pageSizeOptions?: readonly number[];
 }
@@ -46,6 +48,7 @@ export default function Pagination({
   page, pageSize, total, totalPages,
   onPageChange, onPageSizeChange,
   itemLabel = 'record',
+  itemPlural = `${itemLabel}s`,
   pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: PaginationProps) {
   const safeTotalPages = Math.max(1, totalPages);
@@ -57,8 +60,8 @@ export default function Pagination({
       <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
         <span>
           {total === 0
-            ? `No ${itemLabel}s found`
-            : `Showing ${rangeStart}–${rangeEnd} of ${total} ${itemLabel}${total === 1 ? '' : 's'}`}
+            ? `No ${itemPlural} found`
+            : `Showing ${rangeStart}–${rangeEnd} of ${total} ${total === 1 ? itemLabel : itemPlural}`}
         </span>
         <label className="flex items-center gap-1.5">
           <span className="hidden sm:inline">Rows:</span>
