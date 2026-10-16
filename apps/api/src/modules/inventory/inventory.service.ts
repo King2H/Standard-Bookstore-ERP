@@ -206,6 +206,12 @@ export async function issueDamaged(tx: Queryable, change: StockChange): Promise<
   });
 }
 
+/** Negative stock follows the setting of the branch the location belongs to (was: the system's only). */
+async function negativeStockAllowedAt(tx: Queryable, locationId: number): Promise<boolean> {
+  const branchId = await stock.locationBranch(tx, locationId);
+  return branchId !== undefined && isNegativeStockAllowed(branchId);
+}
+
 /**
  * Stock leaving a location: a sale, a confirmed order, an exchange. Returns
  * the average cost it left at, which a sale keeps as its cost of goods.
@@ -213,7 +219,7 @@ export async function issueDamaged(tx: Queryable, change: StockChange): Promise<
 export async function issueStock(tx: Queryable, issue: StockIssue): Promise<{ unitCost: Money }> {
   const { bookId, locationId, quantity } = issue;
   checkQuantity(quantity);
-  const allowNegative = await isNegativeStockAllowed();
+  const allowNegative = await negativeStockAllowedAt(tx, locationId);
 
   const before = await lockOrThrow(tx, bookId, locationId);
   const available = Math.max(0, before.quantity);
@@ -251,7 +257,7 @@ export async function issueStock(tx: Queryable, issue: StockIssue): Promise<{ un
 async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment): Promise<{ before: number; after: number }> {
   const { bookId, locationId, delta, reasonCode } = adjustment;
   policy.checkAdjustmentDirection(reasonCode, delta);
-  const allowNegative = await isNegativeStockAllowed();
+  const allowNegative = await negativeStockAllowedAt(tx, locationId);
 
   const before = await lockOrThrow(tx, bookId, locationId);
   policy.checkVersion(before.version, adjustment.version);

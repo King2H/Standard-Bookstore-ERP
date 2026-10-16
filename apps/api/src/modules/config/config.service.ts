@@ -220,8 +220,18 @@ export async function getSignInLockoutPolicy(): Promise<{ maxFailedAttempts: num
   return { maxFailedAttempts: Number(max ?? 5), lockoutMinutes: Number(minutes ?? 30) };
 }
 
-export async function isNegativeStockAllowed(): Promise<boolean> {
-  return (await systemValue('allow_negative_stock')) === true;
+/**
+ * Whether stock may go below zero in a branch: its own setting, else the
+ * system's, as the Settings page offers it. Read uncached, so a change applies
+ * at once to the next stock movement.
+ */
+export async function isNegativeStockAllowed(branchId: number): Promise<boolean> {
+  try {
+    return (await getEffectiveConfigWithSource(branchId, 'allow_negative_stock')).value === true;
+  } catch (err) {
+    if (err instanceof NotFoundError) return false;
+    throw err;
+  }
 }
 
 export async function isExchangeCashAdjustmentAllowed(): Promise<boolean> {
