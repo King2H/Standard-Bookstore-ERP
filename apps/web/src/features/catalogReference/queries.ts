@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  createReference, deleteReference, listReference, runReferenceAction, updateReference,
+  createReference, deleteReference, listBookEditions, listBookFormats, listReference, runReferenceAction, updateReference,
   type ReferenceAction, type ReferenceKind, type ReferenceListParams,
 } from './api.js';
 
@@ -13,6 +13,15 @@ export const referenceKeys = {
   all: (kind: ReferenceKind) => [kind] as const,
   list: (kind: ReferenceKind, params: ReferenceListParams) => [kind, 'list', params] as const,
 };
+
+/** Book formats and editions: fixed lists, read once an hour. */
+export function useBookFormats() {
+  return useQuery({ queryKey: ['book-formats'], queryFn: listBookFormats, staleTime: 3_600_000 });
+}
+
+export function useBookEditions() {
+  return useQuery({ queryKey: ['book-editions'], queryFn: listBookEditions, staleTime: 3_600_000 });
+}
 
 export function useReferenceList(kind: ReferenceKind, params: ReferenceListParams) {
   return useQuery({

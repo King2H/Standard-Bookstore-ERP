@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type {
-  Author, AuthorListQuerySchema, AuthorListResponse, Category, CategoryListResponse, CreateCategoryRequest, MessageResponse,
+  Author, AuthorListQuerySchema, AuthorListResponse, BookLookupListResponse, Category, CategoryListResponse, CreateCategoryRequest, MessageResponse,
   Publisher, PublisherListResponse, ReferenceNameRequest, UpdateCategoryRequest,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
@@ -43,3 +43,10 @@ export const searchPublishers = (q: string, pageSize = 20) => listReference('pub
 
 /** Active categories whose name starts with `q`, for a picker. */
 export const searchCategories = (q: string, pageSize = 20) => listReference('categories', { q, pageSize });
+
+/** Active authors whose name starts with `q`, for a picker. */
+export const searchAuthors = (q: string, pageSize = 20) => listReference('authors', { q, pageSize });
+
+/** The fixed lists a book's format and edition are chosen from. */
+export const listBookFormats = () => api.get<BookLookupListResponse>('/book-formats');
+export const listBookEditions = () => api.get<BookLookupListResponse>('/book-editions');

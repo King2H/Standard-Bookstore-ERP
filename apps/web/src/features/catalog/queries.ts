@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteBook, listBooks, runBookAction, type BookAction, type BookListParams } from './api.js';
+import type { CreateBookRequest, UpdateBookRequest } from '@bms/shared';
+import { createBook, deleteBook, listBooks, runBookAction, updateBook, type BookAction, type BookListParams } from './api.js';
 
 /** Query keys for books. Every key starts with `bookKeys.all`, so a change refreshes every book list. */
 export const bookKeys = {
@@ -58,4 +59,14 @@ export function useBulkBookAction(action: BookAction) {
 export function useDeleteBook() {
   const refresh = useRefreshBooks();
   return useMutation({ mutationFn: (id: number) => deleteBook(id), onSuccess: refresh });
+}
+
+/** Creates a book, or changes the one with `id`. */
+export function useSaveBook() {
+  const refresh = useRefreshBooks();
+  return useMutation({
+    mutationFn: (save: { id: null; body: CreateBookRequest } | { id: number; body: UpdateBookRequest }) =>
+      save.id === null ? createBook(save.body) : updateBook(save.id, save.body),
+    onSuccess: refresh,
+  });
 }
