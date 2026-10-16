@@ -102,6 +102,8 @@ describe('CatalogPage — Books: Archive/Delete warn before firing', () => {
 describe('CatalogPage — Authors: Archive warns before firing', () => {
   beforeEach(() => {
     getMock.mockImplementation((path: string) => {
+      // The tab reads the roles held from the signed-in account.
+      if (path === '/staff/me') return Promise.resolve({ currentRoles: ['Admin'] });
       if (path.startsWith('/authors?')) {
         return Promise.resolve({
           items: [{ id: 5, name: 'Archive Author', status: 'ACTIVE', archivedAt: null, bookCount: 0, createdAt: new Date().toISOString() }],
