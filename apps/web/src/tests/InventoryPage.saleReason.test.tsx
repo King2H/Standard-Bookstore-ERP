@@ -8,7 +8,8 @@ import InventoryPage from '../pages/InventoryPage.js';
 
 const getMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: { get: (...args: unknown[]) => getMock(...args), post: vi.fn(), put: vi.fn() },
   getAccessToken: () => 'test-token',
   getCurrentBranchId: () => 1,
