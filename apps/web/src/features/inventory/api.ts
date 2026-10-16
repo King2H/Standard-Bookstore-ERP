@@ -1,5 +1,5 @@
 import type {
-  ReorderPointRequest, StockLevel, StockLevelListResponse, StockMovementListResponse,
+  ReorderPointRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse, StockOutRequest,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
@@ -8,6 +8,8 @@ import { api, toQuery } from '../../lib/api.js';
 /** `GET /inventory` filters, as they travel in the query string. */
 export type StockLevelParams = {
   q?: string;
+  bookId?: number;
+  locationId?: number;
   lowStockOnly?: boolean;
   is_active?: 'true' | 'false' | 'all';
   sortBy?: 'title' | 'updatedAt';
@@ -36,3 +38,13 @@ export const listStockMovements = (params: StockMovementParams) =>
   api.get<StockMovementListResponse>(`/inventory/history${toQuery(params)}`);
 
 export const setReorderPoint = (body: ReorderPointRequest) => api.put<StockLevel>('/inventory/reorder-point', body);
+
+/** Stock received by hand; purchase orders are received in Procurement. */
+export const stockIn = (body: StockInRequest) => api.post<StockLevel>('/inventory/stock-in', body);
+
+/** Stock removed by hand; sales take stock out through POS and orders. */
+export const stockOut = (body: StockOutRequest) => api.post<StockLevel>('/inventory/stock-out', body);
+
+/** One book's stock at one location, as it is now; null when it has none. */
+export const findStockLevel = async (bookId: number, locationId: number) =>
+  (await listStockLevels({ bookId, locationId, is_active: 'all', pageSize: 1 })).items[0] ?? null;

@@ -1,12 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listBranchConfig, listSystemConfig, removeBranchOverride, setBranchConfig, setSystemConfig } from './api.js';
+import { getEffectiveConfig, listBranchConfig, listSystemConfig, removeBranchOverride, setBranchConfig, setSystemConfig } from './api.js';
 
 /** Every key starts with `settingsKeys.all`; a change refreshes only the settings it touched. */
 export const settingsKeys = {
   all: ['config'] as const,
   system: () => [...settingsKeys.all, 'system'] as const,
   branch: (branchId: number) => [...settingsKeys.all, 'branch', branchId] as const,
+  effective: (key: string) => [...settingsKeys.all, 'effective', key] as const,
 };
+
+/** One setting as it applies in the session's branch; undefined while loading. */
+export function useEffectiveSetting(key: string) {
+  const query = useQuery({ queryKey: settingsKeys.effective(key), queryFn: () => getEffectiveConfig([key]), staleTime: 60_000 });
+  return query.data?.items.find((i) => i.key === key)?.value;
+}
 
 export function useSystemConfig() {
   return useQuery({ queryKey: settingsKeys.system(), queryFn: listSystemConfig, staleTime: 30_000 });

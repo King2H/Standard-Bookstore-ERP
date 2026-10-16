@@ -432,6 +432,7 @@ export async function stockIn(actor: Actor, receipt: StockInRequest): Promise<St
       locationId,
       quantity,
       staffCtx: actor,
+      reasonCode: policy.stockInReason(receipt.referenceType),
       referenceType,
       referenceId: receipt.referenceId,
       notes: receipt.notes,

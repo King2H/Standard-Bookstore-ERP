@@ -5,16 +5,10 @@ import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../com
 import { useMyProfile } from '../../account/queries.js';
 import { useSetReorderPoint, useStockLevels } from '../queries.js';
 import { canMoveStock, canSetReorderPoint } from '../rules.js';
-import { SkeletonRow, fmtDateShort } from './shared.js';
+import { SkeletonRow, fmtDateShort, useDebounce } from './shared.js';
 
 type Status = 'active' | 'inactive' | 'all';
 const TH = 'px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide';
-
-function useDebounce<T>(v: T, ms: number): T {
-  const [d, setD] = useState(v);
-  useEffect(() => { const t = setTimeout(() => setD(v), ms); return () => clearTimeout(t); }, [v, ms]);
-  return d;
-}
 
 /** Stock per book and location in the session's branch, with each row's quick actions. */
 export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }: {

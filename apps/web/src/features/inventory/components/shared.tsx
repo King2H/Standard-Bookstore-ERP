@@ -1,4 +1,11 @@
+import { useEffect, useState } from 'react';
 import { MOVEMENT_LABELS } from '../rules.js';
+
+export function useDebounce<T>(v: T, ms: number): T {
+  const [d, setD] = useState(v);
+  useEffect(() => { const t = setTimeout(() => setD(v), ms); return () => clearTimeout(t); }, [v, ms]);
+  return d;
+}
 
 export function fmtDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });

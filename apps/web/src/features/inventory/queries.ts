@@ -1,6 +1,9 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ReorderPointRequest } from '@bms/shared';
-import { listLowStock, listStockLevels, listStockMovements, setReorderPoint, type StockLevelParams, type StockMovementParams } from './api.js';
+import type { ReorderPointRequest, StockInRequest, StockOutRequest } from '@bms/shared';
+import {
+  listLowStock, listStockLevels, listStockMovements, setReorderPoint, stockIn, stockOut,
+  type StockLevelParams, type StockMovementParams,
+} from './api.js';
 
 /**
  * Query keys for stock. Every key starts with `inventoryKeys.all`, so a stock
@@ -34,6 +37,12 @@ export function useLowStock(params: { page?: number; pageSize?: number }) {
   });
 }
 
+/** The book-and-location picker: asks once two characters are typed. */
+export function useStockSearch(q: string) {
+  const params: StockLevelParams = { q, pageSize: 10 };
+  return useQuery({ queryKey: inventoryKeys.levels(params), queryFn: () => listStockLevels(params), enabled: q.length > 1 });
+}
+
 export function useStockMovements(params: StockMovementParams) {
   return useQuery({ queryKey: inventoryKeys.history(params), queryFn: () => listStockMovements(params), placeholderData: keepPreviousData });
 }
@@ -42,6 +51,22 @@ export function useSetReorderPoint() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: ReorderPointRequest) => setReorderPoint(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
+  });
+}
+
+export function useStockIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StockInRequest) => stockIn(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
+  });
+}
+
+export function useStockOut() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StockOutRequest) => stockOut(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
   });
 }

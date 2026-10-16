@@ -1,9 +1,14 @@
-import type { BranchConfigListResponse, ConfigEntry, MessageResponse, SystemConfigListResponse } from '@bms/shared';
-import { api } from '../../lib/api.js';
+import type {
+  BranchConfigListResponse, ConfigEntry, EffectiveConfigResponse, MessageResponse, SystemConfigListResponse,
+} from '@bms/shared';
+import { api, toQuery } from '../../lib/api.js';
 
 /** System settings and branch overrides (#21), typed with their @bms/shared contracts. */
 
 export const listSystemConfig = () => api.get<SystemConfigListResponse>('/config/system');
+
+/** The values in effect in the session's branch; open to all staff. */
+export const getEffectiveConfig = (keys: string[]) => api.get<EffectiveConfigResponse>(`/config/effective${toQuery({ keys: keys.join(',') })}`);
 
 export const listBranchConfig = (branchId: number) => api.get<BranchConfigListResponse>(`/config/branches/${branchId}`);
 
