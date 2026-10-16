@@ -3,11 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import CustomersPage from '../pages/CustomersPage.js';
+import CustomersPage from '../features/customers/pages/CustomersPage.js';
 
 const getMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: { get: (...args: unknown[]) => getMock(...args) },
   getCurrentBranchId: () => 1,
 }));
@@ -45,7 +46,7 @@ function renderCustomersPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <CustomersPage userRole="Admin" userPermissions={[]} />
+      <CustomersPage />
     </QueryClientProvider>,
   );
 }

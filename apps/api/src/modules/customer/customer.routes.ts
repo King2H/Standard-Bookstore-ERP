@@ -22,6 +22,9 @@ router.post('/customers', authenticate, canEdit, validate(schemas.create), custo
 router.get('/customers/:id', authenticate, validate(schemas.byId), customer.get);
 router.put('/customers/:id', authenticate, canEdit, validate(schemas.update), customer.update);
 router.post('/customers/:id/deactivate', authenticate, canManage, validate(schemas.byId), customer.deactivate);
+router.post('/customers/:id/activate', authenticate, canManage, validate(schemas.byId), customer.activate);
+router.post('/customers/:id/archive', authenticate, canManage, validate(schemas.byId), customer.archive);
+router.post('/customers/:id/restore', authenticate, canManage, validate(schemas.byId), customer.restore);
 
 router.get('/customer-groups', authenticate, customer.listGroups);
 router.post('/customer-groups', authenticate, canManage, validate(schemas.createGroup), customer.createGroup);

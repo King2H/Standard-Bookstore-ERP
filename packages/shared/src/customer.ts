@@ -55,6 +55,7 @@ export type CustomerListResponse = z.infer<typeof CustomerListResponseSchema>;
 
 const optionalText = z.string().nullable().optional();
 
+/** A new customer's home branch is the session's branch (owner decision 3a, #23). */
 export const CreateCustomerRequestSchema = z.object({
   fullName: z.string().trim().min(1),
   phone: optionalText,
@@ -63,7 +64,6 @@ export const CreateCustomerRequestSchema = z.object({
   dateOfBirth: optionalText,
   address: optionalText,
   city: optionalText,
-  branchId: IdSchema.nullable().optional(),
 });
 export type CreateCustomerRequest = z.infer<typeof CreateCustomerRequestSchema>;
 
@@ -150,7 +150,10 @@ export const AdjustStoreCreditRequestSchema = z.object({
   direction: z.enum(['credit', 'debit']),
   /** Why the balance is changed by hand; kept in the audit log. */
   reason: z.string().trim().min(1).max(500),
-  refType: z.string().nullable().optional(),
-  refId: z.string().nullable().optional(),
+  /**
+   * A reference to keep with the change, such as a receipt number. The entry
+   * is always recorded as a manual adjustment (owner decision 2a, #23).
+   */
+  refId: z.string().trim().max(100).nullable().optional(),
 });
 export type AdjustStoreCreditRequest = z.infer<typeof AdjustStoreCreditRequestSchema>;
