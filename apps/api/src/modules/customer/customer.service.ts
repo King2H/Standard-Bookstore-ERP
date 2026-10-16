@@ -3,7 +3,7 @@ import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
 import { nextRunningNumber } from '../../lib/documentNumber.js';
-import { nextStatus } from '../../lib/lifecycle.js';
+import { nextStatus, type LifecycleAction } from '../../lib/lifecycle.js';
 import { insertOutbox, insertOutboxEvent } from '../../lib/outbox.js';
 import { encryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
@@ -98,7 +98,8 @@ export async function createCustomer(actor: Actor, dto: CreateCustomerRequest): 
     await checkContactFree(tx, 'email', email);
     const customerCode = policy.customerCode(await nextRunningNumber(tx, 'CUS'));
     const id = await customers.insert(tx, {
-      branchId: dto.branchId ?? null,
+      // The home branch is where the customer was registered, never the client's choice.
+      branchId: actor.branchId,
       customerCode,
       fullName: dto.fullName,
       phone,
@@ -130,7 +131,6 @@ export async function updateCustomer(actor: Actor, id: number, dto: UpdateCustom
       dateOfBirth: dto.dateOfBirth,
       address: dto.address,
       city: dto.city,
-      branchId: dto.branchId,
       updatedBy: actor.staffId,
     });
     // Field names only: phone and email never reach the audit log in plain text (#90).
@@ -140,22 +140,31 @@ export async function updateCustomer(actor: Actor, id: number, dto: UpdateCustom
 }
 
 /** A repeat changes nothing and is not audited; an archived customer must be restored first (#96). */
-export async function deactivateCustomer(actor: Actor, id: number): Promise<void> {
+async function transition(actor: Actor, id: number, action: LifecycleAction): Promise<void> {
   await withTransaction({}, async (tx) => {
     const customer = await requireCustomer(tx, id);
     const previousStatus = (await customers.lockStatus(tx, id))!;
-    const newStatus = nextStatus(previousStatus, 'INACTIVATE');
+    const newStatus = nextStatus(previousStatus, action);
     if (newStatus === null) return;
     await customers.setStatus(tx, id, newStatus, actor.staffId);
-    await audit(tx, actor, 'INACTIVATE', 'customer', id, { previousStatus, newStatus });
-    await insertOutboxEvent(tx, 'customer.deactivated', {
-      customerId: id,
-      customerName: customer.fullName,
-      customerCode: customer.customerCode,
-      branchId: customer.branchId ?? actor.branchId,
-    });
+    await audit(tx, actor, action, 'customer', id, { previousStatus, newStatus });
+    if (action === 'INACTIVATE') {
+      await insertOutboxEvent(tx, 'customer.deactivated', {
+        customerId: id,
+        customerName: customer.fullName,
+        customerCode: customer.customerCode,
+        branchId: customer.branchId ?? actor.branchId,
+      });
+    }
   });
 }
+
+// The lifecycle shared with suppliers and the catalog (lib/lifecycle.ts): a
+// deactivation can be undone, and an archived customer comes back by restore.
+export const deactivateCustomer = (actor: Actor, id: number) => transition(actor, id, 'INACTIVATE');
+export const activateCustomer = (actor: Actor, id: number) => transition(actor, id, 'ACTIVATE');
+export const archiveCustomer = (actor: Actor, id: number) => transition(actor, id, 'ARCHIVE');
+export const restoreCustomer = (actor: Actor, id: number) => transition(actor, id, 'RESTORE');
 
 // ── Loyalty ───────────────────────────────────────────────────────────────────
 
@@ -218,7 +227,6 @@ export async function adjustStoreCredit(
     amount: MoneyInput;
     direction: 'credit' | 'debit';
     reason: string;
-    refType: string | null;
     refId: string | null;
   },
 ): Promise<void> {
@@ -230,9 +238,10 @@ export async function adjustStoreCredit(
     if (balance === undefined) throw new NotFoundError('Store credit account');
     if (adjustment.direction === 'debit') policy.checkEnoughStoreCredit(balance, amount);
 
+    // Recorded as manual, so a correction never reads as a sale or a refund (owner decision 2a).
     await customers.moveStoreCredit(tx, customerId, amount, {
       direction: adjustment.direction,
-      refType: adjustment.refType,
+      refType: 'manual',
       refId: adjustment.refId,
     });
     await audit(tx, actor, 'ADJUST_STORE_CREDIT', 'customer', customerId, {

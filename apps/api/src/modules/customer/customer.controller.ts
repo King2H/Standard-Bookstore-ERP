@@ -94,6 +94,21 @@ export async function deactivate(req: Request, res: Response): Promise<void> {
   message(res, 'Customer deactivated');
 }
 
+export async function activate(req: Request, res: Response): Promise<void> {
+  await service.activateCustomer(actor(req), valid(req, schemas.byId).params.id);
+  message(res, 'Customer activated');
+}
+
+export async function archive(req: Request, res: Response): Promise<void> {
+  await service.archiveCustomer(actor(req), valid(req, schemas.byId).params.id);
+  message(res, 'Customer archived');
+}
+
+export async function restore(req: Request, res: Response): Promise<void> {
+  await service.restoreCustomer(actor(req), valid(req, schemas.byId).params.id);
+  message(res, 'Customer restored');
+}
+
 export async function loyalty(req: Request, res: Response): Promise<void> {
   const customer = await service.getCustomerById(valid(req, schemas.byId).params.id);
   const body: LoyaltyBalance = { loyaltyBalance: customer.loyaltyBalance, lifetimePoints: customer.lifetimePoints };
@@ -136,7 +151,6 @@ export async function adjustStoreCredit(req: Request, res: Response): Promise<vo
     amount: dto.amount,
     direction: dto.direction,
     reason: dto.reason,
-    refType: dto.refType ?? null,
     refId: dto.refId ?? null,
   });
   message(res, `Store credit ${dto.direction} applied`);
