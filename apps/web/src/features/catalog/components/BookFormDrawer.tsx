@@ -1,257 +1,265 @@
-// The book form, moved unchanged from pages/CatalogPage.tsx; PR 3 of the
-// catalog step (#23) rebuilds it on the shared contract with search pickers (#95).
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import type { Book } from '@bms/shared';
+import { Controller, useForm, type FieldErrors } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Money, type Book, type CreateBookRequest, type UpdateBookRequest } from '@bms/shared';
+import { useToast } from '../../../components/Toast.js';
 import { isValidIsbn } from '../../../lib/isbn.js';
-import { api } from '../../../lib/api.js';
 import { Drawer } from '../../../shared/components/Drawer.js';
+import { SearchPicker } from '../../../shared/components/SearchPicker.js';
+import { MultiSearchPicker } from '../../../shared/components/MultiSearchPicker.js';
+import { searchAuthors, searchCategories, searchPublishers } from '../../catalogReference/api.js';
+import { useBookEditions, useBookFormats } from '../../catalogReference/queries.js';
+import { useSaveBook } from '../queries.js';
 
-interface Author { id: number; name: string; bookCount?: number; }
-interface AuthorList { items: Author[]; total: number; }
-interface Category { id: number; name: string; parentName?: string | null; }
-interface CategoryList { items: Category[]; total: number; }
-interface Publisher { id: number; name: string; }
-interface PublisherList { items: Publisher[]; total: number; }
-interface BookFormat { id: number; code: string; label: string; sortOrder: number; }
-interface BookEdition { id: number; code: string; label: string; sortOrder: number; }
+const Picked = z.object({ id: z.number().int(), label: z.string() });
+const AMOUNT = /^\d+(\.\d{1,2})?$/;
+const amount = z.string().trim().refine((v) => v === '' || AMOUNT.test(v), 'Enter an amount such as 12.50');
+const text = (max: number) => z.string().trim().max(max, `At most ${max} characters`);
+const lookupId = (message: string) => z.number({ error: message }).int().positive(message);
 
-export function BookFormDrawer({ book, currency, onClose, onSaved, showToast }: {
-  book: Book | null; currency: string; onClose: () => void; onSaved: () => void;
-  showToast: (m: string, t: 'success' | 'error') => void;
-}) {
-  const [section, setSection] = useState<'basic' | 'physical' | 'authors' | 'categories' | 'pricing'>('basic');
-  const [isbn, setIsbn] = useState(book ? (book.isbn.startsWith('SKU-') || book.isbn.startsWith('AUTO-') ? '' : book.isbn) : '');
-  const [sku, setSku] = useState(book?.sku ?? '');
-  const [title, setTitle] = useState(book?.title ?? '');
-  const [authorIds, setAuthorIds] = useState<number[]>(book?.authorIds ?? []);
-  const [categoryIds, setCategoryIds] = useState<number[]>(book?.categoryIds ?? []);
-  const [publisherId, setPublisherId] = useState<number | null>(book?.publisherId ?? null);
-  const [formatId, setFormatId] = useState<number | null>(book?.formatId ?? null);
-  const [editionId, setEditionId] = useState<number | null>(book?.editionId ?? null);
-  const [genre, setGenre] = useState(book?.genre ?? '');
-  const [language, setLanguage] = useState(book?.language ?? '');
-  const [description, setDescription] = useState(book?.description ?? '');
-  const [defaultPrice, setDefaultPrice] = useState(book?.defaultPrice != null ? String(book.defaultPrice) : '');
-  const [tradeValue, setTradeValue] = useState(book?.tradeValue != null ? String(book.tradeValue) : '');
-  const [tags, setTags] = useState(book?.tags.join(', ') ?? '');
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+/**
+ * The form's fields, checked with the limits of the API's book contract. A
+ * book's ISBN is set once; a price, once set, can be changed but not removed
+ * (the API keeps it).
+ */
+function bookFormSchema(book: Book | null) {
+  return z.object({
+    title: z.string().trim().min(1, 'Title is required').max(500, 'At most 500 characters'),
+    isbn: z.string().trim().refine((v) => book !== null || v === '' || isValidIsbn(v), 'Enter a valid ISBN-13 or ISBN-10'),
+    sku: text(100),
+    publisher: Picked.nullable(),
+    genre: text(100),
+    language: text(50),
+    description: z.string().max(5000, 'At most 5000 characters'),
+    formatId: lookupId('Book format is required'),
+    editionId: lookupId('Edition is required'),
+    authors: z.array(Picked).min(1, 'At least one author is required'),
+    categories: z.array(Picked),
+    tags: z.string(),
+    defaultPrice: amount.refine((v) => v !== '' || book?.defaultPrice == null, 'A price cannot be removed; enter 0 for none'),
+    tradeValue: amount.refine((v) => v !== '' || book?.tradeValue == null, 'A trade value cannot be removed; enter 0 for none'),
+  });
+}
+type BookFormValues = z.infer<ReturnType<typeof bookFormSchema>>;
+type Section = 'basic' | 'physical' | 'authors' | 'categories' | 'pricing';
 
-  const { data: authorsData } = useQuery<AuthorList>({ queryKey: ['authors', ''], queryFn: () => api.get<AuthorList>('/authors?pageSize=200'), staleTime: 60_000 });
-  const { data: catsData } = useQuery<CategoryList>({ queryKey: ['categories', ''], queryFn: () => api.get<CategoryList>('/categories?pageSize=200'), staleTime: 60_000 });
-  const { data: pubsData } = useQuery<PublisherList>({ queryKey: ['publishers', ''], queryFn: () => api.get<PublisherList>('/publishers?pageSize=200'), staleTime: 60_000 });
-  const { data: formatsData } = useQuery<{ items: BookFormat[] }>({ queryKey: ['book-formats'], queryFn: () => api.get<{ items: BookFormat[] }>('/book-formats'), staleTime: 3600_000 });
-  const { data: editionsData } = useQuery<{ items: BookEdition[] }>({ queryKey: ['book-editions'], queryFn: () => api.get<{ items: BookEdition[] }>('/book-editions'), staleTime: 3600_000 });
-  const allAuthors = authorsData?.items ?? [];
-  const allCats = catsData?.items ?? [];
-  const allPubs = pubsData?.items ?? [];
-  const allFormats = formatsData?.items ?? [];
-  const allEditions = editionsData?.items ?? [];
+/** The tab each field is on, to open the tab of the first field to correct. */
+const SECTION_OF: Record<keyof BookFormValues, Section> = {
+  title: 'basic', isbn: 'basic', sku: 'basic', publisher: 'basic', genre: 'basic', language: 'basic', description: 'basic',
+  formatId: 'physical', editionId: 'physical', authors: 'authors', categories: 'categories', tags: 'categories',
+  defaultPrice: 'pricing', tradeValue: 'pricing',
+};
+const SECTIONS: Array<{ id: Section; label: string }> = [
+  { id: 'basic', label: 'Basic Info' }, { id: 'physical', label: 'Physical' }, { id: 'authors', label: 'Authors' },
+  { id: 'categories', label: 'Categories' }, { id: 'pricing', label: 'Pricing' },
+];
 
-  async function save() {
-    setError('');
-    if (!title.trim()) { setError('Title is required'); return; }
-    if (authorIds.length === 0) { setError('At least one author is required'); return; }
-    if (!formatId) { setError('Book format is required'); return; }
-    if (!editionId) { setError('Edition is required'); return; }
-    const rawIsbn = isbn.replace(/[-\s]/g, '');
-    if (!book && rawIsbn) {
-      if (!isValidIsbn(rawIsbn)) { setError('Enter a valid ISBN-13 or ISBN-10'); return; }
-    }
-    const body = {
-      ...(book ? {} : { isbn: rawIsbn || undefined }),
-      sku: sku.trim() || undefined, title: title.trim(),
-      authorIds, categoryIds,
-      publisherId: publisherId || undefined,
-      formatId, editionId,
-      genre: genre || undefined,
-      language: language || undefined,
-      description: description || undefined,
-      defaultPrice: defaultPrice ? parseFloat(defaultPrice) : undefined,
-      tradeValue: tradeValue ? parseFloat(tradeValue) : undefined,
-      tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-    };
-    setSaving(true);
-    try {
-      if (book) await api.put(`/books/${book.id}`, body);
-      else await api.post('/books', body);
-      showToast(book ? 'Book updated' : 'Book created', 'success');
-      onSaved();
-    } catch (e: unknown) { setError((e as Error).message); }
-    finally { setSaving(false); }
+const shownIsbn = (isbn: string) => (isbn.startsWith('SKU-') || isbn.startsWith('AUTO-') ? '' : isbn);
+/** A book's linked names and ids come in the same order. */
+const picked = (names: string[], ids: number[]) => ids.map((id, i) => ({ id, label: names[i] ?? String(id) }));
+const money = (v: string) => (v === '' ? undefined : Money.of(v).toNumber());
+
+function defaults(book: Book | null): BookFormValues {
+  return {
+    title: book?.title ?? '', isbn: book ? shownIsbn(book.isbn) : '', sku: book?.sku ?? '',
+    publisher: book?.publisherId ? { id: book.publisherId, label: book.publisher ?? '' } : null,
+    genre: book?.genre ?? '', language: book?.language ?? '', description: book?.description ?? '',
+    // Unset until chosen; the schema asks for them.
+    formatId: book?.formatId ?? (undefined as unknown as number), editionId: book?.editionId ?? (undefined as unknown as number),
+    authors: book ? picked(book.authors, book.authorIds) : [], categories: book ? picked(book.categories, book.categoryIds) : [],
+    tags: book?.tags.join(', ') ?? '',
+    defaultPrice: book?.defaultPrice != null ? String(book.defaultPrice) : '',
+    tradeValue: book?.tradeValue != null ? String(book.tradeValue) : '',
+  };
+}
+
+/**
+ * What to send. On a change every field is sent, so one emptied is cleared
+ * (was: left out, so it kept its old value).
+ */
+function requestOf(v: BookFormValues, book: Book | null): CreateBookRequest | UpdateBookRequest {
+  const common = {
+    title: v.title, authorIds: v.authors.map((a) => a.id), categoryIds: v.categories.map((c) => c.id),
+    formatId: v.formatId, editionId: v.editionId,
+    tags: v.tags.split(',').map((t) => t.trim()).filter(Boolean),
+    defaultPrice: money(v.defaultPrice), tradeValue: money(v.tradeValue),
+  };
+  if (book) {
+    return { ...common, sku: v.sku, publisherId: v.publisher?.id ?? null, genre: v.genre, language: v.language, description: v.description };
   }
+  return {
+    ...common, isbn: v.isbn.replace(/[-\s]/g, '') || undefined, sku: v.sku || undefined, publisherId: v.publisher?.id ?? null,
+    genre: v.genre || undefined, language: v.language || undefined, description: v.description || undefined,
+  };
+}
 
-  const sections = [
-    { id: 'basic', label: 'Basic Info' },
-    { id: 'physical', label: 'Physical' },
-    { id: 'authors', label: 'Authors' },
-    { id: 'categories', label: 'Categories' },
-    { id: 'pricing', label: 'Pricing' },
-  ] as const;
+const INPUT = 'w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-hidden focus:ring-2 focus:ring-blue-500';
+const LABEL = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
+const BUTTON = 'flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50';
+
+/** Adds a book, or edits one. */
+export function BookFormDrawer({ book, currency, onClose, onSaved }: {
+  book: Book | null; currency: string; onClose: () => void; onSaved: () => void;
+}) {
+  const { showToast } = useToast();
+  const [section, setSection] = useState<Section>('basic');
+  const [problem, setProblem] = useState('');
+  const save = useSaveBook();
+  const formats = useBookFormats().data?.items ?? [];
+  const editions = useBookEditions().data?.items ?? [];
+
+  const { register, control, handleSubmit, watch, formState: { errors } } = useForm<BookFormValues>({
+    resolver: zodResolver(bookFormSchema(book)),
+    defaultValues: defaults(book),
+  });
+  const formatId = watch('formatId');
+  const editionId = watch('editionId');
+
+  const onValid = (v: BookFormValues) => {
+    setProblem('');
+    const request = book ? { id: book.id, body: requestOf(v, book) } : { id: null, body: requestOf(v, null) as CreateBookRequest };
+    save.mutate(request, {
+      onSuccess: () => { showToast(book ? 'Book updated' : 'Book created', 'success'); onSaved(); },
+      onError: (e: Error) => setProblem(e.message),
+    });
+  };
+  // Opens the tab of the first field to correct, and says what is wrong.
+  const onInvalid = (errs: FieldErrors<BookFormValues>) => {
+    const first = (Object.keys(SECTION_OF) as Array<keyof BookFormValues>).find((k) => errs[k]);
+    if (!first) return;
+    setSection(SECTION_OF[first]);
+    setProblem(errs[first]?.message ?? 'Check this field');
+  };
+  const submit = handleSubmit(onValid, onInvalid);
+  const invalid = (name: keyof BookFormValues) => (errors[name] ? true : undefined);
+  const lookupValue = { setValueAs: (v: string) => (v === '' ? undefined : Number(v)) };
 
   return (
     <Drawer title={book ? 'Edit Book' : 'Add Book'} onClose={onClose}
-      tabs={sections.map(s => ({ id: s.id, label: s.label }))}
-      activeTab={section} onTabChange={id => setSection(id as typeof section)}
-      footer={<><Btn variant="secondary" onClick={onClose}>Cancel</Btn><Btn onClick={save} disabled={saving}>{saving ? 'Saving…' : book ? 'Save' : 'Create'}</Btn></>}>
-      <div className="space-y-4">
-        {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 flex gap-2">
-            <span>⚠️</span><span>{error}</span>
+      tabs={SECTIONS} activeTab={section} onTabChange={(id) => setSection(id as Section)}
+      footer={<>
+        <button type="button" onClick={onClose} className={`${BUTTON} border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300`}>Cancel</button>
+        <button type="button" onClick={() => void submit()} disabled={save.isPending} className={`${BUTTON} bg-blue-600 hover:bg-blue-700 text-white`}>{save.isPending ? 'Saving…' : book ? 'Save' : 'Create'}</button>
+      </>}>
+      <form onSubmit={(e) => { e.preventDefault(); void submit(); }} className="space-y-4">
+        {problem && (
+          <div role="alert" className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 flex gap-2">
+            <span>⚠️</span><span>{problem}</span>
           </div>
         )}
 
-        {/* ── Basic Info ─────────────────────────────────────────────── */}
         {section === 'basic' && (
           <>
-            <FField label="Title *" value={title} onChange={setTitle} />
+            <div>
+              <label htmlFor="book-title" className={LABEL}>Title *</label>
+              <input id="book-title" {...register('title')} aria-invalid={invalid('title')} className={INPUT} />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <FField label="ISBN-13 or ISBN-10 (optional)" value={isbn} onChange={setIsbn} placeholder="9780306406157" disabled={!!book} />
+                <label htmlFor="book-isbn" className={LABEL}>ISBN-13 or ISBN-10 (optional)</label>
+                <input id="book-isbn" {...register('isbn')} placeholder="9780306406157" disabled={!!book} aria-invalid={invalid('isbn')} className={INPUT} />
                 {!book && <p className="text-xs text-gray-400 mt-1">Leave blank to use SKU</p>}
               </div>
-              <FField label="SKU / Internal ID" value={sku} onChange={setSku} placeholder="BK-001" />
+              <div>
+                <label htmlFor="book-sku" className={LABEL}>SKU / Internal ID</label>
+                <input id="book-sku" {...register('sku')} placeholder="BK-001" aria-invalid={invalid('sku')} className={INPUT} />
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Publisher</label>
-              <select value={publisherId ?? ''} onChange={e => setPublisherId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
-                <option value="">— No publisher —</option>
-                {allPubs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <label className={LABEL}>Publisher</label>
+              <Controller control={control} name="publisher" render={({ field }) => (
+                <SearchPicker aria-label="Publisher" value={field.value} onChange={field.onChange} queryKey="publishers"
+                  search={async (q) => (await searchPublishers(q)).items.map((p) => ({ id: p.id, label: p.name }))}
+                  placeholder="No publisher — type to search…" className={INPUT} />
+              )} />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <FField label="Genre" value={genre} onChange={setGenre} />
-              <FField label="Language" value={language} onChange={setLanguage} />
+              <div>
+                <label htmlFor="book-genre" className={LABEL}>Genre</label>
+                <input id="book-genre" {...register('genre')} aria-invalid={invalid('genre')} className={INPUT} />
+              </div>
+              <div>
+                <label htmlFor="book-language" className={LABEL}>Language</label>
+                <input id="book-language" {...register('language')} aria-invalid={invalid('language')} className={INPUT} />
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+              <label htmlFor="book-description" className={LABEL}>Description</label>
+              <textarea id="book-description" {...register('description')} rows={3} aria-invalid={invalid('description')}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
             </div>
           </>
         )}
 
-        {/* ── Physical Attributes ────────────────────────────────────── */}
         {section === 'physical' && (
           <>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Format and Edition are required and affect pricing.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Format and Edition are required.</p>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Book Format *</label>
-              <select value={formatId ?? ''} onChange={e => setFormatId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              <label htmlFor="book-format" className={LABEL}>Book Format *</label>
+              <select id="book-format" {...register('formatId', lookupValue)} aria-invalid={invalid('formatId')}
                 className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${!formatId ? 'border-amber-400 dark:border-amber-600' : 'border-gray-300 dark:border-gray-600'}`}>
                 <option value="">— Select format —</option>
-                {allFormats.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                {formats.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
               {!formatId && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Required</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Edition *</label>
-              <select value={editionId ?? ''} onChange={e => setEditionId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              <label htmlFor="book-edition" className={LABEL}>Edition *</label>
+              <select id="book-edition" {...register('editionId', lookupValue)} aria-invalid={invalid('editionId')}
                 className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${!editionId ? 'border-amber-400 dark:border-amber-600' : 'border-gray-300 dark:border-gray-600'}`}>
                 <option value="">— Select edition —</option>
-                {allEditions.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
+                {editions.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
               </select>
               {!editionId && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Required</p>}
             </div>
             {formatId && editionId && (
               <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-300">
-                {allFormats.find(f => f.id === formatId)?.label} · {allEditions.find(e => e.id === editionId)?.label}
-                <span className="ml-2 text-blue-500">— pricing can be set per this combination in the Pricing tab</span>
+                {formats.find((f) => f.id === formatId)?.label} · {editions.find((e) => e.id === editionId)?.label}
               </div>
             )}
           </>
         )}
 
-        {/* ── Authors ────────────────────────────────────────────────── */}
         {section === 'authors' && (
           <>
             <p className="text-xs text-gray-500 dark:text-gray-400">Select from master list. Add new authors in the Authors tab.</p>
-            <MasterSelect items={allAuthors.map(a => ({ id: a.id, label: a.name, sub: `${a.bookCount ?? 0} books` }))} selected={authorIds} onChange={setAuthorIds} placeholder="Search authors…" />
+            <Controller control={control} name="authors" render={({ field }) => (
+              <MultiSearchPicker aria-label="Authors" value={field.value} onChange={field.onChange} queryKey="authors" invalid={!!errors.authors}
+                search={async (q) => (await searchAuthors(q)).items.map((a) => ({ id: a.id, label: a.name }))}
+                placeholder="Search authors…" className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-hidden" />
+            )} />
           </>
         )}
 
-        {/* ── Categories ─────────────────────────────────────────────── */}
         {section === 'categories' && (
           <>
             <p className="text-xs text-gray-500 dark:text-gray-400">Select from master list. Add new categories in the Categories tab.</p>
-            <MasterSelect items={allCats.map(c => ({ id: c.id, label: c.name, sub: c.parentName ? `↳ ${c.parentName}` : undefined }))} selected={categoryIds} onChange={setCategoryIds} placeholder="Search categories…" />
-            <FField label="Tags (comma-separated)" value={tags} onChange={setTags} placeholder="bestseller, award-winner…" />
+            <Controller control={control} name="categories" render={({ field }) => (
+              <MultiSearchPicker aria-label="Categories" value={field.value} onChange={field.onChange} queryKey="categories"
+                search={async (q) => (await searchCategories(q)).items.map((c) => ({ id: c.id, label: c.name }))}
+                placeholder="Search categories…" className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-hidden" />
+            )} />
+            <div>
+              <label htmlFor="book-tags" className={LABEL}>Tags (comma-separated)</label>
+              <input id="book-tags" {...register('tags')} placeholder="bestseller, award-winner…" className={INPUT} />
+            </div>
           </>
         )}
 
-        {/* ── Pricing ────────────────────────────────────────────────── */}
         {section === 'pricing' && (
           <>
-            <FField label={`Default Price (${currency})`} value={defaultPrice} onChange={setDefaultPrice} type="number" />
-            <FField label={`Trade Value (${currency})`} value={tradeValue} onChange={setTradeValue} type="number" />
-            <p className="text-xs text-gray-400">Branch-specific and format/edition-specific overrides can be set from the book's action menu after saving.</p>
+            <div>
+              <label htmlFor="book-price" className={LABEL}>Default Price ({currency})</label>
+              <input id="book-price" type="number" step="0.01" min="0" {...register('defaultPrice')} aria-invalid={invalid('defaultPrice')} className={INPUT} />
+            </div>
+            <div>
+              <label htmlFor="book-trade-value" className={LABEL}>Trade Value ({currency})</label>
+              <input id="book-trade-value" type="number" step="0.01" min="0" {...register('tradeValue')} aria-invalid={invalid('tradeValue')} className={INPUT} />
+            </div>
           </>
         )}
-      </div>
+      </form>
     </Drawer>
-  );
-}
-
-function MasterSelect({ items, selected, onChange, placeholder }: {
-  items: { id: number; label: string; sub?: string }[];
-  selected: number[]; onChange: (ids: number[]) => void; placeholder: string;
-}) {
-  const [q, setQ] = useState('');
-  const filtered = items.filter(i => !q || i.label.toLowerCase().includes(q.toLowerCase()));
-  const toggle = (id: number) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
-  return (
-    <div className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden" />
-      <div className="max-h-48 overflow-y-auto">
-        {filtered.length === 0 ? <p className="px-3 py-3 text-xs text-gray-400 italic">No results</p> :
-          filtered.map(item => (
-            <label key={item.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-              <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggle(item.id)} className="rounded-sm border-gray-300 dark:border-gray-600 text-blue-600" />
-              <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">{item.label}</span>
-              {item.sub && <span className="text-xs text-gray-400">{item.sub}</span>}
-            </label>
-          ))}
-      </div>
-      {selected.length > 0 && (
-        <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-1">
-          {selected.map(id => {
-            const item = items.find(i => i.id === id);
-            return item ? (
-              <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
-                {item.label} <button type="button" onClick={() => toggle(id)} className="hover:text-red-500 leading-none">✕</button>
-              </span>
-            ) : null;
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FField({ label, value, onChange, placeholder, type = 'text', disabled }: {
-  label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; type?: string; disabled?: boolean;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
-        step={type === 'number' ? '0.01' : undefined} min={type === 'number' ? '0' : undefined}
-        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-    </div>
-  );
-}
-
-function Btn({ children, onClick, disabled, variant = 'primary' }: {
-  children: React.ReactNode; onClick?: () => void; disabled?: boolean; variant?: 'primary' | 'secondary';
-}) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${variant === 'primary' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>
-      {children}
-    </button>
   );
 }

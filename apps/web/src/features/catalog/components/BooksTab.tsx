@@ -10,7 +10,7 @@ import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { listReference } from '../../catalogReference/api.js';
 import type { BookAction, BookListParams } from '../api.js';
-import { useActiveBookCount, useBookAction, useBooks, useBulkBookAction, useDeleteBook, useRefreshBooks } from '../queries.js';
+import { useActiveBookCount, useBookAction, useBooks, useBulkBookAction, useDeleteBook } from '../queries.js';
 import { canDeleteFromCatalog, canEditCatalog } from '../rules.js';
 import { BookFormDrawer } from './BookFormDrawer.js';
 import { RowMenu } from './RowMenu.js';
@@ -105,7 +105,6 @@ export function BooksTab() {
   const books = data?.items ?? [];
   const total = data?.total ?? 0;
 
-  const refresh = useRefreshBooks();
   const actions: Record<BookAction, ReturnType<typeof useBookAction>> = {
     deactivate: useBookAction('deactivate'),
     reactivate: useBookAction('reactivate'),
@@ -304,10 +303,7 @@ export function BooksTab() {
         </Drawer>
       )}
       {form && (
-        <BookFormDrawer book={form.book} currency={currency}
-          onClose={() => setForm(null)}
-          onSaved={() => { void refresh(); setForm(null); }}
-          showToast={showToast} />
+        <BookFormDrawer book={form.book} currency={currency} onClose={() => setForm(null)} onSaved={() => setForm(null)} />
       )}
       {depDialog && (
         <DependencyDialog

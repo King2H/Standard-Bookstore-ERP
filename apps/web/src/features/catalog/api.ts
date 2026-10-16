@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { BookListQuerySchema, BookListResponse, MessageResponse } from '@bms/shared';
+import type { Book, BookListQuerySchema, BookListResponse, CreateBookRequest, MessageResponse, UpdateBookRequest } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
 /** The book endpoints (#21), typed with their @bms/shared contracts. */
@@ -18,3 +18,8 @@ export const listBooks = (params: BookListParams) => api.get<BookListResponse>(`
 export const runBookAction = (id: number, action: BookAction) => api.post<MessageResponse>(`/books/${id}/${action}`);
 
 export const deleteBook = (id: number) => api.delete<MessageResponse>(`/books/${id}`);
+
+export const createBook = (body: CreateBookRequest) => api.post<Book>('/books', body);
+
+/** Only the fields given change; a field given as null or empty is cleared. */
+export const updateBook = (id: number, body: UpdateBookRequest) => api.put<Book>(`/books/${id}`, body);
