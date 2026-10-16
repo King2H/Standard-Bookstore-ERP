@@ -119,7 +119,7 @@ export async function create(
   // stock, so the figures may change before it is confirmed. confirm() is
   // the authoritative check, under a row lock, and reserves the stock
   // (owner decision on #70).
-  if (!(await isNegativeStockAllowed())) {
+  if (!(await isNegativeStockAllowed(staffCtx.branchId))) {
     const locationId = data.locationId || (await orders.findBranchLocation(kysely, staffCtx.branchId)) || staffCtx.branchId;
     for (const line of lines) {
       const stock = await inventoryService.availableStock(kysely, line.bookId, locationId);
@@ -181,7 +181,7 @@ export async function confirm(
     for (const item of order.lineItems ?? []) {
       await orders.lockStock(tx, item.bookId, locationId);
       const stock = await inventoryService.availableStock(tx, item.bookId, locationId);
-      if (!(await isNegativeStockAllowed()) && stock.available < item.quantity) {
+      if (!(await isNegativeStockAllowed(order.branchId)) && stock.available < item.quantity) {
         const title = (await orders.findBook(tx, item.bookId))?.title ?? `Book ${item.bookId}`;
         const place = (await orders.findLocationName(tx, locationId)) ?? `Location ${locationId}`;
         throw new BusinessError(

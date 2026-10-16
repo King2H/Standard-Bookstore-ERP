@@ -132,6 +132,12 @@ export async function ensureLevel(q: Queryable, bookId: number, locationId: numb
     .execute();
 }
 
+/** The branch a location belongs to. */
+export async function locationBranch(q: Queryable, locationId: number): Promise<number | undefined> {
+  const row = await q.selectFrom('locations').select('branch_id').where('id', '=', locationId).executeTakeFirst();
+  return row?.branch_id;
+}
+
 /** Locks the stock row until the end of the transaction. */
 export async function lockLevel(q: Queryable, bookId: number, locationId: number): Promise<LockedLevel | undefined> {
   const row = await q

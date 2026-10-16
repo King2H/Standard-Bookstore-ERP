@@ -152,20 +152,19 @@ export type TransferStockRequest = z.infer<typeof TransferStockRequestSchema>;
 export const TransferStockResponseSchema = z.object({ from: StockLevelSchema, to: StockLevelSchema });
 export type TransferStockResponse = z.infer<typeof TransferStockResponseSchema>;
 
-export const StockInRequestSchema = z
-  .object({
-    bookId: IdSchema,
-    locationId: IdSchema,
-    quantity: z.number().int().positive(),
-    version: z.number().int().min(0),
-    referenceType: z.enum(['purchase_order', 'return', 'adjustment', 'manual', 'initial_stock']).optional(),
-    referenceId: IdSchema.optional(),
-    notes: z.string().max(500).optional(),
-  })
-  .refine((r) => r.referenceType !== 'purchase_order' || r.referenceId !== undefined, {
-    message: 'referenceId is required when referenceType is purchase_order',
-    path: ['referenceId'],
-  });
+/**
+ * Stock received by hand. It names no purchase order: those are received in
+ * Procurement, which also counts them as received (owner decision 1a, #23).
+ */
+export const StockInRequestSchema = z.object({
+  bookId: IdSchema,
+  locationId: IdSchema,
+  quantity: z.number().int().positive(),
+  version: z.number().int().min(0),
+  referenceType: z.enum(['return', 'adjustment', 'manual', 'initial_stock']).optional(),
+  referenceId: IdSchema.optional(),
+  notes: z.string().max(500).optional(),
+});
 export type StockInRequest = z.infer<typeof StockInRequestSchema>;
 
 export const StockOutRequestSchema = z.object({

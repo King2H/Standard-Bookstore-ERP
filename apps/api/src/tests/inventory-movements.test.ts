@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
@@ -128,6 +128,33 @@ describe('Stock movements', () => {
     expect((await level()).quantity).toBe(2);
   });
 
+  describe("negative stock, by the branch's own setting", () => {
+    const branchSetting = (value: boolean) =>
+      as(api().put(`/api/v1/config/branches/${branchId}/allow_negative_stock`), superAdmin).send({ value });
+
+    afterEach(async () => {
+      await as(api().delete(`/api/v1/config/branches/${branchId}/allow_negative_stock`), superAdmin);
+      await allowNegativeStock(false);
+    });
+
+    it('lets stock go below zero in a branch that allows it, though the system does not (was: refused)', async () => {
+      expect((await branchSetting(true)).status).toBe(200);
+      await setStock(2);
+      const res = await as(api().post('/api/v1/inventory/stock-out'), clerk).send({ bookId, locationId, quantity: 5, version: 0 });
+      expect(res.status).toBe(200);
+      expect(res.body.quantity).toBe(-3);
+    });
+
+    it('refuses it in a branch that does not, though the system allows it (was: allowed)', async () => {
+      expect((await allowNegativeStock(true)).status).toBe(200);
+      expect((await branchSetting(false)).status).toBe(200);
+      await setStock(2);
+      const res = await as(api().post('/api/v1/inventory/adjust'), clerk)
+        .send({ bookId, locationId, delta: -5, reasonCode: 'loss', version: 0 });
+      expect({ status: res.status, error: res.body.error }).toEqual({ status: 422, error: 'INSUFFICIENT_STOCK' });
+    });
+  });
+
   it('values an adjustment at the average cost, leaving the average as it was (was: no cost)', async () => {
     await setStock(10, { averageCost: '12.5000' });
     const res = await as(api().post('/api/v1/inventory/adjust'), clerk)
@@ -149,6 +176,14 @@ describe('Stock movements', () => {
       )).rows[0].reason_code;
     }
     expect(reasons).toEqual({ none: 'stock_in', manual: 'stock_in', return: 'return', initial_stock: 'initial' });
+  });
+
+  it('refuses a stock-in by hand that names a purchase order, which Procurement receives (was: booked, so receiving it counted twice)', async () => {
+    await setStock(0);
+    const res = await as(api().post('/api/v1/inventory/stock-in'), clerk)
+      .send({ bookId, locationId, quantity: 5, version: 0, referenceType: 'purchase_order', referenceId: 42 });
+    expect({ status: res.status, error: res.body.error }).toEqual({ status: 400, error: 'VALIDATION_ERROR' });
+    expect((await level()).quantity).toBe(0);
   });
 
   describe('stock alerts from sales', () => {

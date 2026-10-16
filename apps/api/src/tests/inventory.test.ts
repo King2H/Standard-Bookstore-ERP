@@ -466,7 +466,7 @@ describe('Inventory — Stock In / Stock Out', () => {
     const res = await request(getTestApp())
       .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ bookId, locationId, quantity: 5, version: 1, referenceType: 'purchase_order', referenceId: 42 });
+      .send({ bookId, locationId, quantity: 5, version: 1, referenceType: 'return', referenceId: 42 });
     expect(res.status).toBe(200);
     expect(res.body.quantity).toBe(20);
   });
@@ -582,7 +582,7 @@ describe('Inventory — Stock In / Stock Out', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.items.length).toBeGreaterThan(0);
-    const withRef = res.body.items.find((h: { referenceType: string | null }) => h.referenceType === 'purchase_order');
+    const withRef = res.body.items.find((h: { referenceType: string | null }) => h.referenceType === 'return');
     expect(withRef).toBeDefined();
     expect(withRef.referenceId).toBe('42');
   });

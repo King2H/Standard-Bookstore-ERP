@@ -18479,7 +18479,6 @@
                   "referenceType": {
                     "type": "string",
                     "enum": [
-                      "purchase_order",
                       "return",
                       "adjustment",
                       "manual",
