@@ -9,6 +9,7 @@ import {
   quantityAfterAdjustment,
   statusesFor,
   stockAlert,
+  stockInReason,
 } from '../inventory.policy.js';
 
 describe('statusesFor', () => {
@@ -112,5 +113,14 @@ describe('stockAlert', () => {
   it('does not alert above the reorder point', () => {
     expect(stockAlert(10, 8, 3)).toBeNull();
     expect(stockAlert(2, 8, 3)).toBeNull();
+  });
+});
+
+describe('stockInReason', () => {
+  it('records a return as a return, opening stock as initial and anything else as stock in', () => {
+    expect(stockInReason('return')).toBe('return');
+    expect(stockInReason('initial_stock')).toBe('initial');
+    expect(stockInReason('manual')).toBe('stock_in');
+    expect(stockInReason(undefined)).toBe('stock_in');
   });
 });

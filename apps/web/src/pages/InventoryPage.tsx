@@ -1,15 +1,18 @@
 // InventoryPage — Slice 7
 // Sub-pages: Stock Levels | Stock In | Stock Out | Adjust | Transfer | History | Low Stock Alerts
-// Stock Levels, History and Low Stock live in features/inventory (#23); the
-// stock change tabs follow in the next two PRs.
+// Stock Levels, History, Low Stock, Stock In and Stock Out live in
+// features/inventory (#23); Adjust and Transfer follow in the next PR.
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { StockLevel } from '@bms/shared';
 import { api, getCurrentBranchId } from '../lib/api.js';
 import { useMyProfile } from '../features/account/queries.js';
 import { canMoveStock } from '../features/inventory/rules.js';
 import { StockLevelsTab } from '../features/inventory/components/StockLevelsTab.js';
 import { HistoryTab } from '../features/inventory/components/HistoryTab.js';
 import { LowStockBadge, LowStockTab } from '../features/inventory/components/LowStockTab.js';
+import { StockInTab } from '../features/inventory/components/StockInTab.js';
+import { StockOutTab } from '../features/inventory/components/StockOutTab.js';
 
 type Role = string;
 type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'transfer' | 'history' | 'alerts';
@@ -34,7 +37,7 @@ export default function InventoryPage({ userRole, userPermissions, initialContex
   const { data: me } = useMyProfile();
   const [tab, setTab] = useState<Tab>('stock');
   // The row a quick "+ In" or "− Out" was pressed on, chosen on that tab (was: ignored).
-  const [chosen, setChosen] = useState<InventoryRow | null>(null);
+  const [chosen, setChosen] = useState<StockLevel | null>(null);
   // Stock changes are offered only to the roles the API lets move stock (was: anyone with MANAGE_INVENTORY).
   const moves = canMoveStock(me);
   const tabs = [
@@ -46,7 +49,7 @@ export default function InventoryPage({ userRole, userPermissions, initialContex
     { id: 'history' as Tab, label: 'History', icon: '📋', show: true },
     { id: 'alerts' as Tab, label: 'Low Stock', icon: '⚠️', show: true },
   ].filter(t => t.show);
-  const open = (next: Tab, row: InventoryRow | null = null) => { setChosen(row); setTab(next); };
+  const open = (next: Tab, row: StockLevel | null = null) => { setChosen(row); setTab(next); };
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950">
@@ -61,8 +64,8 @@ export default function InventoryPage({ userRole, userPermissions, initialContex
       </div>
       <div className="flex-1 min-h-0">
         {tab === 'stock'    && <StockLevelsTab onStockIn={row => open('stock-in', row)} onStockOut={row => open('stock-out', row)} initialLowOnly={initialContext.lowStockOnly === 'true'} />}
-        {tab === 'stock-in' && moves && <StockInTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} userRole={userRole} userPermissions={userPermissions} />}
-        {tab === 'stock-out' && moves && <StockOutTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} userRole={userRole} userPermissions={userPermissions} />}
+        {tab === 'stock-in' && moves && <StockInTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} />}
+        {tab === 'stock-out' && moves && <StockOutTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} />}
         {tab === 'adjust'   && moves && <AdjustTab userRole={userRole} userPermissions={userPermissions} />}
         {tab === 'transfer' && moves && <TransferTab userRole={userRole} userPermissions={userPermissions} />}
         {tab === 'history'  && <HistoryTab />}
@@ -375,330 +378,6 @@ function AccessDenied() {
         <p className="text-4xl mb-3">🔒</p>
         <p className="text-gray-500 dark:text-gray-400 font-medium">Access restricted</p>
         <p className="text-xs text-gray-400 mt-1">Admin, Manager, or Stock_Clerk role required</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Stock In Tab ──────────────────────────────────────────────────────────────
-function StockInTab({ userRole, userPermissions, initialRow = null }: { userRole?: Role; userPermissions?: string[]; initialRow?: InventoryRow | null }) {
-  const qc = useQueryClient();
-  const [bookSearch, setBookSearch] = useState('');
-  const [selectedRow, setSelectedRow] = useState<InventoryRow | null>(initialRow);
-  const [quantity, setQuantity] = useState('');
-  const [referenceType, setReferenceType] = useState('');
-  const [referenceId, setReferenceId] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const { data: stockData } = useQuery<InventoryList>({
-    queryKey: ['inventory', bookSearch, '', false, 1],
-    queryFn: () => api.get<InventoryList>(`/inventory?q=${encodeURIComponent(bookSearch)}&pageSize=10`),
-    enabled: bookSearch.length > 1,
-  });
-
-  // Fetch POs for reference dropdown when referenceType = purchase_order
-  const { data: poData } = useQuery<{ items: Array<{ id: string; supplierName: string; status: string }> }>({
-    queryKey: ['purchase-orders-for-ref'],
-    queryFn: () => api.get('/purchase-orders?pageSize=200&status=approved'),
-    enabled: referenceType === 'purchase_order',
-  });
-
-  if (!canWrite(userRole, userPermissions)) return <AccessDenied />;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedRow) { setError('Select a book and location first'); return; }
-    const qty = parseInt(quantity, 10);
-    if (isNaN(qty) || qty <= 0) { setError('Enter a positive quantity'); return; }
-    setError(''); setSaving(true); setSuccess('');
-    try {
-      const result = await api.post<InventoryRow>('/inventory/stock-in', {
-        bookId: selectedRow.bookId,
-        locationId: selectedRow.locationId,
-        quantity: qty,
-        version: selectedRow.version,
-        referenceType: referenceType || undefined,
-        referenceId: referenceId ? parseInt(referenceId, 10) : undefined,
-        notes: notes || undefined,
-      });
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-      qc.invalidateQueries({ queryKey: ['inventory-low-stock'] });
-      setSuccess(`Stock in recorded. New quantity: ${result.quantity}`);
-      setSelectedRow({ ...selectedRow, quantity: result.quantity, version: result.version });
-      setQuantity(''); setReferenceId(''); setNotes('');
-    } catch (err: unknown) {
-      const e = err as { message?: string; code?: string };
-      if (e.code === 'VERSION_CONFLICT') {
-        setError('Inventory was updated by someone else. Refreshing…');
-        qc.invalidateQueries({ queryKey: ['inventory'] });
-      } else {
-        setError(e.message ?? 'Unknown error');
-      }
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <div className="flex h-full">
-      {/* Left: book selector */}
-      <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Select Book + Location</p>
-          <input value={bookSearch} onChange={e => setBookSearch(e.target.value)} placeholder="Search books…"
-            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {stockData?.items.map(row => (
-            <button key={`${row.bookId}-${row.locationId}`}
-              onClick={() => { setSelectedRow(row); setError(''); setSuccess(''); }}
-              className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${selectedRow?.bookId === row.bookId && selectedRow?.locationId === row.locationId ? 'bg-emerald-50 dark:bg-emerald-950/30' : ''}`}>
-              <div className="text-sm font-medium text-gray-900 dark:text-white line-clamp-1">{row.bookTitle}</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{row.locationName} · Qty: <span className={row.isLowStock ? 'text-amber-600 font-semibold' : 'font-semibold'}>{row.quantity}</span></div>
-            </button>
-          ))}
-          {bookSearch.length <= 1 && <p className="px-4 py-3 text-xs text-gray-400 italic">Type to search books…</p>}
-        </div>
-      </div>
-
-      {/* Right: form */}
-      <div className="flex-1 overflow-auto flex items-start justify-center p-8">
-        <div className="w-full max-w-md pb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-emerald-500 text-xl">⬇️</span>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Stock In</h2>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">Record incoming inventory — procurement receipts, supplier deliveries, or manual additions.</p>
-
-          {selectedRow ? (
-            <div className="mb-5 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm">
-              <div className="font-medium text-emerald-900 dark:text-emerald-200">{selectedRow.bookTitle}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">{selectedRow.locationName} · Current qty: <strong>{selectedRow.quantity}</strong></div>
-            </div>
-          ) : (
-            <div className="mb-5 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-500 dark:text-gray-400">
-              ← Select a book and location from the left panel
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">{error}</div>}
-            {success && <div className="p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm text-emerald-700 dark:text-emerald-300">{success}</div>}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity *</label>
-              <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" placeholder="Units received"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-              {selectedRow && quantity && !isNaN(parseInt(quantity, 10)) && (
-                <p className="text-xs text-gray-400 mt-1">New quantity: <strong>{selectedRow.quantity + parseInt(quantity, 10)}</strong></p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference Type</label>
-                <select value={referenceType} onChange={e => { setReferenceType(e.target.value); setReferenceId(''); }}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
-                  <option value="">— None —</option>
-                  <option value="purchase_order">Purchase Order</option>
-                  <option value="return">Customer Return</option>
-                  <option value="manual">Manual Entry</option>
-                  <option value="opening_stock">Opening Stock</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {referenceType === 'purchase_order' ? 'Purchase Order' : 'Reference ID'}
-                </label>
-                {referenceType === 'purchase_order' ? (
-                  <select value={referenceId} onChange={e => setReferenceId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
-                    <option value="">Select PO...</option>
-                    {(poData?.items ?? []).map(po => (
-                      <option key={po.id} value={po.id}>PO #{po.id} — {po.supplierName}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input type="text" value={referenceId} onChange={e => setReferenceId(e.target.value)}
-                    placeholder={referenceType ? 'Reference number' : '—'}
-                    disabled={!referenceType}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-40" />
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (optional)</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional context…"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-            </div>
-
-            <button type="submit" disabled={saving || !selectedRow}
-              className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
-              {saving ? 'Recording…' : '⬇️ Record Stock In'}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Stock Out Tab ─────────────────────────────────────────────────────────────
-function StockOutTab({ userRole, userPermissions, initialRow = null }: { userRole?: Role; userPermissions?: string[]; initialRow?: InventoryRow | null }) {
-  const qc = useQueryClient();
-  const [bookSearch, setBookSearch] = useState('');
-  const [selectedRow, setSelectedRow] = useState<InventoryRow | null>(initialRow);
-  const [quantity, setQuantity] = useState('');
-  const [referenceType, setReferenceType] = useState('');
-  const [referenceId, setReferenceId] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const { data: stockData } = useQuery<InventoryList>({
-    queryKey: ['inventory', bookSearch, '', false, 1],
-    queryFn: () => api.get<InventoryList>(`/inventory?q=${encodeURIComponent(bookSearch)}&pageSize=10`),
-    enabled: bookSearch.length > 1,
-  });
-
-  // Sales take stock out through POS and orders.
-  if (!canWrite(userRole, userPermissions)) return <AccessDenied />;
-
-  const qty = parseInt(quantity, 10);
-  const wouldGoNegative = selectedRow && !isNaN(qty) && qty > 0 && selectedRow.quantity - qty < 0;
-  const wouldGoLow = selectedRow && !isNaN(qty) && qty > 0 && !wouldGoNegative && (selectedRow.quantity - qty) <= selectedRow.reorderPoint;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedRow) { setError('Select a book and location first'); return; }
-    if (isNaN(qty) || qty <= 0) { setError('Enter a positive quantity'); return; }
-    setError(''); setSaving(true); setSuccess('');
-    try {
-      const result = await api.post<InventoryRow>('/inventory/stock-out', {
-        bookId: selectedRow.bookId,
-        locationId: selectedRow.locationId,
-        quantity: qty,
-        version: selectedRow.version,
-        referenceType: referenceType || undefined,
-        referenceId: referenceId ? parseInt(referenceId, 10) : undefined,
-        notes: notes || undefined,
-      });
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-      qc.invalidateQueries({ queryKey: ['inventory-low-stock'] });
-      setSuccess(`Stock out recorded. New quantity: ${result.quantity}`);
-      setSelectedRow({ ...selectedRow, quantity: result.quantity, version: result.version });
-      setQuantity(''); setReferenceId(''); setNotes('');
-    } catch (err: unknown) {
-      const e = err as { message?: string; code?: string };
-      if (e.code === 'VERSION_CONFLICT') {
-        setError('Inventory was updated by someone else. Refreshing…');
-        qc.invalidateQueries({ queryKey: ['inventory'] });
-      } else if (e.code === 'INSUFFICIENT_STOCK') {
-        setError(e.message ?? 'Insufficient stock');
-      } else {
-        setError(e.message ?? 'Unknown error');
-      }
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <div className="flex h-full">
-      {/* Left: book selector */}
-      <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Select Book + Location</p>
-          <input value={bookSearch} onChange={e => setBookSearch(e.target.value)} placeholder="Search books…"
-            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {stockData?.items.map(row => (
-            <button key={`${row.bookId}-${row.locationId}`}
-              onClick={() => { setSelectedRow(row); setError(''); setSuccess(''); }}
-              className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${selectedRow?.bookId === row.bookId && selectedRow?.locationId === row.locationId ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}>
-              <div className="text-sm font-medium text-gray-900 dark:text-white line-clamp-1">{row.bookTitle}</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {row.locationName} · Qty: <span className={row.isLowStock ? 'text-amber-600 font-semibold' : 'font-semibold'}>{row.quantity}</span>
-                {row.isLowStock && <span className="ml-1 text-amber-500">⚠</span>}
-              </div>
-            </button>
-          ))}
-          {bookSearch.length <= 1 && <p className="px-4 py-3 text-xs text-gray-400 italic">Type to search books…</p>}
-        </div>
-      </div>
-
-      {/* Right: form */}
-      <div className="flex-1 overflow-auto flex items-start justify-center p-8">
-        <div className="w-full max-w-md pb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-blue-500 text-xl">⬆️</span>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Stock Out</h2>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">Record outgoing inventory — sales, order fulfillment, or manual removals.</p>
-
-          {selectedRow ? (
-            <div className="mb-5 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
-              <div className="font-medium text-blue-900 dark:text-blue-200">{selectedRow.bookTitle}</div>
-              <div className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">{selectedRow.locationName} · Available: <strong>{selectedRow.quantity}</strong></div>
-            </div>
-          ) : (
-            <div className="mb-5 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-500 dark:text-gray-400">
-              ← Select a book and location from the left panel
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">{error}</div>}
-            {success && <div className="p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm text-emerald-700 dark:text-emerald-300">{success}</div>}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity *</label>
-              <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" placeholder="Units to remove"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-              {selectedRow && !isNaN(qty) && qty > 0 && (
-                <p className={`text-xs mt-1 ${wouldGoNegative ? 'text-red-500' : wouldGoLow ? 'text-amber-500' : 'text-gray-400'}`}>
-                  {wouldGoNegative
-                    ? `⚠ Exceeds available stock (${selectedRow.quantity})`
-                    : wouldGoLow
-                    ? `⚠ Will trigger low-stock alert (${selectedRow.quantity - qty} remaining)`
-                    : `New quantity: ${selectedRow.quantity - qty}`}
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference Type</label>
-                <select value={referenceType} onChange={e => setReferenceType(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
-                  <option value="">— None —</option>
-                  <option value="sale">Sale</option>
-                  <option value="order">Order</option>
-                  <option value="damage">Damage Write-off</option>
-                  <option value="manual">Manual Removal</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reference ID</label>
-                <input type="number" value={referenceId} onChange={e => setReferenceId(e.target.value)} placeholder="e.g. Order #99"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (optional)</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional context…"
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-            </div>
-
-            <button type="submit" disabled={saving || !selectedRow || !!wouldGoNegative}
-              className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
-              {saving ? 'Recording…' : '⬆️ Record Stock Out'}
-            </button>
-          </form>
-        </div>
       </div>
     </div>
   );

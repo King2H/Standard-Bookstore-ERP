@@ -137,6 +137,20 @@ describe('Stock movements', () => {
     expect((await level()).average_cost).toBe('12.5000');
   });
 
+  it('records a stock-in by hand with the reason its reference names (was: always "return")', async () => {
+    const reasons: Record<string, string> = {};
+    for (const referenceType of [undefined, 'manual', 'return', 'initial_stock'] as const) {
+      await setStock(0);
+      const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId, quantity: 1, version: 0, referenceType });
+      expect(res.status).toBe(200);
+      reasons[referenceType ?? 'none'] = (await db.query(
+        `SELECT reason_code FROM inventory_history WHERE book_id = $1 AND location_id = $2 ORDER BY id DESC LIMIT 1`,
+        [bookId, locationId],
+      )).rows[0].reason_code;
+    }
+    expect(reasons).toEqual({ none: 'stock_in', manual: 'stock_in', return: 'return', initial_stock: 'initial' });
+  });
+
   describe('stock alerts from sales', () => {
     const alerts = async (event: string) =>
       Number((await db.query(

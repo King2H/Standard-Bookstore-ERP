@@ -1,4 +1,4 @@
-import { Money, type AdjustmentReason, type LifecycleStatus } from '@bms/shared';
+import { Money, type AdjustmentReason, type LifecycleStatus, type StockInRequest } from '@bms/shared';
 import { BusinessError, ConflictError, ValidationError } from '../../lib/errors.js';
 import type { StockAlert } from './inventory.types.js';
 
@@ -58,6 +58,16 @@ export function quantityAfterAdjustment(quantity: number, delta: number, allowNe
     throw new BusinessError('INSUFFICIENT_STOCK', `Cannot reduce stock below 0. Current: ${quantity}, Delta: ${delta}`);
   }
   return after;
+}
+
+/**
+ * The reason a stock-in by hand is recorded with: a customer return, opening
+ * stock, or plain stock in (owner decision 3a, #23). History filters on it.
+ */
+export function stockInReason(referenceType: StockInRequest['referenceType']): 'return' | 'initial' | 'stock_in' {
+  if (referenceType === 'return') return 'return';
+  if (referenceType === 'initial_stock') return 'initial';
+  return 'stock_in';
 }
 
 /** True when `quantity` units may leave a shelf that has `available`. */
