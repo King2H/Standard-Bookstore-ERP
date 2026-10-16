@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import CatalogPage from '../pages/CatalogPage.js';
+import CatalogPage from '../features/catalog/pages/CatalogPage.js';
 import SuppliersPage from '../features/suppliers/pages/SuppliersPage.js';
 
 const getMock = vi.fn();
@@ -50,6 +50,8 @@ beforeEach(() => {
 describe('CatalogPage — Books: Archive/Delete warn before firing', () => {
   beforeEach(() => {
     getMock.mockImplementation((path: string) => {
+      // The page reads the roles held from the signed-in account.
+      if (path === '/staff/me') return Promise.resolve({ currentRoles: ['Admin'] });
       if (path.startsWith('/books?')) return Promise.resolve({ items: [book], total: 1, page: 1, totalPages: 1 });
       if (path.startsWith('/config/system')) return Promise.resolve({ items: [{ key: 'base_currency', value: 'ETB' }] });
       return Promise.resolve({ items: [], total: 0 });
@@ -59,7 +61,7 @@ describe('CatalogPage — Books: Archive/Delete warn before firing', () => {
   it('cancelling the Archive confirm does not call the API', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const user = userEvent.setup();
-    renderWithClient(<CatalogPage userRole="Admin" userPermissions={[]} />);
+    renderWithClient(<CatalogPage />);
 
     await waitFor(() => expect(screen.getByText('Archive Me')).toBeInTheDocument());
     await user.click(screen.getByTitle('Actions'));
@@ -73,7 +75,7 @@ describe('CatalogPage — Books: Archive/Delete warn before firing', () => {
   it('accepting the Archive confirm calls the API', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup();
-    renderWithClient(<CatalogPage userRole="Admin" userPermissions={[]} />);
+    renderWithClient(<CatalogPage />);
 
     await waitFor(() => expect(screen.getByText('Archive Me')).toBeInTheDocument());
     await user.click(screen.getByTitle('Actions'));
@@ -87,7 +89,7 @@ describe('CatalogPage — Books: Archive/Delete warn before firing', () => {
   it('cancelling the Delete confirm does not call the API', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const user = userEvent.setup();
-    renderWithClient(<CatalogPage userRole="Admin" userPermissions={[]} />);
+    renderWithClient(<CatalogPage />);
 
     await waitFor(() => expect(screen.getByText('Archive Me')).toBeInTheDocument());
     await user.click(screen.getByTitle('Actions'));
@@ -117,7 +119,7 @@ describe('CatalogPage — Authors: Archive warns before firing', () => {
   it('cancelling the Archive confirm does not call the API', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const user = userEvent.setup();
-    renderWithClient(<CatalogPage userRole="Admin" userPermissions={[]} />);
+    renderWithClient(<CatalogPage />);
 
     await user.click(screen.getByRole('button', { name: /Authors/i }));
     await waitFor(() => expect(screen.getByText('Archive Author')).toBeInTheDocument());

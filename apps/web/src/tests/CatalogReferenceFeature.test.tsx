@@ -12,21 +12,12 @@ import {
   AuthorListResponseSchema, CategoryListResponseSchema, CreateCategoryRequestSchema, MessageResponseSchema, ProfileResponseSchema,
   PublisherListResponseSchema, type Author, type Category, type ProfileResponse,
 } from '@bms/shared';
-import CatalogPage from '../pages/CatalogPage.js';
+import CatalogPage from '../features/catalog/pages/CatalogPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken } from '../lib/api.js';
 import { contract } from './contract.js';
 
 const CREATED = '2026-10-01T00:00:00.000Z';
-
-/** The permissions the API gives each role (lib/permissions.ts), as far as these tests need them. */
-const PERMISSIONS: Record<string, string[]> = {
-  Admin: ['CREATE_SALE', 'MANAGE_INVENTORY', 'VIEW_REPORTS', 'MANAGE_STAFF', 'MANAGE_BRANCH'],
-  Manager: ['CREATE_SALE', 'MANAGE_INVENTORY', 'VIEW_REPORTS', 'MANAGE_STAFF'],
-  Stock_Clerk: ['MANAGE_INVENTORY'],
-  Sales: ['CREATE_SALE', 'PROCESS_PAYMENT'],
-  Purchasor: ['MANAGE_INVENTORY', 'VIEW_REPORTS'],
-};
 
 function profile(roles: string[]): ProfileResponse {
   return contract(ProfileResponseSchema, {
@@ -84,11 +75,9 @@ function stubApi() {
 /** Lets every answer the page asked for arrive, so a missing button is really missing. */
 const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
-/** The page as the app shows it: the first role held, and the permissions of every role held. */
 function renderTab(tab: 'Authors' | 'Categories') {
-  const perms = [...new Set(me.currentRoles.flatMap((r) => PERMISSIONS[r] ?? []))];
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={qc}><ToastProvider><CatalogPage userRole={me.currentRole} userPermissions={perms} /></ToastProvider></QueryClientProvider>);
+  render(<QueryClientProvider client={qc}><ToastProvider><CatalogPage /></ToastProvider></QueryClientProvider>);
   return userEvent.setup().click(screen.getByRole('button', { name: new RegExp(tab) }));
 }
 
