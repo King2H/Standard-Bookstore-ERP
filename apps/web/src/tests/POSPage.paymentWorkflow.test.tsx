@@ -8,12 +8,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import POSPage from '../pages/POSPage.js';
+import POSPage from '../features/pos/pages/PosPage.js';
 
 const getMock = vi.fn();
 const postMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: { get: (...args: unknown[]) => getMock(...args), post: (...args: unknown[]) => postMock(...args) },
   getCurrentBranchId: () => 1,
 }));

@@ -7,13 +7,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '../components/Toast.js';
-import POSPage from '../pages/POSPage.js';
+import POSPage from '../features/pos/pages/PosPage.js';
 import PaymentsPage from '../pages/PaymentsPage.js';
 
 const getMock = vi.fn();
 const postMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: { get: (...args: unknown[]) => getMock(...args), post: (...args: unknown[]) => postMock(...args), patch: vi.fn() },
   getCurrentBranchId: () => 1,
 }));

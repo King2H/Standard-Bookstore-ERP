@@ -4,7 +4,7 @@ import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
 import { usePurchaseOrder, usePurchaseOrderStep } from '../queries.js';
 import { canReadLedger, stepsFor } from '../rules.js';
-import { ActionDialog } from './ActionDialog.js';
+import { ActionDialog } from '../../../components/ActionDialog.js';
 import { PaymentForms } from './PaymentForms.js';
 import { PaymentLists } from './PaymentLists.js';
 import { ProgressBar, StatusBadge, amount, safePct } from './shared.js';
