@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import InventoryPage from '../pages/InventoryPage.js';
+import InventoryPage from '../features/inventory/pages/InventoryPage.js';
 
 const getMock = vi.fn();
 
@@ -32,7 +32,7 @@ describe('Stock history reasons', () => {
   it('shows a sale as "Sale" and filters by it (was: no such reason)', async () => {
     const user = userEvent.setup();
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><InventoryPage userRole="Stock_Clerk" /></QueryClientProvider>);
+    render(<QueryClientProvider client={qc}><InventoryPage /></QueryClientProvider>);
     await user.click(screen.getByRole('button', { name: /History/ }));
 
     const row = (await screen.findByText('Sold Book')).closest('tr')!;

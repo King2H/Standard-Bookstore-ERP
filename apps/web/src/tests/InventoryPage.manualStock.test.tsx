@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import InventoryPage from '../pages/InventoryPage.js';
+import InventoryPage from '../features/inventory/pages/InventoryPage.js';
 import type { Role } from '@bms/shared';
 
 let heldRoles: string[] = [];
@@ -27,7 +27,7 @@ function renderPage(userRole: Role) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <InventoryPage userRole={userRole} />
+      <InventoryPage />
     </QueryClientProvider>,
   );
 }

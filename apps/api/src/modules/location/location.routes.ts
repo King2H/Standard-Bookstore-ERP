@@ -15,7 +15,7 @@ const { schemas } = location;
 
 // Any signed-in staff member may list any branch's locations (transfers,
 // purchase-order receiving); changes need the branch in scope.
-router.get('/branches/:branchId/locations', authenticate, validate(schemas.branch), location.list);
+router.get('/branches/:branchId/locations', authenticate, validate(schemas.list), location.list);
 router.post(
   '/branches/:branchId/locations',
   authenticate,

@@ -7,7 +7,7 @@ import SettingsPage from '../features/settings/pages/SettingsPage.js';
 import BankAccountsPage from '../pages/BankAccountsPage.js';
 import LocationsPage from '../features/locations/pages/LocationsPage.js';
 import CatalogPage from '../features/catalog/pages/CatalogPage.js';
-import InventoryPage from '../pages/InventoryPage.js';
+import InventoryPage from '../features/inventory/pages/InventoryPage.js';
 import SuppliersPage from '../features/suppliers/pages/SuppliersPage.js';
 import ProcurementPage from '../pages/ProcurementPage.js';
 import CustomersPage from '../features/customers/pages/CustomersPage.js';
@@ -42,7 +42,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'bank-accounts'&& <BankAccountsPage userRole={role} />}
         {page === 'locations'    && <LocationsPage />}
         {page === 'catalog'      && <CatalogPage />}
-        {page === 'inventory'    && <InventoryPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
+        {page === 'inventory'    && <InventoryPage initialContext={initialContext} />}
         {page === 'suppliers'    && <SuppliersPage userRole={role} userPermissions={userPermissions} />}
         {page === 'procurement'  && <ProcurementPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
         {page === 'customers'    && <CustomersPage />}
