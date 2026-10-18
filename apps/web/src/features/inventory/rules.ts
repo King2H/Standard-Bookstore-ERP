@@ -1,4 +1,4 @@
-import type { ProfileResponse, StockInRequest, StockOutRequest } from '@bms/shared';
+import type { AdjustmentReason, ProfileResponse, StockInRequest, StockOutRequest } from '@bms/shared';
 
 /**
  * Who may change stock: the API's rules (inventory.routes.ts), so the page
@@ -38,6 +38,14 @@ export const STOCK_IN_REFERENCES: { value: NonNullable<StockInRequest['reference
 export const STOCK_OUT_REFERENCES: { value: NonNullable<StockOutRequest['referenceType']>; label: string }[] = [
   { value: 'manual', label: 'Manual Removal' },
 ];
+
+/**
+ * The way each adjustment reason moves stock, as the API checks it: damage and
+ * loss remove, a return adds, a correction goes either way (#21).
+ */
+export const ADJUSTMENT_DIRECTION: Record<AdjustmentReason, 'add' | 'remove' | null> = {
+  correction: null, damage: 'remove', loss: 'remove', return: 'add',
+};
 
 /** The reason codes stock movements are recorded with, as History shows and filters them. */
 export const REASON_LABELS: Record<string, string> = {

@@ -1,5 +1,6 @@
 import type {
-  ReorderPointRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse, StockOutRequest,
+  AdjustStockRequest, ReorderPointRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse,
+  StockOutRequest, TransferStockRequest, TransferStockResponse,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
@@ -48,3 +49,9 @@ export const stockOut = (body: StockOutRequest) => api.post<StockLevel>('/invent
 /** One book's stock at one location, as it is now; null when it has none. */
 export const findStockLevel = async (bookId: number, locationId: number) =>
   (await listStockLevels({ bookId, locationId, is_active: 'all', pageSize: 1 })).items[0] ?? null;
+
+/** A correction by hand, with its reason: damage and loss remove stock, a return adds it, a correction goes either way. */
+export const adjustStock = (body: AdjustStockRequest) => api.post<StockLevel>('/inventory/adjust', body);
+
+/** Stock moved between two locations of the session's branch. */
+export const transferStock = (body: TransferStockRequest) => api.post<TransferStockResponse>('/inventory/transfer', body);

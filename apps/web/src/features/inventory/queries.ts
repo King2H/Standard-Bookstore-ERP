@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ReorderPointRequest, StockInRequest, StockOutRequest } from '@bms/shared';
+import type { AdjustStockRequest, ReorderPointRequest, StockInRequest, StockOutRequest, TransferStockRequest } from '@bms/shared';
 import {
-  listLowStock, listStockLevels, listStockMovements, setReorderPoint, stockIn, stockOut,
+  adjustStock, listLowStock, listStockLevels, listStockMovements, setReorderPoint, stockIn, stockOut, transferStock,
   type StockLevelParams, type StockMovementParams,
 } from './api.js';
 
@@ -67,6 +67,22 @@ export function useStockOut() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: StockOutRequest) => stockOut(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
+  });
+}
+
+export function useAdjustStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AdjustStockRequest) => adjustStock(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
+  });
+}
+
+export function useTransferStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TransferStockRequest) => transferStock(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
   });
 }

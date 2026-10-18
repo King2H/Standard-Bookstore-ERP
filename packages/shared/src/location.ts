@@ -25,6 +25,15 @@ export const LocationListResponseSchema = z.object({
 export type LocationListResponse = z.infer<typeof LocationListResponseSchema>;
 
 export const BranchLocationsParamsSchema = z.object({ branchId: IdSchema });
+
+export const LocationListQuerySchema = z.object({
+  /**
+   * Every location of the branch, also for staff limited to some: a transfer
+   * may send stock to any of them (#72; owner decision 1a, #23).
+   */
+  all: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+});
+export type LocationListQuery = z.infer<typeof LocationListQuerySchema>;
 export const BranchLocationParamsSchema = z.object({ branchId: IdSchema, id: IdSchema });
 
 export const LocationNameRequestSchema = z.object({ name: z.string().min(1).max(100) });

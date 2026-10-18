@@ -13,19 +13,12 @@ import {
   ProfileResponseSchema, StockLevelListResponseSchema, StockLevelSchema, StockMovementListResponseSchema,
   type ProfileResponse, type StockLevel,
 } from '@bms/shared';
-import InventoryPage from '../pages/InventoryPage.js';
+import InventoryPage from '../features/inventory/pages/InventoryPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken } from '../lib/api.js';
 import { contract } from './contract.js';
 
 const CREATED = '2026-10-01T00:00:00.000Z';
-
-/** The permissions the API gives each role (lib/permissions.ts), as far as these tests need them. */
-const PERMISSIONS: Record<string, string[]> = {
-  Admin: ['CREATE_SALE', 'MANAGE_INVENTORY', 'VIEW_REPORTS', 'MANAGE_STAFF', 'MANAGE_BRANCH'],
-  Stock_Clerk: ['MANAGE_INVENTORY'],
-  Purchasor: ['MANAGE_INVENTORY', 'VIEW_REPORTS'],
-};
 
 function profile(roles: string[]): ProfileResponse {
   return contract(ProfileResponseSchema, {
@@ -66,11 +59,10 @@ function stubApi() {
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
-/** The page as the app shows it: the first role held, and the permissions of every role held. */
+/** The page as the app shows it; who may do what comes from the signed-in account. */
 async function renderPage() {
-  const perms = [...new Set(me.currentRoles.flatMap((r) => PERMISSIONS[r] ?? []))];
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage userRole={me.currentRole} userPermissions={perms} /></ToastProvider></QueryClientProvider>);
+  render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage /></ToastProvider></QueryClientProvider>);
   await screen.findByText('Animal Farm');
   await settle();
 }

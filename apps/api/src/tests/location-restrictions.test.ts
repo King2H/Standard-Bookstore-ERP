@@ -102,6 +102,15 @@ describe('Location restrictions on sales and stock', () => {
     expect(res.status).toBeLessThan(300);
   });
 
+  it('lists every location of the branch with ?all=true, for transfer destinations (was: only the assigned ones)', async () => {
+    const res = await as(api().get(`/api/v1/branches/${branchId}/locations?all=true`), clerk);
+    expect(res.status).toBe(200);
+    expect({ accessMode: res.body.accessMode, ids: res.body.items.map((l: { id: number }) => l.id).sort() })
+      .toEqual({ accessMode: 'restricted', ids: [locA, locB].sort() });
+    const own = await as(api().get(`/api/v1/branches/${branchId}/locations`), clerk);
+    expect(own.body.items.map((l: { id: number }) => l.id)).toEqual([locA]);
+  });
+
   it('limits a transfer by its source: from an assigned location to any, not the other way', async () => {
     expectRefused(await as(api().post('/api/v1/inventory/transfer'), clerk).send({
       bookId, fromLocationId: locB, toLocationId: locA, quantity: 1, fromVersion: await version(locB),

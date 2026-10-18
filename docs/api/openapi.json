@@ -8306,7 +8306,7 @@
     "/branches/{branchId}/locations": {
       "get": {
         "operationId": "listLocations",
-        "summary": "List a branch's locations, default first (staff with location restrictions get only theirs)",
+        "summary": "List a branch's locations, default first (staff with location restrictions get only theirs, unless ?all=true)",
         "tags": [
           "Locations"
         ],
@@ -8319,6 +8319,18 @@
               "type": "integer",
               "exclusiveMinimum": 0,
               "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "all",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
             }
           }
         ],

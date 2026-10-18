@@ -41,10 +41,14 @@ function duplicateName(err: unknown, name: string): never {
 export async function listLocations(
   actor: Staff,
   branchId: number,
+  opts: { all: boolean } = { all: false },
 ): Promise<{ items: LocationRecord[]; accessMode: LocationAccessMode }> {
   if (!policy.hasFullLocationAccess(rolesHeld(actor))) {
     const assigned = await locations.listAssignedInBranch(kysely, actor.staffId, branchId);
-    if (assigned.length > 0) return { items: assigned, accessMode: 'restricted' };
+    if (assigned.length > 0) {
+      // The access mode stays the caller's: `all` widens the list, not what they may use.
+      return { items: opts.all ? await locations.listByBranch(kysely, branchId) : assigned, accessMode: 'restricted' };
+    }
   }
   return { items: await locations.listByBranch(kysely, branchId), accessMode: 'full' };
 }

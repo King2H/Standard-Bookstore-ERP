@@ -13,7 +13,7 @@ import {
   EffectiveConfigResponseSchema, ProfileResponseSchema, StockLevelListResponseSchema, StockLevelSchema,
   StockMovementListResponseSchema, type ProfileResponse, type StockLevel,
 } from '@bms/shared';
-import InventoryPage from '../pages/InventoryPage.js';
+import InventoryPage from '../features/inventory/pages/InventoryPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken } from '../lib/api.js';
 import { contract } from './contract.js';
@@ -82,7 +82,7 @@ const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
 async function openTab(name: 'Stock In' | 'Stock Out') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage userRole={me.currentRole} /></ToastProvider></QueryClientProvider>);
+  render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage /></ToastProvider></QueryClientProvider>);
   await screen.findByText('Animal Farm');
   await settle();
   const user = userEvent.setup();
@@ -199,7 +199,7 @@ describe('Inventory: location limits', () => {
   it('does not choose a row at another location from its quick "+ In" (was: chosen, then refused)', async () => {
     me = profile(['Stock_Clerk'], [SHOP]);
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage userRole={me.currentRole} /></ToastProvider></QueryClientProvider>);
+    render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage /></ToastProvider></QueryClientProvider>);
     const row = (await screen.findByText('Burmese Days')).closest('tr')!;
     await settle();
     await userEvent.setup().click(within(row).getByTitle('Stock In'));

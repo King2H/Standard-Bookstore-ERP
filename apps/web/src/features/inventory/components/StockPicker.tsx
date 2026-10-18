@@ -12,12 +12,13 @@ const CHOSEN = { emerald: 'bg-emerald-50 dark:bg-emerald-950/30', blue: 'bg-blue
  * and choose a book at one location. Only the locations the staff member may
  * use are listed (was: every location, which the API then refused).
  */
-export function StockPicker({ chosen, onChoose, accent = 'blue', markLow = false }: {
+export function StockPicker({ chosen, onChoose, accent = 'blue', markLow = false, title = 'Select Book + Location' }: {
   chosen: StockLevel | null;
   onChoose: (row: StockLevel) => void;
   accent?: keyof typeof CHOSEN;
   /** Marks rows at or below their reorder point. */
   markLow?: boolean;
+  title?: string;
 }) {
   const { data: me } = useMyProfile();
   const [qRaw, setQRaw] = useState('');
@@ -29,7 +30,7 @@ export function StockPicker({ chosen, onChoose, accent = 'blue', markLow = false
   return (
     <div className="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
       <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Select Book + Location</p>
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{title}</p>
         <input value={qRaw} onChange={e => setQRaw(e.target.value)} placeholder="Search books…" aria-label="Search books"
           className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
       </div>
