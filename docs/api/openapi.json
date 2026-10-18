@@ -14783,6 +14783,10 @@
                           "type": "string",
                           "maxLength": 200
                         },
+                        "payerBank": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
                         "bankAccountId": {
                           "type": "integer",
                           "exclusiveMinimum": 0,
@@ -15088,6 +15092,18 @@
                               "null"
                             ]
                           },
+                          "reference": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -15097,6 +15113,8 @@
                           "entryType",
                           "amount",
                           "method",
+                          "reference",
+                          "payerBank",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -15545,6 +15563,18 @@
                                     "null"
                                   ]
                                 },
+                                "reference": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "payerBank": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
                                 "createdAt": {
                                   "type": "string"
                                 }
@@ -15554,6 +15584,8 @@
                                 "entryType",
                                 "amount",
                                 "method",
+                                "reference",
+                                "payerBank",
                                 "createdAt"
                               ],
                               "additionalProperties": false
@@ -15940,6 +15972,18 @@
                               "null"
                             ]
                           },
+                          "reference": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -15949,6 +15993,8 @@
                           "entryType",
                           "amount",
                           "method",
+                          "reference",
+                          "payerBank",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -16468,6 +16514,18 @@
                               "null"
                             ]
                           },
+                          "reference": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -16477,6 +16535,8 @@
                           "entryType",
                           "amount",
                           "method",
+                          "reference",
+                          "payerBank",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -21632,6 +21692,26 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "transactionReference": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "payerBank": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "bankAccountId": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }
@@ -22428,6 +22508,12 @@
                               "null"
                             ]
                           },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "notes": {
                             "type": [
                               "string",
@@ -22540,6 +22626,7 @@
                           "paymentMethod",
                           "status",
                           "transactionReference",
+                          "payerBank",
                           "notes",
                           "processedAt",
                           "createdAt",
@@ -22721,6 +22808,10 @@
                     "type": "string",
                     "maxLength": 200
                   },
+                  "payerBank": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
                   "notes": {
                     "type": "string",
                     "maxLength": 1000
@@ -22789,6 +22880,12 @@
                         "null"
                       ]
                     },
+                    "payerBank": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "notes": {
                       "type": [
                         "string",
@@ -22901,6 +22998,7 @@
                     "paymentMethod",
                     "status",
                     "transactionReference",
+                    "payerBank",
                     "notes",
                     "processedAt",
                     "createdAt",
@@ -22953,6 +23051,12 @@
                         "null"
                       ]
                     },
+                    "payerBank": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "notes": {
                       "type": [
                         "string",
@@ -23065,6 +23169,7 @@
                     "paymentMethod",
                     "status",
                     "transactionReference",
+                    "payerBank",
                     "notes",
                     "processedAt",
                     "createdAt",
@@ -23276,6 +23381,12 @@
                               "null"
                             ]
                           },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "notes": {
                             "type": [
                               "string",
@@ -23388,6 +23499,7 @@
                           "paymentMethod",
                           "status",
                           "transactionReference",
+                          "payerBank",
                           "notes",
                           "processedAt",
                           "createdAt",
@@ -23528,6 +23640,12 @@
                         "null"
                       ]
                     },
+                    "payerBank": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "notes": {
                       "type": [
                         "string",
@@ -23640,6 +23758,7 @@
                     "paymentMethod",
                     "status",
                     "transactionReference",
+                    "payerBank",
                     "notes",
                     "processedAt",
                     "createdAt",
@@ -24368,6 +24487,10 @@
                           "type": "string",
                           "maxLength": 200
                         },
+                        "payerBank": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
                         "bankAccountId": {
                           "type": "integer",
                           "exclusiveMinimum": 0,
@@ -24578,6 +24701,12 @@
                               "null"
                             ]
                           },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "bankAccountId": {
                             "anyOf": [
                               {
@@ -24600,6 +24729,7 @@
                           "method",
                           "amount",
                           "reference",
+                          "payerBank",
                           "bankAccountId",
                           "createdAt"
                         ],
@@ -24984,6 +25114,12 @@
                                     "null"
                                   ]
                                 },
+                                "payerBank": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
                                 "bankAccountId": {
                                   "anyOf": [
                                     {
@@ -25006,6 +25142,7 @@
                                 "method",
                                 "amount",
                                 "reference",
+                                "payerBank",
                                 "bankAccountId",
                                 "createdAt"
                               ],
@@ -25299,6 +25436,12 @@
                               "null"
                             ]
                           },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "bankAccountId": {
                             "anyOf": [
                               {
@@ -25321,6 +25464,7 @@
                           "method",
                           "amount",
                           "reference",
+                          "payerBank",
                           "bankAccountId",
                           "createdAt"
                         ],
@@ -25462,6 +25606,10 @@
                         "reference": {
                           "type": "string",
                           "maxLength": 200
+                        },
+                        "payerBank": {
+                          "type": "string",
+                          "maxLength": 100
                         },
                         "bankAccountId": {
                           "type": "integer",
@@ -25657,6 +25805,12 @@
                               "null"
                             ]
                           },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "bankAccountId": {
                             "anyOf": [
                               {
@@ -25679,6 +25833,7 @@
                           "method",
                           "amount",
                           "reference",
+                          "payerBank",
                           "bankAccountId",
                           "createdAt"
                         ],
@@ -25977,6 +26132,12 @@
                               "null"
                             ]
                           },
+                          "payerBank": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "bankAccountId": {
                             "anyOf": [
                               {
@@ -25999,6 +26160,7 @@
                           "method",
                           "amount",
                           "reference",
+                          "payerBank",
                           "bankAccountId",
                           "createdAt"
                         ],
@@ -36122,6 +36284,14 @@
                       }
                     ]
                   },
+                  "transactionReference": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "payerBank": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
                   "notes": {
                     "type": "string",
                     "maxLength": 1000
@@ -38893,6 +39063,12 @@
                           "paymentMethod": {
                             "type": "string"
                           },
+                          "payerBank": {
+                            "type": "string"
+                          },
+                          "paymentReference": {
+                            "type": "string"
+                          },
                           "amount": {
                             "type": "number"
                           },
@@ -38916,6 +39092,8 @@
                           "referenceType",
                           "referenceNo",
                           "paymentMethod",
+                          "payerBank",
+                          "paymentReference",
                           "amount",
                           "direction",
                           "date",

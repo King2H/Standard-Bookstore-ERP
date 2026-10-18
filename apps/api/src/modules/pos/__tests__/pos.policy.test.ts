@@ -21,7 +21,7 @@ describe('priceLine and checkDiscounts', () => {
 
 describe('payments', () => {
   it('needs a customer for store credit and loyalty points', () => {
-    const credit = [{ method: 'store_credit' as const, amount: Money.of(1), reference: null }];
+    const credit = [{ method: 'store_credit' as const, amount: Money.of(1), reference: null, payerBank: null }];
     expect(() => checkTender(credit, null)).toThrow(expect.objectContaining({ code: 'STORE_CREDIT_REQUIRES_CUSTOMER' }));
     expect(() => checkTender(credit, 7)).not.toThrow();
   });

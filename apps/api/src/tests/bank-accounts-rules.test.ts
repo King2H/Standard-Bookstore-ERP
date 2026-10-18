@@ -114,12 +114,12 @@ describe('Bank accounts and reconciliation', () => {
 
   describe('bank payments (owner decision 2a)', () => {
     it('needs an account for a POS bank payment while the module is on', async () => {
-      const res = await sell([{ method: 'bank', amount: price }]);
+      const res = await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price }]);
       expect(res.status).toBe(400);
     });
 
     it("records a POS bank payment on the branch's account, and its void as money out (was: account id in the text reference)", async () => {
-      const sale = await sell([{ method: 'bank', amount: price, bankAccountId: accountA }]);
+      const sale = await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price, bankAccountId: accountA }]);
       expect(sale.status).toBe(201);
       expect(sale.body.payments[0].bankAccountId).toBe(accountA);
       expect(await entriesOf(accountA)).toEqual([{ source_type: 'pos_payment', direction: 'in', amount: price, status: 'uncleared' }]);
@@ -134,10 +134,10 @@ describe('Bank accounts and reconciliation', () => {
     });
 
     it("refuses another branch's or an inactive account", async () => {
-      expect((await sell([{ method: 'bank', amount: price, bankAccountId: accountB }])).body.error).toBe('INVALID_BANK_ACCOUNT');
+      expect((await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price, bankAccountId: accountB }])).body.error).toBe('INVALID_BANK_ACCOUNT');
       const inactive = (await newAccount(managerA, branchA)).body.id;
       await as(managerA).post(accounts(branchA, `/${inactive}/deactivate`));
-      expect((await sell([{ method: 'bank', amount: price, bankAccountId: inactive }])).body.error).toBe('INVALID_BANK_ACCOUNT');
+      expect((await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price, bankAccountId: inactive }])).body.error).toBe('INVALID_BANK_ACCOUNT');
     });
   });
 
@@ -150,7 +150,7 @@ describe('Bank accounts and reconciliation', () => {
     });
 
     it('matches a statement line to the payment it stands for, clearing both (was: every line unmatched, the payment never cleared)', async () => {
-      const sale = await sell([{ method: 'bank', amount: price, bankAccountId: account }]);
+      const sale = await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price, bankAccountId: account }]);
       expect(sale.status).toBe(201);
 
       const res = await as(financeA).post(linesUrl(), { lines: [{ statementDate: today, amount: price, direction: 'in', reference: 'STMT-1' }] });
@@ -185,7 +185,7 @@ describe('Bank accounts and reconciliation', () => {
 
       expect((await as(financeA).post(linesUrl(`/${line.id}/match`), { entryId: '99999999' })).status).toBe(404);
 
-      await sell([{ method: 'bank', amount: price, bankAccountId: account }]);
+      await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price, bankAccountId: account }]);
       const open = (await as(financeA).get(accounts(branchA, `/${account}/entries?status=uncleared`))).body.items[0];
       const mismatch = await as(financeA).post(linesUrl(`/${line.id}/match`), { entryId: open.id });
       expect(mismatch.status).toBe(422);
@@ -193,7 +193,7 @@ describe('Bank accounts and reconciliation', () => {
     });
 
     it('leaves a line open when more than one payment fits', async () => {
-      await sell([{ method: 'bank', amount: price, bankAccountId: account }]);
+      await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price, bankAccountId: account }]);
       const res = await as(financeA).post(linesUrl(), { lines: [{ statementDate: today, amount: price, direction: 'in', reference: 'STMT-TWO' }] });
       expect(res.body.matched).toBe(0);
     });
@@ -214,7 +214,7 @@ describe('Bank accounts and reconciliation', () => {
     it('keeps the number once money has moved, while the name can change', async () => {
       const id = (await newAccount(managerA, branchA)).body.id;
       expect((await as(managerA).put(accounts(branchA, `/${id}`), { accountNumber: '414141' })).status).toBe(200);
-      expect((await sell([{ method: 'bank', amount: price, bankAccountId: id }])).status).toBe(201);
+      expect((await sell([{ method: 'bank', payerBank: 'CBE', reference: 'FT-TEST', amount: price, bankAccountId: id }])).status).toBe(201);
 
       const res = await as(managerA).put(accounts(branchA, `/${id}`), { accountNumber: '424242' });
       expect(res.status).toBe(422);

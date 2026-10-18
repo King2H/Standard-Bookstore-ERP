@@ -96,6 +96,8 @@ export const PAYMENTS_LEDGER_COLUMNS: CsvColumnDef[] = [
   { key: 'reference_type',   header: 'Reference Type',   type: 'string' },
   { key: 'reference_no',     header: 'Reference No',     type: 'string' },
   { key: 'payment_method',   header: 'Payment Method',   type: 'string' },
+  { key: 'payer_bank',       header: 'Customer Bank',    type: 'string' },
+  { key: 'payment_reference', header: 'Payment Reference', type: 'string' },
   { key: 'amount',           header: 'Amount',           type: 'number' },
   { key: 'direction',        header: 'Direction',        type: 'string' },
   { key: 'date',             header: 'Date',             type: 'string' },

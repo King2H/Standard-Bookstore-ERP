@@ -343,7 +343,7 @@ describe('Orders — Lifecycle', () => {
       .post(`/api/v1/orders/${orderId}/confirm`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ paymentMethod: 'bank' });
+      .send({ paymentMethod: 'bank', payerBank: 'CBE', transactionReference: 'FT-TEST' });
 
     expect(confirmRes.status).toBe(200);
     expect(confirmRes.body.paymentMethod).toBe('bank');

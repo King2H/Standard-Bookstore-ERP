@@ -5,7 +5,7 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
-import { accountForPayment, recordMovement } from '../bankAccount/bankAccount.service.js';
+import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxLineDiscountPct } from '../config/config.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -51,7 +51,8 @@ async function insertPayments(tx: Queryable, t: { id: string; number: string; br
     const bankAccountId = p.method === 'bank' ? await accountForPayment(tx, p.bankAccountId ?? null, t.branchId) : null;
     const id = await pos.insertPayment(tx, t.id, { ...p, bankAccountId });
     if (bankAccountId !== null) {
-      await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'pos_payment', sourceId: id, notes: `Sale ${t.number}` });
+      await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'pos_payment', sourceId: id,
+        notes: movementNote(`Sale ${t.number}`, { payerBank: p.payerBank, reference: p.reference }) });
     }
   }
 }

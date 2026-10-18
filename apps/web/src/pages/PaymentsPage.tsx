@@ -7,6 +7,8 @@ import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
 import BankAccountSelect from '../components/BankAccountSelect.js';
+import PaymentProofFields from '../components/PaymentProofFields.js';
+import { needsProof, proofError, proofFields } from '../lib/paymentProof.js';
 import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
 import { paymentMethodLabel, type PaymentMethodCode } from '../lib/paymentMethods.js';
 
@@ -27,7 +29,7 @@ interface PaymentsPageProps {
 interface Payment {
   id: string; paymentReference: string; orderId: string; amount: number;
   currency: string; paymentMethod: string; status: string;
-  transactionReference: string | null; processedAt: string; createdAt: string;
+  transactionReference: string | null; payerBank?: string | null; processedAt: string; createdAt: string;
   sourceType?: string; entityNumber?: string;
   /** Order status — used to hide Refund button for FULFILLED orders (req 4.3) */
   orderStatus?: string;
@@ -91,6 +93,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<number | null>(null);
   const [txRef, setTxRef] = useState('');
+  const [payerBank, setPayerBank] = useState('');
   const [orderBalance, setOrderBalance] = useState<OrderBalance | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
@@ -174,7 +177,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
     mutationFn: (body: unknown) => api.post<Payment>('/payments', body),
     onSuccess: (p) => {
       showToast(`Payment ${p.paymentReference} recorded`, 'success');
-      setAmount(''); setTxRef(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
+      setAmount(''); setTxRef(''); setPayerBank(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
       qc.invalidateQueries({ queryKey: ['unpaid-orders'] });
       qc.invalidateQueries({ queryKey: ['payments-list'] });
       qc.invalidateQueries({ queryKey: ['orders-list'] });
@@ -191,11 +194,11 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
 
   // POS credit-sale payment collection (routes to /api/v1/pos/transactions/:id/payment)
   const posPayMut = useMutation({
-    mutationFn: ({ txId, payments }: { txId: string; payments: { method: string; amount: number; reference?: string; bankAccountId?: number }[] }) =>
+    mutationFn: ({ txId, payments }: { txId: string; payments: { method: string; amount: number; reference?: string; payerBank?: string; bankAccountId?: number }[] }) =>
       api.post<unknown>(`/pos/transactions/${txId}/payment`, { payments }),
     onSuccess: () => {
       showToast('POS Credit Sale payment collected', 'success');
-      setAmount(''); setTxRef(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
+      setAmount(''); setTxRef(''); setPayerBank(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
       qc.invalidateQueries({ queryKey: ['unpaid-orders'] });
       qc.invalidateQueries({ queryKey: ['payments-list'] });
       qc.invalidateQueries({ queryKey: ['customers'] });
@@ -220,7 +223,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
     mutationFn: ({ id, body }: { id: string; body: unknown }) => api.post(`/receivables/${id}/collect`, body),
     onSuccess: () => {
       showToast('Payment collected', 'success');
-      setAmount(''); setTxRef(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
+      setAmount(''); setTxRef(''); setPayerBank(''); setOrderBalance(null); setSelectedOrder(null); setSelectedBankAccountId(null);
       qc.invalidateQueries({ queryKey: ['unpaid-orders'] });
       qc.invalidateQueries({ queryKey: ['payments-list'] });
       qc.invalidateQueries({ queryKey: ['customers'] });
@@ -250,6 +253,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
     setPaymentMethod('cash');
     setSelectedBankAccountId(null);
     setTxRef('');
+    setPayerBank('');
 
     // POS credit sales and exchange-difference receivables don't have a
     // backoffice /orders/:id/balance endpoint (that endpoint is order-table-
@@ -300,6 +304,10 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
       showToast('Select a bank account for bank transfer payments', 'error');
       return;
     }
+    const proof = { payerBank, reference: txRef };
+    const missing = proofError(paymentMethod, proof);
+    if (missing) { showToast(missing, 'error'); return; }
+    const { payerBank: bank, reference } = proofFields(paymentMethod, proof);
 
     // POS Credit Sales are collected via the POS payment endpoint
     if (selectedOrder.sourceType === 'pos') {
@@ -308,7 +316,8 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
         payments: [{
           method: paymentMethod as 'cash' | 'bank' | 'mobile' | 'store_credit' | 'loyalty_points',
           amount: parseFloat(amount),
-          reference: txRef || undefined,
+          reference,
+          payerBank: bank,
           bankAccountId: paymentMethod === 'bank' ? selectedBankAccountId ?? undefined : undefined,
         }],
       });
@@ -324,7 +333,8 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
           amount: parseFloat(amount),
           paymentMethod,
           bankAccountId: paymentMethod === 'bank' ? selectedBankAccountId : undefined,
-          notes: txRef || undefined,
+          transactionReference: reference,
+          payerBank: bank,
         },
       });
       return;
@@ -334,7 +344,8 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
       orderId: parseInt(selectedOrder.id),
       amount: parseFloat(amount),
       paymentMethod,
-      transactionReference: txRef || undefined,
+      transactionReference: reference,
+      payerBank: bank,
       bankAccountId: paymentMethod === 'bank' ? selectedBankAccountId : undefined,
     });
   }
@@ -572,11 +583,25 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Transaction Reference (optional)</label>
-              <input value={txRef} onChange={e => setTxRef(e.target.value)} placeholder="Bank ref, mobile money code..."
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-            </div>
+            {needsProof(paymentMethod) ? (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {paymentMethod === 'bank' ? "Customer's Bank and Transfer Reference" : 'Telebirr Transaction Number'} <span className="text-red-500">*</span>
+                </label>
+                <PaymentProofFields
+                  method={paymentMethod}
+                  value={{ payerBank, reference: txRef }}
+                  onChange={(p) => { setPayerBank(p.payerBank); setTxRef(p.reference); }}
+                  inputClassName="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Transaction Reference (optional)</label>
+                <input value={txRef} onChange={e => setTxRef(e.target.value)} placeholder="Receipt or card slip number..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
+              </div>
+            )}
 
             <button onClick={submitPayment} disabled={
               (createMut.isPending || posPayMut.isPending || receivableCollectMut.isPending) ||
@@ -672,6 +697,7 @@ export default function PaymentsPage({ userRole, userPermissions, initialContext
                       {expandedId === pay.id && (
                         <tr key={`${pay.id}-detail`}>
                           <td colSpan={7} className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400">
+                            {pay.payerBank && <p>Customer's bank: {pay.payerBank}</p>}
                             {pay.transactionReference && <p>Tx Ref: {pay.transactionReference}</p>}
                             <p>Processed: {new Date(pay.processedAt).toLocaleString()}</p>
                           </td>

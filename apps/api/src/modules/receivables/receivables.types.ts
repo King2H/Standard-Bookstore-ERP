@@ -76,6 +76,8 @@ export interface PaymentCollection {
   amount: Money;
   paymentMethod: 'cash' | 'bank' | 'mobile' | 'store_credit';
   bankAccountId: number | null;
+  transactionReference: string | null;
+  payerBank: string | null;
   notes: string | null;
 }
 

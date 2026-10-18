@@ -86,24 +86,31 @@ export async function collect(req: Request, res: Response): Promise<void> {
   const id = String(params.id);
   const amount = Money.of(body.amount);
   const receivable = await service.getById(id);
+  const transactionReference = body.transactionReference || null;
+  const payerBank = body.payerBank || null;
+  const bankAccountId = body.bankAccountId ?? null;
   if (receivable.sourceType === 'order_credit_sale') {
     await paymentsService.createPayment(actor(req), {
       orderId: receivable.sourceEntityId,
       amount,
       paymentMethod: body.paymentMethod,
-      transactionReference: null,
+      transactionReference,
+      payerBank,
       notes: body.notes ?? null,
-      bankAccountId: body.bankAccountId ?? null,
+      bankAccountId,
     });
   } else if (receivable.sourceType === 'pos_credit_sale') {
+    // A POS payment has no notes: its reference is the bank's or Telebirr's.
     await posService.recordPayment(actor(req), receivable.sourceEntityId, [
-      { method: body.paymentMethod, amount, reference: body.notes ?? null },
+      { method: body.paymentMethod, amount, reference: transactionReference, payerBank, bankAccountId },
     ]);
   } else {
     await service.collectPayment(actor(req), id, {
       amount,
       paymentMethod: body.paymentMethod,
-      bankAccountId: body.bankAccountId ?? null,
+      bankAccountId,
+      transactionReference,
+      payerBank,
       notes: body.notes ?? null,
     });
   }

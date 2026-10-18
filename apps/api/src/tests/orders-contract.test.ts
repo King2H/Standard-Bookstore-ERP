@@ -58,7 +58,7 @@ describe('Orders on the shared contracts', () => {
     expect(OrderSchema.strict().parse(created.body)).toEqual(created.body);
     expect(created.body).toMatchObject({ status: 'DRAFT', channel: 'in_store', saleType: 'cash_sale' });
 
-    const confirmed = await auth(api().post(`/api/v1/orders/${created.body.id}/confirm`)).send({ paymentMethod: 'mobile' });
+    const confirmed = await auth(api().post(`/api/v1/orders/${created.body.id}/confirm`)).send({ paymentMethod: 'mobile', transactionReference: 'TB-TEST' });
     expect(OrderSchema.strict().parse(confirmed.body)).toEqual(confirmed.body);
     expect(confirmed.body).toMatchObject({ status: 'CONFIRMED', paymentStatus: 'paid', paymentMethod: 'mobile' });
 

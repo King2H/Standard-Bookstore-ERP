@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
+import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
 
 /** Contracts for /api/v1/payments and an order's payments and balance (#21). */
 
@@ -34,7 +35,10 @@ export const PaymentSchema = z.object({
   currency: z.string(),
   paymentMethod: z.string(),
   status: PaymentStatusSchema,
+  /** A bank transfer's reference or a Telebirr transaction number. */
   transactionReference: z.string().nullable(),
+  /** The bank the customer paid from (bank payments). */
+  payerBank: z.string().nullable(),
   notes: z.string().nullable(),
   processedAt: z.string(),
   createdAt: z.string(),
@@ -79,15 +83,20 @@ export type OrderPaymentListResponse = z.infer<typeof OrderPaymentListResponseSc
 export const PaymentRefundListResponseSchema = z.object({ items: z.array(PaymentRefundSchema) });
 export type PaymentRefundListResponse = z.infer<typeof PaymentRefundListResponseSchema>;
 
-export const CreatePaymentRequestSchema = z.object({
-  orderId: IdSchema,
-  amount: MoneyInputSchema,
-  paymentMethod: OrderPaymentMethodSchema,
-  transactionReference: z.string().max(200).optional(),
-  notes: z.string().max(1000).optional(),
-  /** Required for bank: an active account of the session branch. */
-  bankAccountId: IdSchema.nullable().optional(),
-});
+export const CreatePaymentRequestSchema = z
+  .object({
+    orderId: IdSchema,
+    amount: MoneyInputSchema,
+    paymentMethod: OrderPaymentMethodSchema,
+    /** Required for bank (the transfer's reference) and mobile (the Telebirr transaction number). */
+    transactionReference: PaymentReferenceSchema.optional(),
+    /** Required for bank: the bank the customer paid from. */
+    payerBank: PayerBankSchema.optional(),
+    notes: z.string().max(1000).optional(),
+    /** Required for bank: an active account of the session branch. */
+    bankAccountId: IdSchema.nullable().optional(),
+  })
+  .superRefine(checkPaymentProof({ method: 'paymentMethod', reference: 'transactionReference' }));
 export type CreatePaymentRequest = z.infer<typeof CreatePaymentRequestSchema>;
 
 export const RefundPaymentRequestSchema = z.object({

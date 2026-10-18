@@ -7,6 +7,10 @@ import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../component
 import { useCurrency } from '../lib/useCurrency.js';
 import { paymentMethodLabel, type PaymentMethodCode } from '../lib/paymentMethods.js';
 import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
+import BankAccountSelect from '../components/BankAccountSelect.js';
+import PaymentProofFields from '../components/PaymentProofFields.js';
+import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
+import { EMPTY_PROOF, proofError, proofFields, type PaymentProof } from '../lib/paymentProof.js';
 
 type Role = string;
 interface OrdersPageProps {
@@ -106,6 +110,8 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [confirmDueDate, setConfirmDueDate] = useState('');
   const [confirmPaymentMethod, setConfirmPaymentMethod] = useState('');
+  const [confirmProof, setConfirmProof] = useState<PaymentProof>(EMPTY_PROOF);
+  const [confirmBankAccountId, setConfirmBankAccountId] = useState<number | null>(null);
 
   // New order state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -115,6 +121,8 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   // of a separate post-creation "Confirm (set payment method)" step — Create
   // Order now creates AND confirms (see createMut) in one action.
   const [orderPaymentMethod, setOrderPaymentMethod] = useState<PaymentMethodCode>('cash');
+  const [orderProof, setOrderProof] = useState<PaymentProof>(EMPTY_PROOF);
+  const [orderBankAccountId, setOrderBankAccountId] = useState<number | null>(null);
   // Due Date at Creation: same treatment for credit sales — captured here
   // instead of a separate post-creation "Confirm (set due date)" step, so
   // Create Order creates AND confirms in one action for credit sales too.
@@ -170,12 +178,34 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
   // error), the order is left in DRAFT exactly as it would have been under
   // the old two-step flow — the existing list-row "Confirm" action still
   // works as a manual fallback.
+  // With Bank Accounts on, a bank payment names the account it went to (#21).
+  const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(
+    branchId, orderPaymentMethod === 'bank' || confirmPaymentMethod === 'bank',
+  );
+
+  /** What a cash order's payment still lacks, or null. */
+  function cashPaymentProblem(method: string, proof: PaymentProof, bankAccountId: number | null): string | null {
+    if (method === 'bank' && bankAccountRequired && !bankAccountId) return 'Select a bank account for bank transfer payments';
+    return proofError(method, proof);
+  }
+
+  /** The confirm body of a cash order: its method and, for bank and Telebirr, the proof. */
+  function cashConfirmBody(method: string, proof: PaymentProof, bankAccountId: number | null) {
+    const { payerBank, reference } = proofFields(method, proof);
+    return {
+      paymentMethod: method,
+      ...(payerBank && { payerBank }),
+      ...(reference && { transactionReference: reference }),
+      ...(method === 'bank' && bankAccountId && { bankAccountId }),
+    };
+  }
+
   const createMut = useMutation({
-    mutationFn: async (body: { saleType: 'cash_sale' | 'credit_sale'; paymentMethod?: string; dueDate?: string; [key: string]: unknown }) => {
-      const { paymentMethod, dueDate, ...orderBody } = body;
+    mutationFn: async (body: { saleType: 'cash_sale' | 'credit_sale'; confirmBody?: object; dueDate?: string; [key: string]: unknown }) => {
+      const { confirmBody, dueDate, ...orderBody } = body;
       const order = await api.post<Order>('/orders', orderBody);
       if (body.saleType === 'cash_sale') {
-        return api.post<Order>(`/orders/${order.id}/confirm`, { paymentMethod });
+        return api.post<Order>(`/orders/${order.id}/confirm`, confirmBody);
       }
       if (body.saleType === 'credit_sale') {
         return api.post<Order>(`/orders/${order.id}/confirm`, { dueDate });
@@ -188,6 +218,7 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
         : `Order ${o.orderNumber} created`;
       showToast(msg, 'success');
       setTab('list'); setOrderItems([]); setSelectedCustomer(null); setOrderPaymentMethod('cash'); setOrderDueDate('');
+      setOrderProof(EMPTY_PROOF); setOrderBankAccountId(null);
       qc.invalidateQueries({ queryKey: ['orders-list'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['order-books'] });
@@ -212,6 +243,8 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       setConfirmingId(null);
       setConfirmDueDate('');
       setConfirmPaymentMethod('');
+      setConfirmProof(EMPTY_PROOF);
+      setConfirmBankAccountId(null);
     },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
@@ -262,11 +295,13 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
       showToast('Store credit payment requires a customer — please select one above', 'error');
       return;
     }
+    const paymentProblem = saleType === 'cash_sale' ? cashPaymentProblem(orderPaymentMethod, orderProof, orderBankAccountId) : null;
+    if (paymentProblem) { showToast(paymentProblem, 'error'); return; }
     createMut.mutate({
       customerId: selectedCustomer?.id ?? null,
       channel,
       saleType,
-      paymentMethod: saleType === 'cash_sale' ? orderPaymentMethod : undefined,
+      confirmBody: saleType === 'cash_sale' ? cashConfirmBody(orderPaymentMethod, orderProof, orderBankAccountId) : undefined,
       dueDate: saleType === 'credit_sale' ? orderDueDate : undefined,
       locationId: effectiveLocationId ?? undefined,
       items: orderItems.map(i => ({
@@ -396,20 +431,28 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                               // mirroring the credit_sale due-date prompt above.
                               if (action === 'confirm' && order.saleType === 'cash_sale') {
                                 return confirmingId === order.id ? (
-                                  <div key="confirm-cash" className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                  <div key="confirm-cash" className="flex flex-wrap items-start gap-1" onClick={e => e.stopPropagation()}>
                                     <select value={confirmPaymentMethod} onChange={e => setConfirmPaymentMethod(e.target.value)}
                                       className="text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
                                       <option value="">Payment method…</option>
                                       {CASH_PAYMENT_METHODS.map(code => <option key={code} value={code}>{paymentMethodLabel(code)}</option>)}
                                     </select>
+                                    {confirmPaymentMethod === 'bank' && bankAccountRequired && (
+                                      <BankAccountSelect accounts={bankAccounts} value={confirmBankAccountId} onChange={setConfirmBankAccountId} className="w-40 text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+                                    )}
+                                    <PaymentProofFields method={confirmPaymentMethod} value={confirmProof} onChange={setConfirmProof} inputClassName="w-40 text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
                                     <button
                                       disabled={!confirmPaymentMethod}
-                                      onClick={() => actionMut.mutate({ id: order.id, action: 'confirm', body: { paymentMethod: confirmPaymentMethod } })}
+                                      onClick={() => {
+                                        const problem = cashPaymentProblem(confirmPaymentMethod, confirmProof, confirmBankAccountId);
+                                        if (problem) { showToast(problem, 'error'); return; }
+                                        actionMut.mutate({ id: order.id, action: 'confirm', body: cashConfirmBody(confirmPaymentMethod, confirmProof, confirmBankAccountId) });
+                                      }}
                                       className="text-xs bg-blue-600 disabled:opacity-40 text-white px-2 py-0.5 rounded-sm">OK</button>
-                                    <button onClick={() => { setConfirmingId(null); setConfirmPaymentMethod(''); }} className="text-xs text-gray-500 px-1">✕</button>
+                                    <button onClick={() => { setConfirmingId(null); setConfirmPaymentMethod(''); setConfirmProof(EMPTY_PROOF); setConfirmBankAccountId(null); }} className="text-xs text-gray-500 px-1">✕</button>
                                   </div>
                                 ) : (
-                                  <button key="confirm-cash-open" onClick={e => { e.stopPropagation(); setConfirmingId(order.id); setConfirmPaymentMethod(''); }}
+                                  <button key="confirm-cash-open" onClick={e => { e.stopPropagation(); setConfirmingId(order.id); setConfirmPaymentMethod(''); setConfirmProof(EMPTY_PROOF); setConfirmBankAccountId(null); }}
                                     className={`text-xs px-2 py-0.5 rounded-sm transition-colors ${ACTION_STYLES.confirm}`}>
                                     Confirm (set payment method)
                                   </button>
@@ -562,6 +605,10 @@ export default function OrdersPage({ userRole, userPermissions = [], initialCont
                 {orderPaymentMethod === 'store_credit' && !selectedCustomer && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">⚠ Store credit requires a customer — please select one above.</p>
                 )}
+                {orderPaymentMethod === 'bank' && bankAccountRequired && (
+                  <BankAccountSelect accounts={bankAccounts} value={orderBankAccountId} onChange={setOrderBankAccountId} />
+                )}
+                <PaymentProofFields method={orderPaymentMethod} value={orderProof} onChange={setOrderProof} />
               </div>
             )}
           </div>

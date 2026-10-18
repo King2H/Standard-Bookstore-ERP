@@ -287,7 +287,7 @@ describe('POS — Transactions', () => {
         branchId,
         locationId,
         items: [{ bookId, quantity: qty }],
-        payments: [{ method: 'mobile', amount: expectedGrand }],
+        payments: [{ method: 'mobile', reference: 'TB-TEST', amount: expectedGrand }],
       });
 
     expect(res.status).toBe(201);

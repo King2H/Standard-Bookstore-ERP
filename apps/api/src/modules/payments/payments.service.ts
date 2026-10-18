@@ -5,7 +5,7 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
-import { accountForPayment, bankAccountsEnabled, recordMovement } from '../bankAccount/bankAccount.service.js';
+import { accountForPayment, bankAccountsEnabled, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import * as customers from '../customer/customer.repository.js';
 import { checkNotWrittenOff, reopenOnRefund, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as policy from './payments.policy.js';
@@ -129,7 +129,8 @@ export async function createPayment(actor: Actor, p: NewPayment): Promise<Paymen
       await customers.moveStoreCredit(tx, order.customerId as number, p.amount, { direction: 'debit', refType: 'order_payment', refId: id });
     }
     if (bankAccountId !== null) {
-      await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'order_payment', sourceId: id, notes: `Payment ${reference}` });
+      await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'order_payment', sourceId: id,
+        notes: movementNote(`Payment ${reference}`, { payerBank: p.payerBank, reference: p.transactionReference }) });
     }
 
     const status = await settleOrder(tx, order, total, 'payment');

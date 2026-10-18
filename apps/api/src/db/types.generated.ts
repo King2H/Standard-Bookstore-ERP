@@ -349,6 +349,8 @@ export interface ExchangeSettlementEntries {
   method: string | null;
   note: string | null;
   override_reason: string | null;
+  payer_bank: string | null;
+  reference: string | null;
   tenant_id: Generated<number>;
 }
 
@@ -536,6 +538,7 @@ export interface OrderPayments {
   id: Generated<Int8>;
   notes: string | null;
   order_id: Int8;
+  payer_bank: string | null;
   payment_method: string;
   payment_reference: string;
   processed_at: Generated<Timestamp>;
@@ -877,6 +880,7 @@ export interface TransactionPayments {
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
   method: string;
+  payer_bank: string | null;
   reference: string | null;
   tenant_id: Generated<number>;
   transaction_id: Int8;

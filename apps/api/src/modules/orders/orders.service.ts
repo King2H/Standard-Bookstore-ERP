@@ -4,7 +4,8 @@ import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
-import { insertOutbox, type OutboxEventType } from '../../lib/outbox.js';
+import { insertOutbox, insertOutboxEvent, type OutboxEventType } from '../../lib/outbox.js';
+import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
 import { cancelReceivable, createReceivable } from '../receivables/receivables.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -12,7 +13,7 @@ import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 import * as policy from './orders.policy.js';
 import * as orders from './orders.repository.js';
-import type { OrderLineInput, OrderPaymentStatus, OrderRow, PricedLine, SaleType, StaffCtx } from './orders.types.js';
+import type { ConfirmPayment, OrderLineInput, OrderPaymentStatus, OrderRow, PricedLine, SaleType, StaffCtx } from './orders.types.js';
 
 export type { OrderLineInput, OrderLineItemRow, OrderRow, StaffCtx } from './orders.types.js';
 export { computeOrderAllowedActions } from './orders.policy.js';
@@ -161,20 +162,24 @@ export async function create(
 /**
  * DRAFT -> CONFIRMED. Takes the stock out (and reserves it for fulfilment),
  * then either records the cash payment (a cash order is paid now) or opens
- * the receivable (a credit order is paid later).
+ * the receivable (a credit order is paid later). A bank payment goes to an
+ * account of the order's branch and is queued for reconciliation, as in
+ * Payments.
  */
 export async function confirm(
   orderId: string | number,
   staffCtx: StaffCtx,
   dueDate?: string | null,
-  paymentMethod?: string | null,
+  payment: ConfirmPayment = { method: null, transactionReference: null, payerBank: null, bankAccountId: null },
 ): Promise<OrderRow> {
   await withTransaction({}, async (tx, client) => {
     // Locked, so two confirms of the same order cannot both take the stock out.
     const order = await loadOrder(tx, orderId, { forUpdate: true });
     policy.checkCanConfirm(order.status);
     policy.checkDueDate(order, dueDate, await orders.today(tx));
-    const method = policy.confirmPaymentMethod(order, paymentMethod);
+    const method = policy.confirmPaymentMethod(order, payment.method);
+    // With bank accounts on, a bank payment names an active account of the branch (#21).
+    const bankAccountId = method === 'bank' ? await accountForPayment(tx, payment.bankAccountId, order.branchId) : null;
 
     const locationId = await stockLocation(tx, order, staffCtx);
     await assertAssignedLocation(locationId, staffCtx);
@@ -214,14 +219,29 @@ export async function confirm(
         policy.checkStoreCredit(await orders.lockStoreCreditBalance(tx, customerId), order.total);
         await orders.debitStoreCredit(tx, customerId, amount, String(orderId));
       }
-      await orders.insertPayment(tx, {
-        reference: await nextDailyNumber(tx, 'PAY'),
+      const reference = await nextDailyNumber(tx, 'PAY');
+      const paymentId = await orders.insertPayment(tx, {
+        reference,
         orderId: order.id,
         amount,
         method,
+        transactionReference: payment.transactionReference,
+        payerBank: method === 'bank' ? payment.payerBank : null,
+        bankAccountId,
         notes: 'Recorded at order confirmation',
         processedBy: staffCtx.staffId,
       });
+      if (bankAccountId !== null) {
+        await recordMovement(tx, {
+          bankAccountId, direction: 'in', amount: Money.of(amount), sourceType: 'order_payment', sourceId: paymentId,
+          notes: movementNote(`Payment ${reference}`, { payerBank: payment.payerBank, reference: payment.transactionReference }),
+        });
+      }
+      if (method === 'bank') {
+        await insertOutboxEvent(tx, 'payment.bank_transfer', {
+          paymentId, amount: Money.of(amount).toNumber(), orderNumber: order.orderNumber, orderId: order.id, branchId: order.branchId,
+        });
+      }
     }
 
     await orders.setStatus(tx, order.id, 'CONFIRMED');

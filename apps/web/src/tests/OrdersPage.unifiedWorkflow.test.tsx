@@ -146,6 +146,10 @@ describe('OrdersPage — Payment Mode Capture (cash_sale confirm)', () => {
           allowedActions: ['confirm', 'cancel'],
         }));
       }
+      // Bank Accounts on: the branch has one active account.
+      if (path.includes('/bank-accounts')) {
+        return Promise.resolve({ items: [{ id: 3, accountName: 'Main', bankName: 'CBE', accountNumberMasked: '****1234', currency: 'ETB' }] });
+      }
       return Promise.resolve({ items: [] });
     });
     postMock.mockResolvedValue({ id: '10', status: 'CONFIRMED', paymentMethod: 'bank' });
@@ -167,10 +171,21 @@ describe('OrdersPage — Payment Mode Capture (cash_sale confirm)', () => {
 
     await user.selectOptions(select, 'bank');
     expect(okButton).not.toBeDisabled();
+    // A bank payment names the customer's bank and the transfer reference (owner decision 2a).
+    await user.click(okButton);
+    expect(postMock).not.toHaveBeenCalled();
+    await user.type(within(row).getByLabelText("Customer's bank"), 'Awash Bank');
+    await user.type(within(row).getByLabelText('Transfer reference'), 'FT24001');
+    // ...and, with Bank Accounts on, the shop's account it went to (was: never sent).
+    await user.click(okButton);
+    expect(postMock).not.toHaveBeenCalled();
+    await user.selectOptions(within(row).getByLabelText('Bank account'), '3');
     await user.click(okButton);
 
     await waitFor(() => {
-      expect(postMock).toHaveBeenCalledWith('/orders/10/confirm', { paymentMethod: 'bank' });
+      expect(postMock).toHaveBeenCalledWith('/orders/10/confirm', {
+        paymentMethod: 'bank', payerBank: 'Awash Bank', transactionReference: 'FT24001', bankAccountId: 3,
+      });
     });
   });
 
@@ -236,6 +251,10 @@ describe('OrdersPage — Payment Method / Due Date at Creation (create+confirm)'
     // form offers Telebirr as an alternative right there, no separate step.
     await waitFor(() => expect(screen.getByText('Telebirr')).toBeInTheDocument());
     await user.click(screen.getByText('Telebirr'));
+    // A Telebirr payment carries its transaction number (owner decision 2a).
+    await user.click(screen.getByRole('button', { name: /Create Order/i }));
+    expect(postMock).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText('Telebirr transaction number'), ' TB-77 ');
 
     await user.click(screen.getByRole('button', { name: /Create Order/i }));
 
@@ -246,7 +265,7 @@ describe('OrdersPage — Payment Method / Due Date at Creation (create+confirm)'
     // confirm call's job; POST /orders itself has no such field.
     const ordersCallBody = postMock.mock.calls.find(c => c[0] === '/orders')?.[1] as Record<string, unknown>;
     expect(ordersCallBody.paymentMethod).toBeUndefined();
-    expect(postMock).toHaveBeenCalledWith('/orders/20/confirm', { paymentMethod: 'mobile' });
+    expect(postMock).toHaveBeenCalledWith('/orders/20/confirm', { paymentMethod: 'mobile', transactionReference: 'TB-77' });
   });
 
   it('clicking Create Order on a credit sale creates AND confirms in one action, with the chosen due date', async () => {

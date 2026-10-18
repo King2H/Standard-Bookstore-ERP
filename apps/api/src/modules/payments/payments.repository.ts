@@ -87,6 +87,7 @@ const PAYMENT_COLUMNS = [
   'payment_method',
   'status',
   'transaction_reference',
+  'payer_bank',
   'notes',
   'processed_at',
   'created_at',
@@ -126,6 +127,7 @@ export async function insertPayment(
       payment_method: p.paymentMethod,
       status: 'success',
       transaction_reference: p.transactionReference,
+      payer_bank: p.payerBank,
       notes: p.notes,
       processed_by: p.processedBy,
       bank_account_id: p.bankAccountId,
@@ -204,20 +206,20 @@ export async function listHistory(q: Queryable, filter: PaymentFilter, page: Pag
   const history = sql`
     SELECT p.id::text AS id, p.payment_reference, p.order_id::text AS order_id, o.order_number AS entity_number,
            'order' AS source_type, p.amount, p.currency, p.payment_method, p.status, p.transaction_reference,
-           p.notes, p.processed_at, p.created_at, p.processed_by, p.bank_account_id, o.status AS order_status, o.branch_id
+           p.payer_bank, p.notes, p.processed_at, p.created_at, p.processed_by, p.bank_account_id, o.status AS order_status, o.branch_id
     FROM order_payments p
     JOIN orders o ON o.id = p.order_id
     UNION ALL
-    SELECT tp.id::text, COALESCE(tp.reference, 'PAY-POS-' || tp.id), t.id::text, t.transaction_number,
+    SELECT tp.id::text, 'PAY-POS-' || tp.id, t.id::text, t.transaction_number,
            'pos', tp.amount, 'ETB', tp.method, 'success', tp.reference,
-           'POS Credit Sale Collection', tp.created_at, tp.created_at, t.staff_id, NULL::integer, NULL::text, t.branch_id
+           tp.payer_bank, 'POS Credit Sale Collection', tp.created_at, tp.created_at, t.staff_id, NULL::integer, NULL::text, t.branch_id
     FROM transaction_payments tp
     JOIN transactions t ON t.id = tp.transaction_id
     JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
     UNION ALL
     SELECT ft.id::text, 'PAY-EXC-' || ft.id, e.id::text, e.exchange_reference,
-           'exchange', ft.amount, ft.currency, ft.method, 'success', NULL::text,
-           'Exchange Receivable Collection', ft.created_at, ft.created_at, ft.staff_id, NULL::integer, NULL::text, e.branch_id
+           'exchange', ft.amount, ft.currency, ft.method, 'success', ft.meta->>'transactionReference',
+           ft.meta->>'payerBank', 'Exchange Receivable Collection', ft.created_at, ft.created_at, ft.staff_id, NULL::integer, NULL::text, e.branch_id
     FROM financial_transactions ft
     JOIN exchanges e ON e.id = ft.exchange_id
     WHERE ft.type = 'payment'`;

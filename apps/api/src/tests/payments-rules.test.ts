@@ -209,7 +209,7 @@ describe('Order payments', () => {
 
     it('send a bank payment back to its account by default (was: no bank movement)', async () => {
       const order = await creditOrder();
-      const payment = (await pay(order.id, 8, { paymentMethod: 'bank', bankAccountId: bankAccount })).body;
+      const payment = (await pay(order.id, 8, { paymentMethod: 'bank', payerBank: 'CBE', transactionReference: 'FT-TEST', bankAccountId: bankAccount })).body;
       const res = await refund(payment.id, 8);
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ method: 'bank', bankAccountId: bankAccount });
@@ -222,7 +222,7 @@ describe('Order payments', () => {
 
     it('refuse an inactive or another branch\'s bank account (was: 201)', async () => {
       const order = await creditOrder();
-      const payment = (await pay(order.id, 8, { paymentMethod: 'bank', bankAccountId: bankAccount })).body;
+      const payment = (await pay(order.id, 8, { paymentMethod: 'bank', payerBank: 'CBE', transactionReference: 'FT-TEST', bankAccountId: bankAccount })).body;
       for (const account of [inactiveAccount, otherBranchAccount]) {
         const res = await refund(payment.id, 2, { bankAccountId: account });
         expect(res.status).toBe(422);
