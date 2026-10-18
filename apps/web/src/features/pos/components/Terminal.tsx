@@ -1,35 +1,33 @@
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { api, getCurrentBranchId } from '../lib/api.js';
-import { useToast } from '../components/Toast.js';
-import { useCurrency } from '../lib/useCurrency.js';
-import QuickAddCustomer, { type QuickCustomerPayload } from '../components/QuickAddCustomer.js';
-import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
-import BankAccountSelect from '../components/BankAccountSelect.js';
-import PaymentProofFields from '../components/PaymentProofFields.js';
-import { EMPTY_PROOF, proofError, proofFields, proofLabel, type PaymentProof } from '../lib/paymentProof.js';
-import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
-import { paymentMethodPlainLabel, PAYMENT_METHOD_META, type PaymentMethodCode } from '../lib/paymentMethods.js';
+import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Money, type BookAvailabilityListResponse, type Customer, type PosTransaction } from '@bms/shared';
+import { getCurrentBranchId } from '../../../lib/api.js';
+import { useToast } from '../../../components/Toast.js';
+import { useCurrency } from '../../../lib/useCurrency.js';
+import QuickAddCustomer, { type QuickCustomerPayload } from '../../../components/QuickAddCustomer.js';
+import PaymentMethodTabs from '../../../components/PaymentMethodTabs.js';
+import BankAccountSelect from '../../../components/BankAccountSelect.js';
+import PaymentProofFields from '../../../components/PaymentProofFields.js';
+import { EMPTY_PROOF, proofError, proofFields, proofLabel, type PaymentProof } from '../../../lib/paymentProof.js';
+import { paymentMethodPlainLabel, PAYMENT_METHOD_META, type PaymentMethodCode } from '../../../lib/paymentMethods.js';
+import { useMyProfile } from '../../account/queries.js';
+import { useBranchBankAccounts } from '../../bankAccounts/queries.js';
+import { createCustomer } from '../../customers/api.js';
+import { useLocations } from '../../locations/queries.js';
+import { getEffectiveConfig } from '../../settings/api.js';
+import { useEffectiveSetting } from '../../settings/queries.js';
+import { useBooksForSale, useCreateSale, useCustomersForSale } from '../queries.js';
+import { maxDiscountPct } from '../rules.js';
+import {
+  AMOUNT_MESSAGE, cartTotals, cashLine, changeOf, isAmount, lineOverLimit, paidTotal, recalcLine, tenderProblem,
+  type CartLine, type PaymentLine,
+} from '../sale.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Role = string;
 
-interface BookResult {
-  id: number;
-  title: string;
-  isbn: string;
-  defaultPrice: number | null;
-  branchPrice: number | null;
-  stockQuantity?: number | null;
-  availability?: {
-    locationId: number;
-    locationName: string | null;
-    onHand: number;
-    reserved: number;
-    available: number;
-  } | null;
-}
+type BookWithAvailability = BookAvailabilityListResponse['items'][number];
 
 type DiscountPresetType = 'Normal' | 'Merchant' | 'Special';
 const DISCOUNT_PRESET_TYPES = ['Normal', 'Merchant', 'Special'] as const;
@@ -50,48 +48,33 @@ interface DiscountPreset {
   source: 'branch' | 'system' | 'unset';
 }
 
-interface CartItem {
-  bookId: number;
-  bookTitle: string;
-  bookIsbn: string;
-  quantity: number;
-  unitPrice: number;
-  discountPct: number;
-  discountAmount: number;
-  discountType: string;
-  discountMode: string;
-  lineTotal: number;
-  isDivergent?: boolean;
-}
+const DISCOUNT_KEYS = [
+  'default_discount_type',
+  'default_discount_mode_normal', 'default_discount_value_normal',
+  'default_discount_mode_merchant', 'default_discount_value_merchant',
+  'default_discount_mode_special', 'default_discount_value_special',
+  'max_line_discount_pct',
+];
 
-interface Customer {
-  id: number;
-  customerCode: string;
-  fullName: string;
-  loyaltyBalance: number;
-  storeCreditBalance: number;
-}
+/** A receipt: the sale as the API recorded it, and the change given on cash. */
+type Receipt = PosTransaction & { change: Money };
 
-interface Location { id: number; name: string; isDefaultFulfillment: boolean; }
+/** The day itself, wherever the till is (a YYYY-MM-DD read as UTC midnight shows the day before west of UTC). */
+const localDay = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString();
 
-interface TransactionLine { bookTitle: string; quantity: number; unitPrice: number; discountAmount: number; lineTotal: number; }
-interface TransactionPayment { method: string; amount: number; payerBank?: string | null; reference?: string | null; }
+/** Only the receipt is printed (owner decision 2a), at a receipt printer's width. */
+const RECEIPT_PRINT_CSS = `@media print {
+  body * { visibility: hidden; }
+  #pos-receipt, #pos-receipt * { visibility: visible; }
+  #pos-receipt { position: absolute; left: 0; top: 0; width: 80mm; box-shadow: none; border: 0; }
+  #pos-receipt .no-print { display: none; }
+}`;
 
-interface Transaction {
-  id: string; transactionNumber: string;
-  subtotal: number; discountTotal: number; grandTotal: number;
-  amountPaid: number; amountDue: number;
-  paymentStatus: 'paid' | 'partial' | 'credit';
-  currency: string; status: string; createdAt: string;
-  lineItems?: TransactionLine[]; payments?: TransactionPayment[];
-  dueDate?: string | null;
-  /** Sold today, nothing returned: a void is still possible (otherwise use a return). */
-  voidable?: boolean;
-}
-
-// The terminal until it moves to features/pos (#23, POS part 2). The page
-// (features/pos/pages/PosPage.tsx) owns the tabs; the terminal stays mounted
-// under them so the cart survives a look at Sales History.
+/**
+ * The POS terminal (#23, POS part 2): the cart, the customer, payments and
+ * the receipt. The page (pages/PosPage.tsx) owns the tabs; the terminal stays
+ * mounted under them so the cart survives a look at Sales History.
+ */
 interface PosTerminalProps {
   userRole?: Role; userPermissions?: string[];
   tabBar: ReactNode;
@@ -107,85 +90,31 @@ const canCreate = (r?: Role, perms?: string[]) =>
 // ── Payment ───────────────────────────────────────────────────────────────────
 
 type PaymentMethod = PaymentMethodCode;
-// 'store_credit' was previously mislabeled "Telebirr" here — transactions'
-// payment method CHECK constraint had no separate 'mobile' value (unlike
-// orders/payments, which did), so this tab quietly stood in as a mobile-
-// money button while actually debiting the customer's real store credit
-// balance underneath. Fixed: 'mobile' (Telebirr) is now its own real
-// payment channel (see 1700000050_pos_payment_mobile.cjs), correctly
-// distinct from 'store_credit', matching every other payment surface.
 const PAYMENT_TABS: PaymentMethod[] = ['cash', 'bank', 'mobile', 'store_credit', 'loyalty_points'];
-
-// ── Cart maths (no tax) ───────────────────────────────────────────────────────
-
-function calcCart(items: CartItem[]) {
-  const subtotalCents      = items.reduce((s, i) => s + Math.round(i.unitPrice * 100) * i.quantity, 0);
-  const discountTotalCents = items.reduce((s, i) => s + Math.round(i.discountAmount * 100), 0);
-  const grandTotalCents    = Math.max(0, subtotalCents - discountTotalCents);
-  const result = {
-    subtotal:      subtotalCents / 100,
-    discountTotal: discountTotalCents / 100,
-    grandTotal:    grandTotalCents / 100,
-  };
-  // Dev-mode diagnostic: log cart totals whenever they change
-  if (import.meta.env.DEV && items.length > 0) {
-    console.debug('[POS calcCart]', {
-      subtotal: result.subtotal.toFixed(2),
-      discountTotal: result.discountTotal.toFixed(2),
-      grandTotal: result.grandTotal.toFixed(2),
-      itemCount: items.length,
-      items: items.map(i => ({
-        title: i.bookTitle,
-        qty: i.quantity,
-        unitPrice: i.unitPrice,
-        discountType: i.discountType,
-        discountMode: i.discountMode,
-        discountPct: i.discountPct,
-        discountAmount: i.discountAmount,
-        lineTotal: i.lineTotal,
-      })),
-    });
-  }
-  return result;
-}
-
-function recalcItem(item: CartItem): CartItem {
-  const unitPriceCents           = Math.round(item.unitPrice * 100);
-  const totalBeforeDiscountCents = unitPriceCents * item.quantity;
-  const discountAmtCents         = item.discountMode === 'Percentage'
-    ? Math.round(totalBeforeDiscountCents * (item.discountPct / 100))
-    : Math.round(item.discountAmount * 100);
-  const clampedDiscountCents = Math.max(0, Math.min(totalBeforeDiscountCents, discountAmtCents));
-  const lineTotalCents       = Math.max(0, totalBeforeDiscountCents - clampedDiscountCents);
-  return {
-    ...item,
-    discountAmount: clampedDiscountCents / 100,
-    lineTotal:      lineTotalCents / 100,
-  };
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, view, history }: PosTerminalProps) {
+export function Terminal({ userRole, userPermissions, tabBar, view, history }: PosTerminalProps) {
   const { showToast } = useToast();
   const currency    = useCurrency();
+  const { data: me } = useMyProfile();
 
   // ── POS state ──────────────────────────────────────────────────────────────
   const [bookSearch, setBookSearch]               = useState('');
-  const [cart, setCart]                           = useState<CartItem[]>([]);
+  const [cart, setCart]                           = useState<CartLine[]>([]);
   const [selectedCustomer, setSelectedCustomer]   = useState<Customer | null>(null);
   const [dueDate, setDueDate]                     = useState<string>('');
   const [customerSearch, setCustomerSearch]       = useState('');
   const [showQuickAdd, setShowQuickAdd]           = useState(false);
   const [locationId, setLocationId]               = useState<number | null>(null);
-  const [paymentLines, setPaymentLines]           = useState<Array<{ method: PaymentMethod; amount: string; bankAccountId?: number; payerBank?: string; reference?: string }>>([]);
+  const [paymentLines, setPaymentLines]           = useState<PaymentLine[]>([]);
   const [payMethod, setPayMethod]                 = useState<PaymentMethod>('cash');
   const [payAmount, setPayAmount]                 = useState('');
   const [payBankAccountId, setPayBankAccountId]   = useState<number | ''>('');
   const [payProof, setPayProof]                   = useState<PaymentProof>(EMPTY_PROOF);
-  const [receipt, setReceipt]                     = useState<Transaction | null>(null);
+  const [receipt, setReceipt]                     = useState<Receipt | null>(null);
 
   // Discount state
   const [defaultDiscountType, setDefaultDiscountType]     = useState<DiscountPresetType>('Normal');
@@ -201,34 +130,23 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
-  const { data: locData } = useQuery<{ items: Location[] }>({
-    queryKey: ['pos-locations', branchId],
-    queryFn:  () => api.get(`/branches/${branchId}/locations?pageSize=50`),
-    enabled:  branchId !== null,
-  });
+  // Staff limited to some locations get only those (#72).
+  const { data: locData } = useLocations(branchId);
 
   // With Bank Accounts on, a bank payment names the account it went to (#21).
   const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(branchId, payMethod === 'bank');
 
-  const { data: bookResults } = useQuery<{ items: BookResult[] }>({
-    queryKey: ['pos-books', bookSearch, locationId, branchId],
-    queryFn:  () => api.get(`/books/with-availability?q=${encodeURIComponent(bookSearch)}&pageSize=10&branchId=${branchId}${locationId ? `&locationId=${locationId}` : ''}`),
-    enabled:  branchId !== null && bookSearch.length > 1,
-  });
+  // A book with no stock can still be sold where the branch allows negative stock.
+  const allowNegative = useEffectiveSetting('allow_negative_stock') === true;
 
-  const { data: customerResults } = useQuery<{ items: Customer[] }>({
-    queryKey: ['pos-customers', customerSearch, branchId],
-    queryFn:  () => api.get(`/customers?q=${encodeURIComponent(customerSearch)}&pageSize=5`),
-    enabled:  branchId !== null && customerSearch.length > 1,
-  });
+  const { data: bookResults } = useBooksForSale(bookSearch, locationId);
+  const { data: customerResults } = useCustomersForSale(customerSearch);
 
   const { data: configData, isError: configError } = useQuery({
     queryKey: ['pos-discount-config', branchId],
     queryFn:  async () => {
       try {
-        return await api.get<{ items: Array<{ key: string; value: unknown; source?: 'branch' | 'system' }> }>(
-          `/config/effective?keys=default_discount_type,default_discount_mode_normal,default_discount_value_normal,default_discount_mode_merchant,default_discount_value_merchant,default_discount_mode_special,default_discount_value_special`,
-        );
+        return await getEffectiveConfig(DISCOUNT_KEYS);
       } catch (e) {
         showToast('Unable to load discount defaults; using fallback values.', 'info');
         throw e;
@@ -238,6 +156,10 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
     staleTime: 60_000,
     retry:     false,
   });
+
+  // The most this cashier may discount a line, as the API checks it; unknown until the settings load.
+  const discountLimits = configData?.items.find(item => item.key === 'max_line_discount_pct')?.value;
+  const maxPct = discountLimits === undefined ? null : maxDiscountPct(discountLimits, me);
 
   // ── Config effect ──────────────────────────────────────────────────────────
 
@@ -294,20 +216,19 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
 
   // ── Derived totals ─────────────────────────────────────────────────────────
 
-  const { subtotal, discountTotal, grandTotal } = calcCart(cart);
-  const paidTotal = parseFloat(paymentLines.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toFixed(2));
-  const remaining = parseFloat((grandTotal - paidTotal).toFixed(2));
+  const totals = cartTotals(cart);
+  const remainingDue = totals.grandTotal.minus(paidTotal(paymentLines));
+  const subtotal = totals.subtotal.toNumber();
+  const discountTotal = totals.discountTotal.toNumber();
+  const grandTotal = totals.grandTotal.toNumber();
+  const remaining = remainingDue.toNumber();
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
-  const createMut = useMutation({
-    mutationFn: (body: unknown) => api.post<Transaction>('/pos/transactions', body),
-    onSuccess:  (tx) => { setReceipt(tx); showToast(`Sale ${tx.transactionNumber} completed`, 'success'); },
-    onError:    (e: Error) => showToast(e.message, 'error'),
-  });
+  const createSale = useCreateSale();
 
   const quickAddMut = useMutation({
-    mutationFn: (payload: QuickCustomerPayload) => api.post<Customer>('/customers', payload),
+    mutationFn: (payload: QuickCustomerPayload) => createCustomer(payload),
     onSuccess:  (customer) => {
       setSelectedCustomer(customer);
       setShowQuickAdd(false);
@@ -319,7 +240,7 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
 
   // ── Cart helpers ───────────────────────────────────────────────────────────
 
-  const checkDivergence = useCallback((item: CartItem): boolean => {
+  const checkDivergence = useCallback((item: CartLine): boolean => {
     const preset = discountPresets[item.discountType as DiscountPresetType];
     if (!preset || preset.source === 'unset') return false;
     if (item.discountMode !== preset.mode) return true;
@@ -328,13 +249,13 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
     return Math.abs(item.discountAmount - presetVal) > 0.001;
   }, [discountPresets]);
 
-  function addToCart(book: BookResult) {
+  function addToCart(book: BookWithAvailability) {
     const price    = book.branchPrice ?? book.defaultPrice ?? 0;
     const existing = cart.find(i => i.bookId === book.id);
     if (existing) {
-      setCart(c => c.map(i => i.bookId === book.id ? recalcItem({ ...i, quantity: i.quantity + 1 }) : i));
+      setCart(c => c.map(i => i.bookId === book.id ? recalcLine({ ...i, quantity: i.quantity + 1 }) : i));
     } else {
-      const newItem = recalcItem({
+      const newItem = recalcLine({
         bookId:         book.id,
         bookTitle:      book.title,
         bookIsbn:       book.isbn,
@@ -355,7 +276,7 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
   function updateQty(bookId: number, delta: number) {
     setCart(c => c.map(i => {
       if (i.bookId !== bookId) return i;
-      const updated = recalcItem({ ...i, quantity: Math.max(1, i.quantity + delta) });
+      const updated = recalcLine({ ...i, quantity: Math.max(1, i.quantity + delta) });
       return { ...updated, isDivergent: checkDivergence(updated) };
     }));
   }
@@ -363,16 +284,15 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
   function updateDiscountValue(bookId: number, rawValue: number) {
     setCart(c => c.map(i => {
       if (i.bookId !== bookId) return i;
-      const lineBase = i.unitPrice * i.quantity;
-      let next: CartItem;
+      const lineBase = Money.of(i.unitPrice).times(i.quantity);
+      let next: CartLine;
       if (i.discountMode === 'Percentage') {
         const pct = Math.max(0, Math.min(100, rawValue));
-        const amt = lineBase > 0 ? parseFloat(((pct / 100) * lineBase).toFixed(2)) : 0;
-        next = recalcItem({ ...i, discountPct: pct, discountAmount: amt });
+        next = recalcLine({ ...i, discountPct: pct, discountAmount: lineBase.percent(pct).round(2).toNumber() });
       } else {
-        const amt = Math.max(0, Math.min(lineBase, rawValue));
-        const pct = lineBase > 0 ? parseFloat(((amt / lineBase) * 100).toFixed(4)) : 0;
-        next = recalcItem({ ...i, discountAmount: amt, discountPct: pct });
+        const amt = Money.max(Money.ZERO, Money.min(lineBase, Money.of(rawValue || 0)));
+        const pct = lineBase.isZero() ? 0 : Number(amt.times(100).dividedBy(lineBase.toFixed(2)).toFixed(4));
+        next = recalcLine({ ...i, discountAmount: amt.toNumber(), discountPct: pct });
       }
       return { ...next, isDivergent: checkDivergence(next) };
     }));
@@ -383,12 +303,13 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
     const preset = discountPresets[type as DiscountPresetType];
     setCart(c => c.map(i => {
       if (i.bookId !== bookId) return i;
-      let updated: CartItem;
+      let updated: CartLine;
       if (preset && preset.source !== 'unset') {
-        const lineBase = i.unitPrice * i.quantity;
-        const discPct = preset.mode === 'Percentage' ? preset.value : (lineBase > 0 ? parseFloat(((preset.value / lineBase) * 100).toFixed(4)) : 0);
-        const discAmt = preset.mode === 'Amount' ? preset.value : parseFloat(((preset.value / 100) * lineBase).toFixed(2));
-        updated = recalcItem({ ...i, discountType: type, discountMode: preset.mode, discountPct: discPct, discountAmount: discAmt });
+        const lineBase = Money.of(i.unitPrice).times(i.quantity);
+        const discPct = preset.mode === 'Percentage' ? preset.value
+          : (lineBase.isZero() ? 0 : Number(Money.of(preset.value).times(100).dividedBy(lineBase.toFixed(2)).toFixed(4)));
+        const discAmt = preset.mode === 'Amount' ? preset.value : lineBase.percent(preset.value).round(2).toNumber();
+        updated = recalcLine({ ...i, discountType: type, discountMode: preset.mode, discountPct: discPct, discountAmount: discAmt });
       } else {
         updated = { ...i, discountType: type };
       }
@@ -399,7 +320,7 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
   function updateDiscountMode(bookId: number, mode: string) {
     setCart(c => c.map(i => {
       if (i.bookId !== bookId) return i;
-      const updated = recalcItem({
+      const updated = recalcLine({
         ...i,
         discountMode:   mode,
         discountPct:    mode === 'Percentage' ? i.discountPct : 0,
@@ -414,14 +335,14 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
   // ── Payment helpers ────────────────────────────────────────────────────────
 
   function addPayment() {
-    const raw = payAmount.trim() !== '' ? payAmount : remaining.toFixed(2);
-    const amt = parseFloat(raw);
-    if (!amt || amt <= 0) return;
+    const raw = payAmount.trim() !== '' ? payAmount.trim() : remainingDue.toFixed(2);
+    if (!isAmount(raw)) { showToast(AMOUNT_MESSAGE, 'error'); return; }
     if (payMethod === 'bank' && bankAccountRequired && !payBankAccountId) { showToast('Select a bank account', 'error'); return; }
-    const missing = proofError(payMethod, payProof);
+    const missing = proofError(payMethod, payProof) ?? tenderProblem(payMethod, Money.of(raw), selectedCustomer, paymentLines);
     if (missing) { showToast(missing, 'error'); return; }
+    const amount = payMethod === 'cash' ? cashLine(raw, remainingDue) : { amount: Money.of(raw).toFixed(2) };
     setPaymentLines(prev => [...prev, {
-      method: payMethod, amount: raw, bankAccountId: payMethod === 'bank' && payBankAccountId ? Number(payBankAccountId) : undefined,
+      method: payMethod, ...amount, bankAccountId: payMethod === 'bank' && payBankAccountId ? Number(payBankAccountId) : undefined,
       ...proofFields(payMethod, payProof),
     }]);
     setPayAmount('');
@@ -431,53 +352,54 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
   function removePayment(idx: number) { setPaymentLines(prev => prev.filter((_, i) => i !== idx)); }
 
   function buildPaymentPayload() {
-    return paymentLines.map(p => ({ method: p.method, amount: parseFloat(p.amount), bankAccountId: p.bankAccountId, payerBank: p.payerBank, reference: p.reference }));
+    return paymentLines.map(p => ({
+      method: p.method as PaymentMethod & ('cash' | 'bank' | 'mobile' | 'store_credit' | 'loyalty_points'),
+      amount: Money.of(p.amount).toNumber(),
+      bankAccountId: p.bankAccountId, payerBank: p.payerBank, reference: p.reference,
+    }));
+  }
+
+  /** What stops the sale before it is sent, or null: a line discounted more than this cashier may give. */
+  function discountProblem(): string | null {
+    if (maxPct === null) return null;
+    const over = lineOverLimit(cart, maxPct);
+    return over ? `The discount on "${over.bookTitle}" is more than your limit of ${maxPct}%` : null;
+  }
+
+  function sell(body: { customerId: number | null; allowCredit: boolean; dueDate?: string | null }) {
+    const change = Money.sum(paymentLines.map(changeOf));
+    createSale.mutate({
+      locationId: locationId!,
+      items: cart.map(i => ({ bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct, discountAmount: i.discountAmount, discountType: i.discountType as DiscountPresetType, discountMode: i.discountMode as 'Percentage' | 'Amount' })),
+      payments: buildPaymentPayload(),
+      ...body,
+    }, {
+      onSuccess: (tx) => { setReceipt({ ...tx, change }); showToast(`Sale ${tx.transactionNumber} completed`, 'success'); },
+      onError:   (e: Error) => showToast(e.message, 'error'),
+    });
   }
 
   function handleCompleteSale() {
     if (!locationId) { showToast('Select a location', 'error'); return; }
     if (cart.length === 0) { showToast('Cart is empty', 'error'); return; }
-    if (Math.abs(remaining) > 0.01) { showToast(`Remaining balance: ${currency} ${remaining.toFixed(2)}`, 'error'); return; }
-
-    // Dev-mode: log exactly what is being submitted
-    if (import.meta.env.DEV) {
-      const paySum = parseFloat(paymentLines.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toFixed(2));
-      console.debug('[POS handleCompleteSale]', {
-        subtotal: subtotal.toFixed(2),
-        discountTotal: discountTotal.toFixed(2),
-        grandTotal: grandTotal.toFixed(2),
-        paymentSum: paySum.toFixed(2),
-        diff: (grandTotal - paySum).toFixed(4),
-        payments: paymentLines,
-        items: cart.map(i => ({
-          bookId: i.bookId, qty: i.quantity,
-          discountType: i.discountType, discountMode: i.discountMode,
-          discountPct: i.discountPct, discountAmount: i.discountAmount,
-          lineTotal: i.lineTotal,
-        })),
-      });
-    }
-
-    createMut.mutate({ branchId, locationId, customerId: selectedCustomer?.id ?? null, items: cart.map(i => ({ bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct, discountAmount: i.discountAmount, discountType: i.discountType, discountMode: i.discountMode })), payments: buildPaymentPayload(), allowCredit: false });
+    if (remainingDue.abs().greaterThan('0.01')) { showToast(`Remaining balance: ${currency} ${remainingDue.toFixed(2)}`, 'error'); return; }
+    const problem = discountProblem();
+    if (problem) { showToast(problem, 'error'); return; }
+    sell({ customerId: selectedCustomer?.id ?? null, allowCredit: false });
   }
 
   function completeCreditSale() {
     if (!locationId) { showToast('Select a location', 'error'); return; }
     if (cart.length === 0) { showToast('Cart is empty', 'error'); return; }
     if (!selectedCustomer) { showToast('Credit sales require a customer', 'error'); return; }
-
-    if (import.meta.env.DEV) {
-      const paySum = parseFloat(paymentLines.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toFixed(2));
-      console.debug('[POS completeCreditSale]', {
-        grandTotal: grandTotal.toFixed(2), paymentSum: paySum.toFixed(2), remaining: remaining.toFixed(2),
-      });
-    }
-
-    createMut.mutate({ branchId, locationId, customerId: selectedCustomer.id, items: cart.map(i => ({ bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct, discountAmount: i.discountAmount, discountType: i.discountType, discountMode: i.discountMode })), payments: buildPaymentPayload(), allowCredit: true, dueDate: dueDate || null });
+    const problem = discountProblem();
+    if (problem) { showToast(problem, 'error'); return; }
+    sell({ customerId: selectedCustomer.id, allowCredit: true, dueDate: dueDate || null });
   }
 
   function newSale() { setCart([]); setPaymentLines([]); setSelectedCustomer(null); setReceipt(null); setPayAmount(''); setDueDate(''); }
 
+  const isSelling = createSale.isPending;
 
   // ── Stock badge ────────────────────────────────────────────────────────────
 
@@ -495,8 +417,9 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
   if (receipt) {
     return (
       <div className="flex items-center justify-center min-h-full bg-gray-50 dark:bg-gray-950 p-6">
+        <style>{RECEIPT_PRINT_CSS}</style>
         <div className="w-full max-w-md">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl overflow-hidden">
+          <div id="pos-receipt" className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl overflow-hidden">
             <div className={`px-6 py-5 text-center ${receipt.paymentStatus === 'paid' ? 'bg-linear-to-br from-emerald-500 to-teal-600' : 'bg-linear-to-br from-amber-500 to-orange-600'}`}>
               <div className="text-4xl mb-2">{receipt.paymentStatus === 'paid' ? '✅' : '🟡'}</div>
               <div className="flex items-center justify-center gap-1.5">
@@ -509,7 +432,7 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
                       .then(() => showToast('Transaction ID copied', 'success'))
                       .catch(() => showToast('Could not copy — copy manually', 'error'));
                   }}
-                  className="text-white/70 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+                  className="no-print text-white/70 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 </button>
@@ -521,7 +444,7 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
                     {receipt.paymentStatus === 'partial' ? `Partial — ${currency} ${Number(receipt.amountDue).toFixed(2)} due` : `Credit — ${currency} ${Number(receipt.amountDue).toFixed(2)} due`}
                   </span>
                   {receipt.dueDate && (
-                    <p className="text-xs text-white/90 font-medium">Due Date: {new Date(receipt.dueDate).toLocaleDateString()}</p>
+                    <p className="text-xs text-white/90 font-medium">Due Date: {localDay(receipt.dueDate)}</p>
                   )}
                 </div>
               )}
@@ -566,9 +489,15 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
                       <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {Number(p.amount).toFixed(2)}</span>
                     </div>
                   ))}
+                  {receipt.change.greaterThan(0) && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Change</span>
+                      <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {receipt.change.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="flex gap-3 pt-1">
+              <div className="no-print flex gap-3 pt-1">
                 <button onClick={() => window.print()} className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">🖨 Print</button>
                 <button onClick={newSale} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors shadow-md shadow-blue-600/20">＋ New Sale</button>
               </div>
@@ -692,8 +621,8 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
                     key={b.id}
                     id={`pos-book-${b.id}`}
                     onClick={() => addToCart(b)}
-                    disabled={b.availability != null && b.availability.available === 0}
-                    className={`w-full text-left px-3 py-2 border-b border-gray-50 dark:border-gray-800/60 transition-colors ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100'}`}
+                    disabled={!allowNegative && b.availability != null && b.availability.available <= 0}
+                    className={`w-full text-left px-3 py-2 border-b border-gray-50 dark:border-gray-800/60 transition-colors ${!allowNegative && b.availability != null && b.availability.available <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/20 active:bg-blue-100'}`}
                   >
                     <div className="flex items-start justify-between gap-1.5">
                       <p className="text-xs font-semibold text-gray-900 dark:text-white truncate leading-tight flex-1 min-w-0">{b.title}</p>
@@ -977,19 +906,26 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
               {paymentLines.length > 0 && (
                 <div className="space-y-1 bg-gray-50 dark:bg-gray-800/40 rounded-lg p-2">
                   {paymentLines.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs">
+                    <Fragment key={i}>
+                    <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1 min-w-0">
-                        <span>{PAYMENT_METHOD_META[p.method]?.icon}</span>
+                        <span>{PAYMENT_METHOD_META[p.method as PaymentMethodCode]?.icon}</span>
                         {paymentMethodPlainLabel(p.method)}
                         {proofLabel(p) && <span className="text-gray-400 truncate">· {proofLabel(p)}</span>}
                       </span>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{currency} {parseFloat(p.amount).toFixed(2)}</span>
+                        <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{currency} {Money.of(p.amount).toFixed(2)}</span>
                         <button onClick={() => removePayment(i)} className="text-gray-300 hover:text-red-500 transition-colors" aria-label="Remove payment">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                       </div>
                     </div>
+                    {p.tendered && (
+                      <p className="text-xs text-gray-400 text-right tabular-nums">
+                        Given {currency} {Money.of(p.tendered).toFixed(2)} · change {currency} {changeOf(p).toFixed(2)}
+                      </p>
+                    )}
+                    </Fragment>
                   ))}
                 </div>
               )}
@@ -1025,10 +961,10 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
                 <button
                   id="pos-complete-sale"
                   onClick={handleCompleteSale}
-                  disabled={createMut.isPending || cart.length === 0 || !locationId || Math.abs(remaining) > 0.01}
+                  disabled={isSelling || cart.length === 0 || !locationId || Math.abs(remaining) > 0.01}
                   className="w-full flex items-center justify-between gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md shadow-emerald-600/20 active:scale-[0.98]"
                 >
-                  <span className="text-sm">{createMut.isPending ? '⏳ Processing…' : '✓ Complete Sale'}</span>
+                  <span className="text-sm">{isSelling ? '⏳ Processing…' : '✓ Complete Sale'}</span>
                   <span className="text-xs font-semibold opacity-90 tabular-nums flex items-center gap-1.5">
                     {currency} {grandTotal.toFixed(2)}
                     <span className="opacity-50 font-mono">Ctrl+↵</span>
@@ -1055,7 +991,7 @@ export default function PosTerminalLegacy({ userRole, userPermissions, tabBar, v
                   <button
                     id="pos-credit-sale"
                     onClick={completeCreditSale}
-                    disabled={createMut.isPending || cart.length === 0 || !locationId || !selectedCustomer}
+                    disabled={isSelling || cart.length === 0 || !locationId || !selectedCustomer}
                     title={!selectedCustomer ? 'Select a customer to allow credit sale' : ''}
                     className="w-full flex items-center justify-between gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-4 rounded-xl transition-colors active:scale-[0.98]"
                   >

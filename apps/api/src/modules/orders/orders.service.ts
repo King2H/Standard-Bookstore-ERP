@@ -103,7 +103,7 @@ export async function create(
     throw new BusinessError('CUSTOMER_INACTIVE', 'This customer account is inactive');
   }
 
-  const maxDiscountPct = await getMaxLineDiscountPct(staffCtx.branchId, staffCtx.role);
+  const maxDiscountPct = await getMaxLineDiscountPct(staffCtx.branchId, staffCtx.roles ?? [staffCtx.role]);
   const lines: PricedLine[] = [];
   for (const item of data.items) {
     policy.checkQuantity(item);

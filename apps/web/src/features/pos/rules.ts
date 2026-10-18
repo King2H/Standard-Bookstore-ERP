@@ -10,3 +10,13 @@ const holds = (me: Account | undefined, allowed: string[]) => (me?.currentRoles 
 
 /** Voiding a sale: Manager and Admin (was: offered to Super_Admin, whom the API refuses). */
 export const canVoid = (me: Account | undefined) => holds(me, ['Admin', 'Manager']);
+
+/**
+ * The largest line discount the cashier may give: the most any role held in
+ * the branch allows (`max_line_discount_pct`, per role), as the API checks it.
+ */
+export function maxDiscountPct(limits: unknown, me: Account | undefined): number {
+  if (!limits || typeof limits !== 'object') return 0;
+  const byRole = limits as Record<string, unknown>;
+  return Math.max(0, ...(me?.currentRoles ?? []).map((r) => Number(byRole[r] ?? 0) || 0));
+}
