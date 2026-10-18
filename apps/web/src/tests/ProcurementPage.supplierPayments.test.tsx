@@ -4,12 +4,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ProcurementPage from '../pages/ProcurementPage.js';
+import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 
 const getMock = vi.fn();
 const postMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: {
     get: (...args: unknown[]) => getMock(...args),
     post: (...args: unknown[]) => postMock(...args),
@@ -41,7 +42,7 @@ function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <ProcurementPage userRole="Finance_Officer" userPermissions={[]} />
+      <ProcurementPage />
     </QueryClientProvider>,
   );
 }
@@ -50,6 +51,7 @@ beforeEach(() => {
   getMock.mockReset();
   postMock.mockReset();
   getMock.mockImplementation((path: string) => {
+    if (path === '/staff/me') return Promise.resolve({ id: 5, currentRoles: ['Finance_Officer'], currentBranchId: 1 });
     if (path.startsWith('/purchase-orders?')) return Promise.resolve({ items: [PO], total: 1, page: 1, totalPages: 1 });
     if (path.startsWith('/purchase-orders/42')) return Promise.resolve(DETAIL);
     return Promise.resolve({ items: [] });

@@ -44,7 +44,7 @@ vi.mock('../features/locations/pages/LocationsPage.js', pageStub('LocationsPage'
 vi.mock('../features/catalog/pages/CatalogPage.js', pageStub('CatalogPage'));
 vi.mock('../features/inventory/pages/InventoryPage.js', pageStub('InventoryPage'));
 vi.mock('../features/suppliers/pages/SuppliersPage.js', pageStub('SuppliersPage'));
-vi.mock('../pages/ProcurementPage.js', pageStub('ProcurementPage'));
+vi.mock('../features/procurement/pages/ProcurementPage.js', pageStub('ProcurementPage'));
 vi.mock('../features/customers/pages/CustomersPage.js', pageStub('CustomersPage'));
 vi.mock('../pages/POSPage.js', pageStub('POSPage'));
 vi.mock('../pages/ReturnsPage.js', pageStub('ReturnsPage'));

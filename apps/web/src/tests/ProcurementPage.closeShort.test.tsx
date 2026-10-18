@@ -1,15 +1,17 @@
-// Purchase orders (#21): a part-received order closes short with a reason,
+// Purchase orders (#21): a part-received order closes short with a reason
+// (asked in the app's own dialog since #23),
 // and orders are in ETB, so the form offers no currency to type.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ProcurementPage from '../pages/ProcurementPage.js';
+import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 
 const getMock = vi.fn();
 const postMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: {
     get: (...args: unknown[]) => getMock(...args),
     post: (...args: unknown[]) => postMock(...args),
@@ -35,7 +37,7 @@ function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <ProcurementPage userRole="Manager" userPermissions={[]} />
+      <ProcurementPage />
     </QueryClientProvider>,
   );
 }
@@ -44,6 +46,7 @@ beforeEach(() => {
   getMock.mockReset();
   postMock.mockReset();
   getMock.mockImplementation((path: string) => {
+    if (path === '/staff/me') return Promise.resolve({ id: 5, currentRoles: ['Manager'], currentBranchId: 1 });
     if (path.startsWith('/purchase-orders?')) return Promise.resolve({ items: [PO], total: 1, page: 1, totalPages: 1 });
     if (path.startsWith('/purchase-orders/42')) return Promise.resolve(DETAIL);
     return Promise.resolve({ items: [] });
@@ -54,12 +57,13 @@ beforeEach(() => {
 describe('ProcurementPage', () => {
   it('closes a part-received order short with the reason given', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'prompt').mockReturnValue('Out of print');
     renderPage();
     await waitFor(() => expect(screen.getByText('Acme Distributors')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'View' }));
 
     await user.click(await screen.findByRole('button', { name: 'Close Short' }));
+    await user.type(screen.getByLabelText('Why will the rest not be delivered?'), 'Out of print');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close Short' }));
     await waitFor(() => expect(postMock).toHaveBeenCalledWith('/purchase-orders/42/close', { reason: 'Out of print' }));
   });
 

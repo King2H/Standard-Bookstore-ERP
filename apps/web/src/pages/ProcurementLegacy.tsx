@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, downloadFile, getCurrentBranchId } from '../lib/api.js';
 import { paymentMethodPlainLabel } from '../lib/paymentMethods.js';
 import { useToast } from '../components/Toast.js';
-import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import BankAccountSelect from '../components/BankAccountSelect.js';
 import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
 
-type Role = string;
+// What is left of the old Procurement page until #23's PRs 2 and 3 move it to
+// features/procurement: the order form, receiving, the supplier ledger, and an
+// order's payments and credit notes. The page is features/procurement/pages.
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,64 +58,17 @@ interface SupplierLedgerEntry {
   amount: number;
   balance: number;
 }
-interface POListResponse { items: PO[]; total: number; page: number; totalPages: number; }
 interface Supplier { id: number; name: string; isActive: boolean; isBlacklisted: boolean; }
 interface Location { id: number; name: string; branchId: number; isDefaultFulfillment: boolean; }
 
-interface ProcurementPageProps { userRole?: Role; userPermissions?: string[]; initialContext?: Record<string, string>; }
 
 
 // ── RBAC helpers ──────────────────────────────────────────────────────────────
 
-const canWrite = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_INVENTORY')) || ['Admin', 'Manager', 'Purchasor'].includes(r ?? '');
-const canApprove = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
-const canReceive = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_INVENTORY')) || ['Admin', 'Manager', 'Stock_Clerk'].includes(r ?? '');
-const canClose = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager'].includes(r ?? '');
-const canRecordPayment = (r?: Role, perms?: string[]) => (perms?.includes('MANAGE_STAFF')) || ['Admin', 'Manager', 'Finance_Officer'].includes(r ?? '');
 
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  pending_approval: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-  approved: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  ordered: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
-  partially_received: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
-  received: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  closed: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
-  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[status] ?? 'bg-gray-100 text-gray-700'}`}>
-      {status.replace(/_/g, ' ')}
-    </span>
-  );
-}
-
-// ── Progress bar (Prompt 2 — receiving % / payment %) ─────────────────────────
-
-/** Clamp a fraction to [0, 1]; guards against divide-by-zero (empty PO). */
-function safePct(numerator: number, denominator: number): number {
-  if (!denominator || denominator <= 0) return 0;
-  return Math.min(1, Math.max(0, numerator / denominator));
-}
-
-function ProgressBar({ label, pct, tone, caption }: { label: string; pct: number; tone: 'blue' | 'green'; caption: string }) {
-  const barColor = tone === 'green' ? 'bg-green-500' : 'bg-blue-500';
-  return (
-    <div>
-      <div className="flex items-center justify-between text-xs mb-1">
-        <span className="font-medium text-gray-600 dark:text-gray-400">{label}</span>
-        <span className="text-gray-500 dark:text-gray-400">{caption}</span>
-      </div>
-      <div className="w-full h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.round(pct * 100)}%` }} />
-      </div>
-    </div>
-  );
-}
+// What is left of the Procurement page until #23's PRs 2 and 3 move it to
+// features/procurement: the order form, receiving, the supplier ledger, and
+// an order's payments and credit notes. The page is features/procurement/pages.
 
 // ── Line item form row ────────────────────────────────────────────────────────
 
@@ -254,7 +208,7 @@ function BookSearchCombobox({
 
 // ── View 4: Create/Edit PO Form ───────────────────────────────────────────────
 
-function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO) => void; onCancel: () => void }) {
+export function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO) => void; onCancel: () => void }) {
   const { showToast } = useToast();
   const [supplierId, setSupplierId] = useState<number | null>(editing?.supplierId ?? null);
   // Purchase orders are in ETB: their amounts become stock costs and supplier balances.
@@ -438,7 +392,7 @@ function POForm({ editing, onSaved, onCancel }: { editing?: PO; onSaved: (po: PO
 
 // ── View 3: Receive Goods (GRN form) ─────────────────────────────────────────
 
-function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated: PO) => void; onBack: () => void }) {
+export function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated: PO) => void; onBack: () => void }) {
   const { showToast } = useToast();
   const [locationId, setLocationId] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
@@ -565,14 +519,11 @@ function ReceiveForm({ po: poProp, onDone, onBack }: { po: PO; onDone: (updated:
   );
 }
 
-// ── View 2: PO Detail ─────────────────────────────────────────────────────────
+// ── Legacy: supplier payments and credit notes (move to features/procurement in PR 3) ──
 
-function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, onViewLedger }: {
-  poId: string; userRole?: Role; userPermissions?: string[]; onBack: () => void;
-  onEdit: (po: PO) => void; onReceive: (po: PO) => void; onViewLedger: (supplierId: number, supplierName: string) => void;
-}) {
+/** The payment and credit-note forms of an order's detail, as before #23's PR 1. */
+export function LegacyPaymentForms({ po, canPay, onChanged }: { po: PO; canPay: boolean; onChanged: () => void }) {
   const { showToast } = useToast();
-  const qc = useQueryClient();
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [paymentBankAccountId, setPaymentBankAccountId] = useState<number | null>(null);
@@ -580,137 +531,23 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
   const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(getCurrentBranchId(), paymentMethod === 'bank');
   const [creditAmount, setCreditAmount] = useState('');
   const [creditReason, setCreditReason] = useState('');
-
-  const { data: po, isLoading } = useQuery<PO>({
-    queryKey: ['po', poId],
-    queryFn: () => api.get(`/purchase-orders/${poId}`),
-  });
-
-  // Supplier Ledger is a live-derived view of PO/receipt/payment/credit-note
-  // activity (no cached/materialized table — see procurement.service.ts's
-  // getSupplierLedger()), so it's only ever as fresh as the last time this
-  // query was invalidated or the view was freshly mounted. Every mutation
-  // that changes what's owed to a supplier (submit/approve/order/close/
-  // cancel/payment/credit-note) must invalidate it too, or a ledger view
-  // left open elsewhere in the app silently goes stale.
-  const inv = () => {
-    qc.invalidateQueries({ queryKey: ['po', poId] });
-    qc.invalidateQueries({ queryKey: ['purchase-orders'] });
-    qc.invalidateQueries({ queryKey: ['supplier-ledger'] });
-  };
-
-  const submitMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/submit`), onSuccess: () => { inv(); showToast('Submitted for approval', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const approveMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/approve`), onSuccess: () => { inv(); showToast('PO approved', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const orderMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/order`), onSuccess: () => { inv(); showToast('Marked as ordered', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const closeMut = useMutation({ mutationFn: (reason?: string) => api.post<PO>(`/purchase-orders/${poId}/close`, reason ? { reason } : {}), onSuccess: () => { inv(); showToast('PO closed', 'success'); }, onError: (e: Error) => showToast(e.message, 'error') });
-  // A part-received order closes short when the supplier will not deliver the rest.
-  function closeShort() {
-    const reason = prompt('Why will the rest not be delivered?')?.trim();
-    if (reason) closeMut.mutate(reason);
-  }
-  const cancelMut = useMutation({ mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/cancel`), onSuccess: () => { inv(); showToast('PO cancelled', 'success'); onBack(); }, onError: (e: Error) => showToast(e.message, 'error') });
-  const reverseMut = useMutation({
-    mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) =>
-      api.post<PO>(`/purchase-orders/${poId}/payments/${paymentId}/reverse`, { reason }),
-    onSuccess: () => { inv(); showToast('Payment reversed', 'success'); },
-    onError: (e: Error) => showToast(e.message, 'error'),
-  });
-  // A payment recorded by mistake is reversed, with a reason; it stays on record.
-  function reversePayment(paymentId: string) {
-    const reason = prompt('Why is this payment being reversed?')?.trim();
-    if (reason) reverseMut.mutate({ paymentId, reason });
-  }
   const paymentMut = useMutation({
-    mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/payments`, {
+    mutationFn: () => api.post<PO>(`/purchase-orders/${po.id}/payments`, {
       amount: parseFloat(paymentAmount),
       paymentMethod,
       ...(paymentMethod === 'bank' && paymentBankAccountId ? { bankAccountId: paymentBankAccountId } : {}),
     }),
-    onSuccess: () => { inv(); showToast('Payment recorded', 'success'); setPaymentAmount(''); },
+    onSuccess: () => { onChanged(); showToast('Payment recorded', 'success'); setPaymentAmount(''); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
   const creditNoteMut = useMutation({
-    mutationFn: () => api.post<PO>(`/purchase-orders/${poId}/credit-notes`, { amount: parseFloat(creditAmount), reason: creditReason }),
-    onSuccess: () => { inv(); showToast('Credit note recorded', 'success'); setCreditAmount(''); setCreditReason(''); },
+    mutationFn: () => api.post<PO>(`/purchase-orders/${po.id}/credit-notes`, { amount: parseFloat(creditAmount), reason: creditReason }),
+    onSuccess: () => { onChanged(); showToast('Credit note recorded', 'success'); setCreditAmount(''); setCreditReason(''); },
     onError: (e: Error) => showToast(e.message, 'error'),
   });
-
-  if (isLoading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
-  if (!po) return <div className="p-8 text-center text-gray-400">PO not found.</div>;
-
   const status = po.status;
-  // Nullish-guarded: these are always populated by the live API (see
-  // procurement.service.ts's PO_FINANCIALS_SELECT), but older cached
-  // responses / test fixtures may omit them.
-  const receivedValue = po.receivedValue ?? 0;
-  const amountPaid = po.amountPaid ?? 0;
-  const creditNotesTotal = po.creditNotesTotal ?? 0;
-  const outstandingAmount = po.outstandingAmount ?? 0;
-  const orderedQuantityTotal = po.orderedQuantityTotal ?? 0;
-  const receivedQuantityTotal = po.receivedQuantityTotal ?? 0;
-  const receivingPct = safePct(receivedQuantityTotal, orderedQuantityTotal);
-  const paymentPct = safePct(amountPaid + creditNotesTotal, receivedValue);
-
+  if (!(po.financialStatus !== 'paid' && !['draft', 'pending_approval', 'cancelled'].includes(status) && canPay)) return null;
   return (
-    <div className="p-6 space-y-5 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back to List</button>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">PO #{po.id}</h2>
-        <StatusBadge status={status} />
-        <button onClick={() => onViewLedger(po.supplierId, po.supplierName)} className="ml-auto text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
-          View Supplier Ledger →
-        </button>
-      </div>
-
-      {/* Header info */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 grid grid-cols-2 gap-4 text-sm">
-        <div><span className="text-gray-500 dark:text-gray-400">Supplier:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.supplierName}</span></div>
-        <div><span className="text-gray-500 dark:text-gray-400">Total:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.currency} {Number(po.totalAmount).toFixed(2)}</span></div>
-        {po.closedReason && <div><span className="text-gray-500 dark:text-gray-400">Closed short:</span> <span className="text-gray-900 dark:text-white ml-1">{po.closedReason}</span></div>}
-        <div><span className="text-gray-500 dark:text-gray-400">Expected Delivery:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.expectedDeliveryDate ?? '—'}</span></div>
-        <div><span className="text-gray-500 dark:text-gray-400">Created:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{new Date(po.createdAt).toLocaleDateString()}</span></div>
-        {po.receivingLocationName && (
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Receiving Location:</span>
-            <span className="font-medium text-gray-900 dark:text-white ml-1">{po.receivingLocationName}</span>
-          </div>
-        )}
-        <div>
-          <span className="text-gray-500 dark:text-gray-400">Payment Status:</span>
-          <span className={`ml-1 text-xs font-medium px-2 py-0.5 rounded-full ${po.financialStatus === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : po.financialStatus === 'partial' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
-            {po.financialStatus}
-          </span>
-          <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">({po.paymentTerms === 'cash' ? 'Cash — settles on receipt' : 'Credit'})</span>
-        </div>
-        {po.notes && <div className="col-span-2"><span className="text-gray-500 dark:text-gray-400">Notes:</span> <span className="text-gray-900 dark:text-white ml-1">{po.notes}</span></div>}
-      </div>
-
-      {/* Prompt 2 — receiving & payment progress, plus the received-value AP basis */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ProgressBar
-            label="Receiving Progress"
-            pct={receivingPct}
-            tone="blue"
-            caption={`${receivedQuantityTotal} / ${orderedQuantityTotal} units`}
-          />
-          <ProgressBar
-            label="Payment Progress"
-            pct={paymentPct}
-            tone="green"
-            caption={`${po.currency} ${(amountPaid + creditNotesTotal).toFixed(2)} / ${receivedValue.toFixed(2)}`}
-          />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-gray-100 dark:border-gray-800">
-          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Received Value</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {receivedValue.toFixed(2)}</div></div>
-          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Amount Paid</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {amountPaid.toFixed(2)}</div></div>
-          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Credit Notes</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {creditNotesTotal.toFixed(2)}</div></div>
-          <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Outstanding</div><div className={`font-semibold ${outstandingAmount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>{po.currency} {outstandingAmount.toFixed(2)}</div></div>
-        </div>
-      </div>
-
-      {/* Record payment / credit note (credit POs, or cash POs not yet fully auto-settled) */}
-      {po.financialStatus !== 'paid' && !['draft', 'pending_approval', 'cancelled'].includes(status) && canRecordPayment(userRole, userPermissions) && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-5">
           <div>
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Record Supplier Payment</h3>
@@ -784,92 +621,25 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
             </div>
           </div>
         </div>
-      )}
+  );
+}
 
-      {/* Action buttons */}
-      <div className="flex flex-wrap gap-2">
-        {status === 'draft' && canWrite(userRole, userPermissions) && <>
-          <button onClick={() => onEdit(po)} className="px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Edit</button>
-          <button onClick={() => submitMut.mutate()} disabled={submitMut.isPending} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">Submit for Approval</button>
-          <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>
-        </>}
-        {status === 'pending_approval' && <>
-          {canApprove(userRole, userPermissions) && <button onClick={() => approveMut.mutate()} disabled={approveMut.isPending} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">Approve</button>}
-          {canWrite(userRole, userPermissions) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
-        </>}
-        {status === 'approved' && <>
-          {canWrite(userRole, userPermissions) && <button onClick={() => orderMut.mutate()} disabled={orderMut.isPending} className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">Mark as Ordered</button>}
-          {canReceive(userRole, userPermissions) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive Goods</button>}
-          {canWrite(userRole, userPermissions) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
-        </>}
-        {status === 'ordered' && <>
-          {canReceive(userRole, userPermissions) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive Goods</button>}
-          {canWrite(userRole, userPermissions) && <button onClick={() => { if (confirm('Cancel this PO?')) cancelMut.mutate(); }} disabled={cancelMut.isPending} className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors">Cancel</button>}
-        </>}
-        {status === 'partially_received' && <>
-          {canReceive(userRole, userPermissions) && <button onClick={() => onReceive(po)} className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Receive More Goods</button>}
-          {canClose(userRole, userPermissions) && <button onClick={closeShort} disabled={closeMut.isPending} className="px-4 py-2 text-sm font-medium bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 rounded-lg hover:bg-teal-200 dark:hover:bg-teal-800 disabled:opacity-50 transition-colors">Close Short</button>}
-        </>}
-        {status === 'received' && canClose(userRole, userPermissions) && (
-          <button onClick={() => closeMut.mutate(undefined)} disabled={closeMut.isPending} className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">Close PO</button>
-        )}
-      </div>
-
-      {/* Line items */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Line Items</h3>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>{['Book', 'ISBN', 'Ordered', 'Received', 'Remaining', 'Unit Cost', 'Line Total'].map(h => (
-              <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {(po.lineItems ?? []).map(li => (
-              <tr key={li.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td className="px-4 py-3 text-gray-900 dark:text-white">{li.bookTitle}</td>
-                <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{li.bookIsbn}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.quantity}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.receivedQuantity}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.remaining}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{Number(li.unitCost).toFixed(2)}</td>
-                <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">{(li.quantity * li.unitCost).toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Receipts */}
-      {(po.receipts ?? []).length > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Receipts (GRNs)</h3>
-          </div>
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {(po.receipts ?? []).map(r => (
-              <div key={r.id} className="p-4 space-y-2">
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="font-medium text-gray-900 dark:text-white">Receipt #{r.id}</span>
-                  <span className="text-gray-500 dark:text-gray-400">{r.locationName}</span>
-                  <span className="text-gray-500 dark:text-gray-400">{new Date(r.receivedAt).toLocaleString()}</span>
-                  {r.notes && <span className="text-gray-500 dark:text-gray-400 italic">{r.notes}</span>}
-                </div>
-                <div className="pl-4 space-y-1">
-                  {r.items.map(ri => (
-                    <div key={ri.id} className="text-xs text-gray-600 dark:text-gray-400">
-                      {ri.bookTitle}: {ri.quantityReceived} units
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
+/** The payments and credit notes of an order's detail, as before #23's PR 1. */
+export function LegacyPaymentLists({ po, canPay, onChanged }: { po: PO; canPay: boolean; onChanged: () => void }) {
+  const { showToast } = useToast();
+  const reverseMut = useMutation({
+    mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) =>
+      api.post<PO>(`/purchase-orders/${po.id}/payments/${paymentId}/reverse`, { reason }),
+    onSuccess: () => { onChanged(); showToast('Payment reversed', 'success'); },
+    onError: (e: Error) => showToast(e.message, 'error'),
+  });
+  // A payment recorded by mistake is reversed, with a reason; it stays on record.
+  function reversePayment(paymentId: string) {
+    const reason = prompt('Why is this payment being reversed?')?.trim();
+    if (reason) reverseMut.mutate({ paymentId, reason });
+  }
+  return (
+    <>
       {/* Supplier payments */}
       {(po.payments ?? []).length > 0 && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -889,7 +659,7 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
                 {p.notes && <span className="text-gray-500 dark:text-gray-400 italic">{p.notes}</span>}
                 {p.reversedAt
                   ? <span className="text-xs text-red-600 dark:text-red-400">Reversed: {p.reversalReason}</span>
-                  : canRecordPayment(userRole, userPermissions) && (
+                  : canPay && (
                     <button onClick={() => reversePayment(p.id)} disabled={reverseMut.isPending}
                       className="ml-auto text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950 px-2 py-1 rounded-sm transition-colors">Reverse</button>
                   )}
@@ -918,9 +688,10 @@ function PODetail({ poId, userRole, userPermissions, onBack, onEdit, onReceive, 
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
+
 
 // ── View 5: Supplier Ledger ──────────────────────────────────────────────────
 
@@ -931,7 +702,7 @@ const LEDGER_TYPE_COLORS: Record<string, string> = {
   CREDIT_NOTE: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
 };
 
-function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: number; supplierName: string; onBack: () => void }) {
+export function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: number; supplierName: string; onBack: () => void }) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -1055,186 +826,3 @@ function SupplierLedgerView({ supplierId, supplierName, onBack }: { supplierId: 
 }
 
 // ── View 1: PO List ───────────────────────────────────────────────────────────
-
-type View = 'list' | 'detail' | 'receive' | 'form' | 'ledger';
-
-export default function ProcurementPage({ userRole, userPermissions, initialContext = {} }: ProcurementPageProps) {
-  const qc = useQueryClient();
-  const [view, setView] = useState<View>('list');
-  const [selectedPO, setSelectedPO] = useState<PO | null>(null);
-  const [editingPO, setEditingPO] = useState<PO | undefined>(undefined);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterSupplier, setFilterSupplier] = useState('');
-  // Module 6: the dashboard's Procurement Expense KPI drill-down passes a
-  // date range (and branch) — this page used to silently ignore both.
-  const [dateFromFilter, setDateFromFilter] = useState(initialContext.dateFrom ?? '');
-  const [dateToFilter, setDateToFilter] = useState(initialContext.dateTo ?? '');
-  const [branchFilter] = useState(initialContext.branchId ?? '');
-  const [ledgerSupplier, setLedgerSupplier] = useState<{ id: number; name: string } | null>(null);
-
-  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  if (filterStatus) params.set('status', filterStatus);
-  if (dateFromFilter) params.set('dateFrom', dateFromFilter);
-  if (dateToFilter) params.set('dateTo', dateToFilter);
-  if (branchFilter) params.set('branchId', branchFilter);
-
-  const { data, isLoading } = useQuery<POListResponse>({
-    queryKey: ['purchase-orders', page, pageSize, filterStatus, dateFromFilter, dateToFilter, branchFilter],
-    queryFn: () => api.get(`/purchase-orders?${params}`),
-  });
-
-  const pos = (data?.items ?? []).filter(po =>
-    !filterSupplier || po.supplierName.toLowerCase().includes(filterSupplier.toLowerCase()),
-  );
-
-  function openDetail(po: PO) { setSelectedPO(po); setView('detail'); }
-  function openReceive(po: PO) { setSelectedPO(po); setView('receive'); }
-  function openCreate() { setEditingPO(undefined); setView('form'); }
-  function openEdit(po: PO) { setEditingPO(po); setView('form'); }
-  function openLedger(supplierId: number, supplierName: string) { setLedgerSupplier({ id: supplierId, name: supplierName }); setView('ledger'); }
-  function backToList() { setView('list'); setSelectedPO(null); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); }
-
-  if (view === 'form') {
-    return <POForm editing={editingPO} onSaved={(po) => { qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['supplier-ledger'] }); openDetail(po); }} onCancel={backToList} />;
-  }
-
-  if (view === 'detail' && selectedPO) {
-    return (
-      <PODetail
-        poId={selectedPO.id}
-        userRole={userRole}
-        userPermissions={userPermissions}
-        onBack={backToList}
-        onEdit={openEdit}
-        onReceive={openReceive}
-        onViewLedger={openLedger}
-      />
-    );
-  }
-
-  if (view === 'receive' && selectedPO) {
-    return (
-      <ReceiveForm
-        po={selectedPO}
-        onDone={(updated) => { setSelectedPO(updated); setView('detail'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['supplier-ledger'] }); }}
-        onBack={() => setView('detail')}
-      />
-    );
-  }
-
-  if (view === 'ledger' && ledgerSupplier) {
-    return (
-      <SupplierLedgerView
-        supplierId={ledgerSupplier.id}
-        supplierName={ledgerSupplier.name}
-        onBack={() => setView(selectedPO ? 'detail' : 'list')}
-      />
-    );
-  }
-
-  // List view
-  return (
-    <div className="p-6 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          placeholder="Search by supplier..."
-          value={filterSupplier}
-          onChange={e => setFilterSupplier(e.target.value)}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-56 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={filterStatus}
-          onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All Statuses</option>
-          {['draft','pending_approval','approved','ordered','partially_received','received','closed','cancelled'].map(s => (
-            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-          ))}
-        </select>
-        <input type="date" value={dateFromFilter} onChange={e => { setDateFromFilter(e.target.value); setPage(1); }}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-        <span className="text-xs text-gray-400">to</span>
-        <input type="date" value={dateToFilter} onChange={e => { setDateToFilter(e.target.value); setPage(1); }}
-          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
-        {(filterStatus || dateFromFilter || dateToFilter) && (
-          <button onClick={() => { setFilterStatus(''); setDateFromFilter(''); setDateToFilter(''); setPage(1); }}
-            className="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-            Clear
-          </button>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} orders</span>
-          {canWrite(userRole, userPermissions) && (
-            <button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-              + New PO
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center text-gray-400">Loading...</div>
-        ) : pos.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">No purchase orders found.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-              <tr>
-                {['ID', 'Supplier', 'Status', 'Total', 'Received', 'Paid / Outstanding', 'Expected Date', 'Actions'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {pos.map(po => {
-                const receivingPct = safePct(po.receivedQuantityTotal, po.orderedQuantityTotal);
-                return (
-                <tr key={po.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">#{po.id}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{po.supplierName}</td>
-                  <td className="px-4 py-3"><StatusBadge status={po.status} /></td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{po.currency} {Number(po.totalAmount).toFixed(2)}</td>
-                  <td className="px-4 py-3 w-28">
-                    <ProgressBar label="" pct={receivingPct} tone="blue" caption={`${Math.round(receivingPct * 100)}%`} />
-                  </td>
-                  <td className="px-4 py-3 text-xs whitespace-nowrap">
-                    <span className="font-medium text-gray-900 dark:text-white">{po.currency} {Number(po.amountPaid ?? 0).toFixed(2)} paid</span>
-                    {po.outstandingAmount > 0 && (
-                      <span className="block text-amber-600 dark:text-amber-400">{po.currency} {Number(po.outstandingAmount).toFixed(2)} outstanding</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{po.expectedDeliveryDate ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 text-xs">
-                      <button onClick={() => openDetail(po)} className="px-2 py-1 rounded-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors">View</button>
-                      {po.status === 'draft' && canWrite(userRole, userPermissions) && (
-                        <button onClick={() => openEdit(po)} className="px-2 py-1 rounded-sm text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">Edit</button>
-                      )}
-                      {['approved', 'ordered', 'partially_received'].includes(po.status) && canReceive(userRole, userPermissions) && (
-                        <button onClick={() => openReceive(po)} className="px-2 py-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-950 transition-colors">Receive</button>
-                      )}
-                      <button onClick={() => openLedger(po.supplierId, po.supplierName)} className="px-2 py-1 rounded-sm text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors">Ledger</button>
-                    </div>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        {data && (
-          <Pagination
-            page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
-            onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)}
-            itemLabel="purchase order"
-          />
-        )}
-      </div>
-    </div>
-  );
-}

@@ -3,11 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ProcurementPage from '../pages/ProcurementPage.js';
+import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 
 const getMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: { get: (...args: unknown[]) => getMock(...args) },
   getCurrentBranchId: () => 1,
 }));
@@ -23,6 +24,16 @@ function makePOPage(total: number, page = 1, pageSize = 10) {
       totalAmount: 100,
       currency: 'ETB',
       createdAt: new Date().toISOString(),
+      // As the API sends every order (the list shows them).
+      poNumber: `PO-${String((page - 1) * pageSize + i + 1).padStart(6, '0')}`,
+      receivingBranchId: 1,
+      createdBy: 1,
+      receivedValue: 0,
+      amountPaid: 0,
+      creditNotesTotal: 0,
+      outstandingAmount: 0,
+      orderedQuantityTotal: 1,
+      receivedQuantityTotal: 0,
     })),
     total,
     page,
@@ -34,7 +45,7 @@ function renderProcurementPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <ProcurementPage userRole="Admin" userPermissions={[]} />
+      <ProcurementPage />
     </QueryClientProvider>,
   );
 }
@@ -42,6 +53,7 @@ function renderProcurementPage() {
 beforeEach(() => {
   getMock.mockReset();
   getMock.mockImplementation((path: string) => {
+    if (path === '/staff/me') return Promise.resolve({ id: 5, currentRoles: ['Admin'], currentBranchId: 1 });
     if (path.startsWith('/purchase-orders?')) return Promise.resolve(makePOPage(17));
     return Promise.resolve({ items: [] });
   });
