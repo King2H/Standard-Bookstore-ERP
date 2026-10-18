@@ -228,7 +228,7 @@ describe('Payments — Order Payment Management', () => {
       .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ orderId: parseInt(order.id), amount: partialAmount, paymentMethod: 'mobile' });
+      .send({ orderId: parseInt(order.id), amount: partialAmount, paymentMethod: 'mobile', transactionReference: 'TB-1' });
 
     const balRes = await request(getTestApp())
       .get(`/api/v1/orders/${order.id}/balance`)
@@ -251,7 +251,7 @@ describe('Payments — Order Payment Management', () => {
       .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ orderId: parseInt(order.id), amount: order.total, paymentMethod: 'mobile' });
+      .send({ orderId: parseInt(order.id), amount: order.total, paymentMethod: 'mobile', transactionReference: 'TB-2' });
 
     const listRes = await request(getTestApp())
       .get(`/api/v1/orders/${order.id}/payments`)
@@ -281,7 +281,7 @@ describe('Payments — Order Payment Management', () => {
       .post('/api/v1/payments')
       .set('Authorization', `Bearer ${salesToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ orderId: parseInt(order.id), amount: remainder, paymentMethod: 'mobile' });
+      .send({ orderId: parseInt(order.id), amount: remainder, paymentMethod: 'mobile', transactionReference: 'TB-3' });
 
     expect(res2.status).toBe(201);
 

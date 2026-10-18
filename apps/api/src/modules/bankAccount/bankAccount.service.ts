@@ -198,6 +198,15 @@ export async function accountForPayment(q: Queryable, bankAccountId: number | nu
 }
 
 /** Records a bank movement for reconciliation, in the caller's transaction. */
+/**
+ * A customer payment's movement note: the document, then the bank the customer
+ * paid from and the transfer's reference, as the statement line shows them,
+ * so the line can be matched by hand.
+ */
+export function movementNote(document: string, proof: { payerBank: string | null; reference: string | null }): string {
+  return [document, proof.payerBank, proof.reference].filter(Boolean).join(' · ');
+}
+
 export function recordMovement(q: Queryable, m: BankMovement): Promise<void> {
   return repo.insertEntry(q, m);
 }

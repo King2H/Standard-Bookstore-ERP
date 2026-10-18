@@ -186,9 +186,10 @@ describe('Post-MVP Hardening', () => {
         .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ orderId, amount: bookPrice, paymentMethod: 'bank' });
+        .send({ orderId, amount: bookPrice, paymentMethod: 'bank', payerBank: 'CBE', transactionReference: 'FT-H6' });
 
       expect(res.status).toBe(400);
+      expect(res.body.message).toBe('bankAccountId is required for bank payments');
       delete process.env.FEATURE_BANK_ACCOUNTS;
     });
 
@@ -198,7 +199,7 @@ describe('Post-MVP Hardening', () => {
       const res = await request(getTestApp())
         .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ orderId, amount: bookPrice, paymentMethod: 'bank' });
+        .send({ orderId, amount: bookPrice, paymentMethod: 'bank', payerBank: 'CBE', transactionReference: 'FT-H6B' });
 
       expect(res.status).toBe(201);
       expect(res.body.bankAccountId).toBeNull();
@@ -211,7 +212,7 @@ describe('Post-MVP Hardening', () => {
         .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ orderId, amount: bookPrice, paymentMethod: 'bank', bankAccountId });
+        .send({ orderId, amount: bookPrice, paymentMethod: 'bank', payerBank: 'CBE', transactionReference: 'FT-H7', bankAccountId });
 
       expect(res.status).toBe(201);
       expect(res.body.bankAccountId).toBe(bankAccountId);
@@ -242,7 +243,7 @@ describe('Post-MVP Hardening', () => {
         .post('/api/v1/payments')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ orderId, amount: bookPrice, paymentMethod: 'bank', bankAccountId: otherBaId });
+        .send({ orderId, amount: bookPrice, paymentMethod: 'bank', payerBank: 'CBE', transactionReference: 'FT-H8', bankAccountId: otherBaId });
 
       expect(res.status).toBe(422);
       expect(res.body.error).toBe('INVALID_BANK_ACCOUNT');

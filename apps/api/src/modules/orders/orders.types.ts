@@ -2,6 +2,14 @@ import type { DiscountMode, DiscountType } from '../../lib/discount.js';
 
 export interface StaffCtx { staffId: number; role: string; roles?: string[]; branchId: number; }
 
+/** How a cash order is paid at confirmation; a bank or Telebirr payment carries its proof. */
+export interface ConfirmPayment {
+  method: string | null;
+  transactionReference: string | null;
+  payerBank: string | null;
+  bankAccountId: number | null;
+}
+
 export type SaleType = 'cash_sale' | 'credit_sale';
 
 /** The values the orders.payment_status constraint allows. */

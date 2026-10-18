@@ -46,6 +46,7 @@ export interface PosPaymentRow {
   method: string;
   amount: string;
   reference: string | null;
+  payer_bank: string | null;
   bank_account_id: number | null;
   created_at: Date;
 }
@@ -99,6 +100,7 @@ export function toPaymentRecord(row: PosPaymentRow): PosPaymentRecord {
     method: row.method,
     amount: Money.of(row.amount),
     reference: row.reference,
+    payerBank: row.payer_bank,
     bankAccountId: row.bank_account_id,
     createdAt: row.created_at,
   };

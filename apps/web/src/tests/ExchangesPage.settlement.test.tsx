@@ -74,6 +74,10 @@ describe('ExchangesPage — Quick Exchange', () => {
     expect(screen.getByTitle('Catalog price')).toHaveTextContent('150.00');
 
     await user.selectOptions(screen.getByLabelText('Payment method'), 'mobile');
+    // A Telebirr payment carries its transaction number (owner decision 2a).
+    await user.click(screen.getByRole('button', { name: 'Complete Exchange' }));
+    expect(postMock).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText('Telebirr transaction number'), 'TB-EX-1');
     await user.click(screen.getByRole('button', { name: 'Complete Exchange' }));
 
     await waitFor(() => expect(postMock).toHaveBeenCalled());
@@ -82,7 +86,7 @@ describe('ExchangesPage — Quick Exchange', () => {
     expect(body).toMatchObject({
       incomingItems: [{ bookId: 1, quantity: 1, unitPrice: 100, condition: 'damaged' }],
       outgoingItems: [{ bookId: 2, quantity: 1 }],
-      payments: [{ method: 'mobile', amount: 50 }],
+      payments: [{ method: 'mobile', amount: 50, reference: 'TB-EX-1' }],
       allowCredit: false,
     });
     expect(body.outgoingItems[0]).not.toHaveProperty('unitPrice');

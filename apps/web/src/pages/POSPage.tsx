@@ -7,6 +7,8 @@ import QuickAddCustomer, { type QuickCustomerPayload } from '../components/Quick
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import PaymentMethodTabs from '../components/PaymentMethodTabs.js';
 import BankAccountSelect from '../components/BankAccountSelect.js';
+import PaymentProofFields from '../components/PaymentProofFields.js';
+import { EMPTY_PROOF, proofError, proofFields, proofLabel, type PaymentProof } from '../lib/paymentProof.js';
 import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
 import { paymentMethodPlainLabel, PAYMENT_METHOD_META, type PaymentMethodCode } from '../lib/paymentMethods.js';
 
@@ -74,7 +76,7 @@ interface Customer {
 interface Location { id: number; name: string; isDefaultFulfillment: boolean; }
 
 interface TransactionLine { bookTitle: string; quantity: number; unitPrice: number; discountAmount: number; lineTotal: number; }
-interface TransactionPayment { method: string; amount: number; }
+interface TransactionPayment { method: string; amount: number; payerBank?: string | null; reference?: string | null; }
 
 interface Transaction {
   id: string; transactionNumber: string;
@@ -191,10 +193,11 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
   const [customerSearch, setCustomerSearch]       = useState('');
   const [showQuickAdd, setShowQuickAdd]           = useState(false);
   const [locationId, setLocationId]               = useState<number | null>(null);
-  const [paymentLines, setPaymentLines]           = useState<Array<{ method: PaymentMethod; amount: string; bankAccountId?: number }>>([]);
+  const [paymentLines, setPaymentLines]           = useState<Array<{ method: PaymentMethod; amount: string; bankAccountId?: number; payerBank?: string; reference?: string }>>([]);
   const [payMethod, setPayMethod]                 = useState<PaymentMethod>('cash');
   const [payAmount, setPayAmount]                 = useState('');
   const [payBankAccountId, setPayBankAccountId]   = useState<number | ''>('');
+  const [payProof, setPayProof]                   = useState<PaymentProof>(EMPTY_PROOF);
   const [receipt, setReceipt]                     = useState<Transaction | null>(null);
   const [histPage, setHistPage]                   = useState(1);
   const [histPageSize, setHistPageSize]           = useState(DEFAULT_PAGE_SIZE);
@@ -442,14 +445,20 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
     const amt = parseFloat(raw);
     if (!amt || amt <= 0) return;
     if (payMethod === 'bank' && bankAccountRequired && !payBankAccountId) { showToast('Select a bank account', 'error'); return; }
-    setPaymentLines(prev => [...prev, { method: payMethod, amount: raw, bankAccountId: payMethod === 'bank' && payBankAccountId ? Number(payBankAccountId) : undefined }]);
+    const missing = proofError(payMethod, payProof);
+    if (missing) { showToast(missing, 'error'); return; }
+    setPaymentLines(prev => [...prev, {
+      method: payMethod, amount: raw, bankAccountId: payMethod === 'bank' && payBankAccountId ? Number(payBankAccountId) : undefined,
+      ...proofFields(payMethod, payProof),
+    }]);
     setPayAmount('');
+    setPayProof(EMPTY_PROOF);
   }
 
   function removePayment(idx: number) { setPaymentLines(prev => prev.filter((_, i) => i !== idx)); }
 
   function buildPaymentPayload() {
-    return paymentLines.map(p => ({ method: p.method, amount: parseFloat(p.amount), bankAccountId: p.bankAccountId }));
+    return paymentLines.map(p => ({ method: p.method, amount: parseFloat(p.amount), bankAccountId: p.bankAccountId, payerBank: p.payerBank, reference: p.reference }));
   }
 
   function handleCompleteSale() {
@@ -577,7 +586,10 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 space-y-1.5">
                   {(receipt.payments ?? []).map((p, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500">{paymentMethodPlainLabel(p.method)}</span>
+                      <span className="text-gray-500">
+                        {paymentMethodPlainLabel(p.method)}
+                        {proofLabel(p) && <span className="block text-xs text-gray-400">{proofLabel(p)}</span>}
+                      </span>
                       <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {Number(p.amount).toFixed(2)}</span>
                     </div>
                   ))}
@@ -1070,6 +1082,9 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                 <BankAccountSelect accounts={bankAccounts} value={payBankAccountId || null} onChange={(id) => setPayBankAccountId(id ?? '')} />
               )}
 
+              {/* Customer's bank and reference, or the Telebirr number */}
+              <PaymentProofFields method={payMethod} value={payProof} onChange={setPayProof} />
+
               {/* Store credit info */}
               {payMethod === 'store_credit' && selectedCustomer && (
                 <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-lg px-2.5 py-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-semibold">
@@ -1116,9 +1131,10 @@ export default function POSPage({ userRole, userPermissions, initialContext = {}
                 <div className="space-y-1 bg-gray-50 dark:bg-gray-800/40 rounded-lg p-2">
                   {paymentLines.map((p, i) => (
                     <div key={i} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                      <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1 min-w-0">
                         <span>{PAYMENT_METHOD_META[p.method]?.icon}</span>
                         {paymentMethodPlainLabel(p.method)}
+                        {proofLabel(p) && <span className="text-gray-400 truncate">· {proofLabel(p)}</span>}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{currency} {parseFloat(p.amount).toFixed(2)}</span>

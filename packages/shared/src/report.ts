@@ -269,6 +269,10 @@ export const PaymentsLedgerRowSchema = z.object({
   referenceType: z.enum(['ORDER', 'POS', 'RETURN', 'EXCHANGE', 'PO']),
   referenceNo: z.string(),
   paymentMethod: z.string(),
+  /** The bank the customer paid from; empty when not a bank payment or not recorded. */
+  payerBank: z.string(),
+  /** A bank transfer's reference or a Telebirr transaction number; empty when none. */
+  paymentReference: z.string(),
   amount: z.number(),
   direction: z.enum(['IN', 'OUT']),
   date: z.string(),

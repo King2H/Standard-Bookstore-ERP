@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
+import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
 
 /** Contracts for /api/v1/pos: counter sales (#21). */
 
@@ -29,7 +30,10 @@ export const PosPaymentSchema = z.object({
   transactionId: z.string(),
   method: z.string(),
   amount: z.number(),
+  /** A bank transfer's reference or a Telebirr transaction number. */
   reference: z.string().nullable(),
+  /** The bank the customer paid from (bank payments). */
+  payerBank: z.string().nullable(),
   /** The bank account a bank payment went to (#21). */
   bankAccountId: z.number().int().nullable(),
   createdAt: z.string(),
@@ -94,13 +98,18 @@ export const PosTransactionListResponseSchema = z.object({
 });
 export type PosTransactionListResponse = z.infer<typeof PosTransactionListResponseSchema>;
 
-export const PosPaymentInputSchema = z.object({
-  method: PosPaymentMethodSchema,
-  amount: MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be more than zero'),
-  reference: z.string().max(200).optional(),
-  /** A bank payment's account; required while bank accounts are on (#21). */
-  bankAccountId: z.number().int().positive().optional(),
-});
+export const PosPaymentInputSchema = z
+  .object({
+    method: PosPaymentMethodSchema,
+    amount: MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be more than zero'),
+    /** Required for bank (the transfer's reference) and mobile (the Telebirr transaction number). */
+    reference: PaymentReferenceSchema.optional(),
+    /** Required for bank: the bank the customer paid from. */
+    payerBank: PayerBankSchema.optional(),
+    /** A bank payment's account; required while bank accounts are on (#21). */
+    bankAccountId: z.number().int().positive().optional(),
+  })
+  .superRefine(checkPaymentProof({ method: 'method', reference: 'reference' }));
 export type PosPaymentInput = z.infer<typeof PosPaymentInputSchema>;
 
 export const PosLineInputSchema = z.object({

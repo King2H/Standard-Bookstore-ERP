@@ -63,6 +63,8 @@ export interface SettlementEntryRecord {
   entryType: string;
   amount: Money;
   method: string | null;
+  reference: string | null;
+  payerBank: string | null;
   bankAccountId: number | null;
   createdAt: Date;
 }
@@ -71,6 +73,7 @@ export interface PaymentLine {
   method: PaymentMethod;
   amount: Money;
   reference: string | null;
+  payerBank: string | null;
   bankAccountId: number | null;
 }
 

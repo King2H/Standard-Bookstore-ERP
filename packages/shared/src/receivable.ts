@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
+import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
 
 /** Contracts for /api/v1/receivables: what customers owe on credit sales and exchanges (#21). */
 
@@ -93,13 +94,19 @@ export const ReceivableSummarySchema = z.object({
 });
 export type ReceivableSummary = z.infer<typeof ReceivableSummarySchema>;
 
-export const CollectReceivableRequestSchema = z.object({
-  amount: MoneyInputSchema,
-  paymentMethod: z.enum(['cash', 'bank', 'mobile', 'store_credit']),
-  /** Required for bank. */
-  bankAccountId: IdSchema.nullable().optional(),
-  notes: z.string().max(1000).optional(),
-});
+export const CollectReceivableRequestSchema = z
+  .object({
+    amount: MoneyInputSchema,
+    paymentMethod: z.enum(['cash', 'bank', 'mobile', 'store_credit']),
+    /** Required for bank. */
+    bankAccountId: IdSchema.nullable().optional(),
+    /** Required for bank (the transfer's reference) and mobile (the Telebirr transaction number). */
+    transactionReference: PaymentReferenceSchema.optional(),
+    /** Required for bank: the bank the customer paid from. */
+    payerBank: PayerBankSchema.optional(),
+    notes: z.string().max(1000).optional(),
+  })
+  .superRefine(checkPaymentProof({ method: 'paymentMethod', reference: 'transactionReference' }));
 export type CollectReceivableRequest = z.infer<typeof CollectReceivableRequestSchema>;
 
 export const WriteOffReceivableRequestSchema = z.object({

@@ -91,7 +91,8 @@ export async function create(req: Request, res: Response): Promise<void> {
       orderId: String(input.orderId),
       amount: Money.of(input.amount),
       paymentMethod: input.paymentMethod,
-      transactionReference: input.transactionReference ?? null,
+      transactionReference: input.transactionReference || null,
+      payerBank: input.payerBank || null,
       notes: input.notes ?? null,
       bankAccountId: input.bankAccountId ?? null,
     }).then(toPaymentResponse);

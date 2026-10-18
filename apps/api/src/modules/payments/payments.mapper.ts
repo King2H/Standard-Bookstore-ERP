@@ -11,6 +11,7 @@ export interface PaymentRow {
   payment_method: string;
   status: string;
   transaction_reference: string | null;
+  payer_bank: string | null;
   notes: string | null;
   processed_at: Date;
   created_at: Date;
@@ -58,6 +59,7 @@ export function toPaymentRecord(row: PaymentRow): PaymentRecord {
     paymentMethod: row.payment_method,
     status: row.status as PaymentStatus,
     transactionReference: row.transaction_reference,
+    payerBank: row.payer_bank,
     notes: row.notes,
     processedAt: row.processed_at,
     createdAt: row.created_at,

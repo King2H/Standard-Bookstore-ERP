@@ -7,6 +7,8 @@ import { useCurrency } from '../lib/useCurrency.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../components/Pagination.js';
 import { PAYMENT_METHOD_META, type PaymentMethodCode } from '../lib/paymentMethods.js';
 import BankAccountSelect from '../components/BankAccountSelect.js';
+import PaymentProofFields from '../components/PaymentProofFields.js';
+import { EMPTY_PROOF, proofError, proofFields, type PaymentProof } from '../lib/paymentProof.js';
 import { useBranchBankAccounts } from '../features/bankAccounts/queries.js';
 
 // How the customer pays what they owe at the counter (owner decision 2a).
@@ -64,6 +66,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
   // Settling the difference: the customer pays at the counter (or leaves the rest on credit), or the store refunds.
   const [payMethod, setPayMethod] = useState<PaymentMethodCode>('cash');
   const [payBankAccountId, setPayBankAccountId] = useState<number | null>(null);
+  const [payProof, setPayProof] = useState<PaymentProof>(EMPTY_PROOF);
   // With Bank Accounts on, a bank payment names the account it went to (#21).
   const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(branchId, payMethod === 'bank');
   const [payAmount, setPayAmount] = useState('');
@@ -142,7 +145,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
       showToast(`Exchange ${e.exchangeReference} completed`, 'success');
       setIncomingItems([]); setOutgoingItems([]); setBookSearch('');
       setSelectedCustomer(null); setCustomerSearch('');
-      setPayAmount(''); setAllowCredit(false); setRefundMethod('store_credit');
+      setPayAmount(''); setPayProof(EMPTY_PROOF); setAllowCredit(false); setRefundMethod('store_credit');
       qc.invalidateQueries({ queryKey: ['exchanges-list'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['inventory-low-stock'] });
@@ -209,6 +212,8 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
       showToast('Select the bank account the payment went to', 'error');
       return;
     }
+    const missingProof = paid > 0 ? proofError(payMethod, payProof) : null;
+    if (missingProof) { showToast(missingProof, 'error'); return; }
     if ((allowCredit && netBalance > 0.01 && paid < netBalance - 0.01) || (netBalance < -0.01 && refundMethod === 'store_credit')
       || ((payMethod === 'store_credit' || payMethod === 'loyalty_points') && paid > 0)) {
       if (!selectedCustomer) { showToast('Select a customer: credit, store credit and points belong to a customer', 'error'); return; }
@@ -219,7 +224,12 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
       incomingItems: incomingItems.map(i => ({ bookId: i.bookId, quantity: i.quantity, unitPrice: i.unitPrice, condition: i.condition })),
       outgoingItems: outgoingItems.map(i => ({ bookId: i.bookId, quantity: i.quantity })),
       payments: paid > 0
-        ? [{ method: payMethod, amount: Number(paid.toFixed(2)), ...(payMethod === 'bank' && payBankAccountId ? { bankAccountId: payBankAccountId } : {}) }]
+        ? [{
+            method: payMethod,
+            amount: Number(paid.toFixed(2)),
+            ...(payMethod === 'bank' && payBankAccountId ? { bankAccountId: payBankAccountId } : {}),
+            ...proofFields(payMethod, payProof),
+          }]
         : [],
       allowCredit: allowCredit && paid < netBalance - 0.01,
       refundMethod,
@@ -488,6 +498,7 @@ export default function ExchangesPage({ userRole, userPermissions = [] }: Exchan
                   {payMethod === 'bank' && bankAccountRequired && (
                     <BankAccountSelect accounts={bankAccounts} value={payBankAccountId} onChange={setPayBankAccountId} />
                   )}
+                  <PaymentProofFields method={payMethod} value={payProof} onChange={setPayProof} />
                   <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                     <input type="checkbox" checked={allowCredit} onChange={e => setAllowCredit(e.target.checked)} />
                     Leave what is not paid on credit (a receivable for the customer)

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
+import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
 
 /** Contracts for /api/v1/exchanges: books brought in for books taken out, at the counter (#21). */
 
@@ -23,6 +24,10 @@ export const ExchangeSettlementEntrySchema = z.object({
   amount: z.number(),
   /** cash, bank, mobile, store_credit or loyalty_points. */
   method: z.string().nullable(),
+  /** A bank transfer's reference or a Telebirr transaction number. */
+  reference: z.string().nullable(),
+  /** The bank the customer paid from (bank payments). */
+  payerBank: z.string().nullable(),
   createdAt: z.string(),
 });
 
@@ -114,13 +119,18 @@ export const ExchangeOutgoingItemInputSchema = z.object({
   quantity: z.number().int().positive(),
 });
 
-export const ExchangePaymentInputSchema = z.object({
-  method: z.enum(['cash', 'bank', 'mobile', 'store_credit', 'loyalty_points']),
-  amount: PositiveMoneySchema,
-  reference: z.string().max(200).optional(),
-  /** A bank payment's account; required while bank accounts are on (#21). */
-  bankAccountId: z.number().int().positive().optional(),
-});
+export const ExchangePaymentInputSchema = z
+  .object({
+    method: z.enum(['cash', 'bank', 'mobile', 'store_credit', 'loyalty_points']),
+    amount: PositiveMoneySchema,
+    /** Required for bank (the transfer's reference) and mobile (the Telebirr transaction number). */
+    reference: PaymentReferenceSchema.optional(),
+    /** Required for bank: the bank the customer paid from. */
+    payerBank: PayerBankSchema.optional(),
+    /** A bank payment's account; required while bank accounts are on (#21). */
+    bankAccountId: z.number().int().positive().optional(),
+  })
+  .superRefine(checkPaymentProof({ method: 'method', reference: 'reference' }));
 
 export const CreateExchangeRequestSchema = z
   .object({

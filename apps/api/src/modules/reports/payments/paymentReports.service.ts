@@ -36,6 +36,8 @@ export async function getPaymentsLedger(scope: ReportScope): Promise<PaymentsLed
     referenceType,
     referenceNo: r.reference_no,
     paymentMethod: r.payment_method ?? '',
+    payerBank: r.payer_bank ?? '',
+    paymentReference: r.payment_ref ?? '',
     amount: num(r.amount),
     direction,
     date: r.date_str,

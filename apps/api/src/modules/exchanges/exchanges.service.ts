@@ -5,7 +5,7 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { AppError, BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
-import { accountForPayment, recordMovement } from '../bankAccount/bankAccount.service.js';
+import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxReturnValueWithoutAuth } from '../config/config.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -97,7 +97,7 @@ async function spendFromAccounts(q: Queryable, customerId: number | null, paymen
  */
 export async function createExchange(actor: Actor, input: NewExchange): Promise<ExchangeRecord> {
   checkTender(
-    input.payments.map((p) => ({ method: p.method, amount: p.amount, reference: p.reference, bankAccountId: p.bankAccountId })),
+    input.payments.map((p) => ({ method: p.method, amount: p.amount, reference: p.reference, payerBank: p.payerBank, bankAccountId: p.bankAccountId })),
     input.customerId,
   );
 
@@ -170,10 +170,11 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       // With bank accounts on, a bank payment names an active account of the branch (#21).
       const bankAccountId = p.method === 'bank' ? await accountForPayment(tx, p.bankAccountId, input.branchId) : null;
       const entryId = await exchanges.insertEntry(tx, {
-        exchangeId: id, entryType: 'cash_payment', amount: p.amount, method: p.method, note: p.reference, by: actor.staffId, bankAccountId,
+        exchangeId: id, entryType: 'cash_payment', amount: p.amount, method: p.method, reference: p.reference, payerBank: p.payerBank, by: actor.staffId, bankAccountId,
       });
       if (bankAccountId !== null) {
-        await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'exchange_payment', sourceId: entryId, notes: `Exchange ${reference}` });
+        await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'exchange_payment', sourceId: entryId,
+          notes: movementNote(`Exchange ${reference}`, { payerBank: p.payerBank, reference: p.reference }) });
       }
     }
     const credit = type === 'Customer_Pays' ? net.minus(paid) : Money.ZERO;
@@ -193,7 +194,7 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       if (input.refundMethod === 'store_credit' && input.customerId !== null) {
         await customers.moveStoreCredit(tx, input.customerId, refund, { direction: 'credit', refType: 'exchange_refund', refId: reference });
       } else {
-        await exchanges.insertEntry(tx, { exchangeId: id, entryType: 'cash_refund', amount: refund, method: 'cash', note: null, by: actor.staffId });
+        await exchanges.insertEntry(tx, { exchangeId: id, entryType: 'cash_refund', amount: refund, method: 'cash', by: actor.staffId });
       }
     }
 

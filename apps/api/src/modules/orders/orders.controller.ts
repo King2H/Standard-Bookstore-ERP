@@ -84,7 +84,12 @@ export async function create(req: Request, res: Response): Promise<void> {
 
 export async function confirm(req: Request, res: Response): Promise<void> {
   const { params, body } = valid(req, schemas.confirm);
-  const order = await service.confirm(params.id, req.staff!, body.dueDate ?? null, body.paymentMethod ?? null);
+  const order = await service.confirm(params.id, req.staff!, body.dueDate ?? null, {
+    method: body.paymentMethod ?? null,
+    transactionReference: body.transactionReference || null,
+    payerBank: body.payerBank || null,
+    bankAccountId: body.bankAccountId ?? null,
+  });
   res.json(toResponse(req, order));
 }
 

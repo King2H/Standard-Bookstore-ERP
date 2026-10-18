@@ -148,7 +148,7 @@ export async function items(q: Queryable, exchangeId: string): Promise<{ incomin
 export async function settlementEntries(q: Queryable, exchangeId: string): Promise<SettlementEntryRecord[]> {
   const rows = await q
     .selectFrom('exchange_settlement_entries')
-    .select(['id', 'entry_type', 'amount', 'method', 'bank_account_id', 'created_at'])
+    .select(['id', 'entry_type', 'amount', 'method', 'reference', 'payer_bank', 'bank_account_id', 'created_at'])
     .where('exchange_id', '=', exchangeId)
     .orderBy('id')
     .execute();
@@ -157,6 +157,8 @@ export async function settlementEntries(q: Queryable, exchangeId: string): Promi
     entryType: r.entry_type,
     amount: Money.of(r.amount),
     method: r.method,
+    reference: r.reference,
+    payerBank: r.payer_bank,
     bankAccountId: r.bank_account_id,
     createdAt: r.created_at,
   }));
@@ -270,7 +272,8 @@ export async function insertEntry(
     entryType: 'cash_payment' | 'cash_refund';
     amount: Money;
     method: string;
-    note: string | null;
+    reference?: string | null;
+    payerBank?: string | null;
     by: number;
     bankAccountId?: number | null;
   },
@@ -283,7 +286,8 @@ export async function insertEntry(
       amount: e.amount.toFixed(2),
       currency: 'ETB',
       method: e.method,
-      note: e.note,
+      reference: e.reference ?? null,
+      payer_bank: e.payerBank ?? null,
       authorised_by: e.by,
       bank_account_id: e.bankAccountId ?? null,
     })

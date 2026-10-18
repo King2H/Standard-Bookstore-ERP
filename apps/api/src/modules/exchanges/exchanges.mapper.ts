@@ -109,7 +109,7 @@ export function toExchangeResponse(e: ExchangeRecord): Exchange {
     ...(e.outgoingItems && { outgoingItems: e.outgoingItems.map(item) }),
     ...(e.settlementEntries && {
       settlementEntries: e.settlementEntries.map((s) => ({
-        id: s.id, entryType: s.entryType, amount: s.amount.toNumber(), method: s.method, createdAt: s.createdAt.toISOString(),
+        id: s.id, entryType: s.entryType, amount: s.amount.toNumber(), method: s.method, reference: s.reference, payerBank: s.payerBank, createdAt: s.createdAt.toISOString(),
       })),
     }),
   };

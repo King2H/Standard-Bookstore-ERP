@@ -100,6 +100,8 @@ export interface LedgerRow {
   party: string;
   reference_no: string;
   payment_method: string | null;
+  payer_bank: string | null;
+  payment_ref: string | null;
   amount: string;
   entry_type?: string;
   date_str: string;
@@ -125,6 +127,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
       q,
       `SELECT op.payment_reference AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
               o.order_number AS reference_no, op.payment_method,
+              op.payer_bank, op.transaction_reference AS payment_ref,
               op.amount, TO_CHAR(op.processed_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM order_payments op
        JOIN orders o ON o.id = op.order_id
@@ -137,6 +140,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
       q,
       `SELECT ('TXN-PAY-' || tp.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
               t.transaction_number AS reference_no, tp.method AS payment_method,
+              tp.payer_bank, tp.reference AS payment_ref,
               tp.amount, TO_CHAR(tp.created_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM transaction_payments tp
        JOIN transactions t ON t.id = tp.transaction_id
@@ -149,6 +153,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
       q,
       `SELECT ('REF-' || rf.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
               r.return_number AS reference_no, rf.method AS payment_method,
+              NULL::text AS payer_bank, NULL::text AS payment_ref,
               rf.amount, TO_CHAR(rf.created_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM refunds rf
        JOIN returns r ON r.id = rf.return_id
@@ -161,6 +166,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
       q,
       `SELECT ('OREF-' || ore.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
               o2.order_number AS reference_no, COALESCE(ore.method, op2.payment_method, 'cash') AS payment_method,
+              NULL::text AS payer_bank, NULL::text AS payment_ref,
               ore.refund_amount AS amount, TO_CHAR(ore.created_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM order_refunds ore
        JOIN orders o2 ON o2.id = ore.order_id
@@ -176,6 +182,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
       q,
       `SELECT ('EXST-' || ese.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
               e.exchange_reference AS reference_no, COALESCE(ese.method, 'cash') AS payment_method,
+              ese.payer_bank, ese.reference AS payment_ref,
               ese.amount, ese.entry_type, TO_CHAR(ese.created_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM exchange_settlement_entries ese
        JOIN exchanges e ON e.id = ese.exchange_id
@@ -188,6 +195,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
       q,
       `SELECT ('PAY-EXC-' || ft.id) AS receipt_no, COALESCE(c.full_name, 'Walk-in') AS party,
               e.exchange_reference AS reference_no, ft.method AS payment_method,
+              ft.meta->>'payerBank' AS payer_bank, ft.meta->>'transactionReference' AS payment_ref,
               ft.amount, TO_CHAR(ft.created_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM financial_transactions ft
        JOIN exchanges e ON e.id = ft.exchange_id
@@ -201,6 +209,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
       q,
       `SELECT COALESCE(sp.payment_number, 'SUP-' || sp.id) AS receipt_no, s2.name AS party,
               ('PO-' || LPAD(sp.po_id::text, 6, '0')) AS reference_no, sp.payment_method,
+              NULL::text AS payer_bank, NULL::text AS payment_ref,
               sp.amount, TO_CHAR(sp.created_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM supplier_payments sp
        JOIN suppliers s2 ON s2.id = sp.supplier_id

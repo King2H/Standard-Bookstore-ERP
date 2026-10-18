@@ -212,7 +212,7 @@ describe('Returns', () => {
 
   describe('how the money goes back', () => {
     it('refunds the way the sale was paid; the request names no method (was: the cashier chose)', async () => {
-      const sale = await sell({ payments: [{ method: 'mobile', amount: price }] });
+      const sale = await sell({ payments: [{ method: 'mobile', reference: 'TB-TEST', amount: price }] });
       const res = await giveBack(sale, 1, manager, { refundMethod: 'store_credit' });
       expect(res.status).toBe(201);
       expect(res.body.refundMethod).toBe('mobile');

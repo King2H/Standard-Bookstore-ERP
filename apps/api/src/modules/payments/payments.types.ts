@@ -39,6 +39,7 @@ export interface PaymentRecord {
   paymentMethod: string;
   status: PaymentStatus;
   transactionReference: string | null;
+  payerBank: string | null;
   notes: string | null;
   processedAt: Date;
   createdAt: Date;
@@ -67,6 +68,7 @@ export interface NewPayment {
   amount: Money;
   paymentMethod: OrderPaymentMethod;
   transactionReference: string | null;
+  payerBank: string | null;
   notes: string | null;
   bankAccountId: number | null;
 }

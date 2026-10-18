@@ -170,7 +170,7 @@ describe('Receivables — unified payment collection (Module 3)', () => {
     const recRes = await db.query(`SELECT id FROM receivables WHERE source_type = 'pos_credit_sale' AND source_entity_id = $1`, [txId]);
     const receivableId = recRes.rows[0].id as string;
 
-    const collectRes = await collect(receivableId, { amount: grandTotal, paymentMethod: 'mobile' });
+    const collectRes = await collect(receivableId, { amount: grandTotal, paymentMethod: 'mobile', transactionReference: 'TB-TEST' });
     expect(collectRes.status).toBe(200);
     expect(collectRes.body.status).toBe('Settled');
 

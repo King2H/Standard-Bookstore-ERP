@@ -90,7 +90,7 @@ export async function lineItems(q: Queryable, transactionId: string): Promise<Po
 export async function payments(q: Queryable, transactionId: string): Promise<PosPaymentRecord[]> {
   const rows = await q
     .selectFrom('transaction_payments')
-    .select(['id', 'transaction_id', 'method', 'amount', 'reference', 'bank_account_id', 'created_at'])
+    .select(['id', 'transaction_id', 'method', 'amount', 'reference', 'payer_bank', 'bank_account_id', 'created_at'])
     .where('transaction_id', '=', transactionId)
     .orderBy('id')
     .execute();
@@ -215,6 +215,7 @@ export async function insertPayment(q: Queryable, transactionId: string, p: Paym
       method: p.method,
       amount: p.amount.toFixed(2),
       reference: p.reference,
+      payer_bank: p.payerBank,
       bank_account_id: p.bankAccountId ?? null,
     })
     .returning('id')

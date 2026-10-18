@@ -4,7 +4,7 @@ import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
-import { accountForPayment, recordMovement } from '../bankAccount/bankAccount.service.js';
+import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as policy from './receivables.policy.js';
 import * as receivables from './receivables.repository.js';
@@ -220,7 +220,13 @@ export async function collectPayment(actor: Actor, id: string, payment: PaymentC
       amount: payment.amount,
       method: payment.paymentMethod,
       staffId: actor.staffId,
-      meta: { receivableId: r.id, sourceType: r.sourceType, notes: payment.notes },
+      meta: {
+        receivableId: r.id,
+        sourceType: r.sourceType,
+        notes: payment.notes,
+        transactionReference: payment.transactionReference,
+        payerBank: payment.payerBank,
+      },
     });
     if (bankAccountId !== null) {
       await recordMovement(tx, {
@@ -229,7 +235,7 @@ export async function collectPayment(actor: Actor, id: string, payment: PaymentC
         amount: payment.amount,
         sourceType: 'receivable_payment',
         sourceId: entryId,
-        notes: `Receivable #${r.id} payment`,
+        notes: movementNote(`Receivable #${r.id} payment`, { payerBank: payment.payerBank, reference: payment.transactionReference }),
       });
     }
 
@@ -239,6 +245,8 @@ export async function collectPayment(actor: Actor, id: string, payment: PaymentC
     await audit(tx, actor, 'CREATE', 'receivable_payment', r.id, {
       amount: payment.amount.toNumber(),
       paymentMethod: payment.paymentMethod,
+      transactionReference: payment.transactionReference,
+      payerBank: payment.payerBank,
       notes: payment.notes,
     });
   });

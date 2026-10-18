@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, PaginatedSchema } from './common.js';
+import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
 
 /** Contracts for /api/v1/orders (#20). */
 
@@ -98,12 +99,20 @@ export const CreateOrderRequestSchema = z.object({
 });
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
 
-export const ConfirmOrderRequestSchema = z.object({
-  /** Credit sales: the receivable's due date, YYYY-MM-DD, today or later. */
-  dueDate: z.string().nullable().optional(),
-  /** Cash sales: cash (default), bank, mobile or store_credit. */
-  paymentMethod: z.string().nullable().optional(),
-});
+export const ConfirmOrderRequestSchema = z
+  .object({
+    /** Credit sales: the receivable's due date, YYYY-MM-DD, today or later. */
+    dueDate: z.string().nullable().optional(),
+    /** Cash sales: cash (default), bank, mobile or store_credit. */
+    paymentMethod: z.string().nullable().optional(),
+    /** Cash sales paid by bank (the transfer's reference) or mobile (the Telebirr transaction number). */
+    transactionReference: PaymentReferenceSchema.optional(),
+    /** Cash sales paid by bank: the bank the customer paid from. */
+    payerBank: PayerBankSchema.optional(),
+    /** Cash sales paid by bank: an active account of the order's branch; required while bank accounts are on. */
+    bankAccountId: IdSchema.nullable().optional(),
+  })
+  .superRefine(checkPaymentProof({ method: 'paymentMethod', reference: 'transactionReference' }));
 export type ConfirmOrderRequest = z.infer<typeof ConfirmOrderRequestSchema>;
 
 export const CancelOrderRequestSchema = z.object({

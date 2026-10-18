@@ -268,9 +268,19 @@ export async function debitStoreCredit(q: Queryable, customerId: number, amount:
 
 export async function insertPayment(
   q: Queryable,
-  p: { reference: string; orderId: string; amount: string; method: string; notes: string; processedBy: number },
-): Promise<void> {
-  await q
+  p: {
+    reference: string;
+    orderId: string;
+    amount: string;
+    method: string;
+    transactionReference: string | null;
+    payerBank: string | null;
+    bankAccountId: number | null;
+    notes: string;
+    processedBy: number;
+  },
+): Promise<string> {
+  const row = await q
     .insertInto('order_payments')
     .values({
       payment_reference: p.reference,
@@ -279,10 +289,15 @@ export async function insertPayment(
       currency: 'ETB',
       payment_method: p.method,
       status: 'success',
+      transaction_reference: p.transactionReference,
+      payer_bank: p.payerBank,
+      bank_account_id: p.bankAccountId,
       notes: p.notes,
       processed_by: p.processedBy,
     })
-    .execute();
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
 }
 
 /** What was paid on the order, refunded payments included (they were received). */

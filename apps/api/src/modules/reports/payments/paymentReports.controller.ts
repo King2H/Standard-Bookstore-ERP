@@ -42,6 +42,8 @@ export async function ledgerCsv(req: Request, res: Response): Promise<void> {
     reference_type: r.referenceType,
     reference_no: r.referenceNo,
     payment_method: r.paymentMethod,
+    payer_bank: r.payerBank,
+    payment_reference: r.paymentReference,
     amount: r.amount,
     direction: r.direction,
     date: r.date,
