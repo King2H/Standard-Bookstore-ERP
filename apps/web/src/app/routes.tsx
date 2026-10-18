@@ -11,7 +11,7 @@ import InventoryPage from '../features/inventory/pages/InventoryPage.js';
 import SuppliersPage from '../features/suppliers/pages/SuppliersPage.js';
 import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 import CustomersPage from '../features/customers/pages/CustomersPage.js';
-import POSPage from '../pages/POSPage.js';
+import PosPage from '../features/pos/pages/PosPage.js';
 import ReturnsPage from '../pages/ReturnsPage.js';
 import OrdersPage from '../pages/OrdersPage.js';
 import PaymentsPage from '../pages/PaymentsPage.js';
@@ -46,7 +46,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'suppliers'    && <SuppliersPage userRole={role} userPermissions={userPermissions} />}
         {page === 'procurement'  && <ProcurementPage initialContext={initialContext} />}
         {page === 'customers'    && <CustomersPage />}
-        {page === 'pos'          && <POSPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
+        {page === 'pos'          && <PosPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'returns'      && <ReturnsPage userRole={role} userPermissions={userPermissions} />}
         {page === 'orders'       && <OrdersPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'payments'     && <PaymentsPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}

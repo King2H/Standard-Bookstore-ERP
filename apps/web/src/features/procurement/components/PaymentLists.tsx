@@ -3,7 +3,7 @@ import type { PurchaseOrder } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { paymentMethodPlainLabel } from '../../../lib/paymentMethods.js';
 import { useSupplierPayables } from '../queries.js';
-import { ActionDialog } from './ActionDialog.js';
+import { ActionDialog } from '../../../components/ActionDialog.js';
 import { amount } from './shared.js';
 
 /** An order's supplier payments, with their reversal, and its credit notes. */

@@ -5,9 +5,9 @@ import { z } from 'zod';
 const INPUT = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 resize-none';
 
 /**
- * Confirms a step on an order, and asks for its reason when it needs one,
- * checked with the API's limits before sending (owner decision 1a, #23; was:
- * the browser's prompt and confirm boxes, unchecked).
+ * Confirms a step, and asks for its reason when it needs one, checked with the
+ * API's limits before sending (owner decision 1a, #23; was: the browser's
+ * prompt and confirm boxes, unchecked).
  */
 export function ActionDialog({ title, message, confirmLabel, reason, busy, tone = 'blue', onConfirm, onCancel }: {
   title: string;
@@ -33,13 +33,13 @@ export function ActionDialog({ title, message, confirmLabel, reason, busy, tone 
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <form role="dialog" aria-labelledby="po-action-title" onSubmit={handleSubmit((v) => onConfirm(reason ? v.reason.trim() : undefined))} noValidate
+      <form role="dialog" aria-labelledby="action-dialog-title" onSubmit={handleSubmit((v) => onConfirm(reason ? v.reason.trim() : undefined))} noValidate
         className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6 max-w-sm w-full mx-4 shadow-xl">
-        <h3 id="po-action-title" className="text-base font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
+        <h3 id="action-dialog-title" className="text-base font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{message}</p>
         {reason && <>
-          <label htmlFor="po-action-reason" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{reason.label}</label>
-          <textarea id="po-action-reason" rows={3} autoFocus {...register('reason')} aria-invalid={errors.reason ? true : undefined} className={INPUT} />
+          <label htmlFor="action-dialog-reason" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{reason.label}</label>
+          <textarea id="action-dialog-reason" rows={3} autoFocus {...register('reason')} aria-invalid={errors.reason ? true : undefined} className={INPUT} />
           {errors.reason && <p role="alert" className="text-xs mt-1 text-red-500">{errors.reason.message}</p>}
         </>}
         <div className="flex gap-2 justify-end mt-4">
