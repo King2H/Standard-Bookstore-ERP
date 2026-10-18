@@ -132,7 +132,7 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
     }
 
     const lines = await priceLines(tx, sale);
-    policy.checkDiscounts(lines, await getMaxLineDiscountPct(sale.branchId, actor.role));
+    policy.checkDiscounts(lines, await getMaxLineDiscountPct(sale.branchId, actor.roles ?? [actor.role]));
     const totals = policy.totals(lines);
     const paid = sumOf(sale.payments);
     policy.checkSalePayments(

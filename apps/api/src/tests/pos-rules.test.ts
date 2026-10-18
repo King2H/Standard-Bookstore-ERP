@@ -113,6 +113,27 @@ describe('Counter sales', () => {
       expect(res.body.error).toBe('DISCOUNT_EXCEEDS_LIMIT');
     });
 
+    it('allows the discount of any role held in the branch, at the counter and on an order (was: the main role\'s only)', async () => {
+      const limits = (await db.query(`SELECT value FROM system_config WHERE key = 'max_line_discount_pct'`)).rows[0].value as Record<string, number>;
+      expect(limits.Manager).toBeGreaterThan(limits.Sales);
+      // Sales first, so the old main role was Sales; Manager in the same branch allows more.
+      const both = await createTestStaff({ username: `${STAFF_PREFIX}salesmgr`, role: 'Sales', branchId });
+      await db.query(`INSERT INTO staff_branch_roles (staff_id, branch_id, role) VALUES ($1, $2, 'Manager')`, [both.staffId, branchId]);
+      const discountPct = (limits.Sales + limits.Manager) / 2;
+      const line = { bookId, quantity: 1, discountMode: 'Percentage', discountPct };
+
+      const sale = await as(api().post('/api/v1/pos/transactions'), both.token).send({
+        locationId, customerId, items: [line], payments: [], allowCredit: true,
+      });
+      expect(sale.status).toBe(201);
+      const order = await as(api().post('/api/v1/orders'), both.token).send({
+        locationId, saleType: 'credit_sale', customerId, items: [{ bookId, quantity: 1, discountMode: 'Percentage', discountPct }],
+      });
+      expect(order.status).toBe(201);
+      await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [order.body.id]);
+      await db.query(`DELETE FROM orders WHERE id = $1`, [order.body.id]);
+    });
+
     it('refuses a zero payment or an unknown method with 400 (was: 500)', async () => {
       expect((await sell({ payments: [{ method: 'cash', amount: 0 }, { method: 'cash', amount: price }] })).status).toBe(400);
       expect((await sell({ payments: [{ method: 'cheque', amount: price }] })).status).toBe(400);

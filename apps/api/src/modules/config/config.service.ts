@@ -167,9 +167,10 @@ async function systemValue(key: string): Promise<unknown> {
   return (await config.findSystemValue(kysely, key))?.value;
 }
 
-export async function getMaxLineDiscountPct(branchId: number, role: string): Promise<number> {
+/** The largest line discount any role held in the branch allows (every role held counts, as elsewhere). */
+export async function getMaxLineDiscountPct(branchId: number, roles: readonly string[]): Promise<number> {
   const val = (await getEffectiveConfig(branchId, 'max_line_discount_pct')) as Record<string, number>;
-  return val[role] ?? 0;
+  return Math.max(0, ...roles.map((r) => val[r] ?? 0));
 }
 
 export async function getDiscountApprovalThresholdPct(branchId: number): Promise<number> {

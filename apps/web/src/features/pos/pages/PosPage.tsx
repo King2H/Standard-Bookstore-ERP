@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import PosTerminalLegacy from '../../../pages/PosTerminalLegacy.js';
+import { Terminal } from '../components/Terminal.js';
 import { SalesHistory } from '../components/SalesHistory.js';
 
 type Tab = 'pos' | 'history';
@@ -43,7 +43,7 @@ export default function PosPage({ userRole, userPermissions, initialContext = {}
   );
 
   return (
-    <PosTerminalLegacy
+    <Terminal
       userRole={userRole}
       userPermissions={userPermissions}
       tabBar={tabBar}

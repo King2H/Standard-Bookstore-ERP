@@ -6,6 +6,8 @@ export type { PosPaymentMethod, PosPaymentStatus };
 export interface Actor {
   staffId: number;
   role: string;
+  /** Every role held in the session branch; the main role when not given. */
+  roles?: string[];
   branchId: number;
 }
 
