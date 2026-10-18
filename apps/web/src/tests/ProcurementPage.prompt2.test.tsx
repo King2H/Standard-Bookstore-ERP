@@ -144,7 +144,8 @@ describe('ProcurementPage — Prompt 2 UI (progress bars, ledger, credit notes)'
     await user.click(screen.getByRole('button', { name: 'Issue Credit Note' }));
 
     await waitFor(() => {
-      expect(postMock).toHaveBeenCalledWith('/purchase-orders/42/credit-notes', { amount: 40, reason: 'Damaged in transit' });
+      // The amount travels as the decimal typed, as the contract allows (worked out with Money, not a float).
+      expect(postMock).toHaveBeenCalledWith('/purchase-orders/42/credit-notes', { amount: '40', reason: 'Damaged in transit' });
     });
   });
 });

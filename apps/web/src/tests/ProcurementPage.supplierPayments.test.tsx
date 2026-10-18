@@ -1,7 +1,7 @@
 // Supplier payables (#21): payments are numbered, use the system's method
-// codes, and a mistaken one is reversed with a reason.
+// codes, and a mistaken one is reversed with a reason, asked in the app's dialog.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
@@ -77,8 +77,10 @@ describe('ProcurementPage supplier payments', () => {
 
   it('reverses a payment with the reason given', async () => {
     const user = await openOrder();
-    vi.spyOn(window, 'prompt').mockReturnValue('Paid twice');
     await user.click(screen.getByRole('button', { name: 'Reverse' }));
+    // Asked in the app's own dialog (owner decision 1a, #23; was the browser's prompt).
+    await user.type(screen.getByLabelText('Why is this payment being reversed?'), 'Paid twice');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Reverse Payment' }));
     await waitFor(() => expect(postMock).toHaveBeenCalledWith('/purchase-orders/42/payments/9/reverse', { reason: 'Paid twice' }));
   });
 

@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import type { PurchaseOrder } from '@bms/shared';
-import { SupplierLedgerView } from '../../../pages/ProcurementLegacy.js';
 import { PurchaseOrderDetail } from '../components/PurchaseOrderDetail.js';
 import { EditPurchaseOrder, PurchaseOrderForm } from '../components/PurchaseOrderForm.js';
 import { PurchaseOrderList } from '../components/PurchaseOrderList.js';
 import { ReceiveGoodsForm } from '../components/ReceiveGoodsForm.js';
+import { SupplierLedger } from '../components/SupplierLedger.js';
 import { useRefreshPurchaseOrders } from '../queries.js';
 
 type View = 'list' | 'detail' | 'receive' | 'form' | 'ledger';
 
-/** Purchase orders: list, detail and steps, the order form and receiving; the ledger follows in #23's next PR. */
+/** Purchase orders: list, detail and steps, the order form, receiving, payments and the supplier ledger. */
 export default function ProcurementPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
   const refresh = useRefreshPurchaseOrders();
   const [view, setView] = useState<View>('list');
@@ -37,7 +37,7 @@ export default function ProcurementPage({ initialContext = {} }: { initialContex
     );
   }
   if (view === 'ledger' && ledger) {
-    return <SupplierLedgerView supplierId={ledger.id} supplierName={ledger.name} onBack={() => setView(selected ? 'detail' : 'list')} />;
+    return <SupplierLedger supplierId={ledger.id} supplierName={ledger.name} onBack={() => setView(selected ? 'detail' : 'list')} />;
   }
   return (
     <PurchaseOrderList initialContext={initialContext} onOpen={openDetail} onCreate={() => openForm()} onEdit={openForm}

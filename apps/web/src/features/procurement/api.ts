@@ -1,8 +1,9 @@
 import type {
-  BookAvailabilityListResponse, CatalogSearchResponse, CreatePurchaseOrderRequest, PurchaseOrder, PurchaseOrderListResponse,
-  PurchaseOrderStatus, ReceivePurchaseOrderRequest, UpdatePurchaseOrderRequest,
+  BookAvailabilityListResponse, CatalogSearchResponse, CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest,
+  CreateSupplierPaymentRequest, PurchaseOrder, PurchaseOrderListResponse, PurchaseOrderStatus, ReceivePurchaseOrderRequest,
+  SupplierLedgerResponse, UpdatePurchaseOrderRequest,
 } from '@bms/shared';
-import { api, toQuery } from '../../lib/api.js';
+import { api, downloadFile, toQuery } from '../../lib/api.js';
 import { listSuppliers } from '../suppliers/api.js';
 
 /** The purchase-order endpoints (#21), typed with their @bms/shared contracts. */
@@ -65,3 +66,23 @@ export async function searchBooksToBuy(text: string, at: { branchId: number | nu
   const res = await api.get<CatalogSearchResponse>(`/catalog/search${toQuery({ q: text })}`);
   return res.results.map((b) => ({ id: b.id, title: b.title, isbn: b.isbn, isActive: b.isActive, available: null }));
 }
+
+/** A payment to the supplier against an order; the ordering branch pays. */
+export const recordSupplierPayment = (id: string, body: CreateSupplierPaymentRequest) =>
+  api.post<PurchaseOrder>(`/purchase-orders/${id}/payments`, body);
+
+/** A payment recorded by mistake stops counting; it stays on record with the reason. */
+export const reverseSupplierPayment = (id: string, paymentId: string, reason: string) =>
+  api.post<PurchaseOrder>(`/purchase-orders/${id}/payments/${paymentId}/reverse`, { reason });
+
+/** The supplier's credit against an order: damaged goods, an overcharge, a negotiated price. */
+export const recordSupplierCreditNote = (id: string, body: CreateSupplierCreditNoteRequest) =>
+  api.post<PurchaseOrder>(`/purchase-orders/${id}/credit-notes`, body);
+
+export type SupplierLedgerParams = { dateFrom?: string; dateTo?: string };
+
+export const getSupplierLedger = (supplierId: number, params: SupplierLedgerParams) =>
+  api.get<SupplierLedgerResponse>(`/suppliers/${supplierId}/ledger${toQuery(params)}`);
+
+export const exportSupplierLedger = (supplierId: number, params: SupplierLedgerParams, filename: string) =>
+  downloadFile(`/suppliers/${supplierId}/ledger/export${toQuery(params)}`, filename);

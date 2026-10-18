@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Money, type PurchaseOrder } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
-import { LegacyPaymentForms, LegacyPaymentLists } from '../../../pages/ProcurementLegacy.js';
 import { useMyProfile } from '../../account/queries.js';
-import { usePurchaseOrder, usePurchaseOrderStep, useRefreshPurchaseOrders } from '../queries.js';
+import { usePurchaseOrder, usePurchaseOrderStep } from '../queries.js';
 import { canReadLedger, stepsFor } from '../rules.js';
 import { ActionDialog } from './ActionDialog.js';
+import { PaymentForms } from './PaymentForms.js';
+import { PaymentLists } from './PaymentLists.js';
 import { ProgressBar, StatusBadge, amount, safePct } from './shared.js';
 
 type Asking = 'cancel' | 'closeShort' | null;
@@ -24,7 +25,6 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
   const { data: me } = useMyProfile();
   const { data: po, isLoading } = usePurchaseOrder(poId);
   const step = usePurchaseOrderStep(poId);
-  const refresh = useRefreshPurchaseOrders();
   const [asking, setAsking] = useState<Asking>(null);
 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
@@ -90,7 +90,8 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
         </div>
       </div>
 
-      <LegacyPaymentForms po={po} canPay={steps.pay} onChanged={() => { void refresh(); }} />
+      {/* Once the order is a commitment and something is still owed. */}
+      {steps.pay && po.financialStatus !== 'paid' && !['draft', 'pending_approval', 'cancelled'].includes(po.status) && <PaymentForms po={po} />}
 
       <div className="flex flex-wrap gap-2">
         {steps.edit && <button onClick={() => onEdit(po)} className={`${BTN} bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700`}>Edit</button>}
@@ -156,7 +157,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
         </div>
       )}
 
-      <LegacyPaymentLists po={po} canPay={steps.pay} onChanged={() => { void refresh(); }} />
+      <PaymentLists po={po} canPay={steps.pay} />
 
       {asking === 'cancel' && (
         <ActionDialog title={`Cancel ${po.poNumber}?`} message="The order is cancelled while nothing has arrived; it stays on record."
