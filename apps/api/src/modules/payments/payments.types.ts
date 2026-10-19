@@ -101,6 +101,7 @@ export interface UnpaidRecord {
   orderNumber: string;
   customerName: string | null;
   customerCode: string | null;
+  customerId: number | null;
   total: Money;
   totalPaid: Money;
   outstanding: Money;

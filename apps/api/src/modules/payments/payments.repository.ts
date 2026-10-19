@@ -195,7 +195,8 @@ function whereAll(conditions: RawBuilder<unknown>[]): RawBuilder<unknown> {
  */
 export async function listHistory(q: Queryable, filter: PaymentFilter, page: Page): Promise<{ items: PaymentRecord[]; total: number }> {
   const conditions: RawBuilder<unknown>[] = [sql`u.branch_id = ${filter.branchId}`];
-  if (filter.orderId !== undefined) conditions.push(sql`u.order_id = ${String(filter.orderId)}`);
+  // Ids are unique only within a source: POS sale 5 is not order 5.
+  if (filter.orderId !== undefined) conditions.push(sql`u.source_type = 'order' AND u.order_id = ${String(filter.orderId)}`);
   if (filter.status) conditions.push(sql`u.status = ${filter.status}`);
   if (filter.paymentMethod) conditions.push(sql`u.payment_method = ${filter.paymentMethod}`);
   if (filter.dateFrom) conditions.push(sql`u.created_at >= ${filter.dateFrom}::date`);

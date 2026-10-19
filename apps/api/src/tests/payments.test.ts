@@ -520,4 +520,42 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     expect(row.paymentStatus).toBe('partial');
     expect(Number(row.outstanding)).toBeCloseTo(60, 2);
   });
+
+  // The Payments page looks up the customer's store credit and points by this
+  // id; it used to read it from /orders/:id even for a POS sale or receivable.
+  it('13. Every unpaid row carries its customer id, whatever its source', async () => {
+    const res = await request(getTestApp())
+      .get(`/api/v1/payments/unpaid-orders?pageSize=100`)
+      .set('Authorization', `Bearer ${salesToken}`);
+    expect(res.status).toBe(200);
+    const sources = new Set(res.body.items.map((i: UnpaidRow) => i.sourceType));
+    expect(sources).toEqual(new Set(['order', 'pos', 'exchange_difference']));
+    for (const item of res.body.items) expect(item.customerId).toBe(customerId);
+  });
+
+  it('14. History filtered by orderId lists that order\'s payments only, not a POS sale or exchange with the same id', async () => {
+    const txRes = await request(getTestApp())
+      .post('/api/v1/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ branchId, locationId, customerId, items: [{ bookId: book1.id, quantity: 1 }], payments: [], allowCredit: true });
+    expect(txRes.status).toBe(201);
+    const collectRes = await request(getTestApp())
+      .post(`/api/v1/pos/transactions/${txRes.body.id}/payment`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ payments: [{ method: 'cash', amount: 1 }] });
+    expect(collectRes.status).toBe(200);
+
+    const all = await request(getTestApp())
+      .get(`/api/v1/payments?pageSize=100`)
+      .set('Authorization', `Bearer ${salesToken}`);
+    expect(all.body.items.some((p: { sourceType?: string; orderId: string }) => p.sourceType === 'pos' && p.orderId === String(txRes.body.id))).toBe(true);
+
+    const res = await request(getTestApp())
+      .get(`/api/v1/payments?orderId=${txRes.body.id}&pageSize=100`)
+      .set('Authorization', `Bearer ${salesToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.items.filter((p: { sourceType?: string }) => p.sourceType !== 'order')).toEqual([]);
+  });
 });
