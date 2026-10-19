@@ -12,6 +12,9 @@ type Account = Pick<ProfileResponse, 'currentRoles'>;
 
 const holds = (me: Account | undefined, allowed: string[]) => (me?.currentRoles ?? []).some((r) => allowed.includes(r));
 
+/** Taking a new order: the selling roles (CREATE_SALE). */
+export const canCreateOrder = (me: Account | undefined) => holds(me, ['Sales', 'Manager', 'Admin']);
+
 /** Deleting an order: Admin (was: by the main role only). */
 export const canDeleteOrder = (me: Account | undefined) => holds(me, ['Admin']);
 

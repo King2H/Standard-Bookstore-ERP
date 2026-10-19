@@ -48,7 +48,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'customers'    && <CustomersPage />}
         {page === 'pos'          && <PosPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'returns'      && <ReturnsPage />}
-        {page === 'orders'       && <OrdersPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
+        {page === 'orders'       && <OrdersPage initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'payments'     && <PaymentsPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
         {page === 'exchanges'    && <ExchangesPage />}
         {page === 'receivables'  && <ReceivablesPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}

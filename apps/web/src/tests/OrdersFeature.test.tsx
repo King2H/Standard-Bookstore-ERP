@@ -93,7 +93,7 @@ async function openPage(onNavigate = vi.fn(), initialContext: Record<string, str
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <ToastProvider><OrdersPage userRole="Sales" userPermissions={[]} initialContext={initialContext} onNavigate={onNavigate} /></ToastProvider>
+      <ToastProvider><OrdersPage initialContext={initialContext} onNavigate={onNavigate} /></ToastProvider>
     </QueryClientProvider>,
   );
   await settle();
