@@ -30,8 +30,8 @@ export const schemas = {
 
 /** The signed-in staff member; authenticate() runs before every controller. */
 function actor(req: Request): Actor {
-  const { staffId, role, branchId } = req.staff!;
-  return { staffId, role, branchId };
+  const { staffId, role, roles, branchId } = req.staff!;
+  return { staffId, role, roles: roles?.length ? roles : [role], branchId };
 }
 
 function send(res: Response, record: ExchangeRecord, status = 200): void {
