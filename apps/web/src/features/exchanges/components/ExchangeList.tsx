@@ -7,6 +7,7 @@ import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useExchange, useExchanges, useVoidExchange } from '../queries.js';
 import { canVoidExchange } from '../rules.js';
+import { ExchangeSlip } from './ExchangeSlip.js';
 
 const money = (n: number) => Money.of(n).toFixed();
 
@@ -19,6 +20,7 @@ export function ExchangeList() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [voiding, setVoiding] = useState<Exchange | null>(null);
+  const [printing, setPrinting] = useState<string | null>(null);
   const { data: listData, isLoading } = useExchanges({ page, pageSize });
   const voidMut = useVoidExchange();
 
@@ -80,7 +82,7 @@ export function ExchangeList() {
                         )}
                         {exc.status === 'Cancelled' && <span className="text-xs text-gray-400">{exc.voidReason ? `Voided: ${exc.voidReason}` : 'Cancelled'}</span>}
                         {exc.status === 'Completed' && (
-                          <button onClick={(e) => { e.stopPropagation(); window.print(); }}
+                          <button onClick={(e) => { e.stopPropagation(); setPrinting(exc.id); }}
                             className="text-xs px-2 py-0.5 rounded-sm transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
                             🖨 Print
                           </button>
@@ -109,6 +111,8 @@ export function ExchangeList() {
           />
         )}
       </div>
+
+      {printing && <ExchangeSlip exchangeId={printing} onClose={() => setPrinting(null)} />}
 
       {voiding && (
         <ActionDialog

@@ -82,6 +82,25 @@ describe('Orders on the shared contracts', () => {
     }
   });
 
+  it('cancels only with a reason (owner decision 2a; was: none recorded as "No reason provided")', async () => {
+    const created = await draft();
+    for (const body of [{}, { reason: '   ' }]) {
+      const res = await auth(api().post(`/api/v1/orders/${created.body.id}/cancel`)).send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+    }
+    const cancelled = await auth(api().post(`/api/v1/orders/${created.body.id}/cancel`)).send({ reason: '  Customer changed mind ' });
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body).toMatchObject({ status: 'CANCELLED', cancelReason: 'Customer changed mind' });
+  });
+
+  it('offers a legacy fulfilled order Print, not a Return with no endpoint (owner decision 3a)', async () => {
+    const created = await draft();
+    await db.query(`UPDATE orders SET status = 'FULFILLED' WHERE id = $1`, [created.body.id]);
+    const res = await auth(api().get(`/api/v1/orders/${created.body.id}`));
+    expect(res.body.allowedActions).toEqual(['print']);
+  });
+
   it('replays an order creation sent twice with the same Idempotency-Key', async () => {
     const key = `ordc-${Date.now()}`;
     const first = await draft().set('Idempotency-Key', key);
