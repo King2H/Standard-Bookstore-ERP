@@ -115,7 +115,8 @@ export const ConfirmOrderRequestSchema = z
   .superRefine(checkPaymentProof({ method: 'paymentMethod', reference: 'transactionReference' }));
 export type ConfirmOrderRequest = z.infer<typeof ConfirmOrderRequestSchema>;
 
+/** Why the order is cancelled (owner decision 2a): a confirmed order's stock goes back, so the audit says why. */
 export const CancelOrderRequestSchema = z.object({
-  reason: z.string().default('No reason provided'),
+  reason: z.string().trim().min(1, 'A reason is required').max(500),
 });
 export type CancelOrderRequest = z.infer<typeof CancelOrderRequestSchema>;

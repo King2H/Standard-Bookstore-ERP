@@ -13,7 +13,7 @@ import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 import CustomersPage from '../features/customers/pages/CustomersPage.js';
 import PosPage from '../features/pos/pages/PosPage.js';
 import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
-import OrdersPage from '../pages/OrdersPage.js';
+import OrdersPage from '../features/orders/pages/OrdersPage.js';
 import PaymentsPage from '../pages/PaymentsPage.js';
 import ExchangesPage from '../features/exchanges/pages/ExchangesPage.js';
 import ReceivablesPage from '../pages/ReceivablesPage.js';

@@ -105,8 +105,8 @@ export function computeOrderAllowedActions(
       return cancelOrFulfill;
     case 'PAID':
       return can('PROCESS_PAYMENT') ? ['fulfill'] : [];
+    // Returns go through the Returns module; a legacy fulfilled order is printed like a completed one.
     case 'FULFILLED':
-      return ['return'];
     case 'COMPLETED':
     case 'Fulfilled':
       return ['print'];

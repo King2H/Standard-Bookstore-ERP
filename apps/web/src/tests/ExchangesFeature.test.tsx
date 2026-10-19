@@ -78,6 +78,15 @@ function stubApi() {
     if (u.pathname === '/customers') return json(contract(CustomerListResponseSchema, { items: [customer], total: 1, page: 1, totalPages: 1 }));
     if (method === 'POST' && u.pathname === '/books/quick-register') return json(book(42, 'Trade-In Novel', null), 201);
     if (method === 'POST' && u.pathname === '/exchanges') return json(exchange, 201);
+    if (u.pathname === '/exchanges/7') {
+      const item = (id: string, bookId: number, bookTitle: string, unitPrice: number) => ({ id, exchangeId: '7', bookId, bookTitle, quantity: 1, unitPrice, totalPrice: unitPrice });
+      return json(contract(ExchangeSchema, {
+        ...exchange,
+        incomingItems: [{ ...item('1', 1, 'Fikir Eske Mekabir', 40), condition: 'resellable' }],
+        outgoingItems: [item('2', 2, 'Oromay', 150)],
+        settlementEntries: [{ id: '1', entryType: 'cash_payment', amount: 110, method: 'cash', reference: null, payerBank: null, createdAt: CREATED }],
+      }));
+    }
     if (method === 'POST' && u.pathname === '/exchanges/7/void') return json({ ...exchange, status: 'Cancelled', voidable: false });
     if (u.pathname === '/exchanges') return json(contract(ExchangeListResponseSchema, { items: [exchange], total: 1, page: 1, totalPages: 1 }));
     // Bank Accounts off.
@@ -273,6 +282,25 @@ describe('Quick Exchange: what it asks the API', () => {
 
     await waitFor(() => expect(posted('/books/quick-register')).toEqual([expect.objectContaining({ title: 'Trade-In Novel' })]));
     expect(await screen.findByText('Trade-In Novel')).toBeInTheDocument();
+  });
+});
+
+describe('Exchanges: printing', () => {
+  it('prints an exchange slip, not the whole screen (owner decision 1a)', async () => {
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    await openPage();
+    const user = userEvent.setup();
+    const row = (await screen.findByText('EXC-20261018-0001')).closest('tr') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: /Print/ }));
+    expect(print).not.toHaveBeenCalled();
+
+    const slip = screen.getByRole('dialog', { name: 'Exchange EXC-20261018-0001' });
+    expect(slip).toHaveAttribute('id', 'print-slip');
+    expect(await within(slip).findByText(/Fikir Eske Mekabir × 1/)).toBeInTheDocument();
+    expect(within(slip).getByText(/Oromay × 1/)).toBeInTheDocument();
+    await user.click(within(slip).getByRole('button', { name: /Print/ }));
+    expect(print).toHaveBeenCalledTimes(1);
+    print.mockRestore();
   });
 });
 

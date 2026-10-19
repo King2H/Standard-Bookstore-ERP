@@ -907,7 +907,7 @@ describe('Preservation Tests: Non-Buggy Behaviors Unchanged', () => {
     expect(draftNone).toEqual([]);
 
     // ── FULFILLED (any permissions) — must NOT include 'cancel' or 'fulfill' ──
-    // Post-fix this will return ['return']. Pre-fix it returns [].
+    // It returns ['print'], like a completed order (returns go through the Returns module).
     // The preservation contract is: fulfilling an order never allows cancel/fulfill again.
     const fulfilledFull = computeOrderAllowedActions('FULFILLED', fullPerms, 'paid', 'cash_sale');
     expect(fulfilledFull).not.toContain('cancel');
