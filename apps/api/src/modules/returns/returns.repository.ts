@@ -237,10 +237,12 @@ export async function lastBankAccount(q: Queryable, transactionId: string): Prom
 function selectReturns(q: Queryable) {
   return q
     .selectFrom('returns as r')
+    .innerJoin('transactions as t', 't.id', 'r.transaction_id')
     .select([
       'r.id',
       'r.return_number',
       'r.transaction_id',
+      't.transaction_number',
       'r.branch_id',
       'r.customer_id',
       'r.total_refund_amount',

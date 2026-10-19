@@ -62,6 +62,7 @@ export interface ReturnRecord {
   id: string;
   returnNumber: string;
   transactionId: string;
+  transactionNumber: string;
   branchId: number;
   customerId: number | null;
   totalRefundAmount: Money;

@@ -35,6 +35,8 @@ export const ReturnSchema = z.object({
   /** RET-YYYYMMDD-NNNN. */
   returnNumber: z.string(),
   transactionId: z.string(),
+  /** The sale's POS-YYYYMMDD-NNNN. */
+  transactionNumber: z.string(),
   branchId: z.number().int(),
   customerId: z.number().int().nullable(),
   /** What the returned books were worth: credited and refunded together. */

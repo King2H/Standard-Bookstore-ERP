@@ -33,9 +33,12 @@ export function lineValue(line: SaleLine, quantity: number): Money {
   return line.lineTotal.times(quantity).dividedBy(line.quantity).round(2);
 }
 
-/** Above the limit, a Manager or Admin processes the return (owner decision 3a). */
-export function checkApproval(total: Money, maxWithoutAuth: Money, role: string): boolean {
-  const privileged = role === 'Manager' || role === 'Admin';
+/**
+ * Above the limit, a Manager or Admin processes the return (owner decision
+ * 3a), by any role they hold in the branch, as requireRole() counts them.
+ */
+export function checkApproval(total: Money, maxWithoutAuth: Money, roles: readonly string[]): boolean {
+  const privileged = roles.includes('Manager') || roles.includes('Admin');
   if (total.greaterThan(maxWithoutAuth) && !privileged) {
     throw new BusinessError(
       'APPROVAL_REQUIRED',

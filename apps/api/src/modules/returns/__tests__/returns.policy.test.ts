@@ -66,9 +66,13 @@ describe('lineValue', () => {
 
 describe('checkApproval', () => {
   it('above the limit, needs a Manager or Admin', () => {
-    expect(() => checkApproval(Money.of(501), Money.of(500), 'Sales')).toThrow(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
-    expect(checkApproval(Money.of(501), Money.of(500), 'Manager')).toBe(true);
-    expect(checkApproval(Money.of(500), Money.of(500), 'Sales')).toBe(false);
+    expect(() => checkApproval(Money.of(501), Money.of(500), ['Sales'])).toThrow(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
+    expect(checkApproval(Money.of(501), Money.of(500), ['Manager'])).toBe(true);
+    expect(checkApproval(Money.of(500), Money.of(500), ['Sales'])).toBe(false);
+  });
+
+  it('counts every role held in the branch', () => {
+    expect(checkApproval(Money.of(501), Money.of(500), ['Sales', 'Manager'])).toBe(true);
   });
 });
 
