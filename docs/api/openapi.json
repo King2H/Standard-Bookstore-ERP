@@ -24262,6 +24262,18 @@
                               "null"
                             ]
                           },
+                          "customerId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "total": {
                             "type": "number"
                           },
@@ -24297,6 +24309,7 @@
                           "orderNumber",
                           "customerName",
                           "customerCode",
+                          "customerId",
                           "total",
                           "totalPaid",
                           "outstanding",

@@ -59,6 +59,7 @@ export type Payment = z.infer<typeof PaymentSchema>;
 const DateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a date, YYYY-MM-DD');
 
 export const PaymentListQuerySchema = ListPagingQuerySchema.extend({
+  /** One order's payments (not a POS sale's or an exchange's). */
   orderId: IdSchema.optional(),
   status: PaymentStatusSchema.optional(),
   paymentMethod: z.string().optional(),
@@ -123,6 +124,8 @@ export const UnpaidItemSchema = z.object({
   orderNumber: z.string(),
   customerName: z.string().nullable(),
   customerCode: z.string().nullable(),
+  /** The customer whose store credit or loyalty points can pay it. */
+  customerId: z.number().int().nullable(),
   total: z.number(),
   /** Paid less refunded. */
   totalPaid: z.number(),

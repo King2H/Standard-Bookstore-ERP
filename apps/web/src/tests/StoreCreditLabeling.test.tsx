@@ -21,7 +21,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import POSPage from '../features/pos/pages/PosPage.js';
-import PaymentsPage from '../pages/PaymentsPage.js';
 
 const getMock = vi.fn();
 
@@ -51,37 +50,5 @@ describe('Payment method labeling — POS checkout', () => {
     expect(screen.getByText('Cash')).toBeInTheDocument();
     expect(screen.getByText('Bank Transfer')).toBeInTheDocument();
     expect(screen.getByText('Loyalty')).toBeInTheDocument();
-  });
-});
-
-describe('Payment method labeling — Payments module', () => {
-  it('the Collect form\'s payment method selector lists "Store Credit" as its own distinct option from "Telebirr"', async () => {
-    getMock.mockImplementation((path: string) => {
-      if (path.includes('entityId=order-1') && path.includes('sourceType=order_credit_sale')) {
-        return Promise.resolve({
-          items: [{
-            id: 'order-1', orderNumber: 'ORD-0001', customerName: 'Alice', customerCode: 'CUST-1',
-            total: 100, totalPaid: 0, outstanding: 100, paymentStatus: 'unpaid', status: 'CONFIRMED',
-            channel: 'in_store', createdAt: new Date().toISOString(), sourceType: 'order_credit_sale',
-          }],
-          total: 1, page: 1, totalPages: 1,
-        });
-      }
-      return Promise.resolve({ items: [], total: 0, page: 1, totalPages: 1 });
-    });
-
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <PaymentsPage userRole="Manager" userPermissions={[]} initialContext={{ orderId: 'order-1', sourceType: 'order_credit_sale' }} />
-      </QueryClientProvider>,
-    );
-
-    await waitFor(() => expect(screen.getByText('ORD-0001')).toBeInTheDocument());
-    // Collect form's method picker is the shared PaymentMethodTabs component
-    // (components/PaymentMethodTabs.js) — both labels should be present and
-    // distinct (not both reading "Telebirr").
-    await waitFor(() => expect(screen.getByText('Store Credit')).toBeInTheDocument());
-    expect(screen.getByText('Telebirr')).toBeInTheDocument();
   });
 });

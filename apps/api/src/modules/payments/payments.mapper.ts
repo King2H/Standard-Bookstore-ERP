@@ -39,6 +39,7 @@ export interface UnpaidRow {
   order_number: string;
   customer_name: string | null;
   customer_code: string | null;
+  customer_id: number | null;
   total: string;
   total_paid: string;
   payment_status: string;
@@ -93,6 +94,7 @@ export function toUnpaidRecord(row: UnpaidRow): UnpaidRecord {
     orderNumber: row.order_number,
     customerName: row.customer_name,
     customerCode: row.customer_code,
+    customerId: row.customer_id,
     total,
     totalPaid,
     outstanding: Money.max(0, total.minus(totalPaid)),

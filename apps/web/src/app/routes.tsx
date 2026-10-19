@@ -14,7 +14,7 @@ import CustomersPage from '../features/customers/pages/CustomersPage.js';
 import PosPage from '../features/pos/pages/PosPage.js';
 import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
 import OrdersPage from '../features/orders/pages/OrdersPage.js';
-import PaymentsPage from '../pages/PaymentsPage.js';
+import PaymentsPage from '../features/payments/pages/PaymentsPage.js';
 import ExchangesPage from '../features/exchanges/pages/ExchangesPage.js';
 import ReceivablesPage from '../pages/ReceivablesPage.js';
 import DashboardPage from '../pages/DashboardPage.js';
@@ -49,7 +49,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'pos'          && <PosPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'returns'      && <ReturnsPage />}
         {page === 'orders'       && <OrdersPage initialContext={initialContext} onNavigate={navigateTo} />}
-        {page === 'payments'     && <PaymentsPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
+        {page === 'payments'     && <PaymentsPage initialContext={initialContext} />}
         {page === 'exchanges'    && <ExchangesPage />}
         {page === 'receivables'  && <ReceivablesPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'profile'      && <ProfilePage onPasswordChanged={session.passwordChanged} />}
