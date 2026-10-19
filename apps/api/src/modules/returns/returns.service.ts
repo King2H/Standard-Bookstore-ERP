@@ -107,7 +107,7 @@ export async function createReturn(
     const lines = valueLines(await returns.saleLines(tx, sale.id), input.lines);
     const total = Money.sum(lines.map((l) => l.value));
     const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
-    policy.checkApproval(total, maxWithoutAuth, actor.role);
+    policy.checkApproval(total, maxWithoutAuth, actor.roles);
 
     const credited = sale.amountDue.greaterThan(0)
       ? await creditReturn(tx, { sourceType: 'pos_credit_sale', sourceEntityId: sale.id, amount: total })

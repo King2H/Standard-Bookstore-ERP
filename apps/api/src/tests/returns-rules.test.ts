@@ -296,6 +296,17 @@ describe('Returns', () => {
       expect(res.body.approvedBy).toBe(managerId);
     });
 
+    it('above the limit, lets a Manager process it by any role held in the branch (was: refused unless Manager was the main role)', async () => {
+      const both = await createTestStaff({ username: `${STAFF_PREFIX}both`, role: 'Sales', branchId });
+      await db.query(`INSERT INTO staff_branch_roles (staff_id, branch_id, role) VALUES ($1, $2, 'Manager')`, [both.staffId, branchId]);
+      const quantity = Math.ceil(510 / price);
+      const sale = await sell({ items: [{ bookId, quantity }], payments: [{ method: 'cash', amount: Number((price * quantity).toFixed(2)) }] });
+
+      const res = await giveBack(sale, quantity, both.token);
+      expect(res.status).toBe(201);
+      expect(res.body.approvedBy).toBe(both.staffId);
+    });
+
     it("does not return another branch's sale, whatever the role (was: Admin 201)", async () => {
       const sale = await sell();
       await db.query(`UPDATE transactions SET branch_id = $1 WHERE id = $2`, [otherBranchId, sale.id]);
@@ -325,6 +336,14 @@ describe('Returns', () => {
       const after = await stock();
       expect(after.quantity).toBe(before.quantity);
       expect(after.damaged_quantity).toBe(before.damaged_quantity + 1);
+    });
+
+    it("names the sale by its number, in the list and on the return (was: only the sale's internal id)", async () => {
+      const sale = await sell();
+      const ret = await giveBack(sale, 1);
+      expect(ret.body.transactionNumber).toBe(sale.transactionNumber);
+      const list = await as(api().get(`/api/v1/returns?transactionId=${sale.id}`));
+      expect(list.body.items.map((r: { transactionNumber: string }) => r.transactionNumber)).toEqual([sale.transactionNumber]);
     });
 
     it('numbers returns made at the same moment differently', async () => {

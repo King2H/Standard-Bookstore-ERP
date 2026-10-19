@@ -42525,6 +42525,9 @@
                     "transactionId": {
                       "type": "string"
                     },
+                    "transactionNumber": {
+                      "type": "string"
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -42688,6 +42691,7 @@
                     "id",
                     "returnNumber",
                     "transactionId",
+                    "transactionNumber",
                     "branchId",
                     "customerId",
                     "totalRefundAmount",
@@ -42877,6 +42881,9 @@
                           "transactionId": {
                             "type": "string"
                           },
+                          "transactionNumber": {
+                            "type": "string"
+                          },
                           "branchId": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -43040,6 +43047,7 @@
                           "id",
                           "returnNumber",
                           "transactionId",
+                          "transactionNumber",
                           "branchId",
                           "customerId",
                           "totalRefundAmount",
@@ -43157,6 +43165,9 @@
                       "type": "string"
                     },
                     "transactionId": {
+                      "type": "string"
+                    },
+                    "transactionNumber": {
                       "type": "string"
                     },
                     "branchId": {
@@ -43322,6 +43333,7 @@
                     "id",
                     "returnNumber",
                     "transactionId",
+                    "transactionNumber",
                     "branchId",
                     "customerId",
                     "totalRefundAmount",

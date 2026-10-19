@@ -6,6 +6,7 @@ export interface ReturnRow {
   id: string | number | bigint;
   return_number: string;
   transaction_id: string | number | bigint;
+  transaction_number: string;
   branch_id: number;
   customer_id: number | null;
   total_refund_amount: string;
@@ -42,6 +43,7 @@ export function toReturnRecord(row: ReturnRow): ReturnRecord {
     id: String(row.id),
     returnNumber: row.return_number,
     transactionId: String(row.transaction_id),
+    transactionNumber: row.transaction_number,
     branchId: row.branch_id,
     customerId: row.customer_id,
     totalRefundAmount: Money.of(row.total_refund_amount),
