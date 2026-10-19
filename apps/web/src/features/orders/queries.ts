@@ -1,7 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryKeys } from '../inventory/queries.js';
 import {
-  cancelOrder, confirmOrder, deleteOrder, fulfillOrder, getOrder, listOrders, type ConfirmOrder, type OrdersParams,
+  cancelOrder, confirmOrder, createOrder, deleteOrder, fulfillOrder, getOrder, listOrders, searchBooksForOrder,
+  searchCustomersForOrder, type ConfirmOrder, type OrdersParams,
 } from './api.js';
 
 /** Query keys for orders. Every key starts with `orderKeys.all`. */
@@ -9,6 +10,8 @@ export const orderKeys = {
   all: ['orders'] as const,
   list: (params: OrdersParams) => [...orderKeys.all, 'list', params] as const,
   detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
+  books: (q: string, locationId: number | null) => [...orderKeys.all, 'books', q, locationId] as const,
+  customers: (q: string) => [...orderKeys.all, 'customers', q] as const,
 };
 
 export function useOrders(params: OrdersParams) {
@@ -38,4 +41,18 @@ export const useCancelOrder = () => useOrderStep(({ id, reason }: { id: string; 
 export function useDeleteOrder() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: deleteOrder, onSuccess: () => qc.invalidateQueries({ queryKey: orderKeys.all }) });
+}
+
+/** A draft adds an order to the list; its confirmation (a separate step) moves the stock. */
+export function useCreateOrder() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: createOrder, onSuccess: () => qc.invalidateQueries({ queryKey: orderKeys.all }) });
+}
+
+export function useBooksForOrder(q: string, locationId: number | null) {
+  return useQuery({ queryKey: orderKeys.books(q, locationId), queryFn: () => searchBooksForOrder(q, locationId), enabled: q.length > 1 });
+}
+
+export function useCustomersForOrder(q: string) {
+  return useQuery({ queryKey: orderKeys.customers(q), queryFn: () => searchCustomersForOrder(q), enabled: q.length > 1 });
 }

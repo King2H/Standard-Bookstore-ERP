@@ -1,5 +1,8 @@
 import type { z } from 'zod';
-import type { CancelOrderRequest, ConfirmOrderRequestSchema, Order, OrderListResponse } from '@bms/shared';
+import type {
+  BookAvailabilityListResponse, CancelOrderRequest, ConfirmOrderRequestSchema, CreateOrderRequestSchema, CustomerListResponse, Order,
+  OrderListResponse,
+} from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
 /** The order endpoints (#20), typed with their @bms/shared contracts. */
@@ -35,3 +38,17 @@ export const cancelOrder = (id: string, body: CancelOrderRequest) => api.post<Or
 
 /** Only a draft or cancelled order with no history; Admin only. */
 export const deleteOrder = (id: string) => api.delete<void>(`/orders/${id}`);
+
+/** A new order, as the form sends it; the branch is the session's. */
+export type NewOrder = z.input<typeof CreateOrderRequestSchema>;
+
+/** Created as a draft; the form confirms it at once. */
+export const createOrder = (body: NewOrder) => api.post<Order>('/orders', body);
+
+/** Books matching what was typed, with their stock at the order's location and the branch's price. */
+export const searchBooksForOrder = (q: string, locationId: number | null) =>
+  api.get<BookAvailabilityListResponse>(`/books/with-availability${toQuery({ q, pageSize: 8, locationId })}`);
+
+/** Active customers only: the API refuses an order for an inactive one. */
+export const searchCustomersForOrder = (q: string) =>
+  api.get<CustomerListResponse>(`/customers${toQuery({ q, pageSize: 5, status: 'active' })}`);

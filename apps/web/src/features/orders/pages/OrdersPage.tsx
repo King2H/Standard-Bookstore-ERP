@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import NewOrderLegacy from '../../../pages/NewOrderLegacy.js';
+import { NewOrder } from '../components/NewOrder.js';
 import { OrderList } from '../components/OrderList.js';
 
 type Tab = 'list' | 'new';
@@ -8,9 +8,7 @@ type Tab = 'list' | 'new';
  * Orders: the branch's orders, and a new order. The list opens first; the
  * Dashboard opens it for a status or a date range.
  */
-export default function OrdersPage({ userRole, userPermissions, initialContext = {}, onNavigate }: {
-  userRole?: string;
-  userPermissions?: string[];
+export default function OrdersPage({ initialContext = {}, onNavigate }: {
   initialContext?: Record<string, string>;
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }) {
@@ -27,7 +25,7 @@ export default function OrdersPage({ userRole, userPermissions, initialContext =
       </div>
 
       {tab === 'list' && <OrderList initialContext={initialContext} onNavigate={onNavigate} />}
-      {tab === 'new' && <NewOrderLegacy userRole={userRole} userPermissions={userPermissions} onCreated={() => setTab('list')} />}
+      {tab === 'new' && <NewOrder onDone={() => setTab('list')} />}
     </div>
   );
 }
