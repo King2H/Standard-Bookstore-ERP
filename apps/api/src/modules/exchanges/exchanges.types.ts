@@ -4,6 +4,8 @@ import type { Money } from '@bms/shared';
 export interface Actor {
   staffId: number;
   role: string;
+  /** Every role held in the session branch; the approval rules count any of them. */
+  roles: string[];
   branchId: number;
 }
 

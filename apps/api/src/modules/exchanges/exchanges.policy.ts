@@ -18,15 +18,18 @@ export function settlementType(net: Money): SettlementType {
   return 'Even';
 }
 
+/** A Manager or Admin by any role held in the branch, as requireRole() counts them. */
+const privileged = (roles: readonly string[]) => roles.includes('Manager') || roles.includes('Admin');
+
 /**
  * A book brought in is worth at most what the store sells it for (owner
  * decision 4a). A book with no price yet (one just registered from the
  * exchange screen) has nothing to be held to, so only a Manager or Admin
  * values it.
  */
-export function checkTradeInValue(bookId: number, unitValue: Money, sellingPrice: Money | null, role: string): void {
+export function checkTradeInValue(bookId: number, unitValue: Money, sellingPrice: Money | null, roles: readonly string[]): void {
   if (sellingPrice === null) {
-    if (role !== 'Manager' && role !== 'Admin') {
+    if (!privileged(roles)) {
       throw new BusinessError('APPROVAL_REQUIRED', `Book ${bookId} has no price yet; a Manager or Admin values it`, { bookId });
     }
     return;
@@ -41,8 +44,8 @@ export function checkTradeInValue(bookId: number, unitValue: Money, sellingPrice
 }
 
 /** Above the approval limit, a Manager or Admin completes the exchange (owner decision 4a). */
-export function checkApproval(tradeInValue: Money, maxWithoutAuth: Money, role: string): void {
-  if (tradeInValue.greaterThan(maxWithoutAuth) && role !== 'Manager' && role !== 'Admin') {
+export function checkApproval(tradeInValue: Money, maxWithoutAuth: Money, roles: readonly string[]): void {
+  if (tradeInValue.greaterThan(maxWithoutAuth) && !privileged(roles)) {
     throw new BusinessError(
       'APPROVAL_REQUIRED',
       `Books brought in are worth ETB ${tradeInValue.toFixed()}, above the limit of ETB ${maxWithoutAuth.toFixed()}. A Manager or Admin must complete this exchange.`,

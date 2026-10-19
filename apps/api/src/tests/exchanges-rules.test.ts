@@ -196,6 +196,15 @@ describe('Exchanges', () => {
       expect((await exchange(unpricedIn, manager)).status).toBe(201);
     });
 
+    it('lets a Manager by any role held in the branch complete above the limit and value an unpriced book (was: refused unless Manager was the main role)', async () => {
+      const both = await createTestStaff({ username: `${STAFF_PREFIX}both`, role: 'Sales', branchId });
+      await db.query(`INSERT INTO staff_branch_roles (staff_id, branch_id, role) VALUES ($1, $2, 'Manager')`, [both.staffId, branchId]);
+      const big = { incomingItems: [{ bookId: bookA, quantity: 6, unitPrice: 100 }], outgoingItems: [], refundMethod: 'cash' };
+      expect((await exchange(big, both.token)).status).toBe(201);
+      const unpricedIn = { incomingItems: [{ bookId: unpriced, quantity: 1, unitPrice: 10 }], outgoingItems: [], refundMethod: 'cash' };
+      expect((await exchange(unpricedIn, both.token)).status).toBe(201);
+    });
+
     it('refuses an inactive customer (was: 201)', async () => {
       await db.query(`UPDATE customers SET is_active = false WHERE id = $1`, [customerId]);
       try {

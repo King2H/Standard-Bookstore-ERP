@@ -15,7 +15,7 @@ import PosPage from '../features/pos/pages/PosPage.js';
 import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
 import OrdersPage from '../pages/OrdersPage.js';
 import PaymentsPage from '../pages/PaymentsPage.js';
-import ExchangesPage from '../pages/ExchangesPage.js';
+import ExchangesPage from '../features/exchanges/pages/ExchangesPage.js';
 import ReceivablesPage from '../pages/ReceivablesPage.js';
 import DashboardPage from '../pages/DashboardPage.js';
 import ProfilePage from '../features/account/pages/ProfilePage.js';
@@ -50,7 +50,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'returns'      && <ReturnsPage />}
         {page === 'orders'       && <OrdersPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'payments'     && <PaymentsPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} />}
-        {page === 'exchanges'    && <ExchangesPage userRole={role} userPermissions={userPermissions} />}
+        {page === 'exchanges'    && <ExchangesPage />}
         {page === 'receivables'  && <ReceivablesPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'profile'      && <ProfilePage onPasswordChanged={session.passwordChanged} />}
       </>} />} />

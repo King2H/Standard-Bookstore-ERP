@@ -108,7 +108,7 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
 
     const incoming = [];
     for (const i of input.incoming) {
-      policy.checkTradeInValue(i.bookId, i.unitValue, await priceOf(tx, i.bookId, input.branchId), actor.role);
+      policy.checkTradeInValue(i.bookId, i.unitValue, await priceOf(tx, i.bookId, input.branchId), actor.roles);
       incoming.push(i);
     }
     const outgoing = [];
@@ -120,7 +120,7 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
 
     const totalIncoming = Money.sum(incoming.map((i) => i.unitValue.times(i.quantity))).round(2);
     const totalOutgoing = Money.sum(outgoing.map((o) => o.price.times(o.quantity))).round(2);
-    policy.checkApproval(totalIncoming, Money.of(await getMaxReturnValueWithoutAuth()), actor.role);
+    policy.checkApproval(totalIncoming, Money.of(await getMaxReturnValueWithoutAuth()), actor.roles);
 
     const net = totalOutgoing.minus(totalIncoming);
     const type = policy.settlementType(net);

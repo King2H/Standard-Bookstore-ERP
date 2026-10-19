@@ -22,16 +22,21 @@ describe('settlementType', () => {
 
 describe('valuation', () => {
   it('holds a trade-in to its selling price; an unpriced book is for a Manager or Admin', () => {
-    expect(() => checkTradeInValue(1, Money.of(100), Money.of(100), 'Sales')).not.toThrow();
-    expect(() => checkTradeInValue(1, Money.of('100.01'), Money.of(100), 'Admin')).toThrow(expect.objectContaining({ code: 'TRADE_IN_ABOVE_PRICE' }));
-    expect(() => checkTradeInValue(1, Money.of(5), null, 'Sales')).toThrow(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
-    expect(() => checkTradeInValue(1, Money.of(5), null, 'Manager')).not.toThrow();
+    expect(() => checkTradeInValue(1, Money.of(100), Money.of(100), ['Sales'])).not.toThrow();
+    expect(() => checkTradeInValue(1, Money.of('100.01'), Money.of(100), ['Admin'])).toThrow(expect.objectContaining({ code: 'TRADE_IN_ABOVE_PRICE' }));
+    expect(() => checkTradeInValue(1, Money.of(5), null, ['Sales'])).toThrow(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
+    expect(() => checkTradeInValue(1, Money.of(5), null, ['Manager'])).not.toThrow();
   });
 
   it('needs a Manager or Admin above the approval limit', () => {
-    expect(() => checkApproval(Money.of(501), Money.of(500), 'Sales')).toThrow(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
-    expect(() => checkApproval(Money.of(501), Money.of(500), 'Manager')).not.toThrow();
-    expect(() => checkApproval(Money.of(500), Money.of(500), 'Sales')).not.toThrow();
+    expect(() => checkApproval(Money.of(501), Money.of(500), ['Sales'])).toThrow(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
+    expect(() => checkApproval(Money.of(501), Money.of(500), ['Manager'])).not.toThrow();
+    expect(() => checkApproval(Money.of(500), Money.of(500), ['Sales'])).not.toThrow();
+  });
+
+  it('counts every role held in the branch', () => {
+    expect(() => checkApproval(Money.of(501), Money.of(500), ['Sales', 'Manager'])).not.toThrow();
+    expect(() => checkTradeInValue(1, Money.of(5), null, ['Sales', 'Admin'])).not.toThrow();
   });
 });
 
