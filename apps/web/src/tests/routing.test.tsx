@@ -51,7 +51,7 @@ vi.mock('../features/returns/pages/ReturnsPage.js', pageStub('ReturnsPage'));
 vi.mock('../features/orders/pages/OrdersPage.js', pageStub('OrdersPage'));
 vi.mock('../features/payments/pages/PaymentsPage.js', pageStub('PaymentsPage'));
 vi.mock('../features/exchanges/pages/ExchangesPage.js', pageStub('ExchangesPage'));
-vi.mock('../pages/ReceivablesPage.js', pageStub('ReceivablesPage'));
+vi.mock('../features/receivables/pages/ReceivablesPage.js', pageStub('ReceivablesPage'));
 vi.mock('../features/account/pages/ProfilePage.js', pageStub('ProfilePage'));
 vi.mock('../features/notifications/components/NotificationBell.js', () => ({ default: () => null }));
 vi.mock('../lib/auth.js', () => ({
