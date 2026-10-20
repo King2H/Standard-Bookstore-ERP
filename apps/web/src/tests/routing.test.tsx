@@ -39,7 +39,7 @@ vi.mock('../features/branches/pages/BranchesPage.js', pageStub('BranchesPage'));
 vi.mock('../features/staff/pages/StaffPage.js', pageStub('StaffPage'));
 vi.mock('../features/auditLog/pages/AuditLogPage.js', pageStub('AuditLogPage'));
 vi.mock('../features/settings/pages/SettingsPage.js', pageStub('SettingsPage'));
-vi.mock('../pages/BankAccountsPage.js', pageStub('BankAccountsPage'));
+vi.mock('../features/bankAccounts/pages/BankAccountsPage.js', pageStub('BankAccountsPage'));
 vi.mock('../features/locations/pages/LocationsPage.js', pageStub('LocationsPage'));
 vi.mock('../features/catalog/pages/CatalogPage.js', pageStub('CatalogPage'));
 vi.mock('../features/inventory/pages/InventoryPage.js', pageStub('InventoryPage'));

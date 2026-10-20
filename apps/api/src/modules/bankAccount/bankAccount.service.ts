@@ -110,9 +110,9 @@ export async function setActive(actor: Actor, branchId: number, id: number, isAc
 
 // ── Reconciliation ────────────────────────────────────────────────────────────
 
-export async function listEntries(branchId: number, id: number, status: 'uncleared' | 'cleared' | undefined, page: Page) {
+export async function listEntries(branchId: number, id: number, filter: Omit<repo.EntryFilter, 'bankAccountId'>, page: Page) {
   await accountIn(kysely, branchId, id);
-  return repo.listEntries(kysely, { bankAccountId: id, status }, page);
+  return repo.listEntries(kysely, { ...filter, bankAccountId: id }, page);
 }
 
 export async function listLines(branchId: number, id: number, matched: boolean | undefined, page: Page) {

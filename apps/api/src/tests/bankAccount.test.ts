@@ -105,6 +105,39 @@ describe('Bank Accounts', () => {
     expect(empty.status).toBe(400);
   });
 
+  // The page matches a statement line to an open movement of its amount and
+  // direction; it read only the newest 100 open movements, so an older one
+  // that fits was never offered (owner decision 3a).
+  it('lists open movements of one amount and direction, however many others are open', async () => {
+    const id = (await api().get(url()).set('Authorization', `Bearer ${financeToken}`)).body.items[0].id;
+    await db.query(
+      `INSERT INTO bank_reconciliation (bank_account_id, amount, direction, status, source_type, source_id, notes, created_at)
+       VALUES ($1, 37.50, 'in', 'uncleared', 'order_payment', 'ba-filter-fit', 'The one that fits', now() - interval '2 days'),
+              ($1, 37.50, 'out', 'uncleared', 'order_refund', 'ba-filter-out', NULL, now() - interval '2 days'),
+              ($1, 37.50, 'in', 'cleared', 'order_payment', 'ba-filter-cleared', NULL, now() - interval '2 days')`,
+      [id],
+    );
+    await db.query(
+      `INSERT INTO bank_reconciliation (bank_account_id, amount, direction, status, source_type, source_id, created_at)
+       SELECT $1, 10, 'in', 'uncleared', 'order_payment', 'ba-filter-' || n, now() FROM generate_series(1, 105) n`,
+      [id],
+    );
+
+    const all = await api().get(url(`/${id}/entries?status=uncleared&pageSize=100`)).set('Authorization', `Bearer ${financeToken}`);
+    expect(all.body.total).toBe(107);
+    expect(all.body.items.some((e: { notes: string | null }) => e.notes === 'The one that fits')).toBe(false);
+
+    const res = await api()
+      .get(url(`/${id}/entries?status=uncleared&amount=37.5&direction=in`))
+      .set('Authorization', `Bearer ${financeToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items.map((e: { notes: string | null }) => e.notes)).toEqual(['The one that fits']);
+
+    const bad = await api().get(url(`/${id}/entries?amount=1.005`)).set('Authorization', `Bearer ${financeToken}`);
+    expect(bad.status).toBe(400);
+  });
+
   it('answers 410 to the retired v1 reconciliation endpoints', async () => {
     const base = `/api/v1/branches/${branchId}/reconciliation`;
     for (const res of [

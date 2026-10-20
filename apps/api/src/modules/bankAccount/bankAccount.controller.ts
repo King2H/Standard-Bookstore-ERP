@@ -131,7 +131,8 @@ export async function reactivate(req: Request, res: Response): Promise<void> {
 
 export async function entries(req: Request, res: Response): Promise<void> {
   const { params, query } = valid(req, schemas.entries);
-  res.json(paged(await service.listEntries(params.branchId, params.id, query.status, pageOf(query)), query, toEntry));
+  const filter = { status: query.status, amount: query.amount === undefined ? undefined : Money.of(query.amount), direction: query.direction };
+  res.json(paged(await service.listEntries(params.branchId, params.id, filter, pageOf(query)), query, toEntry));
 }
 
 export async function lines(req: Request, res: Response): Promise<void> {
