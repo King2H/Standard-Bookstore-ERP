@@ -26,6 +26,8 @@ export function priceLine(line: SaleLine, unitPrice: Money): PricedLine {
     unitPrice,
     discountPct: line.discountPct,
     discountAmount,
+    discountMode: line.discountMode,
+    discountType: line.discountType,
     lineTotal: base.minus(discountAmount),
   };
 }

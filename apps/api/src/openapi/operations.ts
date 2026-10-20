@@ -2233,10 +2233,10 @@ function reportOperations(): ApiOperation[] {
       operationId: 'getGrossProfitTrend',
       method: 'get',
       path: '/reports/sales/gross-profit-trend',
-      summary: `Net sales and gross profit per day (${roles})`,
+      summary: `Net sales and gross profit per day, week or month (${roles})`,
       tag,
       request: query,
-      responses: { 200: { description: 'One point per day with sales', schema: GrossProfitTrendSchema } },
+      responses: { 200: { description: 'One point per period with sales', schema: GrossProfitTrendSchema } },
     },
     {
       operationId: 'getKpis',

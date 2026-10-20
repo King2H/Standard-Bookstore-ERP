@@ -201,6 +201,8 @@ export async function insertLine(q: Queryable, transactionId: string, line: Pric
       unit_price: line.unitPrice.toFixed(2),
       discount_pct: line.discountPct.toFixed(2),
       discount_amount: line.discountAmount.toFixed(2),
+      discount_mode: line.discountMode,
+      discount_type: line.discountType,
       line_total: line.lineTotal.toFixed(2),
       unit_cost: unitCost.toFixed(2),
     })

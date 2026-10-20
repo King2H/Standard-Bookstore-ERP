@@ -694,4 +694,26 @@ describe('POS — Transactions', () => {
       expect(res.status).toBe(201);
     }
   });
+
+  // ── 16. The cashier's discount preset is recorded (Dashboard part 2, 1a) ────
+
+  it('16. A line keeps the discount preset and mode the cashier picked (was: always Normal, by percentage)', async () => {
+    const discount = 1;
+    const res = await request(getTestApp())
+      .post('/api/v1/pos/transactions')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({
+        branchId,
+        locationId,
+        items: [{ bookId, quantity: 1, discountMode: 'Amount', discountAmount: discount, discountType: 'Merchant' }],
+        payments: [{ method: 'cash', amount: Number((bookPrice - discount).toFixed(2)) }],
+      });
+    expect(res.status).toBe(201);
+    const line = (await db.query(
+      `SELECT discount_type, discount_mode, discount_amount FROM transaction_line_items WHERE transaction_id = $1`,
+      [res.body.id],
+    )).rows;
+    expect(line).toEqual([{ discount_type: 'Merchant', discount_mode: 'Amount', discount_amount: '1.00' }]);
+  });
 });

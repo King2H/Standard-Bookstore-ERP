@@ -1,4 +1,5 @@
 import type { Money, PosPaymentMethod, PosPaymentStatus } from '@bms/shared';
+import type { DiscountMode, DiscountType } from '../../lib/discount.js';
 
 export type { PosPaymentMethod, PosPaymentStatus };
 
@@ -77,7 +78,9 @@ export interface SaleLine {
   quantity: number;
   discountPct: number;
   discountAmount?: number;
-  discountMode: 'Percentage' | 'Amount';
+  discountMode: DiscountMode;
+  /** The preset the cashier picked; reports break discounts down by it. */
+  discountType: DiscountType;
 }
 
 /** A sale line priced and discounted, ready to be written. */
@@ -87,6 +90,8 @@ export interface PricedLine {
   unitPrice: Money;
   discountPct: number;
   discountAmount: Money;
+  discountMode: DiscountMode;
+  discountType: DiscountType;
   lineTotal: Money;
 }
 

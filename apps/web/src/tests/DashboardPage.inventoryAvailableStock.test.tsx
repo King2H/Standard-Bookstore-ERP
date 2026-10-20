@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
+import { emptyReport } from './reportFixtures.js';
 
 const getMock = vi.fn();
 
@@ -34,10 +35,6 @@ const EMPTY_KPIS = {
   monthlyNetProfitUnified: 0, dailyGrossMarginPct: 0, monthlyGrossMarginPct: 0,
   grossProfitUnified: 0, overdueReceivablesAmount: 0, inventoryValue: 0,
 };
-const EMPTY_SALES = { summary: { totalSales: 0, totalOrders: 0, averageOrderValue: 0, totalPosSales: 0, totalPosTransactions: 0, totalDiscountAmount: 0, discountByType: { Normal: 0, Merchant: 0, Special: 0 } }, byPeriod: [], byBranch: [] };
-const EMPTY_PAYMENTS = { summary: { totalCollected: 0, totalRefunded: 0, netCollected: 0, pendingPayments: 0 }, byMethod: [], byPeriod: [] };
-const EMPTY_EXCHANGES = { summary: { totalExchanges: 0, totalIncomingValue: 0, totalOutgoingValue: 0, netExchangeImpact: 0 }, bySettlementType: [], byPeriod: [] };
-const EMPTY_CUSTOMERS = { summary: { totalCustomers: 0, activeCustomers: 0, repeatCustomers: 0, newCustomersInPeriod: 0 }, topCustomers: [], byPeriod: [] };
 
 const INVENTORY_WITH_STOCK = {
   summary: { totalBooks: 120, totalStockUnits: 940, availableStock: 875, reservedStock: 65, lowStockItems: 4, outOfStockItems: 1 },
@@ -68,11 +65,9 @@ beforeEach(() => {
       });
     }
     if (path.startsWith('/reports/kpis'))      return Promise.resolve(EMPTY_KPIS);
-    if (path.startsWith('/reports/sales'))     return Promise.resolve(EMPTY_SALES);
-    if (path.startsWith('/reports/payments'))  return Promise.resolve(EMPTY_PAYMENTS);
-    if (path.startsWith('/reports/exchanges')) return Promise.resolve(EMPTY_EXCHANGES);
     if (path.startsWith('/reports/inventory')) return Promise.resolve(INVENTORY_WITH_STOCK);
-    if (path.startsWith('/reports/customers')) return Promise.resolve(EMPTY_CUSTOMERS);
+    const empty = emptyReport(path);
+    if (empty) return Promise.resolve(empty);
     return Promise.resolve({ items: [] });
   });
 });

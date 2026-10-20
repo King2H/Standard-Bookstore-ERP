@@ -2,11 +2,11 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import WelcomeBanner from '../../../components/WelcomeBanner.js';
 import { useToast } from '../../../components/Toast.js';
-import DashboardSectionsLegacy from '../../../pages/DashboardSectionsLegacy.js';
 import { useMyProfile } from '../../account/queries.js';
 import { exportReport, type ReportParams } from '../api.js';
 import { Overview } from '../components/Overview.js';
 import { QuickActions } from '../components/QuickActions.js';
+import { ReportSections } from '../components/ReportSections.js';
 import { EMPTY_DRAFT, Toolbar, type Draft } from '../components/Toolbar.js';
 import { reportKeys, useKpis } from '../queries.js';
 import { canReadReports, rangeProblem } from '../rules.js';
@@ -22,7 +22,7 @@ function toParams(d: Draft): ReportParams {
 
 /**
  * The Dashboard: shortcuts, filters, the Live Overview and the report
- * sections (still legacy until part 2). Shown to every role held that reads
+ * sections. Shown to every role held that reads
  * reports; the branch is the session's unless staff with access to all
  * branches pick one.
  */
@@ -84,7 +84,7 @@ export default function DashboardPage({ userRole, userPermissions, onNavigate }:
 
       <Overview params={params} onNavigate={onNavigate} />
 
-      <DashboardSectionsLegacy params={params} onNavigate={onNavigate} />
+      <ReportSections params={params} onNavigate={onNavigate} />
 
     </div>
     </div>

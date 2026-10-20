@@ -3,21 +3,37 @@
 // only staff with access to all branches pick a branch, starting on all
 // (owner decision 3a); a date range out of order is not sent; quick actions
 // follow the route guard; Cash Collected opens Payments History on its period
-// (2a); amounts are in the shop's currency. Report answers the page reads are
-// checked against their contracts.
+// (2a); amounts are in the shop's currency. Part 2 moves the report sections:
+// the Discount Summary by preset type (1a), Top Selling Books said to be POS
+// (2a), days in the reader's calendar, method names, no stray 0. Report
+// answers the page reads are checked against their contracts.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { cloneElement, type ReactElement } from 'react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  InventoryReportSchema, KpiReportSchema, PaymentListResponseSchema, PeriodKpisSchema, ProfileResponseSchema,
-  type KpiReport, type ProfileResponse,
+  InventoryReportSchema, KpiReportSchema, PaymentListResponseSchema, PaymentReportSchema, PeriodKpisSchema,
+  ProfileResponseSchema, SalesReportSchema,
+  type InventoryReport, type KpiReport, type PaymentReport, type ProfileResponse, type SalesReport,
 } from '@bms/shared';
 import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
 import PaymentsPage from '../features/payments/pages/PaymentsPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { EMPTY_REPORTS, emptyReport } from './reportFixtures.js';
+
+// jsdom has no layout, so a ResponsiveContainer measures 0 and draws nothing:
+// give the charts a size, so their axes and legends can be read.
+vi.mock('recharts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('recharts')>();
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactElement<{ width?: number; height?: number }> }) =>
+      cloneElement(children, { width: 600, height: 200 }),
+  };
+});
 
 const CREATED = '2026-10-18T07:00:00.000Z';
 
@@ -41,20 +57,17 @@ const INVENTORY = contract(InventoryReportSchema, {
   summary: { totalBooks: 1, totalStockUnits: 9, availableStock: 9, reservedStock: 0, lowStockItems: 2, outOfStockItems: 0 },
   lowStockItems: [], topSellingBooks: [], stockMovement: [],
 });
-// The sections still on the legacy page read these as they always did.
-const LEGACY: Record<string, unknown> = {
-  sales: { summary: { totalSales: 0, totalOrders: 0, averageOrderValue: 0, totalPosSales: 0, totalPosTransactions: 0 }, byPeriod: [], byBranch: [] },
-  payments: { summary: { totalCollected: 0, totalRefunded: 0, netCollected: 0, pendingPayments: 0 }, byMethod: [], byPeriod: [] },
-  exchanges: { summary: { totalExchanges: 0, totalIncomingValue: 0, totalOutgoingValue: 0, netExchangeImpact: 0 }, bySettlementType: [], byPeriod: [] },
-  customers: { summary: { totalCustomers: 0, activeCustomers: 0, repeatCustomers: 0, newCustomersInPeriod: 0 }, topCustomers: [], byPeriod: [] },
-  'receivables-aging': { rows: [], byBucket: [] },
-};
+const SALES = EMPTY_REPORTS.sales;
+const PAYMENTS = EMPTY_REPORTS.payments;
 
 type Call = { method: string; path: string };
 let calls: Call[];
 let me: ProfileResponse;
 let currency: string;
 let exportFails: boolean;
+let sales: SalesReport | null;
+let payments: PaymentReport;
+let inventory: InventoryReport;
 
 function stubApi() {
   calls = [];
@@ -73,10 +86,11 @@ function stubApi() {
     if (p.endsWith('/export')) return exportFails ? json({ error: 'X', message: 'no', details: {} }, 500) : new Response('a\n1\n', { status: 200 });
     if (p === '/reports/kpis/period') return json(PERIOD);
     if (p === '/reports/kpis') return json(KPIS);
-    if (p === '/reports/inventory') return json(INVENTORY);
-    if (p === '/reports/sales/gross-profit-trend' || p === '/reports/returns/top') return json([]);
-    const legacy = LEGACY[p.replace('/reports/', '')];
-    if (legacy) return json(legacy);
+    if (p === '/reports/inventory') return json(inventory);
+    if (p === '/reports/sales') return sales ? json(sales) : json({ error: 'X', message: 'no', details: {} }, 500);
+    if (p === '/reports/payments') return json(payments);
+    const empty = emptyReport(p);
+    if (empty) return json(empty);
     if (p === '/payments') return json(contract(PaymentListResponseSchema, { items: [], total: 0, page: 1, totalPages: 0 }));
     return json({ items: [], total: 0, page: 1, totalPages: 0 });
   }));
@@ -110,6 +124,9 @@ beforeEach(() => {
   me = profile(['Manager']);
   currency = 'ETB';
   exportFails = false;
+  sales = SALES;
+  payments = PAYMENTS;
+  inventory = INVENTORY;
   stubApi();
 });
 
@@ -221,5 +238,76 @@ describe('drill-downs', () => {
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Clear dates' }));
     await waitFor(() => expect(history().some((p) => !p.includes('dateFrom'))).toBe(true));
+  });
+});
+
+describe('report sections', () => {
+  const header = (title: string) => screen.getByRole('heading', { name: title }).parentElement!;
+  const section = async (title: string) => (await screen.findByRole('heading', { name: title })).parentElement!.parentElement!;
+
+  it('show discounts by preset type (decision 1a; was: never shown, its fields were not in the report)', async () => {
+    sales = contract(SalesReportSchema, {
+      ...SALES, summary: { ...SALES.summary, discounts: 100, discountsByType: { Normal: 60, Merchant: 30, Special: 10 } },
+    });
+    await openDashboard();
+    const discounts = within(await section('Discount Summary'));
+    expect(discounts.getByText('60.0%')).toBeInTheDocument();
+    expect(discounts.getByText('30.0%')).toBeInTheDocument();
+    expect(discounts.getByText('10.0%')).toBeInTheDocument();
+  });
+
+  it('show amounts and chart legends in the shop\'s currency (was: always ETB)', async () => {
+    currency = 'USD';
+    sales = contract(SalesReportSchema, {
+      ...SALES, summary: { ...SALES.summary, totalPosSales: 2600 },
+      byPeriod: [{ period: '2026-10-20 00:00:00+00', totalSales: 1000, totalOrders: 2, averageOrderValue: 500 }],
+    });
+    await openDashboard();
+    expect(await screen.findByText('USD 2.6K')).toBeInTheDocument();
+    expect(screen.getByText('Order Sales (USD)')).toBeInTheDocument();
+    expect(screen.queryByText(/ETB/)).not.toBeInTheDocument();
+  });
+
+  it('label a period by its day in the reader\'s calendar (was: a day early west of UTC)', async () => {
+    const tz = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      sales = contract(SalesReportSchema, {
+        ...SALES, byPeriod: [{ period: '2026-10-20 00:00:00+00', totalSales: 1000, totalOrders: 2, averageOrderValue: 500 }],
+      });
+      await openDashboard();
+      const trend = within(await section('Sales Trend'));
+      expect((await trend.findAllByText('Oct 20')).length).toBeGreaterThan(0);
+      expect(trend.queryByText('Oct 19')).not.toBeInTheDocument();
+    } finally {
+      process.env.TZ = tz;
+    }
+  });
+
+  it('name payment methods as the rest of the app does (was: raw codes such as "cash")', async () => {
+    payments = contract(PaymentReportSchema, {
+      ...PAYMENTS,
+      byMethod: [
+        { method: 'cash', total: 500, count: 2 }, { method: 'bank', total: 300, count: 1 }, { method: 'loyalty_points', total: 20, count: 1 },
+      ],
+    });
+    await openDashboard();
+    expect(await screen.findByText('Bank Transfer')).toBeInTheDocument();
+    expect(screen.getByText('Cash')).toBeInTheDocument();
+    expect(screen.getByText('Loyalty')).toBeInTheDocument();
+    expect(screen.queryByText('cash')).not.toBeInTheDocument();
+  });
+
+  it('say that the top selling books are counter sales (decision 2a)', async () => {
+    inventory = contract(InventoryReportSchema, { ...INVENTORY, topSellingBooks: [{ bookId: 1, title: 'Fikir Eske Mekabir', unitsSold: 3, revenue: 900 }] });
+    await openDashboard();
+    expect(await screen.findByText('Top Selling Books (POS)')).toBeInTheDocument();
+  });
+
+  it('print no stray 0 beside a title while a report loads or fails (was: "Sales Trend0")', async () => {
+    sales = null;
+    await openDashboard();
+    await waitFor(() => expect(screen.getAllByText('Failed to load data').length).toBeGreaterThan(0));
+    expect(header('Sales Trend').textContent).toBe('Sales Trend');
   });
 });

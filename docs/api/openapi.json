@@ -41866,6 +41866,26 @@
                         "discounts": {
                           "type": "number"
                         },
+                        "discountsByType": {
+                          "type": "object",
+                          "properties": {
+                            "Normal": {
+                              "type": "number"
+                            },
+                            "Merchant": {
+                              "type": "number"
+                            },
+                            "Special": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "Normal",
+                            "Merchant",
+                            "Special"
+                          ],
+                          "additionalProperties": false
+                        },
                         "returnsValue": {
                           "type": "number"
                         }
@@ -41889,6 +41909,7 @@
                         "costAmount",
                         "grossSales",
                         "discounts",
+                        "discountsByType",
                         "returnsValue"
                       ],
                       "additionalProperties": false
@@ -42363,7 +42384,7 @@
     "/reports/sales/gross-profit-trend": {
       "get": {
         "operationId": "getGrossProfitTrend",
-        "summary": "Net sales and gross profit per day (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Net sales and gross profit per day, week or month (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -42413,7 +42434,7 @@
         ],
         "responses": {
           "200": {
-            "description": "One point per day with sales",
+            "description": "One point per period with sales",
             "content": {
               "application/json": {
                 "schema": {

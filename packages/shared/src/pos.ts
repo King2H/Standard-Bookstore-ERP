@@ -120,7 +120,7 @@ export const PosLineInputSchema = z.object({
   /** With discountMode Amount: the line's discount in money, at most the line's value. */
   discountAmount: z.number().transform((n) => Math.max(0, n)).optional(),
   discountMode: z.enum(['Percentage', 'Amount']).optional(),
-  /** Informational: which discount preset the cashier used. */
+  /** The discount preset the cashier used, recorded on the line; reports break discounts down by it. */
   discountType: z.enum(['Normal', 'Merchant', 'Special']).optional(),
 });
 export type PosLineInput = z.infer<typeof PosLineInputSchema>;
