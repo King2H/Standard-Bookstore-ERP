@@ -124,8 +124,16 @@ export function findSectionForPage(page: Page): string | null {
   return null;
 }
 
-/** Returns true if the user can see this item based on their role OR permissions. */
-export function canSeeItem(item: NavLeaf, userRole: Role | null, userPermissions: string[]): boolean {
+/** The roles held in the branch; the main role alone when the token names no others (as the API reads it). */
+const held = (userRole: Role | null, userRoles: Role[]): Role[] =>
+  userRoles.length > 0 ? userRoles : userRole ? [userRole] : [];
+
+/**
+ * Returns true if the user can see this item by their permissions OR any role
+ * they hold in the branch (#159; was: the main role only, so a Sales +
+ * Finance_Officer account was turned away from what Finance_Officer opens).
+ */
+export function canSeeItem(item: NavLeaf, userRole: Role | null, userRoles: Role[], userPermissions: string[]): boolean {
   // Super_Admin is a governance-only role: Dashboard, Organization, System only.
   // Block all operational sections regardless of any permission union.
   if (userRole === 'Super_Admin') {
@@ -140,27 +148,29 @@ export function canSeeItem(item: NavLeaf, userRole: Role | null, userPermissions
     if (userPermissions.some(p => item.permissions!.includes(p))) return true;
   }
   // Role-based fallback (for items without permission mapping, or when permissions not yet loaded)
-  if (userRole && item.roles.includes(userRole)) return true;
-  return false;
+  return held(userRole, userRoles).some(r => item.roles.includes(r));
 }
 
 /** Dashboard — standalone, visible to roles with VIEW_REPORTS or Admin/Manager. */
-export function canSeeDashboard(userRole: Role | null, userPermissions: string[]): boolean {
+export function canSeeDashboard(userRole: Role | null, userRoles: Role[], userPermissions: string[]): boolean {
   return userPermissions.some(p => ['VIEW_REPORTS', 'MANAGE_BRANCH'].includes(p)) ||
-    (!!userRole && ['Admin', 'Manager', 'Finance_Officer', 'Super_Admin'].includes(userRole));
+    held(userRole, userRoles).some(r => ['Admin', 'Manager', 'Finance_Officer', 'Super_Admin'].includes(r));
 }
 
 // Not in the menu, but open to those who could use it: the page's own
 // reconcile rule. The API answers it only with FEATURE_BANK_ACCOUNTS=true.
 const BANK_ACCOUNTS: NavLeaf = { id: 'bank-accounts', label: 'Bank Accounts', icon: '🏦', roles: ['Admin', 'Manager', 'Finance_Officer'] };
 
-/** Whether the user may open the page: the same rule the sidebar shows it by. */
-export function canOpenPage(page: Page, userRole: Role | null, userPermissions: string[]): boolean {
+/**
+ * Whether the user may open the page: the same rule the sidebar shows it by.
+ * The main role still decides the landing page and Super_Admin's governance limit.
+ */
+export function canOpenPage(page: Page, userRole: Role | null, userRoles: Role[], userPermissions: string[]): boolean {
   if (page === 'profile') return true;
-  if (page === 'dashboard') return canSeeDashboard(userRole, userPermissions);
-  if (page === 'bank-accounts') return canSeeItem(BANK_ACCOUNTS, userRole, userPermissions);
+  if (page === 'dashboard') return canSeeDashboard(userRole, userRoles, userPermissions);
+  if (page === 'bank-accounts') return canSeeItem(BANK_ACCOUNTS, userRole, userRoles, userPermissions);
   const item = NAV_SECTIONS.flatMap(s => s.items).find(i => i.id === page);
-  return !!item && canSeeItem(item, userRole, userPermissions);
+  return !!item && canSeeItem(item, userRole, userRoles, userPermissions);
 }
 
 /** The page a role starts on after signing in or switching branch. */

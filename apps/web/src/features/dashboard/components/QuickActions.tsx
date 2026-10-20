@@ -10,12 +10,13 @@ const LOOK: Partial<Record<Page, { icon: ReactNode; color: string }>> = {
 };
 
 /** Shortcuts to the pages the person may open (was: all four for everyone). */
-export function QuickActions({ userRole, userPermissions, onNavigate }: {
+export function QuickActions({ userRole, userRoles, userPermissions, onNavigate }: {
   userRole: string | null;
+  userRoles: string[];
   userPermissions: string[];
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }) {
-  const actions = quickActionsFor(userRole, userPermissions);
+  const actions = quickActionsFor(userRole, userRoles, userPermissions);
   if (actions.length === 0) return null;
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

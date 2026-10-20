@@ -70,8 +70,9 @@ vi.mock('../lib/api.js', async (importOriginal) => {
 
 const SALES = ['CREATE_SALE', 'PROCESS_PAYMENT'];
 
-function signedInAs(role: string, permissions: string[], mustChangePassword = false) {
-  tokenRef.current = `x.${btoa(JSON.stringify({ role, roles: [role], branchId: 1 }))}.y`;
+/** Signed in with `role` as the main role, holding `roles` in the branch (the main role alone by default). */
+function signedInAs(role: string, permissions: string[], mustChangePassword = false, roles = [role]) {
+  tokenRef.current = `x.${btoa(JSON.stringify({ role, roles, branchId: 1 }))}.y`;
   vi.mocked(restoreSession).mockResolvedValue({ restored: true, permissions, mustChangePassword });
 }
 
@@ -199,6 +200,20 @@ describe('Route guards', () => {
     await page('PaymentsPage');
   });
 
+  it('counts every role held, not the main role alone (#159): Sales + Finance_Officer opens /bank-accounts', async () => {
+    signedInAs('Sales', [...SALES, 'PROCESS_REFUND', 'VIEW_REPORTS'], false, ['Sales', 'Finance_Officer']);
+    open('/bank-accounts');
+    await page('BankAccountsPage');
+    expect(url()).toBe('/bank-accounts');
+  });
+
+  it('still keeps a page closed when no role held allows it: Sales + Stock_Clerk cannot open /bank-accounts', async () => {
+    signedInAs('Sales', [...SALES, 'MANAGE_INVENTORY'], false, ['Sales', 'Stock_Clerk']);
+    open('/bank-accounts');
+    await page('POSPage');
+    expect(url()).toBe('/pos');
+  });
+
   it('allows only the profile while the password must be changed, then lands as usual', async () => {
     signedInAs('Sales', SALES, true);
     open('/orders');
@@ -236,7 +251,7 @@ describe('The navigation rule', () => {
       Purchasor: ['MANAGE_INVENTORY'], Super_Admin: ['MANAGE_BRANCH', 'MANAGE_STAFF'],
     };
     for (const [role, permissions] of Object.entries(permissionsOf)) {
-      expect([role, canOpenPage(landingPage(role), role, permissions)]).toEqual([role, true]);
+      expect([role, canOpenPage(landingPage(role), role, [role], permissions)]).toEqual([role, true]);
     }
   });
 

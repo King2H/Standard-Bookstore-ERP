@@ -111,7 +111,7 @@ async function openDashboard(onNavigate = vi.fn()) {
   const perms = [...new Set(me.currentRoles.flatMap((r) => PERMS[r] ?? []))];
   render(
     <QueryClientProvider client={qc}>
-      <ToastProvider><DashboardPage userRole={me.currentRole} userPermissions={perms} onNavigate={onNavigate} /></ToastProvider>
+      <ToastProvider><DashboardPage userRole={me.currentRole} userRoles={me.currentRoles} userPermissions={perms} onNavigate={onNavigate} /></ToastProvider>
     </QueryClientProvider>,
   );
   await settle();
