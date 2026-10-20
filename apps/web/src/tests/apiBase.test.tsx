@@ -16,7 +16,7 @@ const API = vi.hoisted(() => {
 });
 
 import { api, setAccessToken, setCsrfToken } from '../lib/api.js';
-import DashboardPage from '../pages/DashboardPage.js';
+import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
 import NotificationBell from '../features/notifications/components/NotificationBell.js';
 import { ToastProvider } from '../components/Toast.js';
 
@@ -46,8 +46,15 @@ const EMPTY_PERIOD = {
   previous: { dateFrom: '', dateTo: '', netSales: 0, grossProfit: 0, grossMarginPct: 0 },
   netSalesChangePct: null, grossProfitChangePct: null, cashCollected: 0, previousCashCollected: 0,
 };
+const ME = {
+  id: 9, username: 'me', fullName: 'Me', isActive: true, createdAt: '2026-10-01T00:00:00.000Z', mustChangePassword: false,
+  lastLoginAt: null, passwordChangedAt: null, isLocked: false, isAllBranches: false,
+  roles: [{ branchId: 1, branchName: 'Home', role: 'Manager' }], currentRole: 'Manager', currentRoles: ['Manager'],
+  currentBranchId: 1, locationAccess: { mode: 'full', locations: [] },
+};
 function dashboardReport(url: string): unknown {
   const path = url.slice(API.length);
+  if (path === '/staff/me') return ME;
   if (path.startsWith('/reports/kpis/period')) return EMPTY_PERIOD;
   if (path.startsWith('/reports/kpis')) return EMPTY_KPIS;
   if (path.startsWith('/reports/sales')) return EMPTY_SALES;
@@ -108,7 +115,7 @@ describe('The API client', () => {
 describe('CSV exports', () => {
   it('download from the API, not from the web app\'s own host (was: /api/reports/… on the web host)', async () => {
     stubFetch(dashboardReport);
-    renderWithProviders(<DashboardPage userRole="Manager" onNavigate={vi.fn()} />);
+    renderWithProviders(<DashboardPage userRole="Manager" userPermissions={['VIEW_REPORTS']} onNavigate={vi.fn()} />);
 
     await userEvent.click(await screen.findByRole('button', { name: /^Export/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Sales' }));

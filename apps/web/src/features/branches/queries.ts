@@ -7,13 +7,13 @@ export const branchKeys = {
   list: (params: BranchListParams) => [...branchKeys.all, 'list', params] as const,
 };
 
-export function useBranches(params: BranchListParams) {
-  return useQuery({ queryKey: branchKeys.list(params), queryFn: () => listBranches(params) });
+export function useBranches(params: BranchListParams, enabled = true) {
+  return useQuery({ queryKey: branchKeys.list(params), queryFn: () => listBranches(params), enabled });
 }
 
 /** The open branches to pick from: the API's largest page, which covers a chain of any realistic size. */
-export function useOpenBranches() {
-  return useBranches({ isActive: 'true', pageSize: 100 });
+export function useOpenBranches(enabled = true) {
+  return useBranches({ isActive: 'true', pageSize: 100 }, enabled);
 }
 
 function useRefreshBranches() {

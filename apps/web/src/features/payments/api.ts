@@ -29,6 +29,10 @@ export type HistoryParams = {
   page?: number;
   pageSize?: number;
   status?: PaymentStatus;
+  /** From this day on, YYYY-MM-DD. */
+  dateFrom?: string;
+  /** Up to and including this day. */
+  dateTo?: string;
 };
 
 /** Payments taken in the branch, newest first: on orders, POS credit sales and exchange differences. */

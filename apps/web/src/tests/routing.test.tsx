@@ -34,7 +34,7 @@ const { pageStub, tokenRef } = vi.hoisted(() => ({
 }));
 
 vi.mock('../features/auth/pages/LoginPage.js', pageStub('LoginPage'));
-vi.mock('../pages/DashboardPage.js', pageStub('DashboardPage'));
+vi.mock('../features/dashboard/pages/DashboardPage.js', pageStub('DashboardPage'));
 vi.mock('../features/branches/pages/BranchesPage.js', pageStub('BranchesPage'));
 vi.mock('../features/staff/pages/StaffPage.js', pageStub('StaffPage'));
 vi.mock('../features/auditLog/pages/AuditLogPage.js', pageStub('AuditLogPage'));

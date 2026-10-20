@@ -10,6 +10,8 @@ import { useUnpaid } from '../queries.js';
 
 type Tab = 'pending' | 'collect' | 'history';
 
+const isDay = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
 const TAB = 'px-4 py-2 text-sm font-medium transition-colors';
 const IDLE = 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200';
 
@@ -17,11 +19,14 @@ const IDLE = 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:te
  * Payments: what customers owe, collecting it, and the payments taken. Orders,
  * Sales History and Receivables open Collect for one debt with `orderId` and
  * `sourceType` (an order, POS sale or receivable id, with 'order', 'pos' or
- * 'exchange_difference').
+ * 'exchange_difference'). The Dashboard opens History on a period with
+ * `tab: 'history'`, `dateFrom` and `dateTo`.
  */
 export default function PaymentsPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
   const { showToast } = useToast();
-  const [tab, setTab] = useState<Tab>('pending');
+  const { dateFrom, dateTo } = initialContext;
+  const linkedRange = initialContext.tab === 'history' && isDay(dateFrom) && isDay(dateTo) ? { dateFrom, dateTo } : undefined;
+  const [tab, setTab] = useState<Tab>(initialContext.tab === 'history' ? 'history' : 'pending');
   const [selected, setSelected] = useState<UnpaidItem | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -77,7 +82,7 @@ export default function PaymentsPage({ initialContext = {} }: { initialContext?:
           setPage={setPage} setPageSize={setPageSize} onCollect={collect} />
       )}
       {tab === 'collect' && selected && <CollectPayment key={`${selected.sourceType}:${selected.id}`} item={selected} onDone={close} onCancel={close} />}
-      {tab === 'history' && <PaymentHistory />}
+      {tab === 'history' && <PaymentHistory initialRange={linkedRange} />}
     </div>
   );
 }

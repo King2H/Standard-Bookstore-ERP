@@ -14,8 +14,12 @@ const STATUS_COLORS: Record<string, string> = {
   partially_refunded: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
 };
 
-/** Payments taken in the branch, newest first; an order payment can be refunded. */
-export function PaymentHistory() {
+/**
+ * Payments taken in the branch, newest first; an order payment can be
+ * refunded. The Dashboard's Cash Collected opens it on its period (owner
+ * decision 2a; was: the dates were dropped), shown as a filter to clear.
+ */
+export function PaymentHistory({ initialRange }: { initialRange?: { dateFrom: string; dateTo: string } }) {
   const currency = useCurrency();
   const { data: me } = useMyProfile();
   const [page, setPage] = useState(1);
@@ -23,7 +27,8 @@ export function PaymentHistory() {
   const [status, setStatus] = useState<PaymentStatus | ''>('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [refunding, setRefunding] = useState<Payment | null>(null);
-  const { data, isLoading } = usePaymentHistory({ page, pageSize, status: status || undefined });
+  const [range, setRange] = useState(initialRange);
+  const { data, isLoading } = usePaymentHistory({ page, pageSize, status: status || undefined, ...range });
 
   return (
     <div className="flex-1 overflow-auto p-4 space-y-3">
@@ -33,6 +38,12 @@ export function PaymentHistory() {
           <option value="">All statuses</option>
           {HISTORY_STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
         </select>
+        {range && (
+          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg">
+            {range.dateFrom === range.dateTo ? range.dateFrom : `${range.dateFrom} to ${range.dateTo}`}
+            <button onClick={() => { setRange(undefined); setPage(1); }} aria-label="Clear dates" className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">✕</button>
+          </span>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
