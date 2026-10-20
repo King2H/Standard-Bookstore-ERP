@@ -65,6 +65,7 @@ function SidebarItem({ item, isActive, expanded, onClick }: SidebarItemProps) {
 interface SidebarSectionProps {
   section: NavSection;
   userRole: Role | null;
+  userRoles: string[];
   userPermissions: string[];
   currentPage: Page;
   isOpen: boolean;
@@ -74,9 +75,9 @@ interface SidebarSectionProps {
 }
 
 function SidebarSection({
-  section, userRole, userPermissions, currentPage, isOpen, sidebarExpanded, onToggle, onNavigate,
+  section, userRole, userRoles, userPermissions, currentPage, isOpen, sidebarExpanded, onToggle, onNavigate,
 }: SidebarSectionProps) {
-  const visibleItems = section.items.filter(item => canSeeItem(item, userRole, userPermissions));
+  const visibleItems = section.items.filter(item => canSeeItem(item, userRole, userRoles, userPermissions));
   if (visibleItems.length === 0) return null;
 
   const hasActiveChild = visibleItems.some(i => i.id === currentPage);
@@ -137,7 +138,7 @@ interface LayoutProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
   userRole: Role | null;
-  userRoles?: string[];           // all roles for the active branch (informational)
+  userRoles?: string[];           // all roles for the active branch: badges and what the menu offers
   userPermissions?: string[];
   activeBranchId?: number | null;
   onSwitchBranch?: (branchId: number) => void;
@@ -226,7 +227,7 @@ export default function Layout({
         <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
 
           {/* Dashboard — standalone, visible to roles with VIEW_REPORTS or Admin/Manager */}
-          {canSeeDashboard(userRole, userPermissions) && (
+          {canSeeDashboard(userRole, userRoles, userPermissions) && (
             <button
               onClick={() => onNavigate('dashboard')}
               title={!sidebarExpanded ? 'Dashboard' : undefined}
@@ -253,6 +254,7 @@ export default function Layout({
               key={section.id}
               section={section}
               userRole={userRole}
+              userRoles={userRoles}
               userPermissions={userPermissions}
               currentPage={currentPage}
               isOpen={openSection === section.id}

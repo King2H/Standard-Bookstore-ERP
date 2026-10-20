@@ -108,7 +108,7 @@ describe('The API client', () => {
 describe('CSV exports', () => {
   it('download from the API, not from the web app\'s own host (was: /api/reports/… on the web host)', async () => {
     stubFetch(dashboardReport);
-    renderWithProviders(<DashboardPage userRole="Manager" userPermissions={['VIEW_REPORTS']} onNavigate={vi.fn()} />);
+    renderWithProviders(<DashboardPage userRole="Manager" userRoles={['Manager']} userPermissions={['VIEW_REPORTS']} onNavigate={vi.fn()} />);
 
     await userEvent.click(await screen.findByRole('button', { name: /^Export/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Sales' }));

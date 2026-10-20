@@ -45,7 +45,7 @@ function renderDashboard() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DashboardPage userRole="Manager" userPermissions={['VIEW_REPORTS']} onNavigate={vi.fn()} />
+      <DashboardPage userRole="Manager" userRoles={['Manager']} userPermissions={['VIEW_REPORTS']} onNavigate={vi.fn()} />
     </QueryClientProvider>,
   );
 }

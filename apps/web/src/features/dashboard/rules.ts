@@ -28,6 +28,6 @@ export const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 /** The quick actions whose page the person may open, by the route guard's own rule (was: all four for everyone). */
-export function quickActionsFor(userRole: string | null, userPermissions: string[]): QuickAction[] {
-  return QUICK_ACTIONS.filter((a) => canOpenPage(a.page, userRole, userPermissions));
+export function quickActionsFor(userRole: string | null, userRoles: string[], userPermissions: string[]): QuickAction[] {
+  return QUICK_ACTIONS.filter((a) => canOpenPage(a.page, userRole, userRoles, userPermissions));
 }

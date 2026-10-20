@@ -27,14 +27,14 @@ export function AppRoutes({ session, onNavigate }: {
   session: Session;
   onNavigate: (page: Page, context?: Record<string, string>) => void;
 }) {
-  const { userRole, userPermissions } = session;
+  const { userRole, userRoles, userPermissions } = session;
   const role = userRole ?? undefined;
   const navigateTo = (page: string, context?: Record<string, string>) => onNavigate(page as Page, context);
 
   return (
     <Routes>
       <Route path="/:page" element={<PageRoute session={session} render={(page, initialContext) => <>
-        {page === 'dashboard'    && <DashboardPage userRole={userRole} userPermissions={userPermissions} onNavigate={navigateTo} />}
+        {page === 'dashboard'    && <DashboardPage userRole={userRole} userRoles={userRoles} userPermissions={userPermissions} onNavigate={navigateTo} />}
         {page === 'branches'     && <BranchesPage />}
         {page === 'staff'        && <StaffPage />}
         {page === 'audit-log'    && <AuditLogPage />}
@@ -59,12 +59,12 @@ export function AppRoutes({ session, onNavigate }: {
   );
 }
 
-type Access = Pick<Session, 'userRole' | 'userPermissions' | 'mustChangePassword'>;
+type Access = Pick<Session, 'userRole' | 'userRoles' | 'userPermissions' | 'mustChangePassword'>;
 
 /** The role's landing page, or the profile when the role may not open even that. */
-function allowedLanding({ userRole, userPermissions, mustChangePassword }: Access): Page {
+function allowedLanding({ userRole, userRoles, userPermissions, mustChangePassword }: Access): Page {
   const landing = landingPage(userRole);
-  return !mustChangePassword && canOpenPage(landing, userRole, userPermissions) ? landing : 'profile';
+  return !mustChangePassword && canOpenPage(landing, userRole, userRoles, userPermissions) ? landing : 'profile';
 }
 
 /**
@@ -79,8 +79,8 @@ function PageRoute({ session, render }: {
 }) {
   const { page = '' } = useParams();
   const [searchParams] = useSearchParams();
-  const { userRole, userPermissions, mustChangePassword } = session;
-  const allowed = isPage(page) && (mustChangePassword ? page === 'profile' : canOpenPage(page, userRole, userPermissions));
+  const { userRole, userRoles, userPermissions, mustChangePassword } = session;
+  const allowed = isPage(page) && (mustChangePassword ? page === 'profile' : canOpenPage(page, userRole, userRoles, userPermissions));
   if (!allowed) return <Navigate to={pagePath(allowedLanding(session))} replace />;
   // A new query string (another order to collect, other filters) starts the page afresh.
   return <Fragment key={searchParams.toString()}>{render(page, Object.fromEntries(searchParams))}</Fragment>;

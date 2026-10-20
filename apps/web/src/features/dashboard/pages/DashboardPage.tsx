@@ -26,8 +26,9 @@ function toParams(d: Draft): ReportParams {
  * reports; the branch is the session's unless staff with access to all
  * branches pick one.
  */
-export default function DashboardPage({ userRole, userPermissions, onNavigate }: {
+export default function DashboardPage({ userRole, userRoles, userPermissions, onNavigate }: {
   userRole: string | null;
+  userRoles: string[];
   userPermissions: string[];
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }) {
@@ -77,7 +78,7 @@ export default function DashboardPage({ userRole, userPermissions, onNavigate }:
     <div className="flex-1 overflow-y-auto">
     <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto pb-10">
 
-      <QuickActions userRole={userRole} userPermissions={userPermissions} onNavigate={onNavigate} />
+      <QuickActions userRole={userRole} userRoles={userRoles} userPermissions={userPermissions} onNavigate={onNavigate} />
 
       <Toolbar draft={draft} setDraft={setDraft} problem={problem} allBranches={me.isAllBranches}
         kpiUpdatedAt={kpiUpdatedAt} refreshing={refreshing} onRefresh={refreshAll} onExport={exportCsv} />
