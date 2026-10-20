@@ -16,7 +16,7 @@ import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
 import OrdersPage from '../features/orders/pages/OrdersPage.js';
 import PaymentsPage from '../features/payments/pages/PaymentsPage.js';
 import ExchangesPage from '../features/exchanges/pages/ExchangesPage.js';
-import ReceivablesPage from '../pages/ReceivablesPage.js';
+import ReceivablesPage from '../features/receivables/pages/ReceivablesPage.js';
 import DashboardPage from '../pages/DashboardPage.js';
 import ProfilePage from '../features/account/pages/ProfilePage.js';
 import { canOpenPage, isPage, landingPage, pagePath, type Page } from './navigation.js';
@@ -51,7 +51,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'orders'       && <OrdersPage initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'payments'     && <PaymentsPage initialContext={initialContext} />}
         {page === 'exchanges'    && <ExchangesPage />}
-        {page === 'receivables'  && <ReceivablesPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
+        {page === 'receivables'  && <ReceivablesPage initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'profile'      && <ProfilePage onPasswordChanged={session.passwordChanged} />}
       </>} />} />
       <Route path="*" element={<Navigate to={pagePath(allowedLanding(session))} replace />} />

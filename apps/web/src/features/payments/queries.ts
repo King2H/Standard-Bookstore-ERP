@@ -3,6 +3,7 @@ import type { PosCollectRequest, RefundPaymentRequest } from '@bms/shared';
 import { customerKeys } from '../customers/queries.js';
 import { orderKeys } from '../orders/queries.js';
 import { posKeys } from '../pos/queries.js';
+import { receivableKeys } from '../receivables/queries.js';
 import {
   collectPosSale, collectReceivable, getOrderBalance, getPayment, listPayments, listUnpaid, recordOrderPayment, refundPayment,
   type HistoryParams, type NewOrderPayment, type ReceivableCollection, type UnpaidParams,
@@ -50,8 +51,7 @@ function useMoneyStep<A, R>(mutationFn: (a: A) => Promise<R>) {
       qc.invalidateQueries({ queryKey: orderKeys.all }),
       qc.invalidateQueries({ queryKey: posKeys.all }),
       qc.invalidateQueries({ queryKey: customerKeys.all }),
-      qc.invalidateQueries({ queryKey: ['receivables'] }),
-      qc.invalidateQueries({ queryKey: ['receivables-summary'] }),
+      qc.invalidateQueries({ queryKey: receivableKeys.all }),
     ]),
   });
 }
