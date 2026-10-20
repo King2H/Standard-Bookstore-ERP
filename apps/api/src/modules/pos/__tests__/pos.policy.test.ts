@@ -6,14 +6,14 @@ const sold = { status: 'completed' as const, soldOn: '2026-10-10', today: '2026-
 
 describe('priceLine and checkDiscounts', () => {
   it('discounts by percentage, or by an amount no larger than the line', () => {
-    const pct = priceLine({ bookId: 1, quantity: 2, discountPct: 10, discountMode: 'Percentage' }, Money.of('50'));
+    const pct = priceLine({ bookId: 1, quantity: 2, discountPct: 10, discountMode: 'Percentage', discountType: 'Normal' }, Money.of('50'));
     expect([pct.discountAmount.toFixed(), pct.lineTotal.toFixed()]).toEqual(['10.00', '90.00']);
-    const amount = priceLine({ bookId: 1, quantity: 1, discountPct: 0, discountAmount: 80, discountMode: 'Amount' }, Money.of('50'));
+    const amount = priceLine({ bookId: 1, quantity: 1, discountPct: 0, discountAmount: 80, discountMode: 'Amount', discountType: 'Normal' }, Money.of('50'));
     expect([amount.discountAmount.toFixed(), amount.lineTotal.toFixed()]).toEqual(['50.00', '0.00']);
   });
 
   it('holds an amount discount to the role\'s maximum percentage', () => {
-    const line = priceLine({ bookId: 1, quantity: 1, discountPct: 0, discountAmount: 6, discountMode: 'Amount' }, Money.of('50'));
+    const line = priceLine({ bookId: 1, quantity: 1, discountPct: 0, discountAmount: 6, discountMode: 'Amount', discountType: 'Normal' }, Money.of('50'));
     expect(() => checkDiscounts([line], 12)).not.toThrow();
     expect(() => checkDiscounts([line], 10)).toThrow(expect.objectContaining({ code: 'DISCOUNT_EXCEEDS_LIMIT' }));
   });

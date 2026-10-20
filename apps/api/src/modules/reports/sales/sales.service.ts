@@ -53,6 +53,7 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
       costAmount: summary.costAmount,
       grossSales: summary.grossSales,
       discounts: summary.discounts,
+      discountsByType: summary.discountsByType,
       returnsValue: summary.returnsValue,
     },
     byPeriod: byPeriod.map((r) => ({
@@ -75,6 +76,6 @@ export async function getSalesDetail(scope: ReportScope): Promise<{ rows: SalesL
   return policy.detailRows(await salesLines(reportDb, scope));
 }
 
-export async function getGrossProfitTrend(scope: ReportScope) {
-  return policy.grossProfitTrend(await salesLines(reportDb, scope));
+export async function getGrossProfitTrend(filters: ReportFilters) {
+  return policy.grossProfitTrend(await salesLines(reportDb, filters), filters.groupBy);
 }

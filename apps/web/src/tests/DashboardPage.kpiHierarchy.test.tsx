@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
+import { emptyReport } from './reportFixtures.js';
 
 const getMock = vi.fn();
 
@@ -76,11 +77,6 @@ const PERIOD_KPIS = {
   cashCollected: 4000, previousCashCollected: 3500,
 };
 
-const EMPTY_SALES = { summary: { totalSales: 0, totalOrders: 0, averageOrderValue: 0, totalPosSales: 0, totalPosTransactions: 0, totalDiscountAmount: 0, discountByType: { Normal: 0, Merchant: 0, Special: 0 } }, byPeriod: [], byBranch: [] };
-const EMPTY_PAYMENTS = { summary: { totalCollected: 0, totalRefunded: 0, netCollected: 0, pendingPayments: 0 }, byMethod: [], byPeriod: [] };
-const EMPTY_EXCHANGES = { summary: { totalExchanges: 0, totalIncomingValue: 0, totalOutgoingValue: 0, netExchangeImpact: 0 }, bySettlementType: [], byPeriod: [] };
-const EMPTY_INVENTORY = { summary: { totalBooks: 0, totalStockUnits: 0, availableStock: 0, reservedStock: 0, lowStockItems: 0, outOfStockItems: 0 }, lowStockItems: [], topSellingBooks: [], stockMovement: [] };
-const EMPTY_CUSTOMERS = { summary: { totalCustomers: 0, activeCustomers: 0, repeatCustomers: 0, newCustomersInPeriod: 0 }, topCustomers: [], byPeriod: [] };
 
 function renderDashboard() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -98,14 +94,8 @@ beforeEach(() => {
     // Order matters — check the more specific paths before their prefixes.
     if (path.startsWith('/reports/kpis/period'))          return Promise.resolve(PERIOD_KPIS);
     if (path.startsWith('/reports/kpis'))                 return Promise.resolve(KPIS);
-    if (path.startsWith('/reports/sales/gross-profit-trend')) return Promise.resolve([]);
-    if (path.startsWith('/reports/sales'))                return Promise.resolve(EMPTY_SALES);
-    if (path.startsWith('/reports/payments'))             return Promise.resolve(EMPTY_PAYMENTS);
-    if (path.startsWith('/reports/exchanges'))            return Promise.resolve(EMPTY_EXCHANGES);
-    if (path.startsWith('/reports/inventory'))            return Promise.resolve(EMPTY_INVENTORY);
-    if (path.startsWith('/reports/customers'))            return Promise.resolve(EMPTY_CUSTOMERS);
-    if (path.startsWith('/reports/returns/top'))          return Promise.resolve([]);
-    if (path.startsWith('/reports/receivables-aging'))    return Promise.resolve({ rows: [], byBucket: [] });
+    const empty = emptyReport(path);
+    if (empty) return Promise.resolve(empty);
     return Promise.resolve({ items: [] });
   });
 });

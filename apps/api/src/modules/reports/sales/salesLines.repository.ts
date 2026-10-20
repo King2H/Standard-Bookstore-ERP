@@ -95,6 +95,7 @@
 import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
 import { costBasisLateralJoin } from '../../../lib/costBasis.js';
+import type { DiscountType } from '../../../lib/discount.js';
 import { NOT_SALE_ORDER_STATUS_LIST } from './sales.policy.js';
 import type { LinePaymentStatus, ReportScope, SalesLineRecord } from './sales.types.js';
 
@@ -197,7 +198,7 @@ async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLi
        br.name AS branch, loc.name AS location_name,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title, b.isbn AS book_isbn,
-       oli.quantity, oli.unit_price, oli.discount_amount, oli.total_price,
+       oli.quantity, oli.unit_price, oli.discount_amount, oli.discount_type, oli.total_price,
        COALESCE(oli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
        o.payment_status,
        opay.payment_method,
@@ -240,6 +241,7 @@ async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLi
       bookTitle: row.book_title as string,
       bookIsbn: (row.book_isbn as string | null) ?? '',
       quantity, unitPrice, discountAmount, grossAmount, netAmount,
+      discountType: row.discount_type as DiscountType,
       costAmount,
       grossProfit: parseFloat((netAmount - costAmount).toFixed(2)),
       paymentStatus: mapOrderPaymentStatus(row.payment_status as string),
@@ -265,7 +267,7 @@ async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLine
        br.name AS branch, loc.name AS location_name,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title, b.isbn AS book_isbn,
-       tli.quantity, tli.unit_price, tli.discount_amount, tli.line_total,
+       tli.quantity, tli.unit_price, tli.discount_amount, tli.discount_type, tli.line_total,
        COALESCE(tli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
        t.payment_status,
        tpay.method AS payment_method,
@@ -308,6 +310,7 @@ async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLine
       bookTitle: row.book_title as string,
       bookIsbn: (row.book_isbn as string | null) ?? '',
       quantity, unitPrice, discountAmount, grossAmount, netAmount,
+      discountType: row.discount_type as DiscountType,
       costAmount,
       grossProfit: parseFloat((netAmount - costAmount).toFixed(2)),
       paymentStatus: mapPosPaymentStatus(row.payment_status as string),
@@ -374,6 +377,7 @@ async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesL
       quantity: -quantity,            // negative — a return reduces stock/sales
       unitPrice,
       discountAmount: 0,              // returns don't carry a discount concept
+      discountType: null,
       grossAmount,
       netAmount,                      // reduces net sales revenue
       costAmount,
@@ -527,6 +531,7 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
       quantity,                       // positive for both directions
       unitPrice,
       discountAmount: 0,              // exchanges don't carry a discount concept
+      discountType: null,
       grossAmount: totalPrice,
       netAmount,
       costAmount,

@@ -19,6 +19,7 @@ import { api, setAccessToken, setCsrfToken } from '../lib/api.js';
 import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
 import NotificationBell from '../features/notifications/components/NotificationBell.js';
 import { ToastProvider } from '../components/Toast.js';
+import { emptyReport } from './reportFixtures.js';
 
 // The dashboard's reports, empty (as in DashboardPage.inventoryAvailableStock.test.tsx).
 const EMPTY_KPIS = {
@@ -31,10 +32,6 @@ const EMPTY_KPIS = {
   monthlyNetProfitUnified: 0, dailyGrossMarginPct: 0, monthlyGrossMarginPct: 0,
   grossProfitUnified: 0, overdueReceivablesAmount: 0, inventoryValue: 0,
 };
-const EMPTY_SALES = { summary: { totalSales: 0, totalOrders: 0, averageOrderValue: 0, totalPosSales: 0, totalPosTransactions: 0, totalDiscountAmount: 0, discountByType: { Normal: 0, Merchant: 0, Special: 0 } }, byPeriod: [], byBranch: [] };
-const EMPTY_PAYMENTS = { summary: { totalCollected: 0, totalRefunded: 0, netCollected: 0, pendingPayments: 0 }, byMethod: [], byPeriod: [] };
-const EMPTY_EXCHANGES = { summary: { totalExchanges: 0, totalIncomingValue: 0, totalOutgoingValue: 0, netExchangeImpact: 0 }, bySettlementType: [], byPeriod: [] };
-const EMPTY_CUSTOMERS = { summary: { totalCustomers: 0, activeCustomers: 0, repeatCustomers: 0, newCustomersInPeriod: 0 }, topCustomers: [], byPeriod: [] };
 
 const EMPTY_INVENTORY = {
   summary: { totalBooks: 120, totalStockUnits: 940, availableStock: 875, reservedStock: 65, lowStockItems: 4, outOfStockItems: 1 },
@@ -57,12 +54,8 @@ function dashboardReport(url: string): unknown {
   if (path === '/staff/me') return ME;
   if (path.startsWith('/reports/kpis/period')) return EMPTY_PERIOD;
   if (path.startsWith('/reports/kpis')) return EMPTY_KPIS;
-  if (path.startsWith('/reports/sales')) return EMPTY_SALES;
-  if (path.startsWith('/reports/payments')) return EMPTY_PAYMENTS;
-  if (path.startsWith('/reports/exchanges')) return EMPTY_EXCHANGES;
   if (path.startsWith('/reports/inventory')) return EMPTY_INVENTORY;
-  if (path.startsWith('/reports/customers')) return EMPTY_CUSTOMERS;
-  return { items: [] };
+  return emptyReport(path) ?? { items: [] };
 }
 
 type Call = { url: string; method: string; headers: Record<string, string> };

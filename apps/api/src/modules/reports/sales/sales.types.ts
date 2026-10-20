@@ -1,3 +1,5 @@
+import type { DiscountType } from '../../../lib/discount.js';
+
 export type { ReportFilters, ReportScope } from '../reportScope.js';
 
 export type TransactionType = 'ORDER' | 'POS' | 'RETURN' | 'EXCHANGE';
@@ -19,6 +21,8 @@ export interface SalesLineRecord {
   quantity: number;             // positive for ORDER/POS/EXCHANGE; negative for RETURN
   unitPrice: number;
   discountAmount: number;
+  /** The discount's preset; null on return and exchange lines, which carry none. */
+  discountType: DiscountType | null;
   grossAmount: number;
   netAmount: number;            // gross − discount for ORDER/POS; −refund for RETURN; ±allowance/sale for EXCHANGE
   costAmount: number;           // signed to match netAmount
@@ -34,6 +38,7 @@ export interface SalesLineRecord {
 export interface SalesSummary {
   grossSales: number;
   discounts: number;
+  discountsByType: Record<DiscountType, number>;
   returnsValue: number;         // positive magnitude
   exchangeDifference: number;   // signed: outgoing − incoming across all exchange lines
   netSalesRevenue: number;      // grossSales − discounts − returnsValue + exchangeDifference

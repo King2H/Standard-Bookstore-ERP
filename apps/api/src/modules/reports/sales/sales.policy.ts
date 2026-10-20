@@ -1,5 +1,5 @@
 import { Money, type SalesLine, type SalesTotals } from '@bms/shared';
-import type { NetProfitParts, NetProfitResult, SalesLineRecord, SalesSummary } from './sales.types.js';
+import type { NetProfitParts, NetProfitResult, ReportFilters, SalesLineRecord, SalesSummary } from './sales.types.js';
 
 /** Pure rules of the sales reports (A5): what counts as a sale, and the arithmetic over sales lines. */
 
@@ -24,6 +24,7 @@ const ratioPct = (part: Money, whole: Money): number =>
 export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
   let grossSales = Money.ZERO;
   let discounts = Money.ZERO;
+  const byType = { Normal: Money.ZERO, Merchant: Money.ZERO, Special: Money.ZERO };
   let returnsValue = Money.ZERO;
   let exchangeDifference = Money.ZERO;
   let costAmount = Money.ZERO;
@@ -31,6 +32,8 @@ export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
     if (row.transactionType === 'ORDER' || row.transactionType === 'POS') {
       grossSales = grossSales.plus(row.grossAmount);
       discounts = discounts.plus(row.discountAmount);
+      const type = row.discountType ?? 'Normal';
+      byType[type] = byType[type].plus(row.discountAmount);
     } else if (row.transactionType === 'RETURN') {
       returnsValue = returnsValue.minus(row.netAmount); // positive magnitude
     } else {
@@ -44,6 +47,7 @@ export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
   return {
     grossSales: grossSales.toNumber(),
     discounts: discounts.toNumber(),
+    discountsByType: { Normal: byType.Normal.toNumber(), Merchant: byType.Merchant.toNumber(), Special: byType.Special.toNumber() },
     returnsValue: returnsValue.toNumber(),
     exchangeDifference: exchangeDifference.toNumber(),
     netSalesRevenue: netSalesRevenue.toNumber(),
@@ -112,14 +116,33 @@ export function detailRows(records: SalesLineRecord[]): { rows: SalesLine[]; tot
   };
 }
 
-/** Net sales and gross profit per day, over the same lines. */
-export function grossProfitTrend(rows: SalesLineRecord[]): Array<{ period: string; netSales: number; grossProfit: number; grossMarginPct: number }> {
-  const byDay = new Map<string, { net: Money; cost: Money }>();
-  for (const r of rows) {
-    const day = byDay.get(r.transactionDate) ?? { net: Money.ZERO, cost: Money.ZERO };
-    byDay.set(r.transactionDate, { net: day.net.plus(r.netAmount), cost: day.cost.plus(r.costAmount) });
+/**
+ * The first day of the bucket a day (YYYY-MM-DD) falls in: the day itself,
+ * the Monday of its week, or the first of its month, as date_trunc does for
+ * the other report series.
+ */
+export function periodStart(day: string, groupBy: ReportFilters['groupBy']): string {
+  if (groupBy === 'month') return `${day.slice(0, 7)}-01`;
+  if (groupBy === 'week') {
+    const d = new Date(`${day}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
   }
-  return [...byDay.entries()]
+  return day;
+}
+
+/** Net sales and gross profit per day, week or month (was: always per day), over the same lines. */
+export function grossProfitTrend(
+  rows: SalesLineRecord[],
+  groupBy: ReportFilters['groupBy'],
+): Array<{ period: string; netSales: number; grossProfit: number; grossMarginPct: number }> {
+  const byPeriod = new Map<string, { net: Money; cost: Money }>();
+  for (const r of rows) {
+    const period = periodStart(r.transactionDate, groupBy);
+    const sum = byPeriod.get(period) ?? { net: Money.ZERO, cost: Money.ZERO };
+    byPeriod.set(period, { net: sum.net.plus(r.netAmount), cost: sum.cost.plus(r.costAmount) });
+  }
+  return [...byPeriod.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([period, v]) => {
       const netSales = v.net.round(2);

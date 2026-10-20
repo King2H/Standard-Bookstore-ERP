@@ -61,6 +61,8 @@ export const SalesReportSchema = z.object({
     costAmount: z.number(),
     grossSales: z.number(),
     discounts: z.number(),
+    /** The discounts by the preset the line used; they add up to discounts. */
+    discountsByType: z.object({ Normal: z.number(), Merchant: z.number(), Special: z.number() }),
     returnsValue: z.number(),
   }),
   byPeriod: z.array(
@@ -116,9 +118,11 @@ export type SalesTotals = z.infer<typeof SalesTotalsSchema>;
 
 export const SalesDetailResponseSchema = z.object({ rows: z.array(SalesLineSchema), totals: SalesTotalsSchema });
 
+/** Per day, week or month (groupBy); period is the bucket's first day, YYYY-MM-DD. */
 export const GrossProfitTrendSchema = z.array(
   z.object({ period: z.string(), netSales: z.number(), grossProfit: z.number(), grossMarginPct: z.number() }),
 );
+export type GrossProfitTrend = z.infer<typeof GrossProfitTrendSchema>;
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
 
@@ -339,6 +343,7 @@ export const ReturnReportResponseSchema = z.object({ rows: z.array(ReturnReportR
 export const TopReturnedBooksSchema = z.array(
   z.object({ bookId: z.number().int(), title: z.string(), unitsReturned: z.number().int(), refundValue: z.number() }),
 );
+export type TopReturnedBooks = z.infer<typeof TopReturnedBooksSchema>;
 
 // ── Procurement ───────────────────────────────────────────────────────────────
 

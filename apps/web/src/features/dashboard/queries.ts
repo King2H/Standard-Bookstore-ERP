@@ -1,6 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import type { KpiPeriod } from '@bms/shared';
-import { getInventoryReport, getKpis, getPeriodKpis, type ReportParams } from './api.js';
+import {
+  getCustomerReport,
+  getExchangeReport,
+  getGrossProfitTrend,
+  getInventoryReport,
+  getKpis,
+  getPaymentReport,
+  getPeriodKpis,
+  getReceivablesAging,
+  getSalesReport,
+  getTopReturnedBooks,
+  type ReportParams,
+} from './api.js';
 
 export type { ReportParams } from './api.js';
 
@@ -28,9 +40,20 @@ export function usePeriodKpis(period: KpiPeriod, branchId?: number) {
   });
 }
 
-export function useInventoryReport(params: ReportParams) {
+/** A report read with the Dashboard's filters, fresh for 30 seconds. */
+function useReport<T>(name: string, params: ReportParams, read: (p: ReportParams) => Promise<T>) {
   return useQuery({
-    queryKey: reportKeys.report('inventory', params), queryFn: () => getInventoryReport(params),
+    queryKey: reportKeys.report(name, params), queryFn: () => read(params),
     staleTime: 30_000, refetchOnWindowFocus: true,
   });
 }
+
+export const useInventoryReport = (params: ReportParams) => useReport('inventory', params, getInventoryReport);
+export const useSalesReport = (params: ReportParams) => useReport('sales', params, getSalesReport);
+export const usePaymentReport = (params: ReportParams) => useReport('payments', params, getPaymentReport);
+export const useExchangeReport = (params: ReportParams) => useReport('exchanges', params, getExchangeReport);
+export const useCustomerReport = (params: ReportParams) => useReport('customers', params, getCustomerReport);
+export const useGrossProfitTrend = (params: ReportParams) => useReport('sales/gross-profit-trend', params, getGrossProfitTrend);
+export const useTopReturnedBooks = (params: ReportParams) => useReport('returns/top', params, getTopReturnedBooks);
+export const useReceivablesAging = (branchId?: number) =>
+  useReport('receivables-aging', { branchId }, (p) => getReceivablesAging(p.branchId));
