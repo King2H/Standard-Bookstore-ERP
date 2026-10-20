@@ -6,15 +6,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import DashboardPage from '../pages/DashboardPage.js';
+import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
 
 const getMock = vi.fn();
 
-vi.mock('../lib/api.js', () => ({
+vi.mock('../lib/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api.js')>(),
   api: { get: (...args: unknown[]) => getMock(...args) },
   getAccessToken: () => 'test-token',
   getCurrentBranchId: () => 1,
 }));
+
+const ME = {
+  id: 9, username: 'me', fullName: 'Me', isActive: true, createdAt: '2026-10-01T00:00:00.000Z', mustChangePassword: false,
+  lastLoginAt: null, passwordChangedAt: null, isLocked: false, isAllBranches: false,
+  roles: [{ branchId: 1, branchName: 'Home', role: 'Manager' }], currentRole: 'Manager', currentRoles: ['Manager'],
+  currentBranchId: 1, locationAccess: { mode: 'full', locations: [] },
+};
 
 const EMPTY_KPIS = {
   dailySales: 0, monthlySales: 0, dailyRevenue: 0, monthlyRevenue: 0, averageOrderValue: 0,
@@ -40,7 +48,7 @@ function renderDashboard() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DashboardPage userRole="Manager" onNavigate={vi.fn()} />
+      <DashboardPage userRole="Manager" userPermissions={['VIEW_REPORTS']} onNavigate={vi.fn()} />
     </QueryClientProvider>,
   );
 }
@@ -48,6 +56,7 @@ function renderDashboard() {
 beforeEach(() => {
   getMock.mockReset();
   getMock.mockImplementation((path: string) => {
+    if (path === '/staff/me') return Promise.resolve(ME);
     // Order matters — check the more specific paths before their prefixes.
     if (path.startsWith('/reports/kpis/period')) {
       return Promise.resolve({

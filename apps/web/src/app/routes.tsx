@@ -17,7 +17,7 @@ import OrdersPage from '../features/orders/pages/OrdersPage.js';
 import PaymentsPage from '../features/payments/pages/PaymentsPage.js';
 import ExchangesPage from '../features/exchanges/pages/ExchangesPage.js';
 import ReceivablesPage from '../features/receivables/pages/ReceivablesPage.js';
-import DashboardPage from '../pages/DashboardPage.js';
+import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
 import ProfilePage from '../features/account/pages/ProfilePage.js';
 import { canOpenPage, isPage, landingPage, pagePath, type Page } from './navigation.js';
 import type { Session } from './useSession.js';
@@ -34,7 +34,7 @@ export function AppRoutes({ session, onNavigate }: {
   return (
     <Routes>
       <Route path="/:page" element={<PageRoute session={session} render={(page, initialContext) => <>
-        {page === 'dashboard'    && <DashboardPage userRole={role} onNavigate={navigateTo} />}
+        {page === 'dashboard'    && <DashboardPage userRole={userRole} userPermissions={userPermissions} onNavigate={navigateTo} />}
         {page === 'branches'     && <BranchesPage />}
         {page === 'staff'        && <StaffPage />}
         {page === 'audit-log'    && <AuditLogPage />}
