@@ -85,8 +85,12 @@ export type BankEntry = z.infer<typeof BankEntrySchema>;
 
 export const BankEntryListQuerySchema = ListPagingQuerySchema.extend({
   status: z.enum(['uncleared', 'cleared']).optional(),
+  /** Movements of this amount only: the ones a statement line of that amount can be matched to. */
+  amount: PositiveMoneySchema.optional(),
+  direction: z.enum(['in', 'out']).optional(),
 });
 export const BankEntryListResponseSchema = PaginatedSchema(BankEntrySchema);
+export type BankEntryListResponse = z.infer<typeof BankEntryListResponseSchema>;
 
 /** A line of the bank's statement. */
 export const StatementLineSchema = z.object({
@@ -108,6 +112,7 @@ export const StatementLineListQuerySchema = ListPagingQuerySchema.extend({
   matched: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
 });
 export const StatementLineListResponseSchema = PaginatedSchema(StatementLineSchema);
+export type StatementLineListResponse = z.infer<typeof StatementLineListResponseSchema>;
 
 export const StatementLineInputSchema = z.object({
   statementDate: DateOnlySchema,
@@ -130,5 +135,6 @@ export const ImportStatementResponseSchema = z.object({
   /** Skipped: their reference was imported before. */
   duplicates: z.number().int(),
 });
+export type ImportStatementResponse = z.infer<typeof ImportStatementResponseSchema>;
 
 export const MatchStatementLineRequestSchema = z.object({ entryId: z.coerce.string().regex(/^\d+$/) });

@@ -146,13 +146,18 @@ function toEntry(r: Awaited<ReturnType<ReturnType<typeof selectEntries>['execute
   };
 }
 
-export async function listEntries(
-  q: Queryable,
-  filter: { bankAccountId: number; status?: 'uncleared' | 'cleared' },
-  page: Page,
-): Promise<{ items: BankEntryRecord[]; total: number }> {
+export interface EntryFilter {
+  bankAccountId: number;
+  status?: 'uncleared' | 'cleared';
+  amount?: Money;
+  direction?: Direction;
+}
+
+export async function listEntries(q: Queryable, filter: EntryFilter, page: Page): Promise<{ items: BankEntryRecord[]; total: number }> {
   let query = selectEntries(q).where('e.bank_account_id', '=', filter.bankAccountId);
   if (filter.status) query = query.where('e.status', '=', filter.status);
+  if (filter.amount) query = query.where('e.amount', '=', filter.amount.toFixed(2));
+  if (filter.direction) query = query.where('e.direction', '=', filter.direction);
   const [rows, count] = await Promise.all([
     query.orderBy('e.created_at', 'desc').orderBy('e.id', 'desc').limit(page.limit).offset(page.offset).execute(),
     query.clearSelect().select((eb) => eb.fn.countAll<string>().as('count')).executeTakeFirstOrThrow(),
