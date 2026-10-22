@@ -10,16 +10,16 @@ import { INPUT, LABEL, Messages, isPositiveWhole, isUnitCost, useStockChange } f
 
 /**
  * The form's fields, checked with the rules of the API's stock-in contract:
- * stock comes in at what it cost, a customer's return may leave it out (#163).
+ * stock comes in at what it cost, a customer's return too (#163).
  */
 const StockInFormSchema = z.object({
   quantity: z.string().trim().refine(isPositiveWhole, 'Enter a positive quantity'),
-  unitCost: z.string().trim().refine((v) => v === '' || isUnitCost(v), 'A unit cost is an amount above 0, e.g. 12.50'),
+  unitCost: z.string().trim()
+    .refine((v) => v !== '', 'Enter what one copy cost: stock is valued at its cost')
+    .refine((v) => v === '' || isUnitCost(v), 'A unit cost is an amount above 0, e.g. 12.50'),
   referenceType: z.union([z.literal(''), z.enum(['return', 'manual', 'initial_stock'])]),
   referenceId: z.string().trim().refine((v) => v === '' || isPositiveWhole(v), 'A reference ID is a whole number'),
   notes: z.string().max(500, 'Notes can be at most 500 characters'),
-}).refine((v) => v.unitCost !== '' || v.referenceType === 'return', {
-  path: ['unitCost'], message: 'Enter what one copy cost: stock is valued at its cost',
 });
 type StockInFormValues = z.infer<typeof StockInFormSchema>;
 
@@ -43,7 +43,7 @@ export function StockInTab({ initialRow = null }: { initialRow?: StockLevel | nu
       bookId: chosen.bookId,
       locationId: chosen.locationId,
       quantity: Number(v.quantity),
-      unitCost: v.unitCost || undefined,
+      unitCost: v.unitCost,
       version: chosen.version,
       referenceType: v.referenceType || undefined,
       referenceId: v.referenceId ? Number(v.referenceId) : undefined,
@@ -94,9 +94,8 @@ export function StockInTab({ initialRow = null }: { initialRow?: StockLevel | nu
             </div>
 
             <div>
-              <label htmlFor="stock-in-unit-cost" className={LABEL}>{`Unit Cost (${currency})${referenceType === 'return' ? '' : ' *'}`}</label>
-              <input id="stock-in-unit-cost" type="text" inputMode="decimal" {...register('unitCost')}
-                placeholder={referenceType === 'return' ? 'Left empty: the book\'s last known cost' : 'What one copy cost'}
+              <label htmlFor="stock-in-unit-cost" className={LABEL}>{`Unit Cost (${currency}) *`}</label>
+              <input id="stock-in-unit-cost" type="text" inputMode="decimal" {...register('unitCost')} placeholder="What one copy cost"
                 aria-invalid={errors.unitCost ? true : undefined} className={INPUT} />
             </div>
 

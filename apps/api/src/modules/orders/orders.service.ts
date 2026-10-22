@@ -320,7 +320,9 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
             reasonCode: 'return',
             notes: `Order cancellation – order ${String(orderId)}`,
             staffCtx,
-            unitCost: item.unitCost != null && item.unitCost > 0 ? item.unitCost : undefined,
+            // At the cost the copies left at; 0 when they left with none (#163).
+            unitCost: item.unitCost ?? 0,
+            costMayBeZero: true,
           });
       }
       await orders.releaseReservations(tx, order.id);

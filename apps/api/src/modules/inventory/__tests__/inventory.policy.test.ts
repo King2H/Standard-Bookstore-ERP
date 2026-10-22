@@ -92,8 +92,9 @@ describe('averageCostAfterReceipt', () => {
     expect(averageCostAfterReceipt(-3, Money.of('20'), 5, Money.of('12.5')).toFixed(4)).toBe('12.5000');
   });
 
-  it('takes the receipt\'s cost when the copies on the shelf have no cost (#163; was: averaged with 0)', () => {
-    expect(averageCostAfterReceipt(5, Money.of('0'), 5, Money.of('10')).toFixed(4)).toBe('10.0000');
+  it('weighs copies with no cost in at 0, never revaluing them (#163; was: they took the receipt\'s cost)', () => {
+    // 5 at 0 and 3 at 30.00 -> 90 / 8 = 11.25
+    expect(averageCostAfterReceipt(5, Money.of('0'), 3, Money.of('30')).toFixed(4)).toBe('11.2500');
   });
 });
 

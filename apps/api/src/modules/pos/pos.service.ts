@@ -292,7 +292,9 @@ export async function voidTransaction(actor: Actor, txId: string): Promise<PosTr
         referenceId: t.id,
         reasonCode: 'return',
         staffCtx: actor,
-        unitCost: line.unitCost !== null && line.unitCost.greaterThan(0) ? line.unitCost : undefined,
+        // At the cost the copies left at; 0 when they left with none (#163).
+        unitCost: line.unitCost ?? 0,
+        costMayBeZero: true,
       });
     }
 

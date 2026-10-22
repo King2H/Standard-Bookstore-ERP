@@ -1,7 +1,7 @@
 import {
   Money,
   type ReorderPointRequest,
-  type SetStockCostRequest,
+  type RevalueStockRequest,
   type StockInRequest,
   type StockOutRequest,
   type TransferStockRequest,
@@ -93,16 +93,6 @@ async function alertOnThreshold(q: Queryable, bookId: number, locationId: number
   });
 }
 
-/**
- * The cost units come in at when they carry none (a void, a cancelled order,
- * a correction): while the location's copies have a cost they are valued at
- * it; on a location with none, at the book's latest known cost (#163,
- * decision 2a). Undefined when no cost was ever recorded for the book.
- */
-async function arrivalCost(q: Queryable, bookId: number, level: LockedLevel): Promise<Money | undefined> {
-  return level.averageCost.isZero() ? stock.latestKnownCost(q, bookId) : undefined;
-}
-
 function checkQuantity(quantity: number): void {
   if (!(quantity > 0)) throw new ValidationError('Quantity must be positive', { field: 'quantity' });
 }
@@ -139,13 +129,14 @@ export async function bookAvailability(
 
 /**
  * Stock arriving at a location: a purchase, a return, a cancelled order. The
- * location's stock record is created when it has none yet.
+ * location's stock record is created when it has none yet. The units come in
+ * at their own cost, weighed into the average (#163).
  */
 export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promise<{ averageCost: Money }> {
   const { bookId, locationId, quantity } = receipt;
   checkQuantity(quantity);
-  const unitCost = receipt.unitCost === undefined ? undefined : Money.of(receipt.unitCost);
-  if (unitCost && (unitCost.isNegative() || (unitCost.isZero() && !receipt.freeOfCharge))) {
+  const unitCost = Money.of(receipt.unitCost);
+  if (unitCost.isNegative() || (unitCost.isZero() && !receipt.costMayBeZero)) {
     throw new ValidationError('A unit cost must be more than zero; stock without a value would distort the average cost', {
       field: 'unitCost',
     });
@@ -154,8 +145,7 @@ export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promis
   await stock.ensureLevel(tx, bookId, locationId);
   const before = await lockOrThrow(tx, bookId, locationId);
   const after = before.quantity + quantity;
-  const cost = unitCost ?? (await arrivalCost(tx, bookId, before));
-  const averageCost = cost ? policy.averageCostAfterReceipt(before.quantity, before.averageCost, quantity, cost) : before.averageCost;
+  const averageCost = policy.averageCostAfterReceipt(before.quantity, before.averageCost, quantity, unitCost);
   await stock.updateLevel(tx, bookId, locationId, { quantity: after, averageCost });
   await stock.insertMovement(tx, {
     bookId,
@@ -168,7 +158,7 @@ export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promis
     referenceId: receipt.referenceId ?? null,
     notes: receipt.notes ?? null,
     staffId: receipt.staffCtx.staffId,
-    unitCost: cost ?? null,
+    unitCost,
   });
   await alertOnThreshold(tx, bookId, locationId, before.quantity);
   return { averageCost };
@@ -268,9 +258,7 @@ export async function issueStock(tx: Queryable, issue: StockIssue): Promise<{ un
 
 /**
  * A manual correction, valued at the average cost so a write-off shows in
- * inventory value; the average itself does not change (owner decision, #21),
- * except that copies added where there is no cost yet bring the book's latest
- * known cost (#163).
+ * inventory value; the average itself does not change (owner decision, #21).
  */
 async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment): Promise<{ before: number; after: number }> {
   const { bookId, locationId, delta, reasonCode } = adjustment;
@@ -280,9 +268,8 @@ async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment):
   const before = await lockOrThrow(tx, bookId, locationId);
   policy.checkVersion(before.version, adjustment.version);
   const after = policy.quantityAfterAdjustment(before.quantity, delta, allowNegative);
-  const cost = delta > 0 ? await arrivalCost(tx, bookId, before) : undefined;
 
-  await stock.updateLevel(tx, bookId, locationId, { quantity: after, averageCost: cost });
+  await stock.updateLevel(tx, bookId, locationId, { quantity: after });
   await stock.insertMovement(tx, {
     bookId,
     locationId,
@@ -294,7 +281,7 @@ async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment):
     referenceId: adjustment.referenceId ?? null,
     notes: adjustment.notes ?? null,
     staffId: actor.staffId,
-    unitCost: cost ?? before.averageCost,
+    unitCost: before.averageCost,
   });
   await alertOnThreshold(tx, bookId, locationId, before.quantity);
   return { before: before.quantity, after };
@@ -302,9 +289,8 @@ async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment):
 
 /**
  * Stock moving between two locations of one branch. The units carry the
- * source's average cost into the destination's average; a transfer never
- * takes the source below zero. Units with no cost at the source come in as
- * stock without a cost does (#163).
+ * source's average cost into the destination's average, so the value moves
+ * with them; a transfer never takes the source below zero.
  */
 export async function moveStock(
   tx: Queryable,
@@ -332,14 +318,11 @@ export async function moveStock(
     );
   }
   const destination = await lockOrThrow(tx, bookId, toLocationId);
-  const cost = source.averageCost.isZero()
-    ? destination.averageCost.isZero() ? await stock.latestKnownCost(tx, bookId) : destination.averageCost
-    : source.averageCost;
 
   await stock.updateLevel(tx, bookId, fromLocationId, { quantity: source.quantity - quantity });
   await stock.updateLevel(tx, bookId, toLocationId, {
     quantity: destination.quantity + quantity,
-    averageCost: cost && policy.averageCostAfterReceipt(destination.quantity, destination.averageCost, quantity, cost),
+    averageCost: policy.averageCostAfterReceipt(destination.quantity, destination.averageCost, quantity, source.averageCost),
   });
 
   const transferId = await stock.nextTransferId(tx);
@@ -530,19 +513,22 @@ export async function setReorderPoint(actor: Actor, change: ReorderPointRequest)
 }
 
 /**
- * Gives stock held at cost 0 a cost, with the reason, moving no copies
- * (#163, decision 3a). Once stock has a cost, only stock arriving changes it.
+ * Sets the average cost of the copies on hand, with the reason (#163): stock
+ * that came in with no cost, or a cost found to be wrong. No copies move; the
+ * value before and after is recorded in the history and the audit log. It is
+ * the only change to the cost of copies already on hand.
  */
-export async function setCost(actor: Actor, change: SetStockCostRequest): Promise<StockLevelRecord> {
+export async function revalue(actor: Actor, change: RevalueStockRequest): Promise<StockLevelRecord> {
   const { bookId, locationId, reason } = change;
-  const unitCost = Money.of(change.unitCost);
+  const unitCost = Money.of(change.unitCost).round(4);
   return withTransaction({}, async (tx) => {
     const before = await lockOrThrow(tx, bookId, locationId);
     policy.checkVersion(before.version, change.version);
-    if (!before.averageCost.isZero()) {
-      throw new BusinessError('COST_ALREADY_SET', 'This stock already has a cost; it changes only as stock arrives', {
-        averageCost: before.averageCost.toFixed(4),
-      });
+    if (before.quantity <= 0) {
+      throw new BusinessError('INVALID_STATE', 'There are no copies on hand here to revalue', { quantity: before.quantity });
+    }
+    if (unitCost.equals(before.averageCost)) {
+      throw new ValidationError('The copies already have this cost', { field: 'unitCost' });
     }
 
     await stock.setAverageCost(tx, bookId, locationId, unitCost);
@@ -564,7 +550,9 @@ export async function setCost(actor: Actor, change: SetStockCostRequest): Promis
       locationId,
       quantity: before.quantity,
       averageCostBefore: before.averageCost.toFixed(4),
-      averageCostAfter: unitCost.round(4).toFixed(4),
+      averageCostAfter: unitCost.toFixed(4),
+      valueBefore: before.averageCost.times(before.quantity).toFixed(2),
+      valueAfter: unitCost.times(before.quantity).toFixed(2),
       reason,
     });
     return levelOrThrow(tx, bookId, locationId);

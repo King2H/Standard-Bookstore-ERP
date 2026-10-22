@@ -127,7 +127,7 @@ npm run db:check
 
 A finding is fixed by the issue that owns it (a repair migration), never by hand in the
 database. Stock with no cost (`stock.valued`) gets one in the app: Inventory, Stock Levels, the
-"No cost" badge (Admin, Manager). Test data found in your own database (branches at "123 Test Street", staff named
+"No cost" badge or Revalue (Admin, Manager), with the reason. Test data found in your own database (branches at "123 Test Street", staff named
 "Test Staff") comes from test runs before the tests had their own database (#45). To be rid of it,
 reset to an empty database as below; the startup seed recreates the demo data.
 

@@ -133,18 +133,16 @@ export interface StockIssue extends StockChange {
 
 export interface StockReceipt extends StockChange {
   /**
-   * What each unit cost, when known (a purchase-order line, the cost a sold
-   * unit left at). It moves the weighted average cost; a receipt without one
-   * leaves the average as it was, unless the location has no cost yet: then
-   * the units come in at the book's latest known cost (#163). It must be more
-   * than zero.
+   * What each unit cost: a purchase-order line, a cost named by hand, the
+   * cost a unit left at when it comes back. Weighed into the average cost;
+   * nothing is estimated (#163). More than zero unless `costMayBeZero`.
    */
-  unitCost?: MoneyInput;
+  unitCost: MoneyInput;
   /**
-   * Free copies on a purchase order (owner decision 5a): a unit cost of zero
-   * is then allowed, and lowers the average cost as weighted average does.
+   * The units truly cost nothing or have no cost: free copies on a purchase
+   * order (owner decision 5a), copies coming back that left at cost 0.
    */
-  freeOfCharge?: boolean;
+  costMayBeZero?: boolean;
 }
 
 export interface Adjustment {

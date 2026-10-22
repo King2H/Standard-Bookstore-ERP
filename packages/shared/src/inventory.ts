@@ -161,40 +161,31 @@ const UnitCostSchema = MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be mo
  * Stock received by hand. It names no purchase order: those are received in
  * Procurement, which also counts them as received (owner decision 1a, #23).
  */
-export const StockInRequestSchema = z
-  .object({
-    bookId: IdSchema,
-    locationId: IdSchema,
-    quantity: z.number().int().positive(),
-    version: z.number().int().min(0),
-    referenceType: z.enum(['return', 'adjustment', 'manual', 'initial_stock']).optional(),
-    referenceId: IdSchema.optional(),
-    notes: z.string().max(500).optional(),
-    /**
-     * What one copy cost. Required, except on a customer's return, which
-     * comes back at the book's latest known cost when left out (#163, decision 1a).
-     */
-    unitCost: UnitCostSchema.optional(),
-  })
-  .superRefine((r, ctx) => {
-    if (r.unitCost === undefined && r.referenceType !== 'return') {
-      ctx.addIssue({ code: 'custom', path: ['unitCost'], message: 'Enter what one copy cost: stock is valued at its cost' });
-    }
-  });
+export const StockInRequestSchema = z.object({
+  bookId: IdSchema,
+  locationId: IdSchema,
+  quantity: z.number().int().positive(),
+  version: z.number().int().min(0),
+  referenceType: z.enum(['return', 'adjustment', 'manual', 'initial_stock']).optional(),
+  referenceId: IdSchema.optional(),
+  notes: z.string().max(500).optional(),
+  /** What one copy cost; every arrival carries its own cost, a customer's return too (#163). */
+  unitCost: UnitCostSchema,
+});
 export type StockInRequest = z.infer<typeof StockInRequestSchema>;
 
 /**
- * Gives stock held at cost 0 a cost, with the reason (#163, decision 3a). No
- * copies move; once stock has a cost, only stock arriving changes it.
+ * Sets the average cost of the copies on hand, with the reason (#163): for
+ * stock that came in with no cost, or a cost found to be wrong. No copies move.
  */
-export const SetStockCostRequestSchema = z.object({
+export const RevalueStockRequestSchema = z.object({
   bookId: IdSchema,
   locationId: IdSchema,
   unitCost: UnitCostSchema,
   reason: z.string().trim().min(1, 'Required').max(500),
   version: z.number().int().min(0),
 });
-export type SetStockCostRequest = z.infer<typeof SetStockCostRequestSchema>;
+export type RevalueStockRequest = z.infer<typeof RevalueStockRequestSchema>;
 
 export const StockOutRequestSchema = z.object({
   bookId: IdSchema,

@@ -4,8 +4,8 @@ import { useToast } from '../../../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../components/Pagination.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useSetReorderPoint, useStockLevels } from '../queries.js';
-import { canMoveStock, canSetCost, canSetReorderPoint } from '../rules.js';
-import { SetCostDialog } from './SetCostDialog.js';
+import { canMoveStock, canRevalue, canSetReorderPoint, hasNoCost } from '../rules.js';
+import { RevalueDialog } from './RevalueDialog.js';
 import { SkeletonRow, fmtDateShort, useDebounce } from './shared.js';
 
 type Status = 'active' | 'inactive' | 'all';
@@ -124,9 +124,9 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
                     {!row.bookIsActive && (
                       <span className="shrink-0 text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 rounded-full font-medium">Inactive</span>
                     )}
-                    {canSetCost(me, row) && (
+                    {hasNoCost(row) && canRevalue(me, row) && (
                       // Stocked without a cost, so these copies add nothing to the inventory value (#163).
-                      <button type="button" title="Set cost" onClick={() => setCostRow(row)}
+                      <button type="button" title="No cost: revalue" onClick={() => setCostRow(row)}
                         className="shrink-0 text-xs px-1.5 py-0.5 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-400 dark:hover:bg-red-900 rounded-full font-medium transition-colors">No cost</button>
                     )}
                   </div>
@@ -160,7 +160,7 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
                         <button type="button" aria-label="Cancel" onClick={() => setEditRow(null)} className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 justify-end opacity-40 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 justify-end opacity-40 group-hover:opacity-100 transition-opacity">
                         {canMove && (
                           <>
                             <button type="button" title="Stock In" onClick={() => onStockIn(row)}
@@ -168,6 +168,10 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
                             <button type="button" title="Stock Out" onClick={() => onStockOut(row)}
                               className="text-xs px-1.5 py-0.5 rounded font-medium transition-colors text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950">− Out</button>
                           </>
+                        )}
+                        {canRevalue(me, row) && (
+                          <button type="button" title="Revalue" aria-label="Revalue" onClick={() => setCostRow(row)}
+                            className="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">¤</button>
                         )}
                         {canReorder && (
                           <button type="button" title="Reorder point" onClick={() => { setEditRow(row); setNewReorder(String(row.reorderPoint)); }}
@@ -183,7 +187,7 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
         </table>
       </div>
 
-      {costRow && <SetCostDialog row={costRow} onClose={() => setCostRow(null)} />}
+      {costRow && <RevalueDialog row={costRow} onClose={() => setCostRow(null)} />}
 
       {data && (
         <Pagination page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}

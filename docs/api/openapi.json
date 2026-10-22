@@ -18557,10 +18557,10 @@
         }
       }
     },
-    "/inventory/set-cost": {
+    "/inventory/revalue": {
       "post": {
-        "operationId": "setStockCost",
-        "summary": "Give stock held at cost 0 at a location of the session branch a cost, with the reason; no copies move (Admin, Manager)",
+        "operationId": "revalueStock",
+        "summary": "Set the average cost of the copies on hand at a location of the session branch, with the reason; no copies move (Admin, Manager)",
         "tags": [
           "Inventory"
         ],
@@ -18849,7 +18849,8 @@
                   "bookId",
                   "locationId",
                   "quantity",
-                  "version"
+                  "version",
+                  "unitCost"
                 ]
               }
             }
