@@ -25,6 +25,7 @@ router.post('/inventory/transfer', authenticate, canMoveStock, validate(schemas.
 router.post('/inventory/stock-in', authenticate, canMoveStock, validate(schemas.stockIn), inventory.stockIn);
 router.post('/inventory/stock-out', authenticate, canMoveStock, validate(schemas.stockOut), inventory.stockOut);
 router.put('/inventory/reorder-point', authenticate, canManage, validate(schemas.reorderPoint), inventory.reorderPoint);
+router.post('/inventory/set-cost', authenticate, canManage, validate(schemas.setCost), inventory.setCost);
 router.post('/inventory/initialize', authenticate, canManage, inventory.initialize);
 
 export default router;

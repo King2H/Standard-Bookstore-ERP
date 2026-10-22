@@ -114,7 +114,7 @@ describe('Stock movements', () => {
 
     it('brings a negative shelf back to the true count with the next receipt', async () => {
       await setStock(-3);
-      const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId, quantity: 10, version: 0 });
+      const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId, quantity: 10, version: 0, unitCost: 10 });
       expect(res.status).toBe(200);
       expect(res.body.quantity).toBe(7);
     });
@@ -168,7 +168,7 @@ describe('Stock movements', () => {
     const reasons: Record<string, string> = {};
     for (const referenceType of [undefined, 'manual', 'return', 'initial_stock'] as const) {
       await setStock(0);
-      const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId, quantity: 1, version: 0, referenceType });
+      const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId, quantity: 1, version: 0, referenceType, unitCost: 10 });
       expect(res.status).toBe(200);
       reasons[referenceType ?? 'none'] = (await db.query(
         `SELECT reason_code FROM inventory_history WHERE book_id = $1 AND location_id = $2 ORDER BY id DESC LIMIT 1`,

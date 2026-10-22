@@ -29,9 +29,9 @@ function profile(roles: string[]): ProfileResponse {
   });
 }
 
-const level = (bookId: number, title: string): StockLevel => contract(StockLevelSchema, {
+const level = (bookId: number, title: string, averageCost = 10): StockLevel => contract(StockLevelSchema, {
   bookId, bookTitle: title, bookIsbn: `978030640615${bookId}`, bookIsActive: true, locationId: 1, locationName: 'Shop Floor',
-  branchId: 1, quantity: 12, reserved: 0, available: 12, reorderPoint: 5, version: 3, isLowStock: false, updatedAt: CREATED,
+  branchId: 1, quantity: 12, reserved: 0, available: 12, reorderPoint: 5, averageCost, version: 3, isLowStock: false, updatedAt: CREATED,
 });
 
 type Call = { method: string; path: string; body: unknown };
@@ -51,8 +51,9 @@ function stubApi() {
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/inventory/low-stock') return json(contract(StockLevelListResponseSchema, list([])));
     if (u.pathname === '/inventory/history') return json(contract(StockMovementListResponseSchema, list([])));
-    if (u.pathname === '/inventory') return json(contract(StockLevelListResponseSchema, list([level(1, 'Animal Farm'), level(2, 'Burmese Days')])));
+    if (u.pathname === '/inventory') return json(contract(StockLevelListResponseSchema, list([level(1, 'Animal Farm'), level(2, 'Burmese Days', 0)])));
     if (method === 'PUT') return json(contract(StockLevelSchema, level(1, 'Animal Farm')));
+    if (u.pathname === '/inventory/set-cost') return json(contract(StockLevelSchema, level(2, 'Burmese Days', 11.25)));
     return json({ items: [] });
   }));
 }
@@ -128,6 +129,40 @@ describe('Inventory: reorder points', () => {
   });
 });
 
+describe('Inventory: stock without a cost (#163)', () => {
+  it('marks stock held at cost 0 and offers Set cost to an Admin or Manager only (was: nothing showed it counted for 0)', async () => {
+    await renderPage();
+    expect(within(rowOf('Burmese Days')).getByTitle('Set cost')).toHaveTextContent('No cost');
+    expect(within(rowOf('Animal Farm')).queryByText('No cost')).toBeNull();
+    expect(within(rowOf('Animal Farm')).queryByTitle('Set cost')).toBeNull();
+  });
+
+  it('offers a Stock Clerk no Set cost, which the API refuses', async () => {
+    me = profile(['Stock_Clerk']);
+    await renderPage();
+    expect(within(rowOf('Burmese Days')).queryByTitle('Set cost')).toBeNull();
+    expect(within(rowOf('Burmese Days')).queryByText('No cost')).toBeNull();
+  });
+
+  it('asks the cost and its reason in the app\'s dialog, checked before sending', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(within(rowOf('Burmese Days')).getByTitle('Set cost'));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Set cost' }));
+    expect(await within(dialog).findByText('Enter an amount above 0, e.g. 12.50')).toBeInTheDocument();
+    expect(within(dialog).getByText('A reason is required')).toBeInTheDocument();
+    expect(calls.some((c) => c.path === '/inventory/set-cost')).toBe(false);
+
+    await user.type(within(dialog).getByLabelText(/Cost of one copy/), '11.25');
+    await user.type(within(dialog).getByLabelText(/Where does this cost come from/), 'Supplier invoice 77');
+    await user.click(within(dialog).getByRole('button', { name: 'Set cost' }));
+    await waitFor(() => expect(calls.find((c) => c.path === '/inventory/set-cost')?.body)
+      .toEqual({ bookId: 2, locationId: 1, unitCost: '11.25', reason: 'Supplier invoice 77', version: 3 }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+});
+
 describe('Inventory: history and search', () => {
   it('filters History by the reasons movements are recorded with (was: also "Stock Out", never recorded)', async () => {
     const user = userEvent.setup();
@@ -135,7 +170,7 @@ describe('Inventory: history and search', () => {
     await user.click(screen.getByRole('button', { name: /History/ }));
     const reasons = screen.getAllByRole('combobox').find((c) => within(c).queryByRole('option', { name: 'All Reasons' }))!;
     expect(within(reasons).getAllByRole('option').map((o) => (o as HTMLOptionElement).value).filter(Boolean))
-      .toEqual(['correction', 'damage', 'initial', 'loss', 'return', 'sale', 'stock_in', 'transfer_in', 'transfer_out']);
+      .toEqual(['correction', 'damage', 'initial', 'loss', 'return', 'revaluation', 'sale', 'stock_in', 'transfer_in', 'transfer_out']);
   });
 
   it('asks once typing pauses (was: a request for every key)', async () => {

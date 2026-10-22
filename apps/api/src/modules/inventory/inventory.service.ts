@@ -1,4 +1,11 @@
-import { Money, type ReorderPointRequest, type StockInRequest, type StockOutRequest, type TransferStockRequest } from '@bms/shared';
+import {
+  Money,
+  type ReorderPointRequest,
+  type SetStockCostRequest,
+  type StockInRequest,
+  type StockOutRequest,
+  type TransferStockRequest,
+} from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
@@ -86,6 +93,16 @@ async function alertOnThreshold(q: Queryable, bookId: number, locationId: number
   });
 }
 
+/**
+ * The cost units come in at when they carry none (a void, a cancelled order,
+ * a correction): while the location's copies have a cost they are valued at
+ * it; on a location with none, at the book's latest known cost (#163,
+ * decision 2a). Undefined when no cost was ever recorded for the book.
+ */
+async function arrivalCost(q: Queryable, bookId: number, level: LockedLevel): Promise<Money | undefined> {
+  return level.averageCost.isZero() ? stock.latestKnownCost(q, bookId) : undefined;
+}
+
 function checkQuantity(quantity: number): void {
   if (!(quantity > 0)) throw new ValidationError('Quantity must be positive', { field: 'quantity' });
 }
@@ -137,9 +154,8 @@ export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promis
   await stock.ensureLevel(tx, bookId, locationId);
   const before = await lockOrThrow(tx, bookId, locationId);
   const after = before.quantity + quantity;
-  const averageCost = unitCost
-    ? policy.averageCostAfterReceipt(before.quantity, before.averageCost, quantity, unitCost)
-    : before.averageCost;
+  const cost = unitCost ?? (await arrivalCost(tx, bookId, before));
+  const averageCost = cost ? policy.averageCostAfterReceipt(before.quantity, before.averageCost, quantity, cost) : before.averageCost;
   await stock.updateLevel(tx, bookId, locationId, { quantity: after, averageCost });
   await stock.insertMovement(tx, {
     bookId,
@@ -152,7 +168,7 @@ export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promis
     referenceId: receipt.referenceId ?? null,
     notes: receipt.notes ?? null,
     staffId: receipt.staffCtx.staffId,
-    unitCost: unitCost ?? null,
+    unitCost: cost ?? null,
   });
   await alertOnThreshold(tx, bookId, locationId, before.quantity);
   return { averageCost };
@@ -252,7 +268,9 @@ export async function issueStock(tx: Queryable, issue: StockIssue): Promise<{ un
 
 /**
  * A manual correction, valued at the average cost so a write-off shows in
- * inventory value; the average itself does not change (owner decision, #21).
+ * inventory value; the average itself does not change (owner decision, #21),
+ * except that copies added where there is no cost yet bring the book's latest
+ * known cost (#163).
  */
 async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment): Promise<{ before: number; after: number }> {
   const { bookId, locationId, delta, reasonCode } = adjustment;
@@ -262,8 +280,9 @@ async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment):
   const before = await lockOrThrow(tx, bookId, locationId);
   policy.checkVersion(before.version, adjustment.version);
   const after = policy.quantityAfterAdjustment(before.quantity, delta, allowNegative);
+  const cost = delta > 0 ? await arrivalCost(tx, bookId, before) : undefined;
 
-  await stock.updateLevel(tx, bookId, locationId, { quantity: after });
+  await stock.updateLevel(tx, bookId, locationId, { quantity: after, averageCost: cost });
   await stock.insertMovement(tx, {
     bookId,
     locationId,
@@ -275,7 +294,7 @@ async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment):
     referenceId: adjustment.referenceId ?? null,
     notes: adjustment.notes ?? null,
     staffId: actor.staffId,
-    unitCost: before.averageCost,
+    unitCost: cost ?? before.averageCost,
   });
   await alertOnThreshold(tx, bookId, locationId, before.quantity);
   return { before: before.quantity, after };
@@ -284,7 +303,8 @@ async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment):
 /**
  * Stock moving between two locations of one branch. The units carry the
  * source's average cost into the destination's average; a transfer never
- * takes the source below zero.
+ * takes the source below zero. Units with no cost at the source come in as
+ * stock without a cost does (#163).
  */
 export async function moveStock(
   tx: Queryable,
@@ -312,11 +332,14 @@ export async function moveStock(
     );
   }
   const destination = await lockOrThrow(tx, bookId, toLocationId);
+  const cost = source.averageCost.isZero()
+    ? destination.averageCost.isZero() ? await stock.latestKnownCost(tx, bookId) : destination.averageCost
+    : source.averageCost;
 
   await stock.updateLevel(tx, bookId, fromLocationId, { quantity: source.quantity - quantity });
   await stock.updateLevel(tx, bookId, toLocationId, {
     quantity: destination.quantity + quantity,
-    averageCost: policy.averageCostAfterReceipt(destination.quantity, destination.averageCost, quantity, source.averageCost),
+    averageCost: cost && policy.averageCostAfterReceipt(destination.quantity, destination.averageCost, quantity, cost),
   });
 
   const transferId = await stock.nextTransferId(tx);
@@ -442,6 +465,7 @@ export async function stockIn(actor: Actor, receipt: StockInRequest): Promise<St
       referenceType,
       referenceId: receipt.referenceId,
       notes: receipt.notes,
+      unitCost: receipt.unitCost,
     });
     await audit(tx, actor, 'inventory_stock_in', receipt, {
       bookId,
@@ -449,6 +473,7 @@ export async function stockIn(actor: Actor, receipt: StockInRequest): Promise<St
       quantity,
       referenceType,
       referenceId: receipt.referenceId,
+      unitCost: receipt.unitCost,
       qtyBefore: before.quantity,
       qtyAfter: before.quantity + quantity,
     });
@@ -500,6 +525,48 @@ export async function setReorderPoint(actor: Actor, change: ReorderPointRequest)
   return withTransaction({}, async (tx) => {
     if (!(await stock.setReorderPoint(tx, bookId, locationId, reorderPoint))) throw new NotFoundError('Inventory record');
     await audit(tx, actor, 'inventory_reorder', change, { bookId, locationId, reorderPoint });
+    return levelOrThrow(tx, bookId, locationId);
+  });
+}
+
+/**
+ * Gives stock held at cost 0 a cost, with the reason, moving no copies
+ * (#163, decision 3a). Once stock has a cost, only stock arriving changes it.
+ */
+export async function setCost(actor: Actor, change: SetStockCostRequest): Promise<StockLevelRecord> {
+  const { bookId, locationId, reason } = change;
+  const unitCost = Money.of(change.unitCost);
+  return withTransaction({}, async (tx) => {
+    const before = await lockOrThrow(tx, bookId, locationId);
+    policy.checkVersion(before.version, change.version);
+    if (!before.averageCost.isZero()) {
+      throw new BusinessError('COST_ALREADY_SET', 'This stock already has a cost; it changes only as stock arrives', {
+        averageCost: before.averageCost.toFixed(4),
+      });
+    }
+
+    await stock.setAverageCost(tx, bookId, locationId, unitCost);
+    await stock.insertMovement(tx, {
+      bookId,
+      locationId,
+      qtyBefore: before.quantity,
+      qtyAfter: before.quantity,
+      movementType: 'adjustment',
+      reasonCode: 'revaluation',
+      referenceType: null,
+      referenceId: null,
+      notes: reason,
+      staffId: actor.staffId,
+      unitCost,
+    });
+    await audit(tx, actor, 'inventory_cost', change, {
+      bookId,
+      locationId,
+      quantity: before.quantity,
+      averageCostBefore: before.averageCost.toFixed(4),
+      averageCostAfter: unitCost.round(4).toFixed(4),
+      reason,
+    });
     return levelOrThrow(tx, bookId, locationId);
   });
 }

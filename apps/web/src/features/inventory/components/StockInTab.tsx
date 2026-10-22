@@ -2,31 +2,39 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { StockLevel } from '@bms/shared';
+import { useCurrency } from '../../../lib/useCurrency.js';
 import { useStockIn } from '../queries.js';
 import { STOCK_IN_REFERENCES } from '../rules.js';
 import { StockPicker } from './StockPicker.js';
-import { INPUT, LABEL, Messages, isPositiveWhole, useStockChange } from './stockChange.js';
+import { INPUT, LABEL, Messages, isPositiveWhole, isUnitCost, useStockChange } from './stockChange.js';
 
-/** The form's fields, checked with the rules of the API's stock-in contract. */
+/**
+ * The form's fields, checked with the rules of the API's stock-in contract:
+ * stock comes in at what it cost, a customer's return may leave it out (#163).
+ */
 const StockInFormSchema = z.object({
   quantity: z.string().trim().refine(isPositiveWhole, 'Enter a positive quantity'),
+  unitCost: z.string().trim().refine((v) => v === '' || isUnitCost(v), 'A unit cost is an amount above 0, e.g. 12.50'),
   referenceType: z.union([z.literal(''), z.enum(['return', 'manual', 'initial_stock'])]),
   referenceId: z.string().trim().refine((v) => v === '' || isPositiveWhole(v), 'A reference ID is a whole number'),
   notes: z.string().max(500, 'Notes can be at most 500 characters'),
+}).refine((v) => v.unitCost !== '' || v.referenceType === 'return', {
+  path: ['unitCost'], message: 'Enter what one copy cost: stock is valued at its cost',
 });
 type StockInFormValues = z.infer<typeof StockInFormSchema>;
 
 /** Stock received by hand at one location. */
 export function StockInTab({ initialRow = null }: { initialRow?: StockLevel | null }) {
   const { chosen, setChosen, choose, error, setError, success, setSuccess, refused } = useStockChange(initialRow);
+  const currency = useCurrency();
   const save = useStockIn();
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<StockInFormValues>({
     resolver: zodResolver(StockInFormSchema),
-    defaultValues: { quantity: '', referenceType: '', referenceId: '', notes: '' },
+    defaultValues: { quantity: '', unitCost: '', referenceType: '', referenceId: '', notes: '' },
   });
   const quantity = watch('quantity');
   const referenceType = watch('referenceType');
-  const problem = errors.quantity?.message ?? errors.referenceId?.message ?? errors.notes?.message;
+  const problem = errors.quantity?.message ?? errors.unitCost?.message ?? errors.referenceId?.message ?? errors.notes?.message;
 
   function submit(v: StockInFormValues) {
     if (!chosen) { setError('Select a book and location first'); return; }
@@ -35,6 +43,7 @@ export function StockInTab({ initialRow = null }: { initialRow?: StockLevel | nu
       bookId: chosen.bookId,
       locationId: chosen.locationId,
       quantity: Number(v.quantity),
+      unitCost: v.unitCost || undefined,
       version: chosen.version,
       referenceType: v.referenceType || undefined,
       referenceId: v.referenceId ? Number(v.referenceId) : undefined,
@@ -43,7 +52,7 @@ export function StockInTab({ initialRow = null }: { initialRow?: StockLevel | nu
       onSuccess: (level) => {
         setSuccess(`Stock in recorded. New quantity: ${level.quantity}`);
         setChosen(level);
-        reset({ quantity: '', referenceType: v.referenceType, referenceId: '', notes: '' });
+        reset({ quantity: '', unitCost: '', referenceType: v.referenceType, referenceId: '', notes: '' });
       },
       onError: refused,
     });
@@ -82,6 +91,13 @@ export function StockInTab({ initialRow = null }: { initialRow?: StockLevel | nu
               {chosen && isPositiveWhole(quantity.trim()) && (
                 <p className="text-xs text-gray-400 mt-1">New quantity: <strong>{chosen.quantity + Number(quantity)}</strong></p>
               )}
+            </div>
+
+            <div>
+              <label htmlFor="stock-in-unit-cost" className={LABEL}>{`Unit Cost (${currency})${referenceType === 'return' ? '' : ' *'}`}</label>
+              <input id="stock-in-unit-cost" type="text" inputMode="decimal" {...register('unitCost')}
+                placeholder={referenceType === 'return' ? 'Left empty: the book\'s last known cost' : 'What one copy cost'}
+                aria-invalid={errors.unitCost ? true : undefined} className={INPUT} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

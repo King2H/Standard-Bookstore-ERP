@@ -34,7 +34,7 @@ function profile(roles: string[], restrictedTo?: (typeof SHOP)[]): ProfileRespon
 
 const level = (bookId: number, title: string, at = SHOP, version = 3, quantity = 12): StockLevel => contract(StockLevelSchema, {
   bookId, bookTitle: title, bookIsbn: `978030640615${bookId}`, bookIsActive: true, locationId: at.id, locationName: at.name,
-  branchId: 1, quantity, reserved: 0, available: quantity, reorderPoint: 5, version, isLowStock: false, updatedAt: CREATED,
+  branchId: 1, quantity, reserved: 0, available: quantity, reorderPoint: 5, averageCost: 10, version, isLowStock: false, updatedAt: CREATED,
 });
 
 type Call = { method: string; path: string; body: Record<string, unknown> };
@@ -119,10 +119,31 @@ describe('Inventory: Stock In', () => {
     await choose(user, 'Animal Farm');
     await user.type(screen.getByPlaceholderText('Units received'), '4');
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'initial_stock');
+    await user.type(screen.getByLabelText(/Unit Cost/), '12.50');
     await user.click(screen.getByRole('button', { name: /Record Stock In/ }));
     await waitFor(() => expect(posted('/inventory/stock-in')).toHaveLength(1));
-    expect(posted('/inventory/stock-in')[0]).toEqual({ bookId: 1, locationId: 1, quantity: 4, version: 3, referenceType: 'initial_stock' });
+    expect(posted('/inventory/stock-in')[0]).toEqual({ bookId: 1, locationId: 1, quantity: 4, unitCost: '12.50', version: 3, referenceType: 'initial_stock' });
     expect(await screen.findByText('Stock in recorded. New quantity: 16')).toBeInTheDocument();
+  });
+
+  it('asks what one copy cost before sending, except for a customer\'s return (#163; was: never asked, so the stock was valued at 0)', async () => {
+    const user = await openTab('Stock In');
+    await choose(user, 'Animal Farm');
+    await user.type(screen.getByPlaceholderText('Units received'), '4');
+    await user.click(screen.getByRole('button', { name: /Record Stock In/ }));
+    expect(await screen.findByText('Enter what one copy cost: stock is valued at its cost')).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Unit Cost/), '0');
+    await user.click(screen.getByRole('button', { name: /Record Stock In/ }));
+    expect(await screen.findByText('A unit cost is an amount above 0, e.g. 12.50')).toBeInTheDocument();
+    await settle();
+    expect(posted('/inventory/stock-in')).toEqual([]);
+
+    await user.clear(screen.getByLabelText(/Unit Cost/));
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'return');
+    expect(screen.getByLabelText(/Unit Cost/)).toHaveAttribute('placeholder', 'Left empty: the book\'s last known cost');
+    await user.click(screen.getByRole('button', { name: /Record Stock In/ }));
+    await waitFor(() => expect(posted('/inventory/stock-in')).toHaveLength(1));
+    expect(posted('/inventory/stock-in')[0]).toEqual({ bookId: 1, locationId: 1, quantity: 4, version: 3, referenceType: 'return' });
   });
 
   it('checks a reference ID is a number before sending (was: sent as null and refused)', async () => {
@@ -142,6 +163,7 @@ describe('Inventory: Stock In', () => {
     const user = await openTab('Stock In');
     await choose(user, 'Animal Farm');
     await user.type(screen.getByPlaceholderText('Units received'), '2');
+    await user.type(screen.getByLabelText(/Unit Cost/), '5');
     await user.click(screen.getByRole('button', { name: /Record Stock In/ }));
     await waitFor(() => expect(screen.getByText(/Current qty/)).toHaveTextContent('Current qty: 20'));
     await user.click(screen.getByRole('button', { name: /Record Stock In/ }));

@@ -10,6 +10,9 @@ export const LABEL = 'block text-sm font-medium text-gray-700 dark:text-gray-300
 /** A whole number of copies, more than zero, as typed. */
 export const isPositiveWhole = (v: string) => /^\d+$/.test(v) && Number(v) > 0;
 
+/** A cost of one copy: more than zero, in whole cents (#163). */
+export const isUnitCost = (v: string) => /^\d+(\.\d{1,2})?$/.test(v) && Number(v) > 0;
+
 /**
  * The book and location a stock change is for, and what the last change
  * said. A row from the Stock Levels quick buttons is chosen only when the

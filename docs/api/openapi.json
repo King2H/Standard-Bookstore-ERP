@@ -17338,6 +17338,9 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "averageCost": {
+                            "type": "number"
+                          },
                           "version": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -17362,6 +17365,7 @@
                           "reserved",
                           "available",
                           "reorderPoint",
+                          "averageCost",
                           "version",
                           "isLowStock",
                           "updatedAt"
@@ -17582,6 +17586,9 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "averageCost": {
+                      "type": "number"
+                    },
                     "version": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -17606,6 +17613,7 @@
                     "reserved",
                     "available",
                     "reorderPoint",
+                    "averageCost",
                     "version",
                     "isLowStock",
                     "updatedAt"
@@ -18259,6 +18267,9 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "averageCost": {
+                            "type": "number"
+                          },
                           "version": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -18283,6 +18294,7 @@
                           "reserved",
                           "available",
                           "reorderPoint",
+                          "averageCost",
                           "version",
                           "isLowStock",
                           "updatedAt"
@@ -18455,6 +18467,9 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "averageCost": {
+                      "type": "number"
+                    },
                     "version": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -18479,6 +18494,7 @@
                     "reserved",
                     "available",
                     "reorderPoint",
+                    "averageCost",
                     "version",
                     "isLowStock",
                     "updatedAt"
@@ -18520,6 +18536,229 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inventory/set-cost": {
+      "post": {
+        "operationId": "setStockCost",
+        "summary": "Give stock held at cost 0 at a location of the session branch a cost, with the reason; no copies move (Admin, Manager)",
+        "tags": [
+          "Inventory"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bookId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "locationId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "unitCost": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "bookId",
+                  "locationId",
+                  "unitCost",
+                  "reason",
+                  "version"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The stock level after the change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bookId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "bookTitle": {
+                      "type": "string"
+                    },
+                    "bookIsbn": {
+                      "type": "string"
+                    },
+                    "bookIsActive": {
+                      "type": "boolean"
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "reserved": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "available": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "reorderPoint": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "averageCost": {
+                      "type": "number"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "isLowStock": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "bookId",
+                    "bookTitle",
+                    "bookIsbn",
+                    "bookIsActive",
+                    "locationId",
+                    "locationName",
+                    "branchId",
+                    "quantity",
+                    "reserved",
+                    "available",
+                    "reorderPoint",
+                    "averageCost",
+                    "version",
+                    "isLowStock",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
             "content": {
               "application/json": {
                 "schema": {
@@ -18593,6 +18832,17 @@
                   "notes": {
                     "type": "string",
                     "maxLength": 500
+                  },
+                  "unitCost": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -18660,6 +18910,9 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "averageCost": {
+                      "type": "number"
+                    },
                     "version": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -18684,6 +18937,7 @@
                     "reserved",
                     "available",
                     "reorderPoint",
+                    "averageCost",
                     "version",
                     "isLowStock",
                     "updatedAt"
@@ -18899,6 +19153,9 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "averageCost": {
+                      "type": "number"
+                    },
                     "version": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -18923,6 +19180,7 @@
                     "reserved",
                     "available",
                     "reorderPoint",
+                    "averageCost",
                     "version",
                     "isLowStock",
                     "updatedAt"
@@ -19115,6 +19373,9 @@
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
                         },
+                        "averageCost": {
+                          "type": "number"
+                        },
                         "version": {
                           "type": "integer",
                           "minimum": -9007199254740991,
@@ -19139,6 +19400,7 @@
                         "reserved",
                         "available",
                         "reorderPoint",
+                        "averageCost",
                         "version",
                         "isLowStock",
                         "updatedAt"
@@ -19195,6 +19457,9 @@
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
                         },
+                        "averageCost": {
+                          "type": "number"
+                        },
                         "version": {
                           "type": "integer",
                           "minimum": -9007199254740991,
@@ -19219,6 +19484,7 @@
                         "reserved",
                         "available",
                         "reorderPoint",
+                        "averageCost",
                         "version",
                         "isLowStock",
                         "updatedAt"

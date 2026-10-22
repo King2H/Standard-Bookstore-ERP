@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
+import { costBasisLateralJoin } from '../../lib/costBasis.js';
 import {
   toStockLevelRecord,
   toStockMovementRecord,
@@ -50,6 +51,7 @@ const LEVEL_COLUMNS = [
   'i.quantity',
   reservedUnits.as('reserved'),
   'i.reorder_point',
+  'i.average_cost',
   'i.version',
   'i.updated_at',
 ] as const;
@@ -187,6 +189,28 @@ export async function updateLevel(
     .where('book_id', '=', bookId)
     .where('location_id', '=', locationId)
     .execute();
+}
+
+/** Sets the average cost alone, no copies moving, and bumps the version (#163). */
+export async function setAverageCost(q: Queryable, bookId: number, locationId: number, averageCost: Money): Promise<void> {
+  await q
+    .updateTable('inventory')
+    .set((eb) => ({ average_cost: averageCost.toFixed(4), version: eb('version', '+', 1), updated_at: sql`now()` }))
+    .where('book_id', '=', bookId)
+    .where('location_id', '=', locationId)
+    .execute();
+}
+
+/**
+ * What the book last cost, the same answer the reports' cost basis gives:
+ * the newest purchase-order cost, else the newest cost a movement recorded,
+ * never 0 (#163). Undefined when nothing ever recorded one.
+ */
+export async function latestKnownCost(q: Queryable, bookId: number): Promise<Money | undefined> {
+  const { rows } = await sql<{ unit_cost: string | null }>`
+    SELECT lc.unit_cost FROM (SELECT ${bookId}::int AS id) b ${sql.raw(costBasisLateralJoin('b.id'))}`.execute(q);
+  const cost = rows[0]?.unit_cost;
+  return cost == null ? undefined : Money.of(cost);
 }
 
 /** Damaged units are counted apart from the quantity for sale. */

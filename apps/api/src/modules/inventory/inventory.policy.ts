@@ -79,10 +79,12 @@ export function canIssue(available: number, quantity: number, allowNegative: boo
  * Weighted average cost after `received` units at `unitCost` arrive on a
  * shelf holding `quantity` units at `averageCost`.
  * A receipt into an empty or negative shelf sets the average to its own
- * cost: the units already sold were costed when they left.
+ * cost: the units already sold were costed when they left. So does one onto
+ * copies with no cost (an average of 0, #163): weighing them in at 0 would
+ * undervalue the new copies too.
  */
 export function averageCostAfterReceipt(quantity: number, averageCost: Money, received: number, unitCost: Money): Money {
-  if (quantity <= 0) return unitCost.round(4);
+  if (quantity <= 0 || averageCost.isZero()) return unitCost.round(4);
   return averageCost.times(quantity).plus(unitCost.times(received)).dividedBy(quantity + received).round(4);
 }
 

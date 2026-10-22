@@ -16,6 +16,11 @@
 //   3. NULL (callers already COALESCE this to 0) if neither source has ever
 //      recorded a cost for this book.
 //
+// A cost of 0 is not a known cost (#163): a sale out of stock that had no
+// cost records 0.00, and free copies are 0 by choice; neither says what the
+// book costs. Stock arriving without a cost takes this value too
+// (inventory.repository.ts latestKnownCost).
+//
 // Mirrors the existing "most recent PO line item wins" simplification
 // (`ORDER BY pli.id DESC LIMIT 1`) already used everywhere in this codebase —
 // there is no FIFO/weighted-average lot costing anywhere, so this fallback
@@ -39,11 +44,11 @@ export function costBasisLateralJoin(bookIdExpr: string, alias = 'lc'): string {
        SELECT unit_cost FROM (
          SELECT pli.unit_cost, 0 AS source_priority, pli.id AS rank_id
          FROM po_line_items pli
-         WHERE pli.book_id = ${bookIdExpr}
+         WHERE pli.book_id = ${bookIdExpr} AND pli.unit_cost > 0
          UNION ALL
          SELECT ih.unit_cost, 1 AS source_priority, ih.id AS rank_id
          FROM inventory_history ih
-         WHERE ih.book_id = ${bookIdExpr} AND ih.unit_cost IS NOT NULL
+         WHERE ih.book_id = ${bookIdExpr} AND ih.unit_cost > 0
        ) combined
        ORDER BY source_priority ASC, rank_id DESC
        LIMIT 1
