@@ -203,8 +203,9 @@ export async function setAverageCost(q: Queryable, bookId: number, locationId: n
 
 /**
  * What the book last cost, the same answer the reports' cost basis gives:
- * the newest purchase-order cost, else the newest cost a movement recorded,
- * never 0 (#163). Undefined when nothing ever recorded one.
+ * the newest purchase-order line that delivered copies, else the newest cost
+ * recorded on stock arriving; never a quote, never 0 (#163). Undefined when
+ * no copies ever arrived with a cost.
  */
 export async function latestKnownCost(q: Queryable, bookId: number): Promise<Money | undefined> {
   const { rows } = await sql<{ unit_cost: string | null }>`
