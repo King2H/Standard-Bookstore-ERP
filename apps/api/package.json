@@ -12,6 +12,7 @@
     "migrate:create": "dotenv -e ../../.env -- node-pg-migrate create --migrations-dir src/db/migrations",
     "db:types": "dotenv -e ../../.env -- kysely-codegen",
     "db:app-role": "dotenv -e ../../.env -- tsx scripts/app-role.ts",
+    "db:check": "dotenv -e ../../.env -- tsx scripts/db-check.ts",
     "openapi": "tsx src/openapi/write.ts",
     "test": "vitest run",
     "test:watch": "vitest",

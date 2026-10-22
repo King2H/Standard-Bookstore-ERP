@@ -115,6 +115,21 @@ npm run migrate
 npm run db:types
 ```
 
+**Check the data for consistency** (#165). Read-only: it changes nothing. It lists, per rule and
+tenant, the rows that break it: stock against its movement history, receivable and order payment
+balances, purchase orders against their lines, bank matches, document counters, and data left by the
+test suite. It exits with an error when money or stock is wrong; warnings alone pass. Run it after
+pulling a migration and before an upgrade.
+
+```powershell
+npm run db:check
+```
+
+A finding is fixed by the issue that owns it (a repair migration), never by hand in the
+database. Test data found in your own database (branches at "123 Test Street", staff named
+"Test Staff") comes from test runs before the tests had their own database (#45). To be rid of it,
+reset to an empty database as below; the startup seed recreates the demo data.
+
 **Reset the test database.** Drop it; the next `npm test` recreates it.
 
 ```powershell
