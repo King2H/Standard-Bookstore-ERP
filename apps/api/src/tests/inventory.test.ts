@@ -456,7 +456,7 @@ describe('Inventory — Stock In / Stock Out', () => {
     const res = await request(getTestApp())
       .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${managerToken}`)
-      .send({ bookId, locationId, quantity: 10, version: 0 });
+      .send({ bookId, locationId, quantity: 10, version: 0, unitCost: 10 });
     expect(res.status).toBe(200);
     expect(res.body.quantity).toBe(15);
     expect(res.body.version).toBe(1);
@@ -483,7 +483,7 @@ describe('Inventory — Stock In / Stock Out', () => {
     const res = await request(getTestApp())
       .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ bookId, locationId, quantity: 1, version: 0 }); // stale
+      .send({ bookId, locationId, quantity: 1, version: 0, unitCost: 10 }); // stale
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('VERSION_CONFLICT');
   });

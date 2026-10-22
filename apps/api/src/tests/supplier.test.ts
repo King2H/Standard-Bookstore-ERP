@@ -519,7 +519,7 @@ describe('Supplier Management', () => {
         .post('/api/v1/inventory/stock-in')
         .set('Authorization', `Bearer ${adminToken}`)
         .set('X-Branch-Id', String(branchId))
-        .send({ bookId: bid, locationId: lid, quantity: 1, version, referenceType: 'manual' });
+        .send({ bookId: bid, locationId: lid, quantity: 1, version, referenceType: 'manual', unitCost: 10 });
 
       expect(res.status).toBe(200);
     });

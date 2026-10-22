@@ -91,6 +91,10 @@ describe('averageCostAfterReceipt', () => {
     expect(averageCostAfterReceipt(0, Money.of('20'), 5, Money.of('12.5')).toFixed(4)).toBe('12.5000');
     expect(averageCostAfterReceipt(-3, Money.of('20'), 5, Money.of('12.5')).toFixed(4)).toBe('12.5000');
   });
+
+  it('takes the receipt\'s cost when the copies on the shelf have no cost (#163; was: averaged with 0)', () => {
+    expect(averageCostAfterReceipt(5, Money.of('0'), 5, Money.of('10')).toFixed(4)).toBe('10.0000');
+  });
 });
 
 describe('stockAlert', () => {

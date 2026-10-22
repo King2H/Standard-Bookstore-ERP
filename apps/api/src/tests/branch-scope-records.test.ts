@@ -139,7 +139,7 @@ describe('Branch scope for single records', () => {
   describe('locations and branches in write requests', () => {
     it('refuses stock movements in another branch\'s location with 403', async () => {
       const stockIn = await auth(api().post('/api/v1/inventory/stock-in'), adminA)
-        .send({ bookId, locationId: locB, quantity: 1, version: 0, referenceType: 'manual' });
+        .send({ bookId, locationId: locB, quantity: 1, version: 0, referenceType: 'manual', unitCost: 10 });
       expect(stockIn.status).toBe(403);
       expect(stockIn.body).toMatchObject({ error: 'BRANCH_ACCESS_DENIED', details: { branchId: branchB } });
 

@@ -19,6 +19,7 @@ export interface StockLevelRecord {
   quantity: number;
   reserved: number;
   reorderPoint: number;
+  averageCost: Money;
   version: number;
   updatedAt: Date;
 }
@@ -134,7 +135,9 @@ export interface StockReceipt extends StockChange {
   /**
    * What each unit cost, when known (a purchase-order line, the cost a sold
    * unit left at). It moves the weighted average cost; a receipt without one
-   * leaves the average as it was. It must be more than zero.
+   * leaves the average as it was, unless the location has no cost yet: then
+   * the units come in at the book's latest known cost (#163). It must be more
+   * than zero.
    */
   unitCost?: MoneyInput;
   /**

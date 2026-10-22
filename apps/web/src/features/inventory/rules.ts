@@ -1,4 +1,4 @@
-import type { AdjustmentReason, ProfileResponse, StockInRequest, StockOutRequest } from '@bms/shared';
+import type { AdjustmentReason, ProfileResponse, StockInRequest, StockLevel, StockOutRequest } from '@bms/shared';
 
 /**
  * Who may change stock: the API's rules (inventory.routes.ts), so the page
@@ -13,6 +13,13 @@ export const canMoveStock = (me: Account | undefined) => holds(me, ['Admin', 'Ma
 
 /** Reorder points: Admin and Manager. */
 export const canSetReorderPoint = (me: Account | undefined) => holds(me, ['Admin', 'Manager']);
+
+/**
+ * A cost for copies on hand held at cost 0, which add nothing to the
+ * inventory value (#163): Admin and Manager.
+ */
+export const canSetCost = (me: Account | undefined, row: Pick<StockLevel, 'averageCost' | 'quantity'>) =>
+  row.averageCost === 0 && row.quantity > 0 && holds(me, ['Admin', 'Manager']);
 
 /**
  * Staff limited to certain locations change stock only there (#72): the API
@@ -49,7 +56,7 @@ export const ADJUSTMENT_DIRECTION: Record<AdjustmentReason, 'add' | 'remove' | n
 
 /** The reason codes stock movements are recorded with, as History shows and filters them. */
 export const REASON_LABELS: Record<string, string> = {
-  correction: 'Correction', damage: 'Damage', initial: 'Initial', loss: 'Loss', return: 'Return', sale: 'Sale',
+  correction: 'Correction', damage: 'Damage', initial: 'Initial', loss: 'Loss', return: 'Return', revaluation: 'Cost Set', sale: 'Sale',
   stock_in: 'Stock In', transfer_in: 'Transfer In', transfer_out: 'Transfer Out',
 };
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IdSchema, ListPagingQuerySchema } from './common.js';
+import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
 
 /** Contracts for /api/v1/inventory (#21). Stock is held per book and location. */
 
@@ -16,6 +16,8 @@ export const StockLevelSchema = z.object({
   reserved: z.number().int(),
   available: z.number().int(),
   reorderPoint: z.number().int(),
+  /** What one copy here cost, as a weighted average; 0 while no cost is known (#163). */
+  averageCost: z.number(),
   /** Send it back with the next change to this row; a stale value gets 409 VERSION_CONFLICT. */
   version: z.number().int(),
   isLowStock: z.boolean(),
@@ -152,20 +154,47 @@ export type TransferStockRequest = z.infer<typeof TransferStockRequestSchema>;
 export const TransferStockResponseSchema = z.object({ from: StockLevelSchema, to: StockLevelSchema });
 export type TransferStockResponse = z.infer<typeof TransferStockResponseSchema>;
 
+/** A cost of one copy: more than zero, or the stock would be valued at nothing (#163). */
+const UnitCostSchema = MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be more than zero');
+
 /**
  * Stock received by hand. It names no purchase order: those are received in
  * Procurement, which also counts them as received (owner decision 1a, #23).
  */
-export const StockInRequestSchema = z.object({
+export const StockInRequestSchema = z
+  .object({
+    bookId: IdSchema,
+    locationId: IdSchema,
+    quantity: z.number().int().positive(),
+    version: z.number().int().min(0),
+    referenceType: z.enum(['return', 'adjustment', 'manual', 'initial_stock']).optional(),
+    referenceId: IdSchema.optional(),
+    notes: z.string().max(500).optional(),
+    /**
+     * What one copy cost. Required, except on a customer's return, which
+     * comes back at the book's latest known cost when left out (#163, decision 1a).
+     */
+    unitCost: UnitCostSchema.optional(),
+  })
+  .superRefine((r, ctx) => {
+    if (r.unitCost === undefined && r.referenceType !== 'return') {
+      ctx.addIssue({ code: 'custom', path: ['unitCost'], message: 'Enter what one copy cost: stock is valued at its cost' });
+    }
+  });
+export type StockInRequest = z.infer<typeof StockInRequestSchema>;
+
+/**
+ * Gives stock held at cost 0 a cost, with the reason (#163, decision 3a). No
+ * copies move; once stock has a cost, only stock arriving changes it.
+ */
+export const SetStockCostRequestSchema = z.object({
   bookId: IdSchema,
   locationId: IdSchema,
-  quantity: z.number().int().positive(),
+  unitCost: UnitCostSchema,
+  reason: z.string().trim().min(1, 'Required').max(500),
   version: z.number().int().min(0),
-  referenceType: z.enum(['return', 'adjustment', 'manual', 'initial_stock']).optional(),
-  referenceId: IdSchema.optional(),
-  notes: z.string().max(500).optional(),
 });
-export type StockInRequest = z.infer<typeof StockInRequestSchema>;
+export type SetStockCostRequest = z.infer<typeof SetStockCostRequestSchema>;
 
 export const StockOutRequestSchema = z.object({
   bookId: IdSchema,

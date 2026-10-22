@@ -1,6 +1,5 @@
 import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
-import { costBasisLateralJoin } from '../../../lib/costBasis.js';
 import { scopeConditions, where, type ReportFilters, type ReportScope } from '../reportScope.js';
 
 // Stock reports (#22). Stock levels are a balance now; sales and movements
@@ -125,9 +124,9 @@ export async function stockRows(q: Queryable, branchId: number | undefined): Pro
        -- information, available is the quantity.
        COALESCE(res.reserved, 0)::int AS quantity_reserved,
        i.quantity::int AS quantity_available,
-       -- The location's weighted average cost values what is on hand there;
-       -- the latest known cost only while nothing valued has arrived yet.
-       COALESCE(NULLIF(i.average_cost, 0), lc.unit_cost, 0)::NUMERIC AS unit_cost,
+       -- The location's weighted average cost values what is on hand there,
+       -- as the stored value and the dashboard do (#163, decision 4a).
+       i.average_cost::NUMERIC AS unit_cost,
        i.inventory_value,
        TO_CHAR(
          (SELECT MAX(ih.created_at) FROM inventory_history ih
@@ -149,10 +148,9 @@ export async function stockRows(q: Queryable, branchId: number | undefined): Pro
        FROM inventory_reservations WHERE status = 'reserved'
        GROUP BY book_id, location_id
      ) res ON res.book_id = i.book_id AND res.location_id = i.location_id
-     ${costBasisLateralJoin('b.id')}
      ${where(b.cond ? [b.cond] : [])}
      GROUP BY b.id, i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id,
-              i.quantity, i.average_cost, i.inventory_value, res.reserved, lc.unit_cost,
+              i.quantity, i.average_cost, i.inventory_value, res.reserved,
               bbp.price, b.default_price
      ORDER BY b.title ASC`,
     b.params,

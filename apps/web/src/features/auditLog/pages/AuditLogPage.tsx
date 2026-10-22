@@ -4,7 +4,8 @@ import { useAuditLog } from '../queries.js';
 /** Every kind of record the API writes to the audit log (was: 8 of them to filter by). */
 const ENTITY_TYPES = [
   'author', 'bank_account', 'bank_statement', 'bank_statement_line', 'book', 'book_price', 'book_supplier', 'branch',
-  'branch_config', 'category', 'customer', 'customer_group', 'exchange', 'location', 'order', 'publisher', 'purchase_order',
+  'branch_config', 'category', 'customer', 'customer_group', 'exchange', 'inventory', 'inventory_cost', 'inventory_reorder',
+  'inventory_stock_in', 'inventory_stock_out', 'location', 'order', 'publisher', 'purchase_order',
   'receivable', 'receivable_payment', 'return', 'staff', 'staff_locations', 'staff_roles', 'staff_session', 'supplier',
   'system_config', 'transaction',
 ];

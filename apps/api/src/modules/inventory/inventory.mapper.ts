@@ -1,4 +1,4 @@
-import type { LocationStock, MovementType, StockLevel, StockMovement } from '@bms/shared';
+import { Money, type LocationStock, type MovementType, type StockLevel, type StockMovement } from '@bms/shared';
 import type { LocationStockRecord, StockLevelRecord, StockMovementRecord } from './inventory.types.js';
 
 /** The columns inventory.repository selects for a stock level. */
@@ -13,6 +13,7 @@ export interface StockLevelRow {
   quantity: number;
   reserved: number | string;
   reorder_point: number;
+  average_cost: string;
   version: number;
   updated_at: Date;
 }
@@ -48,6 +49,7 @@ export function toStockLevelRecord(row: StockLevelRow): StockLevelRecord {
     quantity: row.quantity,
     reserved: Number(row.reserved),
     reorderPoint: row.reorder_point,
+    averageCost: Money.of(row.average_cost),
     version: row.version,
     updatedAt: row.updated_at,
   };
@@ -89,6 +91,7 @@ export function toStockLevelResponse(r: StockLevelRecord): StockLevel {
     // the reservation is bookkeeping, not a second hold.
     available: r.quantity,
     reorderPoint: r.reorderPoint,
+    averageCost: r.averageCost.toNumber(4),
     version: r.version,
     isLowStock: r.quantity <= r.reorderPoint,
     updatedAt: r.updatedAt.toISOString(),

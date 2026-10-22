@@ -189,6 +189,10 @@ describe('Audit log', () => {
     for (const type of ['system_config', 'branch_config', 'order', 'return', 'exchange', 'receivable', 'bank_account']) {
       expect(within(filter).getByRole('option', { name: type })).toBeInTheDocument();
     }
+    // Stock changes by hand, and costs set (#163; was: none of the inventory records).
+    for (const type of ['inventory', 'inventory_cost', 'inventory_reorder', 'inventory_stock_in', 'inventory_stock_out']) {
+      expect(within(filter).getByRole('option', { name: type })).toBeInTheDocument();
+    }
     await user.selectOptions(filter, 'system_config');
     await waitFor(() => expect(calls.some(c => c.path === '/audit-logs?page=1&pageSize=25&entityType=system_config')).toBe(true));
   });

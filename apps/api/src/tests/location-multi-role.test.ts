@@ -59,7 +59,7 @@ describe('Location limits for staff with several roles', () => {
   afterAll(cleanUp);
 
   it('lets a Stock_Clerk later made Manager book stock at any location of the branch (was: 403)', async () => {
-    const res = await as(api().post('/api/v1/inventory/stock-in'), promoted).send({ bookId, locationId: locB, quantity: 1, version: 0 });
+    const res = await as(api().post('/api/v1/inventory/stock-in'), promoted).send({ bookId, locationId: locB, quantity: 1, version: 0, unitCost: 10 });
     expect(res.status).toBe(200);
   });
 
@@ -71,7 +71,7 @@ describe('Location limits for staff with several roles', () => {
   });
 
   it('still limits a Stock_Clerk', async () => {
-    const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId: locB, quantity: 1, version: 1 });
+    const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId: locB, quantity: 1, version: 1, unitCost: 10 });
     expect(res.status).toBe(403);
     const list = await as(api().get(`/api/v1/branches/${branchId}/locations`), clerk);
     expect(list.body).toMatchObject({ accessMode: 'restricted', items: [{ id: locA }] });

@@ -92,13 +92,13 @@ describe('Location restrictions on sales and stock', () => {
   afterAll(cleanUp);
 
   it('refuses stock in, stock out and adjustments at a location not assigned', async () => {
-    expectRefused(await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId: locB, quantity: 1, version: 0 }));
+    expectRefused(await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId: locB, quantity: 1, version: 0, unitCost: 10 }));
     expectRefused(await as(api().post('/api/v1/inventory/stock-out'), clerk).send({ bookId, locationId: locB, quantity: 1, version: 0 }));
     expectRefused(await as(api().post('/api/v1/inventory/adjust'), clerk).send({ bookId, locationId: locB, delta: -1, reasonCode: 'damage', version: 0 }));
   });
 
   it('still allows them at an assigned location', async () => {
-    const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId: locA, quantity: 1, version: await version(locA) });
+    const res = await as(api().post('/api/v1/inventory/stock-in'), clerk).send({ bookId, locationId: locA, quantity: 1, version: await version(locA), unitCost: 10 });
     expect(res.status).toBeLessThan(300);
   });
 
@@ -152,7 +152,7 @@ describe('Location restrictions on sales and stock', () => {
   it('does not limit staff without assignments, nor Managers', async () => {
     const free = await as(api().post('/api/v1/inventory/stock-out'), freeClerk).send({ bookId, locationId: locB, quantity: 1, version: await version(locB) });
     expect(free.status).toBeLessThan(300);
-    const mgr = await as(api().post('/api/v1/inventory/stock-in'), manager).send({ bookId, locationId: locB, quantity: 1, version: await version(locB) });
+    const mgr = await as(api().post('/api/v1/inventory/stock-in'), manager).send({ bookId, locationId: locB, quantity: 1, version: await version(locB), unitCost: 10 });
     expect(mgr.status).toBeLessThan(300);
   });
 });

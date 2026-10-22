@@ -5,6 +5,7 @@ import {
   BookStockQuerySchema,
   BranchPagingQuerySchema,
   ReorderPointRequestSchema,
+  SetStockCostRequestSchema,
   StockInRequestSchema,
   StockLevelListQuerySchema,
   StockMovementListQuerySchema,
@@ -36,6 +37,7 @@ export const schemas = {
   adjust: { body: AdjustStockRequestSchema },
   transfer: { body: TransferStockRequestSchema },
   reorderPoint: { body: ReorderPointRequestSchema },
+  setCost: { body: SetStockCostRequestSchema },
   stockIn: { body: StockInRequestSchema },
   stockOut: { body: StockOutRequestSchema },
   bookStock: { params: BookStockParamsSchema, query: BookStockQuerySchema },
@@ -115,6 +117,13 @@ export async function reorderPoint(req: Request, res: Response): Promise<void> {
   const { body: change } = valid(req, schemas.reorderPoint);
   await assertLocationInBranch(req, change.locationId);
   const body: StockLevel = toStockLevelResponse(await service.setReorderPoint(actor(req), change));
+  res.json(body);
+}
+
+export async function setCost(req: Request, res: Response): Promise<void> {
+  const { body: change } = valid(req, schemas.setCost);
+  await assertLocationInBranch(req, change.locationId);
+  const body: StockLevel = toStockLevelResponse(await service.setCost(actor(req), change));
   res.json(body);
 }
 
