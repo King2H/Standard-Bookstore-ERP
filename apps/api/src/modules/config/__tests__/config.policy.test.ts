@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  checkBranchOverridable,
   checkCanChangeBranchConfig,
   checkCanChangeSystemConfig,
   checkCanRemoveBranchOverride,
   checkConfigValue,
+  checkCurrencyChange,
   mergeEffective,
 } from '../config.policy.js';
 import type { ConfigRecord } from '../config.types.js';
@@ -82,5 +84,30 @@ describe('mergeEffective', () => {
       { ...row('base_currency', 'ETB'), source: 'system' },
       { ...row('return_window_days', 14), source: 'branch' },
     ]);
+  });
+});
+
+describe('the currency (one for every branch)', () => {
+  it('takes only a three-letter ISO 4217 code', () => {
+    for (const value of ['Birr', 'etb', 'ET', '']) {
+      expect(() => checkConfigValue('base_currency', value)).toThrow(expect.objectContaining({ statusCode: 400 }));
+    }
+  });
+
+  it('has no branch override; other settings do', () => {
+    expect(() => checkBranchOverridable('base_currency')).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(() => checkBranchOverridable('return_window_days')).not.toThrow();
+  });
+
+  it('leaves out an override saved before', () => {
+    const at = new Date('2026-10-08T00:00:00Z');
+    const row = (key: string, value: unknown): ConfigRecord => ({ key, value, updatedBy: 1, updatedAt: at });
+    expect(mergeEffective([row('base_currency', 'ETB')], [row('base_currency', 'USD')])).toEqual([{ ...row('base_currency', 'ETB'), source: 'system' }]);
+  });
+
+  it('changes only while no money is recorded; saving the same one is no change', () => {
+    expect(() => checkCurrencyChange('ETB', 'USD', false)).not.toThrow();
+    expect(() => checkCurrencyChange('ETB', 'ETB', true)).not.toThrow();
+    expect(() => checkCurrencyChange('ETB', 'USD', true)).toThrow(expect.objectContaining({ code: 'CURRENCY_IN_USE', statusCode: 422 }));
   });
 });

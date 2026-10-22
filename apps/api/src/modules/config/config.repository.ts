@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import type { Queryable } from '../../db/tx.js';
 import { toConfigRecord } from './config.mapper.js';
 import type { ConfigRecord } from './config.types.js';
@@ -87,4 +88,26 @@ export async function deleteBranch(q: Queryable, branchId: number, key: string):
     .where('key', '=', key)
     .executeTakeFirst();
   return result.numDeletedRows > 0n;
+}
+
+/**
+ * Whether the tenant has recorded any money: a sale, order, exchange, return,
+ * purchase order past draft, payment, receivable, bank statement line, or
+ * stock received at a cost. A draft purchase order is a quote, not money (a
+ * fresh install comes with two).
+ */
+export async function hasRecordedMoney(q: Queryable): Promise<boolean> {
+  const { rows } = await sql<{ recorded: boolean }>`
+    SELECT EXISTS (SELECT 1 FROM transactions)
+        OR EXISTS (SELECT 1 FROM orders)
+        OR EXISTS (SELECT 1 FROM exchanges)
+        OR EXISTS (SELECT 1 FROM returns)
+        OR EXISTS (SELECT 1 FROM purchase_orders WHERE status <> 'draft')
+        OR EXISTS (SELECT 1 FROM supplier_payments)
+        OR EXISTS (SELECT 1 FROM financial_transactions)
+        OR EXISTS (SELECT 1 FROM receivables)
+        OR EXISTS (SELECT 1 FROM bank_statement_lines)
+        OR EXISTS (SELECT 1 FROM inventory_history WHERE unit_cost > 0) AS recorded
+  `.execute(q);
+  return rows[0].recorded;
 }
