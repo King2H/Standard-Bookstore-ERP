@@ -42,8 +42,8 @@ export async function listSystem(_req: Request, res: Response): Promise<void> {
   res.json(body);
 }
 
-export async function currency(req: Request, res: Response): Promise<void> {
-  const body: CurrencyResponse = { currency: await service.getBaseCurrency(actor(req).branchId) };
+export async function currency(_req: Request, res: Response): Promise<void> {
+  const body: CurrencyResponse = { currency: await service.getBaseCurrency() };
   res.json(body);
 }
 

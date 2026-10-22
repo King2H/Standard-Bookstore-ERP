@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ConfigEntry, EffectiveConfigEntry } from '@bms/shared';
+import { SYSTEM_WIDE_CONFIG_KEYS, type ConfigEntry, type EffectiveConfigEntry } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useOpenBranches } from '../../branches/queries.js';
@@ -12,7 +12,7 @@ import {
 // ── Config key metadata for display ──────────────────────────────────────────
 
 const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType; description: string }> = {
-  base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. USD)' },
+  base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. ETB), for every branch. Changes only before any money is recorded' },
   // tax_rate removed — taxation disabled for this phase
   fiscal_year_start_month:          { label: 'Fiscal Year Start Month',      tab: 'General',      type: 'number',  description: 'Month number 1–12 (1 = January)' },
   max_line_discount_pct:            { label: 'Max Line Discount % (per role)',tab: 'Discounts',    type: 'json',    description: 'JSON object: {"Sales":10,"Manager":25,"Admin":50}' },
@@ -329,7 +329,9 @@ export default function SettingsPage() {
   // ── Filter rows by active tab ──────────────────────────────────────────────
 
   const systemRows = (systemData?.items ?? []).filter(r => CONFIG_META[r.key]?.tab === activeTab);
-  const branchRows = (branchConfigData?.items ?? []).filter(r => CONFIG_META[r.key]?.tab === activeTab);
+  // A setting that holds for every branch (the currency) has no branch override.
+  const branchRows = (branchConfigData?.items ?? [])
+    .filter(r => CONFIG_META[r.key]?.tab === activeTab && !SYSTEM_WIDE_CONFIG_KEYS.includes(r.key));
 
   return (
     <div className="p-6 max-w-5xl">

@@ -76,6 +76,7 @@ export const DISCOUNT_TYPES = ['Normal', 'Merchant', 'Special'] as const;
 export const DISCOUNT_MODES = ['Percentage', 'Amount'] as const;
 
 const text = z.string({ error: 'must be a string' });
+const currencyCode = text.regex(/^[A-Z]{3}$/, 'must be a three-letter ISO 4217 code, e.g. ETB');
 const number = z.number({ error: 'must be a number' });
 const flag = z.boolean({ error: 'must be a boolean' });
 const discountMode = z.enum(DISCOUNT_MODES, { error: `must be one of ${DISCOUNT_MODES.join(', ')}` });
@@ -84,13 +85,20 @@ const roles: readonly string[] = ROLES;
 const paymentMethods = `must be a list of payment methods: ${OrderPaymentMethodSchema.options.join(', ')}`;
 
 /**
+ * Settings that hold for every branch; a branch cannot override them. The
+ * currency: every amount is recorded in it, so a branch showing another one
+ * would label its amounts wrongly.
+ */
+export const SYSTEM_WIDE_CONFIG_KEYS: readonly string[] = ['base_currency'];
+
+/**
  * The value each setting takes (#23). The API refuses any other key or value,
  * and the Settings page checks with the same rules before sending; a mistyped
  * value would otherwise be stored and read back as nothing (a discount limit
  * of 0 for every role). Messages complete "Config key '<key>' …".
  */
 export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
-  base_currency: text,
+  base_currency: currencyCode,
   fiscal_year_start_month: number,
   max_line_discount_pct: z
     .record(z.string(), number.min(0, 'must give each role 0 to 100').max(100, 'must give each role 0 to 100'), {

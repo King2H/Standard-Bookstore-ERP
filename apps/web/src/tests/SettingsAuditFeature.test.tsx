@@ -178,6 +178,32 @@ describe('Settings', () => {
     expect(within(row).getByTitle('Override')).toBeInTheDocument();
     expect(within(row).queryByTitle('Remove override')).not.toBeInTheDocument();
   });
+
+  it('offers no branch override of the currency, which holds for every branch (was: offered, so a branch showed another currency)', async () => {
+    me = profile(['Super_Admin'], true, 1);
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+    await screen.findByText('Base Currency');
+    await settle();
+    await user.selectOptions(screen.getByRole('combobox'), '1');
+    const overrides = (await screen.findByText('Branch Overrides')).closest('div.bg-white')! as HTMLElement;
+    await within(overrides).findByText('No settings in this category');
+    expect(within(overrides).queryByText('Base Currency')).not.toBeInTheDocument();
+  });
+
+  it('refuses a currency that is not a three-letter ISO 4217 code and sends nothing', async () => {
+    me = profile(['Super_Admin'], true);
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+    const row = await settingRow('Base Currency');
+    await user.click(within(row).getByTitle('Edit'));
+    const box = within(row).getByRole('textbox');
+    await user.clear(box);
+    await user.type(box, 'Birr');
+    await user.click(within(row).getByRole('button', { name: 'Save' }));
+    expect(within(row).getByRole('alert')).toHaveTextContent('three-letter ISO 4217 code');
+    expect(calls.some(c => c.method === 'PUT')).toBe(false);
+  });
 });
 
 describe('Audit log', () => {

@@ -11582,7 +11582,7 @@
     "/config/branches/{branchId}/{key}": {
       "put": {
         "operationId": "setBranchConfig",
-        "summary": "Override a setting for a branch (Super_Admin, Admin, Manager; the session branch, or any branch with access to all branches)",
+        "summary": "Override a setting for a branch (Super_Admin, Admin, Manager; the session branch, or any branch with access to all branches). Not the currency, which holds for every branch",
         "tags": [
           "Configuration"
         ],
@@ -11810,7 +11810,7 @@
     "/config/currency": {
       "get": {
         "operationId": "getCurrency",
-        "summary": "The session branch's currency (ETB when it cannot be read)",
+        "summary": "The shop's currency, one for every branch (ETB when it cannot be read)",
         "tags": [
           "Configuration"
         ],
@@ -12074,7 +12074,7 @@
     "/config/system/{key}": {
       "put": {
         "operationId": "setSystemConfig",
-        "summary": "Set a system setting (Super_Admin); the value must have the key's type",
+        "summary": "Set a system setting (Super_Admin); the value must have the key's type. The currency changes only while no money is recorded (422 CURRENCY_IN_USE)",
         "tags": [
           "Configuration"
         ],
@@ -12159,6 +12159,16 @@
           },
           "403": {
             "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
             "content": {
               "application/json": {
                 "schema": {

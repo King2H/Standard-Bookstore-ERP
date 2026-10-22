@@ -754,14 +754,13 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 
 | Username | Password | Role | Landing Page | UI Access |
 |----------|----------|------|--------------|-----------|
-| superadmin | password | Super_Admin | Settings | Settings, Staff, Branches, Audit Log |
-| admin | password | Admin | Dashboard | All operational pages |
+| superadmin | Admin@1234 | Super_Admin | Dashboard | Dashboard, Branches, Staff, Settings, Audit Log |
+| admin | Admin@1234 | Admin | Dashboard | All operational pages |
 
-Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page after logging in as admin.
+Both must change the password at first login. Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page after logging in as admin.
 
 **Role landing pages after login:**
-- Super_Admin → Settings
-- Admin / Manager / Finance_Officer → Dashboard
+- Super_Admin / Admin / Manager / Finance_Officer → Dashboard
 - Sales → POS
 - Stock_Clerk → Inventory
 - Purchasor → Procurement

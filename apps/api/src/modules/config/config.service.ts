@@ -23,7 +23,7 @@ export async function getEffectiveConfigWithSource(
   branchId: number,
   key: string,
 ): Promise<{ value: unknown; source: ConfigSource }> {
-  const override = await config.findBranchValue(kysely, branchId, key);
+  const override = policy.isBranchOverridable(key) ? await config.findBranchValue(kysely, branchId, key) : undefined;
   if (override) return { value: override.value, source: 'branch' };
 
   const system = await config.findSystemValue(kysely, key);
@@ -63,10 +63,10 @@ export async function getEffectiveValues(
   );
 }
 
-/** The branch's currency; ETB when it cannot be read, so selling screens always get one. */
-export async function getBaseCurrency(branchId: number): Promise<string> {
+/** The shop's currency, one for every branch; ETB when it cannot be read, so selling screens always get one. */
+export async function getBaseCurrency(): Promise<string> {
   try {
-    return String((await getEffectiveConfig(branchId, 'base_currency')) ?? 'ETB');
+    return String((await config.findSystemValue(kysely, 'base_currency'))?.value ?? 'ETB');
   } catch {
     return 'ETB';
   }
@@ -85,6 +85,9 @@ export async function setSystemConfig(actor: Actor, key: string, value: unknown)
   // Cached branch values pick up a new system default when they expire.
   return withTransaction({}, async (tx) => {
     const previous = await config.findSystemValue(tx, key);
+    if (key === 'base_currency') {
+      policy.checkCurrencyChange(previous?.value, value, await config.hasRecordedMoney(tx));
+    }
     const record = await config.upsertSystem(tx, { key, value, updatedBy: actor.staffId });
     await insertAuditEntry(tx, {
       staffId: actor.staffId,
@@ -114,6 +117,7 @@ export async function setBranchConfig(
   value: unknown,
 ): Promise<ConfigRecord> {
   policy.checkCanChangeBranchConfig(actor.roles);
+  policy.checkBranchOverridable(key);
   policy.checkConfigValue(key, value);
 
   const record = await withTransaction({}, async (tx) => {

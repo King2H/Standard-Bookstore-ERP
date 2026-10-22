@@ -1,5 +1,5 @@
-import { CONFIG_VALUE_SCHEMAS } from '@bms/shared';
-import { ForbiddenError, ValidationError } from '../../lib/errors.js';
+import { CONFIG_VALUE_SCHEMAS, SYSTEM_WIDE_CONFIG_KEYS } from '@bms/shared';
+import { BusinessError, ForbiddenError, ValidationError } from '../../lib/errors.js';
 import type { ConfigRecord, EffectiveConfigRecord } from './config.types.js';
 
 /**
@@ -36,13 +36,35 @@ export function checkCanRemoveBranchOverride(roles: readonly string[]): void {
   }
 }
 
+/** Whether a branch may set its own value for `key`: not for a system-wide setting such as the currency. */
+export const isBranchOverridable = (key: string): boolean => !SYSTEM_WIDE_CONFIG_KEYS.includes(key);
+
+export function checkBranchOverridable(key: string): void {
+  if (!isBranchOverridable(key)) {
+    throw new ValidationError(`Config key '${key}' holds for every branch; change it in the system settings`);
+  }
+}
+
+/**
+ * The currency changes only while no money is recorded: amounts are kept as
+ * entered, never converted, so a new currency would relabel them.
+ */
+export function checkCurrencyChange(current: unknown, next: unknown, moneyRecorded: boolean): void {
+  if (current !== next && moneyRecorded) {
+    throw new BusinessError(
+      'CURRENCY_IN_USE',
+      'The currency cannot change once money is recorded: amounts are kept as entered, never converted',
+    );
+  }
+}
+
 /**
  * A branch's effective settings: every system key, with the branch's
  * override in its place where there is one. Overrides of keys that have no
- * system default are left out.
+ * system default, or that hold for every branch, are left out.
  */
 export function mergeEffective(system: ConfigRecord[], branch: ConfigRecord[]): EffectiveConfigRecord[] {
-  const overrides = new Map(branch.map((r) => [r.key, r]));
+  const overrides = new Map(branch.filter((r) => isBranchOverridable(r.key)).map((r) => [r.key, r]));
   return system.map((r) => {
     const override = overrides.get(r.key);
     return override ? { ...override, source: 'branch' } : { ...r, source: 'system' };

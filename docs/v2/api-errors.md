@@ -107,6 +107,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `CASH_ORDER_ALREADY_PAID`
 - `CATEGORY_NOT_SELECTABLE`
 - `CREDIT_REQUIRES_CUSTOMER`
+- `CURRENCY_IN_USE`
 - `CUSTOMER_INACTIVE`
 - `CUSTOMER_REQUIRED_FOR_SETTLEMENT`
 - `DEPOSIT_TOO_LOW`
