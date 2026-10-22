@@ -80,7 +80,7 @@ export const CHECKS: readonly Check[] = [
   {
     id: 'stock.valued',
     area: 'Stock',
-    title: 'Stock on hand has a cost (at 0 it adds nothing to the inventory value; Inventory > Set cost gives it one)',
+    title: 'Stock on hand has a cost (at 0 it adds nothing to the inventory value; Inventory > Revalue gives it one)',
     severity: 'warning',
     sql: `
       SELECT tenant_id, 'book ' || book_id || ' at location ' || location_id || ': ' || quantity || ' on hand at cost 0' AS ref

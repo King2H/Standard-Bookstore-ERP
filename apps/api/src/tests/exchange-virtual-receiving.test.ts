@@ -394,7 +394,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
       }))).rejects.toThrow();
     });
 
-    it('9. a stockIn() with no unitCost (the default for every other caller) still works and leaves unit_cost NULL', async () => {
+    it('9. a receipt that left at no cost comes back at 0 when the caller says so, and records it (#163: every receipt names its cost)', async () => {
       const regRes = await request(getTestApp())
         .post('/api/v1/books/quick-register')
         .set('Authorization', `Bearer ${salesToken}`)
@@ -405,7 +405,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
       await db.query('INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version) VALUES ($1,$2,0,5,0) ON CONFLICT (book_id, location_id) DO NOTHING', [bookId, locationId]);
 
       await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
-        bookId, locationId, quantity: 4, referenceType: 'manual',
+        bookId, locationId, quantity: 4, referenceType: 'manual', unitCost: 0, costMayBeZero: true,
         staffCtx: { staffId: 1, role: 'Admin', branchId },
       }));
 
@@ -414,7 +414,7 @@ describe('Non-Destructive Catalog Search & Virtual Receiving for Incoming Exchan
         [bookId, locationId],
       );
       expect(histRes.rows.length).toBe(1);
-      expect(histRes.rows[0].unit_cost).toBeNull();
+      expect(histRes.rows[0].unit_cost).toBe('0.00');
     });
   });
 });

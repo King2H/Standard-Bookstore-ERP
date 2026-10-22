@@ -290,7 +290,7 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
         locationId,
         quantity: item.quantityReceived,
         unitCost: line.unitCost,
-        freeOfCharge: line.unitCost.isZero(),
+        costMayBeZero: line.unitCost.isZero(),
         referenceType: 'purchase_order',
         referenceId: id,
         reasonCode: 'initial',

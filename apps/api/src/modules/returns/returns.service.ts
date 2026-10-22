@@ -142,9 +142,11 @@ export async function createReturn(
       if (l.disposition === 'DAMAGED') {
         await inventoryService.receiveDamaged(tx, { ...change, reasonCode: 'damage', notes: `Damaged return – ${l.quantity} unit(s)` });
       } else {
-        // At the cost the books left at, not today's average (the return posting rule).
-        const unitCost = l.line.unitCost !== null && l.line.unitCost.greaterThan(0) ? l.line.unitCost : undefined;
-        await inventoryService.receiveStock(tx, { ...change, reasonCode: 'return', notes: `Return of ${l.quantity} unit(s)`, unitCost });
+        // At the cost the books left at, not today's average (the return posting
+        // rule); 0 when they left with none (#163).
+        await inventoryService.receiveStock(tx, {
+          ...change, reasonCode: 'return', notes: `Return of ${l.quantity} unit(s)`, unitCost: l.line.unitCost ?? 0, costMayBeZero: true,
+        });
       }
     }
 

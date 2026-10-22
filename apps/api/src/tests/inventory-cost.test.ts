@@ -11,11 +11,12 @@ import { costBasisLateralJoin } from '../lib/costBasis.js';
 import * as inventoryService from '../modules/inventory/inventory.service.js';
 import { getStockExportRows } from '../modules/reports/inventory/inventoryReports.service.js';
 
-// #163: stock that arrived without a cost was valued at 0. Stock-in by hand
-// carries a cost (decision 1a); stock arriving without one on a row that has
-// no cost takes the book's latest known cost (2a); rows still at 0 get a cost
-// by a repair migration or by hand, Set cost (3a); the valuation export and
-// the dashboard value stock the same way, at its average cost (4a).
+// #163: stock that arrived without a cost was valued at 0. Every arrival
+// carries its own cost and is weighed into the average; nothing is estimated
+// (follow-up decisions 1a, 2a): a stock-in by hand names its cost, stock
+// coming back comes back at the cost it left at. Only Revalue, with a reason,
+// changes the cost of copies on hand (3a). Only copies that arrived have a
+// cost; the valuation export and the dashboard value stock at its average cost.
 
 const STAFF_PREFIX = 'invcost_test_';
 const BRANCH_PREFIX = 'Inv Cost ';
@@ -81,7 +82,7 @@ describe('Inventory cost (#163)', () => {
     (await db.query(`SELECT lc.unit_cost FROM (SELECT $1::int AS id) b ${costBasisLateralJoin('b.id')}`, [bookId])).rows[0].unit_cost as string | null;
 
   const stockIn = (body: Record<string, unknown>) => as(api().post('/api/v1/inventory/stock-in'), clerk).send({ version: 0, ...body });
-  const setCost = (token: string, body: Record<string, unknown>) => as(api().post('/api/v1/inventory/set-cost'), token).send(body);
+  const revalue = (token: string, body: Record<string, unknown>) => as(api().post('/api/v1/inventory/revalue'), token).send(body);
 
   async function cleanUp() {
     const branches = (await db.query(`SELECT id FROM branches WHERE name LIKE $1`, [`${BRANCH_PREFIX}%`])).rows.map((r) => r.id);
@@ -122,10 +123,10 @@ describe('Inventory cost (#163)', () => {
     await closeOwnerDb();
   });
 
-  describe('stock-in by hand (decision 1a)', () => {
-    it('refuses opening stock and a stock-in without a unit cost (was: booked at cost 0, so valued at 0)', async () => {
+  describe('stock-in by hand', () => {
+    it('refuses a stock-in without a unit cost, a customer\'s return too (was: a return took the book\'s last known cost)', async () => {
       const bookId = await newBook();
-      for (const referenceType of [undefined, 'manual', 'initial_stock'] as const) {
+      for (const referenceType of [undefined, 'manual', 'initial_stock', 'return'] as const) {
         const res = await stockIn({ bookId, locationId: shelfA, quantity: 5, referenceType });
         expect({ referenceType, status: res.status, error: res.body.error }).toEqual({ referenceType, status: 400, error: 'VALIDATION_ERROR' });
       }
@@ -142,93 +143,88 @@ describe('Inventory cost (#163)', () => {
       expect(await row(bookId, shelfA)).toMatchObject({ quantity: 5, cost: '12.5000', value: '62.50' });
       expect(await lastMovement(bookId, shelfA)).toMatchObject({ reason_code: 'initial', unit_cost: '12.50' });
     });
-
-    it('takes the book\'s latest known cost for a return named without one (was: 0)', async () => {
-      const bookId = await newBook();
-      expect((await stockIn({ bookId, locationId: shelfB, quantity: 3, unitCost: 8 })).status).toBe(200);
-      const res = await stockIn({ bookId, locationId: shelfA, quantity: 2, referenceType: 'return' });
-      expect(res.status).toBe(200);
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 2, cost: '8.0000', value: '16.00' });
-      expect((await lastMovement(bookId, shelfA)).unit_cost).toBe('8.00');
-    });
-
-    it('leaves a return of a book with no known cost at 0, and its movement unvalued', async () => {
-      const bookId = await newBook();
-      expect((await stockIn({ bookId, locationId: shelfA, quantity: 2, referenceType: 'return' })).status).toBe(200);
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 2, cost: '0.0000', value: '0.00' });
-      expect((await lastMovement(bookId, shelfA)).unit_cost).toBeNull();
-    });
   });
 
-  describe('stock arriving without a cost (decision 2a)', () => {
+  describe('copies keep the cost they came in at', () => {
     const staff = () => ({ staffId: clerkId, role: 'Stock_Clerk', branchId });
 
-    it('values stock coming back with no cost on an empty row at the latest known cost (cancelled order, void; was: 0)', async () => {
+    it('values 3 copies received at 30.00 next to 5 with no cost at 90.00 (was: 240.00, the 5 valued at 30 too)', async () => {
+      const bookId = await newBook();
+      await unvalued(bookId, shelfA, 5);
+      expect((await stockIn({ bookId, locationId: shelfA, quantity: 3, unitCost: 30, version: 0 })).status).toBe(200);
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 8, cost: '11.2500', value: '90.00' });
+
+      // A sale takes copies out at the average: 7 left, 78.75.
+      const { unitCost } = await withTransaction({}, (tx) => inventoryService.issueStock(tx, {
+        bookId, locationId: shelfA, quantity: 1, reasonCode: 'sale', staffCtx: staff(),
+      }));
+      expect(unitCost.toFixed(4)).toBe('11.2500');
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 7, value: '78.75' });
+    });
+
+    it('brings copies back at the cost they left at, 0 when they left at 0 (was: the book\'s last known cost)', async () => {
       const bookId = await newBook();
       expect((await stockIn({ bookId, locationId: shelfB, quantity: 1, unitCost: 15 })).status).toBe(200);
       await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
-        bookId, locationId: shelfA, quantity: 3, referenceType: 'order_cancelled', reasonCode: 'return', staffCtx: staff(),
+        bookId, locationId: shelfA, quantity: 3, unitCost: 0, costMayBeZero: true,
+        referenceType: 'order_cancelled', reasonCode: 'return', staffCtx: staff(),
       }));
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 3, cost: '15.0000', value: '45.00' });
-    });
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 3, cost: '0.0000', value: '0.00' });
 
-    it('does not take a recorded cost of 0 as the book\'s cost (was: a sale out of unvalued stock made 0 its cost)', async () => {
-      const bookId = await newBook();
-      expect((await stockIn({ bookId, locationId: shelfB, quantity: 2, unitCost: 9 })).status).toBe(200);
-      await unvalued(bookId, shelfA, 3);
-      // Leaves at cost 0: the newest cost in the history is now 0.00.
-      await withTransaction({}, (tx) => inventoryService.issueStock(tx, {
-        bookId, locationId: shelfA, quantity: 1, reasonCode: 'sale', staffCtx: staff(),
-      }));
-      expect((await lastMovement(bookId, shelfA)).unit_cost).toBe('0.00');
-
-      const { rows } = await db.query(`SELECT lc.unit_cost FROM (SELECT $1::int AS id) b ${costBasisLateralJoin('b.id')}`, [bookId]);
-      expect(rows[0].unit_cost).toBe('9.00');
       await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
-        bookId, locationId: shelfA, quantity: 1, referenceType: 'void', reasonCode: 'return', staffCtx: staff(),
+        bookId, locationId: shelfB, quantity: 1, unitCost: 9, costMayBeZero: true,
+        referenceType: 'void', reasonCode: 'return', staffCtx: staff(),
       }));
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 3, cost: '9.0000', value: '27.00' });
+      expect(await row(bookId, shelfB)).toMatchObject({ quantity: 2, cost: '12.0000', value: '24.00' });
     });
 
-    it('values copies on hand at cost 0 at the cost of a priced arrival (was: averaged with 0, so 5 at 10 and 5 at 0 made 5.00)', async () => {
+    it('refuses a receipt at cost 0 unless the caller says the copies have none (free copies, copies that left at 0)', async () => {
       const bookId = await newBook();
-      await unvalued(bookId, shelfA, 5);
-      expect((await stockIn({ bookId, locationId: shelfA, quantity: 5, unitCost: 10 })).status).toBe(200);
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 10, cost: '10.0000', value: '100.00' });
+      await expect(withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
+        bookId, locationId: shelfA, quantity: 1, unitCost: 0, staffCtx: staff(),
+      }))).rejects.toThrow(/more than zero/);
     });
 
-    it('values copies on hand at cost 0 at the latest known cost on a correction upward (was: stayed 0)', async () => {
+    it('keeps the average on a correction, as #21 decided (was: copies at 0 took the book\'s last known cost)', async () => {
       const bookId = await newBook();
       expect((await stockIn({ bookId, locationId: shelfB, quantity: 1, unitCost: 7 })).status).toBe(200);
       await unvalued(bookId, shelfA, 2);
       const res = await as(api().post('/api/v1/inventory/adjust'), clerk)
         .send({ bookId, locationId: shelfA, delta: 1, reasonCode: 'correction', version: 0 });
       expect(res.status).toBe(200);
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 3, cost: '7.0000', value: '21.00' });
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 3, cost: '0.0000', value: '0.00' });
     });
 
-    it('does not lower a destination\'s cost with copies transferred at cost 0 (was: 2 at 10 and 1 at 0 made 6.67)', async () => {
+    it('moves the value with the copies on a transfer (was: copies with no cost took the destination\'s cost)', async () => {
       const bookId = await newBook();
       expect((await stockIn({ bookId, locationId: shelfB, quantity: 2, unitCost: 10 })).status).toBe(200);
       await unvalued(bookId, shelfA, 3);
       const res = await as(api().post('/api/v1/inventory/transfer'), clerk)
         .send({ bookId, fromLocationId: shelfA, toLocationId: shelfB, quantity: 1, fromVersion: 0 });
       expect(res.status).toBe(200);
-      expect(await row(bookId, shelfB)).toMatchObject({ quantity: 3, cost: '10.0000', value: '30.00' });
+      expect(await row(bookId, shelfB)).toMatchObject({ quantity: 3, cost: '6.6667', value: '20.00' });
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 2, value: '0.00' });
     });
   });
 
-  describe('only copies that arrived have a cost (#163 follow-up)', () => {
+  describe('the reports\' cost basis: only copies that arrived have a cost', () => {
     const staff = () => ({ staffId: clerkId, role: 'Stock_Clerk', branchId });
 
-    it('does not take the price on a purchase order that delivered nothing as the book\'s cost (was: a draft\'s 30.00 valued 5 copies at 150)', async () => {
+    it('does not take a recorded cost of 0 as the book\'s cost (was: a sale out of unvalued stock made 0 its cost)', async () => {
+      const bookId = await newBook();
+      expect((await stockIn({ bookId, locationId: shelfB, quantity: 2, unitCost: 9 })).status).toBe(200);
+      await unvalued(bookId, shelfA, 3);
+      await withTransaction({}, (tx) => inventoryService.issueStock(tx, {
+        bookId, locationId: shelfA, quantity: 1, reasonCode: 'sale', staffCtx: staff(),
+      }));
+      expect((await lastMovement(bookId, shelfA)).unit_cost).toBe('0.00');
+      expect(await costBasis(bookId)).toBe('9.00');
+    });
+
+    it('does not take the price on a purchase order that delivered nothing (was: a draft\'s 30.00 valued 5 copies at 150)', async () => {
       const bookId = await newBook();
       for (const status of ['draft', 'pending_approval', 'approved', 'ordered', 'cancelled']) await purchaseOrder(bookId, 30, status);
       expect(await costBasis(bookId)).toBeNull();
-      await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
-        bookId, locationId: shelfA, quantity: 5, referenceType: 'void', reasonCode: 'return', staffCtx: staff(),
-      }));
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 5, cost: '0.0000', value: '0.00' });
     });
 
     it('takes the cost of copies a purchase order delivered, not a newer price nothing arrived at', async () => {
@@ -236,18 +232,14 @@ describe('Inventory cost (#163)', () => {
       await purchaseOrder(bookId, 12, 'partially_received', 2);
       await purchaseOrder(bookId, 30, 'draft');
       expect(await costBasis(bookId)).toBe('12.00');
-      await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
-        bookId, locationId: shelfA, quantity: 5, referenceType: 'void', reasonCode: 'return', staffCtx: staff(),
-      }));
-      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 5, cost: '12.0000', value: '60.00' });
     });
   });
 
-  describe('Set cost (decision 3a)', () => {
-    it('gives stock at cost 0 a cost, with a reason, in the history and the audit log, without moving any copies', async () => {
+  describe('Revalue', () => {
+    it('gives stock with no cost a cost, with a reason, in the history and the audit log, without moving any copies', async () => {
       const bookId = await newBook();
       await unvalued(bookId, shelfA, 5);
-      const res = await setCost(manager, { bookId, locationId: shelfA, unitCost: '11.25', reason: 'Counted opening stock, invoice 77', version: 0 });
+      const res = await revalue(manager, { bookId, locationId: shelfA, unitCost: '11.25', reason: 'Counted opening stock, invoice 77', version: 0 });
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ bookId, locationId: shelfA, quantity: 5, averageCost: 11.25, version: 1 });
       expect(await row(bookId, shelfA)).toMatchObject({ quantity: 5, cost: '11.2500', value: '56.25' });
@@ -261,26 +253,45 @@ describe('Inventory cost (#163)', () => {
       expect(audit).toEqual([{
         entity_type: 'inventory_cost',
         entity_id: `${bookId}:${shelfA}`,
-        meta: { bookId, locationId: shelfA, quantity: 5, averageCostBefore: '0.0000', averageCostAfter: '11.2500', reason: 'Counted opening stock, invoice 77' },
+        meta: {
+          bookId, locationId: shelfA, quantity: 5, averageCostBefore: '0.0000', averageCostAfter: '11.2500',
+          valueBefore: '0.00', valueAfter: '56.25', reason: 'Counted opening stock, invoice 77',
+        },
       }]);
     });
 
-    it('is refused once the stock has a cost: the average then moves only with stock', async () => {
+    it('revalues stock that already has a cost, part of it having none (was: refused once the cost was above 0)', async () => {
       const bookId = await newBook();
-      expect((await stockIn({ bookId, locationId: shelfA, quantity: 2, unitCost: 4 })).status).toBe(200);
-      const res = await setCost(manager, { bookId, locationId: shelfA, unitCost: 6, reason: 'Wrong cost', version: 1 });
-      expect({ status: res.status, error: res.body.error }).toEqual({ status: 422, error: 'COST_ALREADY_SET' });
-      expect((await row(bookId, shelfA)).cost).toBe('4.0000');
+      await unvalued(bookId, shelfA, 5);
+      expect((await stockIn({ bookId, locationId: shelfA, quantity: 3, unitCost: 30, version: 0 })).status).toBe(200);
+      const res = await revalue(manager, { bookId, locationId: shelfA, unitCost: 30, reason: 'The 5 opening copies cost 30.00 too', version: 1 });
+      expect(res.status).toBe(200);
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 8, cost: '30.0000', value: '240.00' });
+      const meta = (await db.query(
+        `SELECT meta FROM audit_logs WHERE entity_type = 'inventory_cost' AND entity_id = $1`, [`${bookId}:${shelfA}`],
+      )).rows[0].meta;
+      expect(meta).toMatchObject({ averageCostBefore: '11.2500', averageCostAfter: '30.0000', valueBefore: '90.00', valueAfter: '240.00' });
+    });
+
+    it('refuses with nothing on hand, or at the cost the stock already has', async () => {
+      const bookId = await newBook();
+      await unvalued(bookId, shelfA, 0);
+      const empty = await revalue(manager, { bookId, locationId: shelfA, unitCost: 5, reason: 'x', version: 0 });
+      expect({ status: empty.status, error: empty.body.error }).toEqual({ status: 422, error: 'INVALID_STATE' });
+      const priced = await newBook();
+      expect((await stockIn({ bookId: priced, locationId: shelfA, quantity: 2, unitCost: 4 })).status).toBe(200);
+      const same = await revalue(manager, { bookId: priced, locationId: shelfA, unitCost: '4.00', reason: 'x', version: 1 });
+      expect({ status: same.status, error: same.body.error }).toEqual({ status: 400, error: 'VALIDATION_ERROR' });
     });
 
     it('needs a reason, a cost above 0 and the current version', async () => {
       const bookId = await newBook();
       await unvalued(bookId, shelfA, 1);
       for (const body of [{ unitCost: 5, reason: ' ', version: 0 }, { unitCost: 0, reason: 'x', version: 0 }, { unitCost: 5, version: 0 }]) {
-        const res = await setCost(manager, { bookId, locationId: shelfA, ...body });
+        const res = await revalue(manager, { bookId, locationId: shelfA, ...body });
         expect({ body, status: res.status, error: res.body.error }).toEqual({ body, status: 400, error: 'VALIDATION_ERROR' });
       }
-      const stale = await setCost(manager, { bookId, locationId: shelfA, unitCost: 5, reason: 'x', version: 3 });
+      const stale = await revalue(manager, { bookId, locationId: shelfA, unitCost: 5, reason: 'x', version: 3 });
       expect({ status: stale.status, error: stale.body.error }).toEqual({ status: 409, error: 'VERSION_CONFLICT' });
       expect((await row(bookId, shelfA)).cost).toBe('0.0000');
     });
@@ -289,8 +300,8 @@ describe('Inventory cost (#163)', () => {
       const bookId = await newBook();
       await unvalued(bookId, shelfA, 1);
       await unvalued(bookId, otherShelf, 1);
-      expect((await setCost(clerk, { bookId, locationId: shelfA, unitCost: 5, reason: 'x', version: 0 })).status).toBe(403);
-      const elsewhere = await setCost(manager, { bookId, locationId: otherShelf, unitCost: 5, reason: 'x', version: 0 });
+      expect((await revalue(clerk, { bookId, locationId: shelfA, unitCost: 5, reason: 'x', version: 0 })).status).toBe(403);
+      const elsewhere = await revalue(manager, { bookId, locationId: otherShelf, unitCost: 5, reason: 'x', version: 0 });
       expect(elsewhere.status).toBeGreaterThanOrEqual(400);
       expect((await row(bookId, otherShelf)).cost).toBe('0.0000');
     });

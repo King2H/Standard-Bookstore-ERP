@@ -261,7 +261,9 @@ export async function voidExchange(actor: Actor, id: string, reason: string): Pr
         reasonCode: 'return',
         notes: 'Exchange voided',
         staffCtx: actor,
-        unitCost: o.unitCost && o.unitCost.greaterThan(0) ? o.unitCost : undefined,
+        // At the cost the copies left at; 0 when they left with none (#163).
+        unitCost: o.unitCost ?? 0,
+        costMayBeZero: true,
       });
     }
 

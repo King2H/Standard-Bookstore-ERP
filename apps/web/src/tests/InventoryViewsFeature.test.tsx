@@ -53,7 +53,7 @@ function stubApi() {
     if (u.pathname === '/inventory/history') return json(contract(StockMovementListResponseSchema, list([])));
     if (u.pathname === '/inventory') return json(contract(StockLevelListResponseSchema, list([level(1, 'Animal Farm'), level(2, 'Burmese Days', 0)])));
     if (method === 'PUT') return json(contract(StockLevelSchema, level(1, 'Animal Farm')));
-    if (u.pathname === '/inventory/set-cost') return json(contract(StockLevelSchema, level(2, 'Burmese Days', 11.25)));
+    if (u.pathname === '/inventory/revalue') return json(contract(StockLevelSchema, level(2, 'Burmese Days', 11.25)));
     return json({ items: [] });
   }));
 }
@@ -129,37 +129,53 @@ describe('Inventory: reorder points', () => {
   });
 });
 
-describe('Inventory: stock without a cost (#163)', () => {
-  it('marks stock held at cost 0 and offers Set cost to an Admin or Manager only (was: nothing showed it counted for 0)', async () => {
+describe('Inventory: stock cost (#163)', () => {
+  it('marks copies with no cost, and offers Revalue on every row with copies to an Admin or Manager (was: only while the cost was 0)', async () => {
     await renderPage();
-    expect(within(rowOf('Burmese Days')).getByTitle('Set cost')).toHaveTextContent('No cost');
+    expect(within(rowOf('Burmese Days')).getByTitle('No cost: revalue')).toHaveTextContent('No cost');
     expect(within(rowOf('Animal Farm')).queryByText('No cost')).toBeNull();
-    expect(within(rowOf('Animal Farm')).queryByTitle('Set cost')).toBeNull();
+    expect(within(rowOf('Animal Farm')).getByTitle('Revalue')).toBeInTheDocument();
+    expect(within(rowOf('Burmese Days')).getByTitle('Revalue')).toBeInTheDocument();
   });
 
-  it('offers a Stock Clerk no Set cost, which the API refuses', async () => {
+  it('offers a Stock Clerk no Revalue, which the API refuses', async () => {
     me = profile(['Stock_Clerk']);
     await renderPage();
-    expect(within(rowOf('Burmese Days')).queryByTitle('Set cost')).toBeNull();
+    expect(within(rowOf('Burmese Days')).queryByTitle('Revalue')).toBeNull();
     expect(within(rowOf('Burmese Days')).queryByText('No cost')).toBeNull();
   });
 
-  it('asks the cost and its reason in the app\'s dialog, checked before sending', async () => {
+  it('asks the new cost and its reason in the app\'s dialog, checked before sending', async () => {
     const user = userEvent.setup();
     await renderPage();
-    await user.click(within(rowOf('Burmese Days')).getByTitle('Set cost'));
+    await user.click(within(rowOf('Burmese Days')).getByTitle('No cost: revalue'));
     const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Set cost' }));
+    expect(dialog).toHaveTextContent('have no cost, so they add nothing to the inventory value');
+    await user.click(within(dialog).getByRole('button', { name: 'Revalue' }));
     expect(await within(dialog).findByText('Enter an amount above 0, e.g. 12.50')).toBeInTheDocument();
     expect(within(dialog).getByText('A reason is required')).toBeInTheDocument();
-    expect(calls.some((c) => c.path === '/inventory/set-cost')).toBe(false);
+    expect(calls.some((c) => c.path === '/inventory/revalue')).toBe(false);
 
-    await user.type(within(dialog).getByLabelText(/Cost of one copy/), '11.25');
+    await user.type(within(dialog).getByLabelText(/New cost of one copy/), '11.25');
+    expect(dialog).toHaveTextContent('New value: ETB 135.00');
     await user.type(within(dialog).getByLabelText(/Where does this cost come from/), 'Supplier invoice 77');
-    await user.click(within(dialog).getByRole('button', { name: 'Set cost' }));
-    await waitFor(() => expect(calls.find((c) => c.path === '/inventory/set-cost')?.body)
+    await user.click(within(dialog).getByRole('button', { name: 'Revalue' }));
+    await waitFor(() => expect(calls.find((c) => c.path === '/inventory/revalue')?.body)
       .toEqual({ bookId: 2, locationId: 1, unitCost: '11.25', reason: 'Supplier invoice 77', version: 3 }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('shows a priced row\'s value and refuses its own cost before sending', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(within(rowOf('Animal Farm')).getByTitle('Revalue'));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('valued at ETB 10.00 each, ETB 120.00 in all');
+    await user.type(within(dialog).getByLabelText(/New cost of one copy/), '10');
+    await user.type(within(dialog).getByLabelText(/Where does this cost come from/), 'x');
+    await user.click(within(dialog).getByRole('button', { name: 'Revalue' }));
+    expect(await within(dialog).findByText('The copies already have this cost')).toBeInTheDocument();
+    expect(calls.some((c) => c.path === '/inventory/revalue')).toBe(false);
   });
 });
 

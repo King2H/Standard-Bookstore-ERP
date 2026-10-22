@@ -466,7 +466,7 @@ describe('Inventory — Stock In / Stock Out', () => {
     const res = await request(getTestApp())
       .post('/api/v1/inventory/stock-in')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ bookId, locationId, quantity: 5, version: 1, referenceType: 'return', referenceId: 42 });
+      .send({ bookId, locationId, quantity: 5, version: 1, referenceType: 'return', referenceId: 42, unitCost: 10 });
     expect(res.status).toBe(200);
     expect(res.body.quantity).toBe(20);
   });

@@ -1,7 +1,6 @@
 import { sql } from 'kysely';
 import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
-import { costBasisLateralJoin } from '../../lib/costBasis.js';
 import {
   toStockLevelRecord,
   toStockMovementRecord,
@@ -199,19 +198,6 @@ export async function setAverageCost(q: Queryable, bookId: number, locationId: n
     .where('book_id', '=', bookId)
     .where('location_id', '=', locationId)
     .execute();
-}
-
-/**
- * What the book last cost, the same answer the reports' cost basis gives:
- * the newest purchase-order line that delivered copies, else the newest cost
- * recorded on stock arriving; never a quote, never 0 (#163). Undefined when
- * no copies ever arrived with a cost.
- */
-export async function latestKnownCost(q: Queryable, bookId: number): Promise<Money | undefined> {
-  const { rows } = await sql<{ unit_cost: string | null }>`
-    SELECT lc.unit_cost FROM (SELECT ${bookId}::int AS id) b ${sql.raw(costBasisLateralJoin('b.id'))}`.execute(q);
-  const cost = rows[0]?.unit_cost;
-  return cost == null ? undefined : Money.of(cost);
 }
 
 /** Damaged units are counted apart from the quantity for sale. */

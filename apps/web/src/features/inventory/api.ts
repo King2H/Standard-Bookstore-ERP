@@ -1,5 +1,5 @@
 import type {
-  AdjustStockRequest, ReorderPointRequest, SetStockCostRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse,
+  AdjustStockRequest, ReorderPointRequest, RevalueStockRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse,
   StockOutRequest, TransferStockRequest, TransferStockResponse,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
@@ -40,8 +40,8 @@ export const listStockMovements = (params: StockMovementParams) =>
 
 export const setReorderPoint = (body: ReorderPointRequest) => api.put<StockLevel>('/inventory/reorder-point', body);
 
-/** A cost for stock held at cost 0, with the reason; no copies move (#163). */
-export const setStockCost = (body: SetStockCostRequest) => api.post<StockLevel>('/inventory/set-cost', body);
+/** Sets the average cost of the copies on hand, with the reason; no copies move (#163). */
+export const revalueStock = (body: RevalueStockRequest) => api.post<StockLevel>('/inventory/revalue', body);
 
 /** Stock received by hand; purchase orders are received in Procurement. */
 export const stockIn = (body: StockInRequest) => api.post<StockLevel>('/inventory/stock-in', body);
