@@ -66,6 +66,20 @@ describe('Inventory cost (#163)', () => {
     )).rows[0];
   }
 
+  let supplierId: number | undefined;
+  /** A purchase order for the book in `status`, its line priced at `unitCost`, `received` copies of it delivered. */
+  async function purchaseOrder(bookId: number, unitCost: number, status: string, received = 0) {
+    supplierId ??= (await db.query(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [`${BOOK_PREFIX}Supplier`])).rows[0].id;
+    const poId = (await db.query(
+      `INSERT INTO purchase_orders (branch_id, supplier_id, created_by, status, total_amount) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [branchId, supplierId, clerkId, status, unitCost * 5],
+    )).rows[0].id;
+    await db.query(`INSERT INTO po_line_items (po_id, book_id, quantity, unit_cost, received_quantity) VALUES ($1, $2, 5, $3, $4)`, [poId, bookId, unitCost, received]);
+  }
+
+  const costBasis = async (bookId: number) =>
+    (await db.query(`SELECT lc.unit_cost FROM (SELECT $1::int AS id) b ${costBasisLateralJoin('b.id')}`, [bookId])).rows[0].unit_cost as string | null;
+
   const stockIn = (body: Record<string, unknown>) => as(api().post('/api/v1/inventory/stock-in'), clerk).send({ version: 0, ...body });
   const setCost = (token: string, body: Record<string, unknown>) => as(api().post('/api/v1/inventory/set-cost'), token).send(body);
 
@@ -78,9 +92,12 @@ describe('Inventory cost (#163)', () => {
       await db.query(`DELETE FROM inventory_history WHERE location_id IN ${locs}`, [branches]);
       await db.query(`DELETE FROM inventory WHERE location_id IN ${locs}`, [branches]);
       await db.query(`DELETE FROM audit_logs WHERE branch_id = ANY($1)`, [branches]);
+      await db.query(`DELETE FROM po_line_items WHERE po_id IN (SELECT id FROM purchase_orders WHERE branch_id = ANY($1))`, [branches]);
+      await db.query(`DELETE FROM purchase_orders WHERE branch_id = ANY($1)`, [branches]);
       await db.query(`DELETE FROM locations WHERE branch_id = ANY($1)`, [branches]);
     }
     if (bookIds.length) await db.query(`DELETE FROM books WHERE id = ANY($1)`, [bookIds]);
+    await db.query(`DELETE FROM suppliers WHERE name = $1`, [`${BOOK_PREFIX}Supplier`]);
     await cleanTestStaff(STAFF_PREFIX);
     await cleanTestBranches(BRANCH_PREFIX);
   }
@@ -201,6 +218,31 @@ describe('Inventory cost (#163)', () => {
     });
   });
 
+  describe('only copies that arrived have a cost (#163 follow-up)', () => {
+    const staff = () => ({ staffId: clerkId, role: 'Stock_Clerk', branchId });
+
+    it('does not take the price on a purchase order that delivered nothing as the book\'s cost (was: a draft\'s 30.00 valued 5 copies at 150)', async () => {
+      const bookId = await newBook();
+      for (const status of ['draft', 'pending_approval', 'approved', 'ordered', 'cancelled']) await purchaseOrder(bookId, 30, status);
+      expect(await costBasis(bookId)).toBeNull();
+      await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
+        bookId, locationId: shelfA, quantity: 5, referenceType: 'void', reasonCode: 'return', staffCtx: staff(),
+      }));
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 5, cost: '0.0000', value: '0.00' });
+    });
+
+    it('takes the cost of copies a purchase order delivered, not a newer price nothing arrived at', async () => {
+      const bookId = await newBook();
+      await purchaseOrder(bookId, 12, 'partially_received', 2);
+      await purchaseOrder(bookId, 30, 'draft');
+      expect(await costBasis(bookId)).toBe('12.00');
+      await withTransaction({}, (tx) => inventoryService.receiveStock(tx, {
+        bookId, locationId: shelfA, quantity: 5, referenceType: 'void', reasonCode: 'return', staffCtx: staff(),
+      }));
+      expect(await row(bookId, shelfA)).toMatchObject({ quantity: 5, cost: '12.0000', value: '60.00' });
+    });
+  });
+
   describe('Set cost (decision 3a)', () => {
     it('gives stock at cost 0 a cost, with a reason, in the history and the audit log, without moving any copies', async () => {
       const bookId = await newBook();
@@ -299,6 +341,62 @@ describe('Inventory cost (#163)', () => {
     });
   });
 
+  describe('correction of the repair migration (#163 follow-up)', () => {
+    it('takes back a cost the repair took from a purchase order that delivered nothing, audited; leaves a cost that moved since', async () => {
+      const load = (name: string) => createRequire(import.meta.url)(`../db/migrations/${name}.cjs`) as { up: (pgm: { sql: (s: string) => void }) => void };
+      const repair = load('1700000072_inventory_cost_repair');
+      const correction = load('1700000073_inventory_cost_correction');
+      // Each book has 4 copies at cost 0 and a draft order at 30.00, the newest price.
+      const quoteOnly = await newBook();
+      const delivered = await newBook();
+      const movedSince = await newBook();
+      await purchaseOrder(delivered, 12, 'received', 5);
+      for (const bookId of [quoteOnly, delivered, movedSince]) await purchaseOrder(bookId, 30, 'draft');
+
+      const client = await ownerDb().connect();
+      const run = async (migration: typeof repair) => {
+        const statements: string[] = [];
+        migration.up({ sql: (s) => statements.push(s) });
+        for (const s of statements) await client.query(s);
+      };
+      const costs = async () => (await client.query(
+        `SELECT book_id, average_cost, inventory_value FROM inventory WHERE location_id = $1 AND book_id = ANY($2) ORDER BY book_id`,
+        [shelfA, [quoteOnly, delivered, movedSince]],
+      )).rows;
+      try {
+        await client.query('BEGIN');
+        await client.query(`SET LOCAL app.tenant_id = '1'`);
+        for (const bookId of [quoteOnly, delivered, movedSince]) {
+          await client.query(`INSERT INTO inventory (book_id, location_id, quantity, average_cost) VALUES ($1, $2, 4, 0)`, [bookId, shelfA]);
+        }
+        await run(repair);
+        // What PR #177's repair did: every row at the draft's 30.00, 120.00 for 4 copies.
+        expect((await costs()).map((r) => r.inventory_value)).toEqual(['120.00', '120.00', '120.00']);
+        await client.query(`UPDATE inventory SET average_cost = 31 WHERE book_id = $1 AND location_id = $2`, [movedSince, shelfA]);
+
+        await run(correction);
+        expect(await costs()).toEqual([
+          { book_id: quoteOnly, average_cost: '0.0000', inventory_value: '0.00' },
+          { book_id: delivered, average_cost: '12.0000', inventory_value: '48.00' },
+          { book_id: movedSince, average_cost: '31.0000', inventory_value: '124.00' },
+        ]);
+        const audit = (await client.query(
+          `SELECT entity_id, staff_id, meta FROM audit_logs WHERE entity_type = 'inventory_cost' AND entity_id = ANY($1) AND meta ? 'corrects' ORDER BY entity_id`,
+          [[`${quoteOnly}:${shelfA}`, `${delivered}:${shelfA}`, `${movedSince}:${shelfA}`]],
+        )).rows;
+        expect(audit.map((a) => ({ entity: a.entity_id, staff: a.staff_id, before: a.meta.averageCostBefore, after: a.meta.averageCostAfter })).sort((a, b) => a.entity.localeCompare(b.entity)))
+          .toEqual([
+            { entity: `${quoteOnly}:${shelfA}`, staff: null, before: '30.0000', after: '0.0000' },
+            { entity: `${delivered}:${shelfA}`, staff: null, before: '30.0000', after: '12.0000' },
+          ].sort((a, b) => a.entity.localeCompare(b.entity)));
+        expect(audit.every((a) => typeof a.meta.corrects === 'number')).toBe(true);
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
+    });
+  });
+
   describe('one valuation rule (decision 4a)', () => {
     it('values stock in the valuation export at its average cost, as the dashboard does (was: a fallback cost next to a value of 0)', async () => {
       const bookId = await newBook();
@@ -309,6 +407,21 @@ describe('Inventory cost (#163)', () => {
         { q: 1, cost: 12, value: 12 },
         { q: 5, cost: 0, value: 0 },
       ]);
+    });
+
+    it('gives as last purchase cost only a price copies arrived at (was: a draft\'s 30.00 next to a book never received)', async () => {
+      const quoteOnly = await newBook();
+      const quoteTitle = `${BOOK_PREFIX}${books}`;
+      const delivered = await newBook();
+      const deliveredTitle = `${BOOK_PREFIX}${books}`;
+      await purchaseOrder(delivered, 12, 'received', 5);
+      for (const bookId of [quoteOnly, delivered]) {
+        await purchaseOrder(bookId, 30, 'draft');
+        await unvalued(bookId, shelfA, 5);
+      }
+      const rows = await getStockExportRows(branchId);
+      const lastCost = (title: string) => rows.filter((r) => r.title === title).map((r) => r.last_purchase_cost);
+      expect({ quoteOnly: lastCost(quoteTitle), delivered: lastCost(deliveredTitle) }).toEqual({ quoteOnly: [0], delivered: [12] });
     });
 
     it('shows each stock level\'s average cost', async () => {

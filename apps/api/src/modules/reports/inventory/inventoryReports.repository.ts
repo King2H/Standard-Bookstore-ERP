@@ -133,8 +133,10 @@ export async function stockRows(q: Queryable, branchId: number | undefined): Pro
           WHERE ih.book_id = i.book_id AND ih.location_id = i.location_id),
          'YYYY-MM-DD'
        ) AS last_movement_date_str,
+       -- What copies last arrived at from a supplier: a price on an order
+       -- that delivered nothing is a quote (#163).
        (SELECT pli.unit_cost FROM po_line_items pli
-        WHERE pli.book_id = b.id ORDER BY pli.id DESC LIMIT 1) AS last_purchase_cost,
+        WHERE pli.book_id = b.id AND pli.received_quantity > 0 ORDER BY pli.id DESC LIMIT 1) AS last_purchase_cost,
        COALESCE(bbp.price, b.default_price) AS last_selling_price
      FROM inventory i
      JOIN books b ON b.id = i.book_id
