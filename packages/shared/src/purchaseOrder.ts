@@ -85,6 +85,9 @@ export const SupplierCreditNoteSchema = z.object({
   createdAt: z.string(),
 });
 
+export const PurchaseOrderApprovalKindSchema = z.enum(['automatic', 'approver', 'sole_approver']);
+export type PurchaseOrderApprovalKind = z.infer<typeof PurchaseOrderApprovalKindSchema>;
+
 export const PurchaseOrderSchema = z.object({
   /** A bigint, sent as a string. */
   id: z.string(),
@@ -111,6 +114,18 @@ export const PurchaseOrderSchema = z.object({
   paymentTerms: z.enum(['cash', 'credit']),
   createdBy: z.number().int(),
   approvedBy: z.number().int().nullable(),
+  approvedAt: z.string().nullable(),
+  /**
+   * How it was approved (#164): on submit, at or under the approval threshold;
+   * by an Admin or Manager other than its creator; or by its creator as the
+   * branch's only approver, with a reason.
+   */
+  approvalKind: PurchaseOrderApprovalKindSchema.nullable(),
+  approvalReason: z.string().nullable(),
+  /** The approval threshold now: an order above it waits for approval. */
+  approvalThreshold: z.number(),
+  /** No other active Admin or Manager can approve this order, so its creator may, with a reason (#164, 2a). */
+  creatorIsOnlyApprover: z.boolean(),
   /** Why a part-received order was closed short (owner decision 3a). */
   closedReason: z.string().nullable(),
   closedBy: z.number().int().nullable(),
@@ -211,6 +226,14 @@ export const ReceivePurchaseOrderRequestSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 export type ReceivePurchaseOrderRequest = z.infer<typeof ReceivePurchaseOrderRequestSchema>;
+
+export const ApprovePurchaseOrderRequestSchema = z
+  .object({
+    /** Required when the creator approves as the branch's only approver (#164, 2a). */
+    reason: z.string().trim().min(1).max(500).optional(),
+  })
+  .default({});
+export type ApprovePurchaseOrderRequest = z.infer<typeof ApprovePurchaseOrderRequestSchema>;
 
 export const ClosePurchaseOrderRequestSchema = z
   .object({

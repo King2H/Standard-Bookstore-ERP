@@ -639,6 +639,9 @@ export interface Publishers {
 }
 
 export interface PurchaseOrders {
+  approval_kind: string | null;
+  approval_reason: string | null;
+  approved_at: Timestamp | null;
   approved_by: number | null;
   branch_id: number;
   closed_at: Timestamp | null;

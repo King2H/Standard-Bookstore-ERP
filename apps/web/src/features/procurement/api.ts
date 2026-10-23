@@ -20,8 +20,8 @@ export type PurchaseOrderListParams = {
   pageSize?: number;
 };
 
-/** The steps an order takes after it is written; closing has its own call. */
-export type PurchaseOrderAction = 'submit' | 'approve' | 'order' | 'cancel';
+/** The steps an order takes after it is written; approving and closing have their own calls. */
+export type PurchaseOrderAction = 'submit' | 'order' | 'cancel';
 
 export const listPurchaseOrders = (params: PurchaseOrderListParams) =>
   api.get<PurchaseOrderListResponse>(`/purchase-orders${toQuery(params)}`);
@@ -30,6 +30,10 @@ export const getPurchaseOrder = (id: string) => api.get<PurchaseOrder>(`/purchas
 
 export const runPurchaseOrderAction = (id: string, action: PurchaseOrderAction) =>
   api.post<PurchaseOrder>(`/purchase-orders/${id}/${action}`);
+
+/** Approving one's own order as the branch's only approver takes a reason (#164). */
+export const approvePurchaseOrder = (id: string, reason?: string) =>
+  api.post<PurchaseOrder>(`/purchase-orders/${id}/approve`, reason ? { reason } : undefined);
 
 /** A part-received order closes short with a reason; a fully received one needs none. */
 export const closePurchaseOrder = (id: string, reason?: string) =>

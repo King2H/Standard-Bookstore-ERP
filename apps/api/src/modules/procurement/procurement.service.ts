@@ -20,6 +20,7 @@ import type {
   PurchaseOrderChanges,
   PurchaseOrderFilter,
   PurchaseOrderRecord,
+  PurchaseOrderView,
   Receipt,
 } from './procurement.types.js';
 
@@ -59,19 +60,29 @@ export async function refreshFinancialStatus(q: Queryable, poId: string): Promis
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
 
-export async function getById(id: string): Promise<PurchaseOrderRecord> {
+/** The approval threshold in force, so a page can say what an order's approval depends on. */
+async function approvalThreshold(): Promise<Money> {
+  return Money.of(await getPOApprovalThreshold());
+}
+
+export async function getById(id: string): Promise<PurchaseOrderView> {
   const po = found(await orders.findOrder(kysely, id));
-  const [lineItems, receipts, payments, creditNotes] = await Promise.all([
+  const [lineItems, receipts, payments, creditNotes, threshold] = await Promise.all([
     orders.lineItems(kysely, id),
     orders.receipts(kysely, id),
     orders.payments(kysely, id),
     orders.creditNotes(kysely, id),
+    approvalThreshold(),
   ]);
-  return { ...po, lineItems, receipts, payments, creditNotes };
+  return { ...po, lineItems, receipts, payments, creditNotes, approvalThreshold: threshold };
 }
 
-export function list(filter: PurchaseOrderFilter, paging: Paging): Promise<{ items: PurchaseOrderRecord[]; total: number }> {
-  return orders.list(kysely, filter, { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize });
+export async function list(filter: PurchaseOrderFilter, paging: Paging): Promise<{ items: PurchaseOrderView[]; total: number }> {
+  const [result, threshold] = await Promise.all([
+    orders.list(kysely, filter, { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize }),
+    approvalThreshold(),
+  ]);
+  return { items: result.items.map((po) => ({ ...po, approvalThreshold: threshold })), total: result.total };
 }
 
 // ── Drafting ──────────────────────────────────────────────────────────────────
@@ -99,7 +110,7 @@ async function receivingLocation(q: Queryable, branchId: number, locationId: num
   return locationId;
 }
 
-export async function createPurchaseOrder(actor: Actor, input: NewPurchaseOrder): Promise<PurchaseOrderRecord> {
+export async function createPurchaseOrder(actor: Actor, input: NewPurchaseOrder): Promise<PurchaseOrderView> {
   const id = await withTransaction({}, async (tx) => {
     await validateSupplierForProcurement(input.supplierId, tx);
     await checkBooks(tx, input.lineItems);
@@ -137,7 +148,7 @@ export async function createPurchaseOrder(actor: Actor, input: NewPurchaseOrder)
  * Changes a draft. A new receiving branch without a location takes that
  * branch's default location, never keeping the old branch's.
  */
-export async function updatePurchaseOrder(actor: Actor, id: string, ch: PurchaseOrderChanges): Promise<PurchaseOrderRecord> {
+export async function updatePurchaseOrder(actor: Actor, id: string, ch: PurchaseOrderChanges): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
@@ -179,14 +190,16 @@ export async function updatePurchaseOrder(actor: Actor, id: string, ch: Purchase
 // ── Approval and ordering ─────────────────────────────────────────────────────
 
 /** Below the approval threshold the order is approved on submit; above it, it waits for a Manager or Admin. */
-export async function submitForApproval(actor: Actor, id: string): Promise<PurchaseOrderRecord> {
+export async function submitForApproval(actor: Actor, id: string): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
-    const threshold = Money.of(await getPOApprovalThreshold());
+    const threshold = await approvalThreshold();
     const status = policy.statusAfterSubmit(po.status, po.totalAmount, threshold);
     await validateSupplierForProcurement(po.supplierId, tx);
-    await orders.setStatus(tx, id, status, { approvedBy: status === 'approved' ? actor.staffId : null });
+    await orders.setStatus(tx, id, status, {
+      approval: status === 'approved' ? { by: actor.staffId, kind: 'automatic', reason: null } : null,
+    });
     await audit(tx, actor, id, {
       action: 'submit_for_approval',
       newStatus: status,
@@ -202,20 +215,23 @@ export async function submitForApproval(actor: Actor, id: string): Promise<Purch
   return getById(id);
 }
 
-export async function approve(actor: Actor, id: string): Promise<PurchaseOrderRecord> {
+/** By an Admin or Manager other than its creator, or by its creator as the branch's only approver, with a reason (#164). */
+export async function approve(actor: Actor, id: string, reason: string | null): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
-    policy.checkCanApprove(po, actor);
+    const kind = policy.approvalKindFor(po, actor, reason);
     await validateSupplierForProcurement(po.supplierId, tx);
-    await orders.setStatus(tx, id, 'approved', { approvedBy: actor.staffId });
-    await audit(tx, actor, id, { action: 'approve' });
-    await insertOutboxEvent(tx, 'po.approved', { poId: id, poNumber: poNumber(id), branchId: po.branchId });
+    await orders.setStatus(tx, id, 'approved', { approval: { by: actor.staffId, kind, reason } });
+    await audit(tx, actor, id, { action: 'approve', approvalKind: kind, ...(reason && { reason }) });
+    await insertOutboxEvent(tx, 'po.approved', {
+      poId: id, poNumber: poNumber(id), branchId: po.branchId, approvalKind: kind, reason,
+    });
   });
   return getById(id);
 }
 
-export async function markAsOrdered(actor: Actor, id: string): Promise<PurchaseOrderRecord> {
+export async function markAsOrdered(actor: Actor, id: string): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
@@ -230,7 +246,7 @@ export async function markAsOrdered(actor: Actor, id: string): Promise<PurchaseO
 
 // ── Ending an order ───────────────────────────────────────────────────────────
 
-export async function cancel(actor: Actor, id: string): Promise<PurchaseOrderRecord> {
+export async function cancel(actor: Actor, id: string): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
@@ -247,7 +263,7 @@ export async function cancel(actor: Actor, id: string): Promise<PurchaseOrderRec
  * will not deliver the rest (owner decision 3a). What is owed stays the value
  * received.
  */
-export async function close(actor: Actor, id: string, reason: string | null): Promise<PurchaseOrderRecord> {
+export async function close(actor: Actor, id: string, reason: string | null): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
@@ -265,7 +281,7 @@ export async function close(actor: Actor, id: string, reason: string | null): Pr
  * into a location of that branch the staff member may use, at each line's
  * cost. A cash-terms order pays for what arrived.
  */
-export async function receive(actor: Actor, id: string, receipt: Receipt): Promise<PurchaseOrderRecord> {
+export async function receive(actor: Actor, id: string, receipt: Receipt): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkReceivingBranch(po, actor);

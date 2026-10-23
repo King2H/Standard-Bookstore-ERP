@@ -1,6 +1,6 @@
-import type { Money, PurchaseOrderStatus } from '@bms/shared';
+import type { Money, PurchaseOrderApprovalKind, PurchaseOrderStatus } from '@bms/shared';
 
-export type { PurchaseOrderStatus };
+export type { PurchaseOrderApprovalKind, PurchaseOrderStatus };
 
 /** The signed-in staff member. */
 export interface Actor {
@@ -31,6 +31,11 @@ export interface PurchaseOrderRecord {
   paymentTerms: PaymentTerms;
   createdBy: number;
   approvedBy: number | null;
+  approvedAt: Date | null;
+  approvalKind: PurchaseOrderApprovalKind | null;
+  approvalReason: string | null;
+  /** No active Admin or Manager other than its creator can approve the order (#164). */
+  creatorIsOnlyApprover: boolean;
   closedReason: string | null;
   closedBy: number | null;
   closedAt: Date | null;
@@ -46,6 +51,9 @@ export interface PurchaseOrderRecord {
   payments?: SupplierPaymentRecord[];
   creditNotes?: CreditNoteRecord[];
 }
+
+/** An order as the API answers it: with the approval threshold now in force. */
+export type PurchaseOrderView = PurchaseOrderRecord & { approvalThreshold: Money };
 
 export interface LineRecord {
   id: string;

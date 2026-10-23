@@ -27840,6 +27840,39 @@
                               }
                             ]
                           },
+                          "approvedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "approvalKind": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "automatic",
+                                  "approver",
+                                  "sole_approver"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "approvalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "approvalThreshold": {
+                            "type": "number"
+                          },
+                          "creatorIsOnlyApprover": {
+                            "type": "boolean"
+                          },
                           "closedReason": {
                             "type": [
                               "string",
@@ -28221,6 +28254,11 @@
                           "paymentTerms",
                           "createdBy",
                           "approvedBy",
+                          "approvedAt",
+                          "approvalKind",
+                          "approvalReason",
+                          "approvalThreshold",
+                          "creatorIsOnlyApprover",
                           "closedReason",
                           "closedBy",
                           "closedAt",
@@ -28568,6 +28606,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -28949,6 +29020,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -29171,6 +29247,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -29552,6 +29661,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -29885,6 +29999,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -30266,6 +30413,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -30359,7 +30511,7 @@
     "/purchase-orders/{id}/approve": {
       "post": {
         "operationId": "approvePurchaseOrder",
-        "summary": "Approve an order someone else created (Admin, Manager; the ordering branch)",
+        "summary": "Approve an order someone else created, or one's own with a reason as the only Admin or Manager who can approve it (Admin, Manager; the ordering branch)",
         "tags": [
           "Purchase orders"
         ],
@@ -30375,6 +30527,24 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The approved order",
@@ -30488,6 +30658,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -30869,6 +31072,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -31091,6 +31299,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -31472,6 +31713,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -31712,6 +31958,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -32093,6 +32372,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -32347,6 +32631,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -32728,6 +33045,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -32950,6 +33272,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -33331,6 +33686,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -33612,6 +33972,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -33993,6 +34386,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -34245,6 +34643,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -34626,6 +35057,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -34909,6 +35345,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -35290,6 +35759,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -35512,6 +35986,39 @@
                         }
                       ]
                     },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "creatorIsOnlyApprover": {
+                      "type": "boolean"
+                    },
                     "closedReason": {
                       "type": [
                         "string",
@@ -35893,6 +36400,11 @@
                     "paymentTerms",
                     "createdBy",
                     "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",

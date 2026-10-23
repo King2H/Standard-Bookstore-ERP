@@ -3,13 +3,13 @@ import { Money, type PurchaseOrder } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
 import { usePurchaseOrder, usePurchaseOrderStep } from '../queries.js';
-import { canReadLedger, stepsFor } from '../rules.js';
+import { approvalNote, canReadLedger, stepsFor } from '../rules.js';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import { PaymentForms } from './PaymentForms.js';
 import { PaymentLists } from './PaymentLists.js';
 import { ProgressBar, StatusBadge, amount, safePct } from './shared.js';
 
-type Asking = 'cancel' | 'closeShort' | null;
+type Asking = 'cancel' | 'closeShort' | 'approveOwn' | null;
 
 const BTN = 'px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 transition-colors';
 
@@ -38,6 +38,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
       onError: (e: Error) => showToast(e.message, 'error'),
     });
 
+  const note = approvalNote(po);
   const receivingPct = safePct(po.receivedQuantityTotal, po.orderedQuantityTotal);
   const settled = Money.of(po.amountPaid).plus(po.creditNotesTotal);
   const paymentPct = safePct(settled.toNumber(), po.receivedValue);
@@ -59,6 +60,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
         <div><span className="text-gray-500 dark:text-gray-400">Supplier:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.supplierName}</span></div>
         <div><span className="text-gray-500 dark:text-gray-400">Total:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.currency} {amount(po.totalAmount)}</span></div>
         {po.closedReason && <div><span className="text-gray-500 dark:text-gray-400">Closed short:</span> <span className="text-gray-900 dark:text-white ml-1">{po.closedReason}</span></div>}
+        {note && <div className="col-span-2"><span className="text-gray-500 dark:text-gray-400">Approval:</span> <span className="text-gray-900 dark:text-white ml-1">{note}</span></div>}
         <div><span className="text-gray-500 dark:text-gray-400">Expected Delivery:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{po.expectedDeliveryDate ?? '—'}</span></div>
         <div><span className="text-gray-500 dark:text-gray-400">Created:</span> <span className="font-medium text-gray-900 dark:text-white ml-1">{new Date(po.createdAt).toLocaleDateString()}</span></div>
         {po.receivingLocationName && (
@@ -96,7 +98,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
       <div className="flex flex-wrap gap-2">
         {steps.edit && <button onClick={() => onEdit(po)} className={`${BTN} bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700`}>Edit</button>}
         {steps.submit && <button onClick={() => run({ action: 'submit' }, 'Submitted for approval')} disabled={step.isPending} className={`${BTN} bg-blue-600 text-white hover:bg-blue-700`}>Submit for Approval</button>}
-        {steps.approve && <button onClick={() => run({ action: 'approve' }, 'PO approved')} disabled={step.isPending} className={`${BTN} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
+        {steps.approve && <button onClick={() => (steps.approveOwn ? setAsking('approveOwn') : run({ action: 'approve' }, 'PO approved'))} disabled={step.isPending} className={`${BTN} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
         {steps.order && <button onClick={() => run({ action: 'order' }, 'Marked as ordered')} disabled={step.isPending} className={`${BTN} bg-indigo-600 text-white hover:bg-indigo-700`}>Mark as Ordered</button>}
         {steps.receive && <button onClick={() => onReceive(po)} className={`${BTN} bg-green-600 text-white hover:bg-green-700`}>{po.status === 'partially_received' ? 'Receive More Goods' : 'Receive Goods'}</button>}
         {steps.closeShort && <button onClick={() => setAsking('closeShort')} disabled={step.isPending} className={`${BTN} bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-800`}>Close Short</button>}
@@ -163,6 +165,11 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
         <ActionDialog title={`Cancel ${po.poNumber}?`} message="The order is cancelled while nothing has arrived; it stays on record."
           confirmLabel="Cancel Order" tone="red" busy={step.isPending}
           onConfirm={() => run({ action: 'cancel' }, 'PO cancelled', onBack)} onCancel={() => setAsking(null)} />
+      )}
+      {asking === 'approveOwn' && (
+        <ActionDialog title={`Approve ${po.poNumber}?`} message="You created this order, and no other Admin or Manager can approve it. Your reason is kept with the order and Super_Admin is notified."
+          confirmLabel="Approve" reason={{ label: 'Why approve it yourself?', max: 500 }} busy={step.isPending}
+          onConfirm={(reason) => run({ action: 'approve', reason }, 'PO approved')} onCancel={() => setAsking(null)} />
       )}
       {asking === 'closeShort' && (
         <ActionDialog title={`Close ${po.poNumber} short?`} message="The rest of the order will not be delivered. The reason is kept with the order."

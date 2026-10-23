@@ -52,12 +52,29 @@ export function statusAfterSubmit(status: PurchaseOrderStatus, total: Money, thr
   return total.greaterThan(threshold) ? 'pending_approval' : 'approved';
 }
 
-/** Whoever created an order does not approve it (owner decision 2a). */
-export function checkCanApprove(po: Pick<PurchaseOrderRecord, 'status' | 'createdBy'>, actor: Actor): void {
+/**
+ * Whoever created an order does not approve it (owner decision 2a, #21),
+ * unless no other Admin or Manager can: then the creator approves it as the
+ * branch's only approver, with a reason (#164, decision 2a). Returns how it
+ * is approved.
+ */
+export function approvalKindFor(
+  po: Pick<PurchaseOrderRecord, 'status' | 'createdBy' | 'creatorIsOnlyApprover'>,
+  actor: Actor,
+  reason: string | null,
+): 'approver' | 'sole_approver' {
   if (po.status !== 'pending_approval') throw invalidStatus('Purchase Order must be in pending_approval status to approve');
-  if (po.createdBy === actor.staffId) {
-    throw new BusinessError('SELF_APPROVAL_NOT_ALLOWED', 'A purchase order is approved by someone other than the person who created it');
+  if (po.createdBy !== actor.staffId) return 'approver';
+  if (!po.creatorIsOnlyApprover) {
+    throw new BusinessError(
+      'SELF_APPROVAL_NOT_ALLOWED',
+      'A purchase order is approved by someone other than the person who created it while another Admin or Manager can approve it',
+    );
   }
+  if (!reason) {
+    throw new ValidationError('A reason is required to approve your own order as the only approver of the branch', { field: 'reason' });
+  }
+  return 'sole_approver';
 }
 
 export function checkCanOrder(status: PurchaseOrderStatus): void {

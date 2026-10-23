@@ -22,7 +22,7 @@ router.post('/purchase-orders', authenticate, buyers, validate(schemas.create), 
 router.get('/purchase-orders/:id', authenticate, inBranch, canSee, validate(schemas.byId), po.getById);
 router.put('/purchase-orders/:id', authenticate, inBranch, buyers, validate(schemas.update), po.update);
 router.post('/purchase-orders/:id/submit', authenticate, inBranch, buyers, validate(schemas.byId), po.submit);
-router.post('/purchase-orders/:id/approve', authenticate, inBranch, approvers, validate(schemas.byId), po.approve);
+router.post('/purchase-orders/:id/approve', authenticate, inBranch, approvers, validate(schemas.approve), po.approve);
 router.post('/purchase-orders/:id/order', authenticate, inBranch, buyers, validate(schemas.byId), po.markAsOrdered);
 router.post(
   '/purchase-orders/:id/receive',

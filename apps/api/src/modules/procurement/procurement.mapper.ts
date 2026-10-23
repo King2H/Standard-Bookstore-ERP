@@ -4,8 +4,10 @@ import type {
   FinancialStatus,
   LineRecord,
   PaymentTerms,
+  PurchaseOrderApprovalKind,
   PurchaseOrderRecord,
   PurchaseOrderStatus,
+  PurchaseOrderView,
   ReceiptRecord,
   SupplierPaymentRecord,
 } from './procurement.types.js';
@@ -28,6 +30,10 @@ export interface PurchaseOrderRow {
   payment_terms: string;
   created_by: number;
   approved_by: number | null;
+  approved_at: Date | null;
+  approval_kind: string | null;
+  approval_reason: string | null;
+  creator_is_only_approver: boolean;
   closed_reason: string | null;
   closed_by: number | null;
   closed_at: Date | null;
@@ -40,7 +46,7 @@ export interface PurchaseOrderRow {
   received_quantity_total: string | number;
 }
 
-// The database CHECK constraints limit status, financial_status and payment_terms to these values.
+// The database CHECK constraints limit status, financial_status, payment_terms and approval_kind to these values.
 export function toPurchaseOrderRecord(row: PurchaseOrderRow): PurchaseOrderRecord {
   return {
     id: String(row.id),
@@ -59,6 +65,10 @@ export function toPurchaseOrderRecord(row: PurchaseOrderRow): PurchaseOrderRecor
     paymentTerms: row.payment_terms as PaymentTerms,
     createdBy: row.created_by,
     approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
+    approvalKind: row.approval_kind as PurchaseOrderApprovalKind | null,
+    approvalReason: row.approval_reason,
+    creatorIsOnlyApprover: row.creator_is_only_approver,
     closedReason: row.closed_reason,
     closedBy: row.closed_by,
     closedAt: row.closed_at,
@@ -83,12 +93,14 @@ export function remainingOf(status: PurchaseOrderStatus, line: Pick<LineRecord, 
   return line.quantity - line.receivedQuantity;
 }
 
-export function toPurchaseOrderResponse(po: PurchaseOrderRecord): PurchaseOrder {
+export function toPurchaseOrderResponse(po: PurchaseOrderView): PurchaseOrder {
   const { lineItems, receipts, payments, creditNotes, ...head } = po;
   return {
     ...head,
     poNumber: poNumber(po.id),
     totalAmount: po.totalAmount.toNumber(),
+    approvedAt: po.approvedAt?.toISOString() ?? null,
+    approvalThreshold: po.approvalThreshold.toNumber(),
     closedAt: po.closedAt?.toISOString() ?? null,
     createdAt: po.createdAt.toISOString(),
     updatedAt: po.updatedAt.toISOString(),

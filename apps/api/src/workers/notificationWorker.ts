@@ -251,7 +251,15 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'purchase_order',
     entityId: String(p.poId ?? ''),
   }),
-  'po.approved': (p) => ({
+  // Approved by its creator as the branch's only approver (#164): Super_Admin sees why.
+  'po.approved': (p) => p.approvalKind === 'sole_approver' ? ({
+    title: '✅ PO Approved by its creator',
+    body: `${p.poNumber} approved by its creator, the only approver of the branch: ${p.reason}`,
+    targetRoles: ['Purchasor', 'Super_Admin'],
+    severity: 'warning',
+    entityType: 'purchase_order',
+    entityId: String(p.poId ?? ''),
+  }) : ({
     title: '✅ PO Approved',
     body: `${p.poNumber} approved — ready to order`,
     targetRoles: ['Purchasor'],

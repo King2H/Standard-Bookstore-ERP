@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import type { CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest, CreateSupplierPaymentRequest, ReceivePurchaseOrderRequest } from '@bms/shared';
 import { inventoryKeys } from '../inventory/queries.js';
 import {
-  closePurchaseOrder, createPurchaseOrder, getPurchaseOrder, getSupplierLedger, listPurchaseOrders, receivePurchaseOrder,
+  approvePurchaseOrder, closePurchaseOrder, createPurchaseOrder, getPurchaseOrder, getSupplierLedger, listPurchaseOrders, receivePurchaseOrder,
   recordSupplierCreditNote, recordSupplierPayment, reverseSupplierPayment, runPurchaseOrderAction, updatePurchaseOrder,
   type PurchaseOrderAction, type PurchaseOrderListParams, type SupplierLedgerParams,
 } from './api.js';
@@ -42,8 +42,10 @@ export function useRefreshPurchaseOrders() {
 export function usePurchaseOrderStep(id: string) {
   const refresh = useRefreshPurchaseOrders();
   return useMutation({
-    mutationFn: (step: { action: PurchaseOrderAction } | { action: 'close'; reason?: string }) =>
-      step.action === 'close' ? closePurchaseOrder(id, step.reason) : runPurchaseOrderAction(id, step.action),
+    mutationFn: (step: { action: PurchaseOrderAction } | { action: 'approve' | 'close'; reason?: string }) =>
+      step.action === 'close' ? closePurchaseOrder(id, step.reason)
+        : step.action === 'approve' ? approvePurchaseOrder(id, step.reason)
+          : runPurchaseOrderAction(id, step.action),
     onSuccess: refresh,
   });
 }
