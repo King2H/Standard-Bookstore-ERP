@@ -82,7 +82,12 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
   const receivingBranchId = values.receivingBranchId ? Number(values.receivingBranchId) : (me?.currentBranchId ?? null);
   // Any location of the receiving branch, its own included (was: only after choosing another branch).
   const { data: locations } = useEveryLocation(receivingBranchId);
-  const receivingLocationId = values.receivingLocationId ? Number(values.receivingLocationId) : null;
+  // The book search shows the receiving branch's stock when the session may read it
+  // (its own branch, or access to all branches), else the session branch's (lib/scope.ts).
+  const stockBranchId = receivingBranchId !== null && (me?.isAllBranches || receivingBranchId === me?.currentBranchId)
+    ? receivingBranchId
+    : (me?.currentBranchId ?? null);
+  const stockBranchName = branches?.items.find((b) => b.id === stockBranchId)?.name ?? null;
 
   const totals = values.lines.map(lineTotal);
   const total = Money.sum(totals.map((t) => t ?? Money.ZERO));
@@ -172,7 +177,8 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
                 <BookPicker
                   value={{ bookId: values.lines[i]?.bookId ?? null, bookTitle: values.lines[i]?.bookTitle ?? '' }}
                   onChange={({ bookId, bookTitle }) => { setValue(`lines.${i}.bookId`, bookId); setValue(`lines.${i}.bookTitle`, bookTitle); }}
-                  branchId={receivingBranchId} locationId={receivingLocationId}
+                  branchId={stockBranchId !== null && stockBranchId !== me?.currentBranchId ? stockBranchId : undefined}
+                  branchName={stockBranchName}
                   invalid={!!errors.lines?.[i]?.bookId}
                 />
               </div>

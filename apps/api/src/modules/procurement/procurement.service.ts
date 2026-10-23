@@ -6,6 +6,7 @@ import { BranchAccessError, BusinessError, NotFoundError, ValidationError } from
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { getPOApprovalThreshold } from '../config/config.service.js';
+import { searchCatalog } from '../catalog/catalog.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 import { validateSupplierForProcurement } from '../supplier/supplier.service.js';
@@ -14,6 +15,7 @@ import * as policy from './procurement.policy.js';
 import * as orders from './procurement.repository.js';
 import type {
   Actor,
+  BookToOrder,
   NewLine,
   NewPurchaseOrder,
   Paging,
@@ -353,4 +355,17 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
     }
   });
   return getById(id);
+}
+
+/** Books to order, found by typing, with the branch's stock by location: on hand and on order. */
+export async function booksToOrder(term: string, branchId: number, limit: number): Promise<BookToOrder[]> {
+  const books = await searchCatalog(term, branchId, limit);
+  const ids = books.map((b) => b.id);
+  const [onHand, onOrder] = await Promise.all([orders.stockOnHand(kysely, branchId, ids), orders.stockOnOrder(kysely, branchId, ids)]);
+  return books.map((b) => ({
+    id: b.id,
+    title: b.title,
+    isbn: b.isbn || null,
+    stock: policy.stockByLocation(onHand.filter((r) => r.bookId === b.id), onOrder.filter((r) => r.bookId === b.id)),
+  }));
 }

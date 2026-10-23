@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import {
   ApprovePurchaseOrderRequestSchema,
+  BooksToOrderQuerySchema,
   ClosePurchaseOrderRequestSchema,
   CreatePurchaseOrderRequestSchema,
   IdParamsSchema,
@@ -8,6 +9,7 @@ import {
   PurchaseOrderListQuerySchema,
   ReceivePurchaseOrderRequestSchema,
   UpdatePurchaseOrderRequestSchema,
+  type BooksToOrderResponse,
   type PurchaseOrder,
   type PurchaseOrderLineInput,
   type PurchaseOrderListResponse,
@@ -25,6 +27,7 @@ import type { Actor, NewLine, PurchaseOrderView } from './procurement.types.js';
 
 export const schemas = {
   list: { query: PurchaseOrderListQuerySchema },
+  books: { query: BooksToOrderQuerySchema },
   byId: { params: IdParamsSchema },
   create: { body: CreatePurchaseOrderRequestSchema },
   update: { params: IdParamsSchema, body: UpdatePurchaseOrderRequestSchema },
@@ -146,4 +149,12 @@ export async function cancel(req: Request, res: Response): Promise<void> {
 export async function close(req: Request, res: Response): Promise<void> {
   const { params, body } = valid(req, schemas.close);
   send(res, await service.close(actor(req), String(params.id), body.reason ?? null));
+}
+
+/** The branch's stock comes from the session (another branch only with access to all branches). */
+export async function booksToOrder(req: Request, res: Response): Promise<void> {
+  const { query } = valid(req, schemas.books);
+  const branchId = scopedBranch(req);
+  const body: BooksToOrderResponse = { branchId, items: await service.booksToOrder(query.q, branchId, query.limit) };
+  res.json(body);
 }
