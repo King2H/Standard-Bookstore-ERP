@@ -154,13 +154,12 @@ describe('Purchase orders', () => {
   });
 
   describe('approval', () => {
-    it('refuses self-approval (was: the creator could approve their own order)', async () => {
+    it('lets the creator approve their own order, recorded as approved by its creator (owner decision 1a, 2026-10-23)', async () => {
       const po = await create({ lineItems: [{ bookId, quantity: 200, unitCost: 10 }] }, managerA);
       await act(po, 'submit', managerA);
       const self = await act(po, 'approve', managerA);
-      expect(self.status).toBe(422);
-      expect(self.body.error).toBe('SELF_APPROVAL_NOT_ALLOWED');
-      expect((await act(po, 'approve', managerA2)).body.status).toBe('approved');
+      expect(self.status).toBe(200);
+      expect(self.body).toMatchObject({ status: 'approved', approvalKind: 'creator' });
     });
 
     it('lets only one of two simultaneous approvals through', async () => {

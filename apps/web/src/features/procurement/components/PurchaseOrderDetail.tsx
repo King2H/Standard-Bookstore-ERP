@@ -9,7 +9,7 @@ import { PaymentForms } from './PaymentForms.js';
 import { PaymentLists } from './PaymentLists.js';
 import { ProgressBar, StatusBadge, amount, safePct } from './shared.js';
 
-type Asking = 'cancel' | 'closeShort' | 'approveOwn' | null;
+type Asking = 'cancel' | 'closeShort' | null;
 
 const BTN = 'px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 transition-colors';
 
@@ -30,7 +30,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
   if (!po) return <div className="p-8 text-center text-gray-400">PO not found.</div>;
 
-  // Offered as the API allows: roles held, the ordering or receiving branch, and nobody approves their own order.
+  // Offered as the API allows: roles held and the ordering or receiving branch.
   const steps = stepsFor(po, me);
   const run = (s: Parameters<typeof step.mutate>[0], done: string, after?: () => void) =>
     step.mutate(s, {
@@ -98,7 +98,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
       <div className="flex flex-wrap gap-2">
         {steps.edit && <button onClick={() => onEdit(po)} className={`${BTN} bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700`}>Edit</button>}
         {steps.submit && <button onClick={() => run({ action: 'submit' }, 'Submitted for approval')} disabled={step.isPending} className={`${BTN} bg-blue-600 text-white hover:bg-blue-700`}>Submit for Approval</button>}
-        {steps.approve && <button onClick={() => (steps.approveOwn ? setAsking('approveOwn') : run({ action: 'approve' }, 'PO approved'))} disabled={step.isPending} className={`${BTN} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
+        {steps.approve && <button onClick={() => run({ action: 'approve' }, 'PO approved')} disabled={step.isPending} className={`${BTN} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
         {steps.order && <button onClick={() => run({ action: 'order' }, 'Marked as ordered')} disabled={step.isPending} className={`${BTN} bg-indigo-600 text-white hover:bg-indigo-700`}>Mark as Ordered</button>}
         {steps.receive && <button onClick={() => onReceive(po)} className={`${BTN} bg-green-600 text-white hover:bg-green-700`}>{po.status === 'partially_received' ? 'Receive More Goods' : 'Receive Goods'}</button>}
         {steps.closeShort && <button onClick={() => setAsking('closeShort')} disabled={step.isPending} className={`${BTN} bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-800`}>Close Short</button>}
@@ -165,11 +165,6 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
         <ActionDialog title={`Cancel ${po.poNumber}?`} message="The order is cancelled while nothing has arrived; it stays on record."
           confirmLabel="Cancel Order" tone="red" busy={step.isPending}
           onConfirm={() => run({ action: 'cancel' }, 'PO cancelled', onBack)} onCancel={() => setAsking(null)} />
-      )}
-      {asking === 'approveOwn' && (
-        <ActionDialog title={`Approve ${po.poNumber}?`} message="You created this order, and no other Admin or Manager can approve it. Your reason is kept with the order and Super_Admin is notified."
-          confirmLabel="Approve" reason={{ label: 'Why approve it yourself?', max: 500 }} busy={step.isPending}
-          onConfirm={(reason) => run({ action: 'approve', reason }, 'PO approved')} onCancel={() => setAsking(null)} />
       )}
       {asking === 'closeShort' && (
         <ActionDialog title={`Close ${po.poNumber} short?`} message="The rest of the order will not be delivered. The reason is kept with the order."

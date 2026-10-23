@@ -35,7 +35,7 @@ function order(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     id: '42', poNumber: 'PO-000042', branchId: 1, supplierId: 7, supplierName: 'Acme Distributors', status: 'draft',
     totalAmount: 200, currency: 'ETB', expectedDeliveryDate: null, notes: null, receivingBranchId: 1, receivingLocationId: null,
     receivingLocationName: null, financialStatus: 'unpaid', paymentTerms: 'credit', createdBy: 3, approvedBy: null,
-    approvedAt: null, approvalKind: null, approvalReason: null, approvalThreshold: 1000, creatorIsOnlyApprover: false,
+    approvedAt: null, approvalKind: null, approvalReason: null, approvalThreshold: 1000,
     closedReason: null, closedBy: null, closedAt: null, createdAt: CREATED, updatedAt: CREATED,
     receivedValue: 0, amountPaid: 0, creditNotesTotal: 0, outstandingAmount: 0, orderedQuantityTotal: 10, receivedQuantityTotal: 0,
     lineItems: [], receipts: [], payments: [], creditNotes: [],
@@ -130,8 +130,8 @@ describe('Procurement: who may take each step', () => {
     expect(buttons()).toContain('Receive Goods');
   });
 
-  it('does not offer Approve to the person who created the order (was: offered, then refused)', async () => {
-    me = profile(['Manager'], { id: 3 });
+  it('offers Approve only to the roles that hold APPROVE_PURCHASE_ORDER, not to the Purchasor who created the order (owner decision 3a, 2026-10-23)', async () => {
+    me = profile(['Purchasor'], { id: 3 });
     po = order({ status: 'pending_approval', createdBy: 3 });
     await openOrder();
     expect(buttons()).not.toContain('Approve');
@@ -145,25 +145,20 @@ describe('Procurement: who may take each step', () => {
     await waitFor(() => expect(posted()).toEqual([{ path: '/purchase-orders/42/approve', body: undefined }]));
   });
 
-  it('lets the only approver approve the order they created, asking why (#164; was: no Approve, the order stuck in pending approval)', async () => {
+  it('lets an Admin approve the order they created, with no reason asked (owner decision 1a, 2026-10-23; was: no Approve unless the only approver, then a reason)', async () => {
     me = profile(['Admin'], { id: 3 });
-    po = order({ status: 'pending_approval', createdBy: 3, totalAmount: 1250, creatorIsOnlyApprover: true });
+    po = order({ status: 'pending_approval', createdBy: 3, totalAmount: 1250 });
     const user = await openOrder();
-    expect(screen.getByText(/No other Admin or Manager can approve it, so its creator may, with a reason/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Approve' }));
-    const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
-    expect(await within(dialog).findByText('A reason is required')).toBeInTheDocument();
-    await user.type(within(dialog).getByRole('textbox'), 'Only approver; urgent restock');
-    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
-    await waitFor(() => expect(posted()).toEqual([{ path: '/purchase-orders/42/approve', body: { reason: 'Only approver; urgent restock' } }]));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(posted()).toEqual([{ path: '/purchase-orders/42/approve', body: undefined }]));
   });
 
   it('says what an order waits for, and how it was approved (#164; was: nothing on screen)', async () => {
     me = profile(['Admin'], { id: 3 });
     po = order({ status: 'pending_approval', createdBy: 3, totalAmount: 1250 });
     await openOrder();
-    expect(screen.getByText(/Waiting for approval by an Admin or Manager other than its creator/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for approval by an Admin or Manager of the branch, its creator included/)).toBeInTheDocument();
     cleanup();
 
     po = order({ status: 'draft' });
@@ -174,6 +169,11 @@ describe('Procurement: who may take each step', () => {
     po = order({ status: 'approved', approvalKind: 'automatic', approvedBy: 3, approvedAt: CREATED });
     await openOrder();
     expect(screen.getByText(/Approved on submit on .*: at or under the approval threshold/)).toBeInTheDocument();
+    cleanup();
+
+    po = order({ status: 'ordered', approvalKind: 'creator', approvedBy: 3, approvedAt: CREATED });
+    await openOrder();
+    expect(screen.getByText(/^Approved by its creator on [^:]*\.$/)).toBeInTheDocument();
     cleanup();
 
     po = order({ status: 'ordered', approvalKind: 'sole_approver', approvedBy: 3, approvedAt: CREATED, approvalReason: 'Urgent restock' });

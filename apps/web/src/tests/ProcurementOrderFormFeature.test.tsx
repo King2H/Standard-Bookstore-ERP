@@ -46,7 +46,7 @@ function order(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     id: '42', poNumber: 'PO-000042', branchId: 1, supplierId: 7, supplierName: 'Acme Distributors', status: 'draft',
     totalAmount: 120, currency: 'ETB', expectedDeliveryDate: null, notes: null, receivingBranchId: 1, receivingLocationId: null,
     receivingLocationName: null, financialStatus: 'unpaid', paymentTerms: 'credit', createdBy: 3, approvedBy: null,
-    approvedAt: null, approvalKind: null, approvalReason: null, approvalThreshold: 1000, creatorIsOnlyApprover: false,
+    approvedAt: null, approvalKind: null, approvalReason: null, approvalThreshold: 1000,
     closedReason: null, closedBy: null, closedAt: null, createdAt: CREATED, updatedAt: CREATED,
     receivedValue: 0, amountPaid: 0, creditNotesTotal: 0, outstandingAmount: 0, orderedQuantityTotal: 10, receivedQuantityTotal: 0,
     lineItems: [{ id: '501', poId: '42', bookId: 1, bookTitle: 'Animal Farm', bookIsbn: '9780306406101', formatId: null, editionId: null,

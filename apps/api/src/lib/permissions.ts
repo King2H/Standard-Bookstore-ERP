@@ -7,7 +7,9 @@ export type Permission =
   | 'MANAGE_INVENTORY'
   | 'VIEW_REPORTS'
   | 'MANAGE_STAFF'
-  | 'MANAGE_BRANCH';
+  | 'MANAGE_BRANCH'
+  // Approving and closing purchase orders (owner decision 3a, 2026-10-23).
+  | 'APPROVE_PURCHASE_ORDER';
 
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // Super_Admin: governance-only role — manages staff, branches, and system config.
@@ -28,6 +30,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'VIEW_REPORTS',
     'MANAGE_STAFF',
     'MANAGE_BRANCH',
+    'APPROVE_PURCHASE_ORDER',
   ],
   Manager: [
     'CREATE_SALE',
@@ -38,6 +41,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'MANAGE_INVENTORY',
     'VIEW_REPORTS',
     'MANAGE_STAFF',
+    'APPROVE_PURCHASE_ORDER',
   ],
   Finance_Officer: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'],
   Stock_Clerk: ['MANAGE_INVENTORY'],

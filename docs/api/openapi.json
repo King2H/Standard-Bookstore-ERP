@@ -27888,6 +27888,7 @@
                                 "enum": [
                                   "automatic",
                                   "approver",
+                                  "creator",
                                   "sole_approver"
                                 ]
                               },
@@ -27904,9 +27905,6 @@
                           },
                           "approvalThreshold": {
                             "type": "number"
-                          },
-                          "creatorIsOnlyApprover": {
-                            "type": "boolean"
                           },
                           "closedReason": {
                             "type": [
@@ -28293,7 +28291,6 @@
                           "approvalKind",
                           "approvalReason",
                           "approvalThreshold",
-                          "creatorIsOnlyApprover",
                           "closedReason",
                           "closedBy",
                           "closedAt",
@@ -28654,6 +28651,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -28670,9 +28668,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -29059,7 +29054,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -29295,6 +29289,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -29311,9 +29306,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -29700,7 +29692,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -30047,6 +30038,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -30063,9 +30055,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -30452,7 +30441,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -30546,7 +30534,7 @@
     "/purchase-orders/{id}/approve": {
       "post": {
         "operationId": "approvePurchaseOrder",
-        "summary": "Approve an order someone else created, or one's own with a reason as the only Admin or Manager who can approve it (Admin, Manager; the ordering branch)",
+        "summary": "Approve an order waiting for approval, one's own included, with an optional note (APPROVE_PURCHASE_ORDER: Admin, Manager; the ordering branch)",
         "tags": [
           "Purchase orders"
         ],
@@ -30706,6 +30694,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -30722,9 +30711,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -31111,7 +31097,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -31347,6 +31332,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -31363,9 +31349,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -31752,7 +31735,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -31846,7 +31828,7 @@
     "/purchase-orders/{id}/close": {
       "post": {
         "operationId": "closePurchaseOrder",
-        "summary": "Close a received order, or a part-received one short with a reason (Admin, Manager; the ordering branch)",
+        "summary": "Close a received order, or a part-received one short with a reason (APPROVE_PURCHASE_ORDER: Admin, Manager; the ordering branch)",
         "tags": [
           "Purchase orders"
         ],
@@ -32006,6 +31988,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -32022,9 +32005,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -32411,7 +32391,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -32679,6 +32658,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -32695,9 +32675,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -33084,7 +33061,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -33320,6 +33296,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -33336,9 +33313,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -33725,7 +33699,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -34020,6 +33993,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -34036,9 +34010,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -34425,7 +34396,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -34691,6 +34661,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -34707,9 +34678,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -35096,7 +35064,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -35393,6 +35360,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -35409,9 +35377,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -35798,7 +35763,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",
@@ -36034,6 +35998,7 @@
                           "enum": [
                             "automatic",
                             "approver",
+                            "creator",
                             "sole_approver"
                           ]
                         },
@@ -36050,9 +36015,6 @@
                     },
                     "approvalThreshold": {
                       "type": "number"
-                    },
-                    "creatorIsOnlyApprover": {
-                      "type": "boolean"
                     },
                     "closedReason": {
                       "type": [
@@ -36439,7 +36401,6 @@
                     "approvalKind",
                     "approvalReason",
                     "approvalThreshold",
-                    "creatorIsOnlyApprover",
                     "closedReason",
                     "closedBy",
                     "closedAt",

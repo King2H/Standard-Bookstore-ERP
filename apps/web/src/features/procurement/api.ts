@@ -31,7 +31,7 @@ export const getPurchaseOrder = (id: string) => api.get<PurchaseOrder>(`/purchas
 export const runPurchaseOrderAction = (id: string, action: PurchaseOrderAction) =>
   api.post<PurchaseOrder>(`/purchase-orders/${id}/${action}`);
 
-/** Approving one's own order as the branch's only approver takes a reason (#164). */
+/** An optional note kept with the approval; none is asked (owner decision 1a, 2026-10-23). */
 export const approvePurchaseOrder = (id: string, reason?: string) =>
   api.post<PurchaseOrder>(`/purchase-orders/${id}/approve`, reason ? { reason } : undefined);
 
