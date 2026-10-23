@@ -79,7 +79,7 @@ describe('Branch scope for single records', () => {
   afterAll(async () => {
     await db.query(`DELETE FROM purchase_orders WHERE id = ANY($1)`, [[poB, poAtoB]]);
     await db.query(`DELETE FROM transactions WHERE id = $1`, [posB]);
-    await db.query(`DELETE FROM order_payments WHERE id = $1`, [paymentB]);
+    await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE id = $1)) DELETE FROM order_payments WHERE id = $1`, [paymentB]);
     await db.query(`DELETE FROM orders WHERE id = ANY($1)`, [[orderA, orderB]]);
     await cleanTestStaff(STAFF_PREFIX);
     await cleanTestBranches(BRANCH_PREFIX);

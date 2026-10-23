@@ -42,7 +42,7 @@ describe('Location restrictions on sales and stock', () => {
     if (branches.length) {
       const locs = `(SELECT id FROM locations WHERE branch_id = ANY($1))`;
       await db.query(`DELETE FROM inventory_reservations WHERE location_id IN ${locs}`, [branches]);
-      await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = ANY($1))`, [branches]);
+      await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = ANY($1)))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = ANY($1))`, [branches]);
       await db.query(`DELETE FROM orders WHERE branch_id = ANY($1)`, [branches]);
       await db.query(`DELETE FROM transactions WHERE branch_id = ANY($1)`, [branches]);
       await db.query(`DELETE FROM purchase_orders WHERE branch_id = ANY($1)`, [branches]);

@@ -29,6 +29,8 @@ export interface OrderLineInput {
 export interface OrderRow {
   id: string; orderNumber: string; customerId: number | null; branchId: number;
   locationId: number | null; channel: string; status: string; paymentStatus: string;
+  /** Payments taken less refunds (#167). */
+  amountPaid: number;
   saleType: SaleType;
   currency: string; subtotal: number; discountAmount: number; discountTotal: number;
   taxRate: number; taxAmount: number; total: number;

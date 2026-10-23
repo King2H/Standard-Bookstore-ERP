@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { Money } from '@bms/shared';
 import {
+  checkCancelReturn,
+  computeOrderAllowedActions,
   amountToInvoice,
   checkCanCancel,
   checkCanConfirm,
@@ -124,5 +127,35 @@ describe('confirming an order', () => {
   it('invoices what a credit order still owes, if more than 0.01', () => {
     expect(amountToInvoice(100, '30.00')?.toFixed()).toBe('70.00');
     expect(amountToInvoice(100, '99.99')).toBeNull();
+  });
+});
+
+describe('cancelling an order that took payments (#167)', () => {
+  const seller = ['CREATE_SALE', 'PROCESS_PAYMENT'] as const;
+  const refunder = ['CREATE_SALE', 'PROCESS_PAYMENT', 'PROCESS_REFUND'] as const;
+  const finance = ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'] as const;
+
+  it('leaves an unpaid order to whoever sells, and one that took payments to whoever refunds', () => {
+    expect(() => checkCancelReturn(Money.of(0), [...seller], undefined, false)).not.toThrow();
+    expect(() => checkCancelReturn(Money.of(5), [...seller], 'original', true)).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(() => checkCancelReturn(Money.of(5), [...refunder], 'original', false)).not.toThrow();
+  });
+
+  it('keeps cancelling to the selling roles: refunding alone does not cancel an order (was: Finance_Officer could)', () => {
+    expect(() => checkCancelReturn(Money.of(5), [...finance], 'original', true)).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(() => checkCancelReturn(Money.of(0), [...finance], undefined, true)).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(computeOrderAllowedActions('CONFIRMED', [...finance], 'paid', 'cash_sale', 12.99)).toEqual(['fulfill']);
+  });
+
+  it('asks how the money goes back; store credit needs a customer', () => {
+    expect(() => checkCancelReturn(Money.of(5), [...refunder], undefined, true)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(() => checkCancelReturn(Money.of(5), [...refunder], 'store_credit', false)).toThrow(expect.objectContaining({ code: 'CREDIT_REQUIRES_CUSTOMER' }));
+    expect(() => checkCancelReturn(Money.of(5), [...refunder], 'store_credit', true)).not.toThrow();
+  });
+
+  it('offers Cancel on an order that took payments only to whoever refunds', () => {
+    expect(computeOrderAllowedActions('CONFIRMED', [...seller], 'paid', 'cash_sale', 12.99)).toEqual(['fulfill']);
+    expect(computeOrderAllowedActions('CONFIRMED', [...refunder], 'paid', 'cash_sale', 12.99)).toEqual(['cancel', 'fulfill']);
+    expect(computeOrderAllowedActions('CONFIRMED', [...seller], 'unpaid', 'credit_sale', 0)).toEqual(['cancel', 'fulfill']);
   });
 });

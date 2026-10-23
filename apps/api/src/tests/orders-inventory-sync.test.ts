@@ -73,7 +73,7 @@ async function getInventoryQty(bookId: number, locationId: number): Promise<numb
 
 async function cleanOrders(branchId: number) {
   await db.query(
-    `DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`,
+    `WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`,
     [branchId],
   ).catch(() => {});
   await db.query(
@@ -285,7 +285,7 @@ describe('Order Inventory Sync — Fix Checking & Preservation', () => {
       .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ reason: 'Test cancellation' });
+      .send({ reason: 'Test cancellation', refundTo: 'original' });
 
     expect(cancelRes.status).toBe(200);
     expect(cancelRes.body.status).toBe('CANCELLED');

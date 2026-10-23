@@ -52,7 +52,7 @@ describe('Payment, exchange, return and procurement reports', () => {
       `DELETE FROM exchange_settlement_entries WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id IN (${branches}))`,
       `DELETE FROM exchanges WHERE branch_id IN (${branches})`,
       `DELETE FROM order_refunds WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches}))`,
-      `DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches}))`,
+      `WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches})))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches}))`,
       `DELETE FROM orders WHERE branch_id IN (${branches})`,
       `DELETE FROM supplier_payments WHERE po_id IN (${pos})`,
       `DELETE FROM po_receipts WHERE po_id IN (${pos})`,

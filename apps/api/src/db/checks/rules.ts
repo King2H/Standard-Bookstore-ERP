@@ -146,6 +146,23 @@ export const CHECKS: readonly Check[] = [
       FROM e WHERE payment_status IS DISTINCT FROM expected`,
   },
 
+  {
+    id: 'orders.cancelled-money-returned',
+    area: 'Orders',
+    title: 'A cancelled order holds no money: what it took was given back (refund it in Payments)',
+    severity: 'error',
+    // Cancelling gives the money back since #167; an order cancelled before kept it.
+    sql: `
+      SELECT o.tenant_id, o.order_number || ': holds ' || (paid - refunded) || ' (paid ' || paid || ', refunded ' || refunded || ')' AS ref
+      FROM orders o
+      CROSS JOIN LATERAL (
+        SELECT COALESCE((SELECT SUM(amount) FROM order_payments p
+                         WHERE p.order_id = o.id AND p.status IN ('success', 'partially_refunded', 'refunded')), 0) AS paid,
+               COALESCE((SELECT SUM(refund_amount) FROM order_refunds r WHERE r.order_id = o.id), 0) AS refunded
+      ) m
+      WHERE lower(o.status) = 'cancelled' AND paid - refunded > 0`,
+  },
+
   // ── Purchase orders ────────────────────────────────────────────────────────
   {
     id: 'procurement.status-matches-lines',

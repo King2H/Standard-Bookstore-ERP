@@ -31,7 +31,7 @@ async function ensureInventory(bookId: number, locationId: number, qty = 50) {
 }
 
 async function cleanOrders(branchId: number) {
-  await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
+  await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
@@ -201,7 +201,7 @@ describe('Orders — Lifecycle', () => {
       .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ reason: 'Customer changed mind' });
+      .send({ reason: 'Customer changed mind', refundTo: 'original' });
 
     expect(cancelRes.status).toBe(200);
     expect(cancelRes.body.status).toBe('CANCELLED');

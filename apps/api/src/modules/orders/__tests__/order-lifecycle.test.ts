@@ -143,11 +143,11 @@ async function cancelOrder(token: string, branchId: number, orderId: string, rea
     .post(`/api/v1/orders/${orderId}/cancel`)
     .set('Authorization', `Bearer ${token}`)
     .set('X-Branch-Id', String(branchId))
-    .send({ reason });
+    .send({ reason, refundTo: 'original' });
 }
 
 async function cleanOrders(branchId: number): Promise<void> {
-  await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
+  await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
   await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
@@ -616,7 +616,7 @@ describe('Order Lifecycle — credit_sale paths', () => {
     await cleanTestStaff(CS_STAFF);
     const old = await db.query(`SELECT id FROM branches WHERE name LIKE $1`, [`${CS_BRANCH}%`]);
     for (const row of old.rows) {
-      await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [row.id]).catch(() => {});
+      await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [row.id]).catch(() => {});
       await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [row.id]).catch(() => {});
       await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [row.id]);
       await db.query(`DELETE FROM orders WHERE branch_id = $1`, [row.id]);
@@ -657,7 +657,7 @@ describe('Order Lifecycle — credit_sale paths', () => {
   });
 
   afterAll(async () => {
-    await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
+    await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
     // This describe's tests confirm credit_sale orders, which create
     // receivables (source_type='order_credit_sale') against customerId —
     // without deleting them first, the customer delete below silently no-ops
@@ -743,7 +743,7 @@ describe('Order Lifecycle — credit_sale paths', () => {
       .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({ reason });
+      .send({ reason, refundTo: 'original' });
   }
 
   // ── CS-1: credit_sale confirm → fulfill (no payment required) ──────────────

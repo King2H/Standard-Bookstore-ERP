@@ -1,5 +1,9 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { CancelOrderRequest } from '@bms/shared';
+import { customerKeys } from '../customers/queries.js';
 import { inventoryKeys } from '../inventory/queries.js';
+import { paymentKeys } from '../payments/queries.js';
+import { receivableKeys } from '../receivables/queries.js';
 import {
   cancelOrder, confirmOrder, createOrder, deleteOrder, fulfillOrder, getOrder, listOrders, searchBooksForOrder,
   searchCustomersForOrder, type ConfirmOrder, type OrdersParams,
@@ -36,7 +40,15 @@ function useOrderStep<A, R>(mutationFn: (a: A) => Promise<R>) {
 
 export const useConfirmOrder = () => useOrderStep(({ id, body }: { id: string; body: ConfirmOrder }) => confirmOrder(id, body));
 export const useFulfillOrder = () => useOrderStep(fulfillOrder);
-export const useCancelOrder = () => useOrderStep(({ id, reason }: { id: string; reason: string }) => cancelOrder(id, { reason }));
+/** Cancelling gives back what the order took (#167): payments, debts and store credit change too. */
+export function useCancelOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CancelOrderRequest }) => cancelOrder(id, body),
+    onSuccess: () => Promise.all([orderKeys.all, inventoryKeys.all, paymentKeys.all, receivableKeys.all, customerKeys.all]
+      .map((queryKey) => qc.invalidateQueries({ queryKey }))),
+  });
+}
 
 export function useDeleteOrder() {
   const qc = useQueryClient();

@@ -12,7 +12,8 @@ const CUSTOMER_MONEY = `
   WITH money AS (
     SELECT op.payment_method AS method, op.amount, 'in' AS direction, op.processed_at AS at, o.branch_id
     FROM order_payments op JOIN orders o ON o.id = op.order_id
-    WHERE op.status IN ('success', 'partially_refunded')
+    -- A refunded payment still came in; its refund goes out below (#167).
+    WHERE op.status IN ('success', 'partially_refunded', 'refunded')
     UNION ALL
     SELECT tp.method, tp.amount, 'in', tp.created_at, t.branch_id
     FROM transaction_payments tp JOIN transactions t ON t.id = tp.transaction_id
@@ -133,7 +134,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
        JOIN orders o ON o.id = op.order_id
        LEFT JOIN customers c ON c.id = o.customer_id
        LEFT JOIN staff s ON s.id = op.processed_by
-       WHERE op.status IN ('success', 'partially_refunded') ${order.and}`,
+       WHERE op.status IN ('success', 'partially_refunded', 'refunded') ${order.and}`,
       order.params,
     ),
     reportRows<LedgerRow>(

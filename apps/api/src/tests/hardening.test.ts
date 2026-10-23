@@ -103,7 +103,7 @@ describe('Post-MVP Hardening', () => {
     // Clean up test data
     await db.query(`DELETE FROM bank_reconciliation WHERE bank_account_id = $1`, [bankAccountId]);
     await db.query(`DELETE FROM order_refunds WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
-    await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
+    await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
     await db.query(`DELETE FROM installments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
     await db.query(`DELETE FROM installment_plans WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
     await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);

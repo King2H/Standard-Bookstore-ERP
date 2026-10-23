@@ -191,6 +191,52 @@ async function spendPoints(q: Queryable, order: OrderForPayment, amount: Money, 
  * refunded amount is owed again. The payment is locked, so two refunds at
  * once cannot return more than was paid.
  */
+/**
+ * Gives back everything a cancelled order took, in the cancel's transaction
+ * (#167, decision 1a): each payment the way it was paid, newest first, or all
+ * of it as store credit for the order's customer. Returns what went back.
+ */
+export async function returnOrderPayments(
+  q: Queryable,
+  actor: Actor,
+  orderId: string,
+  opts: { to: 'original' | 'store_credit'; reason: string },
+): Promise<Money> {
+  const order = foundOrder(await payments.findOrder(q, orderId, { forUpdate: true }));
+  const taken = (await payments.paymentsOfOrder(q, orderId)).filter((p) => p.status === 'success' || p.status === 'partially_refunded');
+  let returned = Money.of(0);
+  for (const payment of taken.reverse()) {
+    const earlier = Money.sum((await payments.refundsOf(q, payment.id)).map((x) => x.refundAmount));
+    const amount = payment.amount.minus(earlier);
+    if (!amount.greaterThan(0)) continue;
+    const toCredit = opts.to === 'store_credit';
+    const refundTo = toCredit ? null : policy.refundBankAccount(payment, null, bankAccountsEnabled());
+    const bankAccountId = refundTo === null ? null : await accountForPayment(q, refundTo, order.branchId);
+    const refund = await payments.insertRefund(q, {
+      payment, amount, reason: opts.reason, bankAccountId, processedBy: actor.staffId, ...(toCredit && { method: 'store_credit' }),
+    });
+    if (bankAccountId !== null) {
+      await recordMovement(q, { bankAccountId, direction: 'out', amount, sourceType: 'order_refund', sourceId: refund.id, notes: `Refund of ${payment.paymentReference}` });
+    }
+    if (order.customerId !== null && (toCredit || payment.paymentMethod === 'store_credit')) {
+      await customers.moveStoreCredit(q, order.customerId, amount, { direction: 'credit', refType: 'order_refund', refId: refund.id });
+    } else if (order.customerId !== null && payment.paymentMethod === 'loyalty_points') {
+      await customers.addPoints(q, order.customerId, amount.toNumber(), { reason: 'REFUND', transactionRef: payment.paymentReference });
+    }
+    await payments.setPaymentStatus(q, payment.id, 'refunded');
+    await audit(q, actor, 'payment_refund', refund.id, {
+      paymentId: payment.id, orderId: Number(order.id), refundAmount: amount.toNumber(),
+      method: toCredit ? 'store_credit' : payment.paymentMethod, reason: opts.reason, orderCancelled: true,
+    });
+    await insertOutboxEvent(q, 'payment.refunded', {
+      paymentId: payment.id, refundId: refund.id, amount: amount.toNumber(), orderNumber: order.orderNumber, orderId: order.id, branchId: actor.branchId,
+    });
+    returned = returned.plus(amount);
+  }
+  if (returned.greaterThan(0) && order.total !== null) await settleOrder(q, order, order.total, 'refund');
+  return returned;
+}
+
 export async function refund(actor: Actor, paymentId: string, r: NewRefund): Promise<RefundRecord> {
   return withTransaction({}, async (tx) => {
     const payment = await payments.findPayment(tx, paymentId, { forUpdate: true });

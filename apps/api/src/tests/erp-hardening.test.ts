@@ -81,7 +81,7 @@ async function cleanPbtData(branchId: number) {
   );
   // Payment Mode Capture: cash_sale confirms now write an order_payments row.
   await db.query(
-    `DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`,
+    `WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`,
     [branchId],
   ).catch(() => {});
   await db.query(
@@ -299,7 +299,7 @@ describe('P2 — Inventory conservation', () => {
     await request(app)
       .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${managerToken}`)
-      .send({ reason: 'PBT test cancel' });
+      .send({ reason: 'PBT test cancel', refundTo: 'original' });
 
     const stockAfter = await db.query(
       `SELECT i.quantity AS available

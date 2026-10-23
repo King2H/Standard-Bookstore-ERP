@@ -39,6 +39,8 @@ export const OrderSchema = z.object({
   /** DRAFT, CONFIRMED, PAID, FULFILLED, COMPLETED or CANCELLED; older rows may hold pre-v1.1 names. */
   status: z.string(),
   paymentStatus: z.string(),
+  /** Payments taken less refunds: what cancelling gives back (#167). */
+  amountPaid: z.number(),
   saleType: SaleTypeSchema,
   currency: z.string(),
   subtotal: z.number(),
@@ -115,8 +117,14 @@ export const ConfirmOrderRequestSchema = z
   .superRefine(checkPaymentProof({ method: 'paymentMethod', reference: 'transactionReference' }));
 export type ConfirmOrderRequest = z.infer<typeof ConfirmOrderRequestSchema>;
 
+/** How the money an order took goes back when it is cancelled (#167): each payment the way it was paid, or store credit. */
+export const CancelRefundToSchema = z.enum(['original', 'store_credit']);
+export type CancelRefundTo = z.infer<typeof CancelRefundToSchema>;
+
 /** Why the order is cancelled (owner decision 2a): a confirmed order's stock goes back, so the audit says why. */
 export const CancelOrderRequestSchema = z.object({
   reason: z.string().trim().min(1, 'A reason is required').max(500),
+  /** Required when the order took payments (#167); store credit needs the order's customer. */
+  refundTo: CancelRefundToSchema.optional(),
 });
 export type CancelOrderRequest = z.infer<typeof CancelOrderRequestSchema>;

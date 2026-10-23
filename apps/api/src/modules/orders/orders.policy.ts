@@ -1,5 +1,5 @@
 import { Money } from '@bms/shared';
-import { BusinessError, ValidationError } from '../../lib/errors.js';
+import { BusinessError, ForbiddenError, ValidationError } from '../../lib/errors.js';
 import { resolveDiscountFields, enforceDiscountCap, type DiscountMode, type DiscountType } from '../../lib/discount.js';
 import type { Permission } from '../../lib/permissions.js';
 import type { OrderLineInput, OrderTotals, PricedLine, SaleType } from './orders.types.js';
@@ -60,6 +60,32 @@ export function checkCanCancel(status: string): { restoresStock: boolean } {
 }
 
 /**
+ * Who cancels and how the money goes back (#167): whoever sells cancels an
+ * order, as before; one that took payments also needs PROCESS_REFUND (decision
+ * 2a; strict permissions, owner 2026-10-23: refunding alone does not cancel),
+ * saying how the money goes back: the way it was paid, or as store credit for
+ * the order's customer (1a).
+ */
+export function checkCancelReturn(
+  amountPaid: Money,
+  permissions: readonly Permission[],
+  refundTo: 'original' | 'store_credit' | undefined,
+  hasCustomer: boolean,
+): void {
+  if (!permissions.includes('CREATE_SALE')) throw new ForbiddenError('Only staff who sell may cancel an order');
+  if (!amountPaid.greaterThan(0)) return;
+  if (!permissions.includes('PROCESS_REFUND')) {
+    throw new ForbiddenError('An order that took payments is cancelled by a Manager or Admin, who gives the money back');
+  }
+  if (!refundTo) {
+    throw new ValidationError('The order took payments: say how the money goes back (refundTo: original or store_credit)', { field: 'refundTo' });
+  }
+  if (refundTo === 'store_credit' && !hasCustomer) {
+    throw new BusinessError('CREDIT_REQUIRES_CUSTOMER', 'Store credit goes to the order\'s customer; this order has none');
+  }
+}
+
+/**
  * Only orders that never moved stock or money may be deleted: DRAFT or
  * CANCELLED, and then only without any recorded history.
  */
@@ -90,21 +116,24 @@ export function computeOrderAllowedActions(
   permissions: Permission[],
   _paymentStatus?: string,
   _saleType?: SaleType,
+  amountPaid = 0,
 ): string[] {
   const can = (p: Permission) => permissions.includes(p);
-  const cancelOrFulfill = [...(can('CREATE_SALE') ? ['cancel'] : []), ...(can('PROCESS_PAYMENT') ? ['fulfill'] : [])];
+  // An order that took payments is cancelled by whoever refunds, giving the money back (#167).
+  const cancel = can('CREATE_SALE') && (amountPaid <= 0 || can('PROCESS_REFUND')) ? ['cancel'] : [];
+  const cancelOrFulfill = [...cancel, ...(can('PROCESS_PAYMENT') ? ['fulfill'] : [])];
 
   switch (status) {
     case 'DRAFT':
     case 'Pending':
-      return can('CREATE_SALE') ? ['confirm', 'cancel'] : [];
+      return can('CREATE_SALE') ? ['confirm', ...cancel] : [];
     case 'CONFIRMED':
     case 'PARTIALLY_PAID':
     case 'Confirmed':
     case 'In_Progress':
       return cancelOrFulfill;
     case 'PAID':
-      return can('PROCESS_PAYMENT') ? ['fulfill'] : [];
+      return cancelOrFulfill;
     // Returns go through the Returns module; a legacy fulfilled order is printed like a completed one.
     case 'FULFILLED':
     case 'COMPLETED':

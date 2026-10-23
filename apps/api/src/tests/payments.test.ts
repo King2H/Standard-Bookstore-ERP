@@ -68,7 +68,7 @@ async function createTestOrder(token: string, branchId: number, locationId: numb
 async function cleanPayments(branchId: number) {
   await db.query(`DELETE FROM receivables WHERE branch_id = $1`, [branchId]);
   await db.query(`DELETE FROM order_refunds WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
-  await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
+  await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
   await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
   await db.query(`DELETE FROM customers WHERE branch_id = $1 AND full_name = 'Payments Test Customer'`, [branchId]);
@@ -327,7 +327,7 @@ describe('Payments — Unpaid Orders & Single Authoritative Collection', () => {
     await db.query(`DELETE FROM exchanges WHERE branch_id = $1`, [bId]);
     await db.query(`DELETE FROM transaction_payments WHERE transaction_id IN (SELECT id FROM transactions WHERE branch_id = $1)`, [bId]);
     await db.query(`DELETE FROM transactions WHERE branch_id = $1`, [bId]);
-    await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [bId]);
+    await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [bId]);
     await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [bId]);
     await db.query(`DELETE FROM orders WHERE branch_id = $1`, [bId]);
     await db.query(`DELETE FROM store_credit_history WHERE customer_id IN (SELECT id FROM customers WHERE branch_id = $1 AND full_name = 'Payments2 Test Customer')`, [bId]);

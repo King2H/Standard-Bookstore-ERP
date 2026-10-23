@@ -64,6 +64,16 @@ describe('Data consistency check', () => {
       );
     }
 
+    // An order cancelled with its payment kept (before #167).
+    const keptMoney = await one(
+      `INSERT INTO orders (order_number, branch_id, created_by, status, total, payment_status) VALUES ($1, $2, $3, 'CANCELLED', 10, 'paid') RETURNING id`,
+      [`${MARK}-KEPT`, branchId, staffId],
+    );
+    await client.query(
+      `INSERT INTO order_payments (payment_reference, order_id, amount, payment_method, processed_by, status) VALUES ($1, $2, 10, 'cash', $3, 'success')`,
+      [`${MARK}-PAY`, keptMoney, staffId],
+    );
+
     // Purchase orders: "ordered" with copies received; paid beyond its total.
     const supplierId = await one(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [`${MARK} Supplier`]);
     const poId = await one(
@@ -116,6 +126,7 @@ describe('Data consistency check', () => {
     ['receivables.within-original', /owes 20\.00 of 10\.00$/],
     ['receivables.status-matches-balance', /\(Settled\): owes 5\.00$/],
     ['orders.payment-status', /-9999: paid, payments say unpaid/],
+    ['orders.cancelled-money-returned', new RegExp(`^${MARK}-KEPT: holds 10\\.00 \\(paid 10\\.00, refunded 0\\)$`)],
     ['procurement.status-matches-lines', /\(ordered\): 2 received/],
     ['procurement.paid-within-total', /paid and credited 60\.00 of 50\.00$/],
     ['bank.matched-line-cleared', /is uncleared$/],
@@ -140,6 +151,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/16 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/17 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });
