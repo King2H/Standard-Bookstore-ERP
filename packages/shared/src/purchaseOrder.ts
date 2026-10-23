@@ -85,7 +85,7 @@ export const SupplierCreditNoteSchema = z.object({
   createdAt: z.string(),
 });
 
-export const PurchaseOrderApprovalKindSchema = z.enum(['automatic', 'approver', 'sole_approver']);
+export const PurchaseOrderApprovalKindSchema = z.enum(['automatic', 'approver', 'creator', 'sole_approver']);
 export type PurchaseOrderApprovalKind = z.infer<typeof PurchaseOrderApprovalKindSchema>;
 
 export const PurchaseOrderSchema = z.object({
@@ -117,15 +117,14 @@ export const PurchaseOrderSchema = z.object({
   approvedAt: z.string().nullable(),
   /**
    * How it was approved (#164): on submit, at or under the approval threshold;
-   * by an Admin or Manager other than its creator; or by its creator as the
-   * branch's only approver, with a reason.
+   * by an Admin or Manager other than its creator ('approver'); or by its
+   * creator ('creator', owner decision 2a, 2026-10-23). 'sole_approver': by its
+   * creator as the branch's only approver, with a reason, before that decision.
    */
   approvalKind: PurchaseOrderApprovalKindSchema.nullable(),
   approvalReason: z.string().nullable(),
   /** The approval threshold now: an order above it waits for approval. */
   approvalThreshold: z.number(),
-  /** No other active Admin or Manager can approve this order, so its creator may, with a reason (#164, 2a). */
-  creatorIsOnlyApprover: z.boolean(),
   /** Why a part-received order was closed short (owner decision 3a). */
   closedReason: z.string().nullable(),
   closedBy: z.number().int().nullable(),
@@ -229,7 +228,7 @@ export type ReceivePurchaseOrderRequest = z.infer<typeof ReceivePurchaseOrderReq
 
 export const ApprovePurchaseOrderRequestSchema = z
   .object({
-    /** Required when the creator approves as the branch's only approver (#164, 2a). */
+    /** An optional note kept with the approval; none is asked (owner decision 1a, 2026-10-23). */
     reason: z.string().trim().min(1).max(500).optional(),
   })
   .default({});

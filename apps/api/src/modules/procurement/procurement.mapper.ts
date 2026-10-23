@@ -33,7 +33,6 @@ export interface PurchaseOrderRow {
   approved_at: Date | null;
   approval_kind: string | null;
   approval_reason: string | null;
-  creator_is_only_approver: boolean;
   closed_reason: string | null;
   closed_by: number | null;
   closed_at: Date | null;
@@ -68,7 +67,6 @@ export function toPurchaseOrderRecord(row: PurchaseOrderRow): PurchaseOrderRecor
     approvedAt: row.approved_at,
     approvalKind: row.approval_kind as PurchaseOrderApprovalKind | null,
     approvalReason: row.approval_reason,
-    creatorIsOnlyApprover: row.creator_is_only_approver,
     closedReason: row.closed_reason,
     closedBy: row.closed_by,
     closedAt: row.closed_at,

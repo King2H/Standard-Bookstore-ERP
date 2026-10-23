@@ -215,12 +215,12 @@ export async function submitForApproval(actor: Actor, id: string): Promise<Purch
   return getById(id);
 }
 
-/** By an Admin or Manager other than its creator, or by its creator as the branch's only approver, with a reason (#164). */
+/** By any Admin or Manager of the ordering branch, its creator included; an optional note is kept with the approval (owner decisions 1a, 2a, 2026-10-23). */
 export async function approve(actor: Actor, id: string, reason: string | null): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
-    const kind = policy.approvalKindFor(po, actor, reason);
+    const kind = policy.approvalKindFor(po, actor);
     await validateSupplierForProcurement(po.supplierId, tx);
     await orders.setStatus(tx, id, 'approved', { approval: { by: actor.staffId, kind, reason } });
     await audit(tx, actor, id, { action: 'approve', approvalKind: kind, ...(reason && { reason }) });

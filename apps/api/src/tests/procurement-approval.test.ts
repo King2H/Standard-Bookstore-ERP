@@ -5,12 +5,12 @@ import { getTestApp } from './helpers/testApp.js';
 import { ownerDb } from './helpers/ownerDb.js';
 import { DEFAULT_ADMIN_PASSWORD_HASH } from '../db/seed.js';
 
-// #164: an order above the approval threshold waits for an Admin or Manager
-// other than its creator. A shop whose only approver created the order was
-// stuck: nobody could approve it, so it could never be ordered, received or
-// closed. The only approver now approves it with a reason, audited and
-// notified (2a); the order records how and when it was approved and says what
-// its approval waits for (1a); Super_Admin does not approve (3a).
+// #164: an order above the approval threshold waits for approval; the order
+// records how and when it was approved (1a); Super_Admin does not approve (3a).
+// Owner decisions 1a, 2a, 3a (2026-10-23), as in v1: any Admin or Manager of
+// the ordering branch approves it, their own order included, with no reason;
+// approving one's own order is recorded as approved by its creator, audited and
+// notified to Super_Admin; approving and closing need APPROVE_PURCHASE_ORDER.
 //
 // Each test runs in its own tenant, so the approvers in its branch are exactly
 // the ones it creates.
@@ -91,33 +91,28 @@ describe('Purchase order approval (#164)', () => {
   beforeAll(cleanUp);
   afterAll(cleanUp);
 
-  describe('the only approver of the branch (2a)', () => {
-    it('approves the order they created, with a reason (was: SELF_APPROVAL_NOT_ALLOWED, and the order stuck in pending approval)', async () => {
+  describe('who approves (owner decisions 1a, 3a, 2026-10-23)', () => {
+    it('lets an Admin approve the order they created, with no reason, recorded and notified as approved by its creator (was: SELF_APPROVAL_NOT_ALLOWED, or a reason demanded)', async () => {
       const s = await shop();
       const admin = await staff(s, 'admin', 'Admin');
+      await staff(s, 'manager', 'Manager');
       const po = await submitted(s, admin.token, 1250);
-      expect(po).toMatchObject({ status: 'pending_approval', creatorIsOnlyApprover: true, approvalThreshold: 1000 });
+      expect(po).toMatchObject({ status: 'pending_approval', approvalThreshold: 1000 });
 
-      const noReason = await approve(admin.token, po.id);
-      expect(noReason.status).toBe(400);
-      expect(noReason.body.error).toBe('VALIDATION_ERROR');
-
-      const res = await approve(admin.token, po.id, { reason: 'Only approver; urgent restock' });
+      const res = await approve(admin.token, po.id);
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({
-        status: 'approved', approvedBy: admin.id, approvalKind: 'sole_approver', approvalReason: 'Only approver; urgent restock',
-      });
+      expect(res.body).toMatchObject({ status: 'approved', approvedBy: admin.id, approvalKind: 'creator', approvalReason: null });
       expect(res.body.approvedAt).toEqual(expect.any(String));
 
       const audit = (await owner().query(
         `SELECT meta FROM audit_logs WHERE tenant_id = $1 AND entity_type = 'purchase_order' AND entity_id = $2 AND meta->>'action' = 'approve'`,
         [s.tenant, po.id],
       )).rows;
-      expect(audit).toEqual([{ meta: expect.objectContaining({ approvalKind: 'sole_approver', reason: 'Only approver; urgent restock' }) }]);
+      expect(audit).toEqual([{ meta: expect.objectContaining({ approvalKind: 'creator' }) }]);
       const event = (await owner().query(
         `SELECT payload FROM outbox WHERE tenant_id = $1 AND event_type = 'po.approved'`, [s.tenant],
       )).rows;
-      expect(event).toEqual([{ payload: expect.objectContaining({ approvalKind: 'sole_approver', reason: 'Only approver; urgent restock' }) }]);
+      expect(event).toEqual([{ payload: expect.objectContaining({ approvalKind: 'creator' }) }]);
 
       // The rest of the lifecycle follows: ordered, received, closed.
       expect((await as(api().post(`/api/v1/purchase-orders/${po.id}/order`), admin.token)).body.status).toBe('ordered');
@@ -128,42 +123,42 @@ describe('Purchase order approval (#164)', () => {
       expect((await as(api().post(`/api/v1/purchase-orders/${po.id}/close`), admin.token).send({})).body.status).toBe('closed');
     });
 
-    it('is still refused while another Admin or Manager of the branch can approve it', async () => {
+    it('lets a Manager approve their own order too, and records another approver as approver', async () => {
       const s = await shop();
-      const admin = await staff(s, 'admin', 'Admin');
       const manager = await staff(s, 'manager', 'Manager');
-      const po = await submitted(s, admin.token, 1250);
-      expect(po.creatorIsOnlyApprover).toBe(false);
+      const admin = await staff(s, 'admin', 'Admin');
+      const own = await submitted(s, manager.token, 1250);
+      expect((await approve(manager.token, own.id)).body).toMatchObject({ status: 'approved', approvedBy: manager.id, approvalKind: 'creator' });
 
-      const refused = await approve(admin.token, po.id, { reason: 'In a hurry' });
-      expect(refused.status).toBe(422);
-      expect(refused.body.error).toBe('SELF_APPROVAL_NOT_ALLOWED');
-
-      const res = await approve(manager.token, po.id);
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ status: 'approved', approvedBy: manager.id, approvalKind: 'approver', approvalReason: null });
+      const theirs = await submitted(s, manager.token, 1500);
+      expect((await approve(admin.token, theirs.id)).body).toMatchObject({ status: 'approved', approvedBy: admin.id, approvalKind: 'approver', approvalReason: null });
     });
 
-    it('counts an Admin with access to all branches, whose role is in another branch, as another approver', async () => {
+    it('leaves approving and closing to APPROVE_PURCHASE_ORDER: Purchasor, Finance_Officer and Super_Admin are refused', async () => {
       const s = await shop();
-      const other = (await owner().query(
-        `INSERT INTO branches (tenant_id, name, address, contact_info, operating_hours) VALUES ($1, 'Other', '-', '{}', '{}') RETURNING id`, [s.tenant],
-      )).rows[0].id;
-      const admin = await staff(s, 'admin', 'Admin');
-      await staff(s, 'head', 'Admin', { branch: other, allBranches: true });
-      const po = await submitted(s, admin.token, 1250);
-      expect(po.creatorIsOnlyApprover).toBe(false);
-      expect((await approve(admin.token, po.id, { reason: 'x' })).body.error).toBe('SELF_APPROVAL_NOT_ALLOWED');
-    });
-
-    it('counts neither Super_Admin nor a deactivated Admin as another approver (3a)', async () => {
-      const s = await shop();
-      const admin = await staff(s, 'admin', 'Admin');
+      const purchasor = await staff(s, 'buyer', 'Purchasor');
+      const finance = await staff(s, 'finance', 'Finance_Officer');
       const superAdmin = await staff(s, 'super', 'Super_Admin', { allBranches: true });
-      await staff(s, 'gone', 'Admin', { active: false });
+      const po = await submitted(s, purchasor.token, 1250);
+      for (const who of [purchasor, finance, superAdmin]) {
+        const refused = await approve(who.token, po.id);
+        expect(refused.status).toBe(403);
+        expect(refused.body).toMatchObject({ error: 'PERMISSION_DENIED', details: { missing: ['APPROVE_PURCHASE_ORDER'] } });
+      }
+      const close = await as(api().post(`/api/v1/purchase-orders/${po.id}/close`), purchasor.token).send({});
+      expect(close.body).toMatchObject({ error: 'PERMISSION_DENIED', details: { missing: ['APPROVE_PURCHASE_ORDER'] } });
+    });
+
+    it('keeps an order approved earlier by its only approver, with the reason they gave', async () => {
+      const s = await shop();
+      const admin = await staff(s, 'admin', 'Admin');
       const po = await submitted(s, admin.token, 1250);
-      expect(po.creatorIsOnlyApprover).toBe(true);
-      expect((await approve(superAdmin.token, po.id)).status).toBe(403);
+      await owner().query(
+        `UPDATE purchase_orders SET status = 'approved', approved_by = $2, approved_at = now(), approval_kind = 'sole_approver', approval_reason = 'Only approver'
+         WHERE id = $1`, [po.id, admin.id],
+      );
+      const read = await as(api().get(`/api/v1/purchase-orders/${po.id}`), admin.token);
+      expect(read.body).toMatchObject({ approvalKind: 'sole_approver', approvalReason: 'Only approver' });
     });
   });
 

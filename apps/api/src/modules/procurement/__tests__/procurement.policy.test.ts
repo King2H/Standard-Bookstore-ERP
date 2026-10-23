@@ -12,6 +12,7 @@ import {
   statusAfterReceipt,
   statusAfterSubmit,
 } from '../procurement.policy.js';
+import { ROLE_PERMISSIONS } from '../../../lib/permissions.js';
 
 const actor = { staffId: 7, role: 'Manager', roles: ['Manager'], branchId: 1 };
 
@@ -48,19 +49,16 @@ describe('status', () => {
     expect(() => statusAfterSubmit('approved', Money.of(1), Money.of(1000))).toThrow(expect.objectContaining({ code: 'PO_INVALID_STATUS' }));
   });
 
-  it('refuses self-approval while another approver can approve', () => {
-    const pending = { status: 'pending_approval' as const, creatorIsOnlyApprover: false };
-    expect(() => approvalKindFor({ ...pending, createdBy: 7 }, actor, 'x')).toThrow(
-      expect.objectContaining({ code: 'SELF_APPROVAL_NOT_ALLOWED' }),
-    );
-    expect(approvalKindFor({ ...pending, createdBy: 8 }, actor, null)).toBe('approver');
+  it('gives APPROVE_PURCHASE_ORDER to Admin and Manager only (owner decision 3a, 2026-10-23)', () => {
+    const holders = Object.entries(ROLE_PERMISSIONS).filter(([, p]) => p.includes('APPROVE_PURCHASE_ORDER')).map(([role]) => role);
+    expect(holders.sort()).toEqual(['Admin', 'Manager']);
   });
 
-  it('lets the only approver approve their own order, with a reason (#164)', () => {
-    const own = { status: 'pending_approval' as const, createdBy: 7, creatorIsOnlyApprover: true };
-    expect(() => approvalKindFor(own, actor, null)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
-    expect(approvalKindFor(own, actor, 'Only approver')).toBe('sole_approver');
-    expect(() => approvalKindFor({ ...own, status: 'approved' }, actor, 'x')).toThrow(expect.objectContaining({ code: 'PO_INVALID_STATUS' }));
+  it('records who approved: its creator or another approver, with no reason asked (owner decisions 1a, 2a, 2026-10-23)', () => {
+    const pending = { status: 'pending_approval' as const };
+    expect(approvalKindFor({ ...pending, createdBy: 7 }, actor)).toBe('creator');
+    expect(approvalKindFor({ ...pending, createdBy: 8 }, actor)).toBe('approver');
+    expect(() => approvalKindFor({ status: 'approved', createdBy: 8 }, actor)).toThrow(expect.objectContaining({ code: 'PO_INVALID_STATUS' }));
   });
 
   it('cancels until anything arrives', () => {

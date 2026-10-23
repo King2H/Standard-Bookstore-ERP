@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { recordInBranch } from '../../middleware/recordScope.js';
 import { validate } from '../../middleware/validate.js';
 import * as po from './procurement.controller.js';
@@ -14,7 +14,8 @@ const { schemas } = po;
 
 const canSee = requireRole('Admin', 'Manager', 'Purchasor', 'Stock_Clerk', 'Finance_Officer');
 const buyers = requireRole('Admin', 'Manager', 'Purchasor');
-const approvers = requireRole('Admin', 'Manager');
+// Admin and Manager hold it (owner decision 3a, 2026-10-23).
+const approvers = requirePermission('APPROVE_PURCHASE_ORDER');
 const inBranch = recordInBranch('purchaseOrder');
 
 router.get('/purchase-orders', authenticate, canSee, validate(schemas.list), po.list);

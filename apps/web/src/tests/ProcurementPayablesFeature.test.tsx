@@ -34,7 +34,7 @@ function order(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     id: '42', poNumber: 'PO-000042', branchId: 1, supplierId: 7, supplierName: 'Acme Distributors', status: 'received',
     totalAmount: 200, currency: 'ETB', expectedDeliveryDate: null, notes: null, receivingBranchId: 1, receivingLocationId: null,
     receivingLocationName: null, financialStatus: 'partial', paymentTerms: 'credit', createdBy: 3, approvedBy: 4,
-    approvedAt: CREATED, approvalKind: 'approver', approvalReason: null, approvalThreshold: 1000, creatorIsOnlyApprover: false,
+    approvedAt: CREATED, approvalKind: 'approver', approvalReason: null, approvalThreshold: 1000,
     closedReason: null, closedBy: null, closedAt: null, createdAt: CREATED, updatedAt: CREATED,
     receivedValue: 200, amountPaid: 150, creditNotesTotal: 0, outstandingAmount: 50, orderedQuantityTotal: 10, receivedQuantityTotal: 10,
     lineItems: [], receipts: [], creditNotes: [],

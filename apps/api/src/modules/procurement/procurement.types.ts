@@ -34,8 +34,6 @@ export interface PurchaseOrderRecord {
   approvedAt: Date | null;
   approvalKind: PurchaseOrderApprovalKind | null;
   approvalReason: string | null;
-  /** No active Admin or Manager other than its creator can approve the order (#164). */
-  creatorIsOnlyApprover: boolean;
   closedReason: string | null;
   closedBy: number | null;
   closedAt: Date | null;

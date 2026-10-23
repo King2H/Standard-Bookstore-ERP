@@ -48,13 +48,6 @@ function selectOrders(q: Queryable) {
       'po.approved_at',
       'po.approval_kind',
       'po.approval_reason',
-      // Another active Admin or Manager of the ordering branch, or one with access to all branches,
-      // who could approve it (#164). Super_Admin does not approve (3a).
-      sql<boolean>`NOT EXISTS (
-        SELECT 1 FROM staff s JOIN staff_branch_roles r ON r.staff_id = s.id
-        WHERE s.id <> po.created_by AND s.is_active AND r.role IN ('Admin', 'Manager')
-          AND (r.branch_id = po.branch_id OR s.is_all_branches)
-      )`.as('creator_is_only_approver'),
       'po.closed_reason',
       'po.closed_by',
       'po.closed_at',
