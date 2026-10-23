@@ -9,7 +9,7 @@ import { poNumber } from './procurement.mapper.js';
 import * as orderPolicy from './procurement.policy.js';
 import * as orders from './procurement.repository.js';
 import { getById, refreshFinancialStatus } from './procurement.service.js';
-import type { Actor, PurchaseOrderRecord } from './procurement.types.js';
+import type { Actor, PurchaseOrderRecord, PurchaseOrderView } from './procurement.types.js';
 import * as policy from './supplierPayables.policy.js';
 import * as payables from './supplierPayables.repository.js';
 
@@ -41,7 +41,7 @@ export async function recordPayment(
   actor: Actor,
   poId: string,
   payment: { amount: Money; paymentMethod: string; notes: string | null; bankAccountId?: number | null },
-): Promise<PurchaseOrderRecord> {
+): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOwnOrder(tx, actor, poId);
     policy.checkPayable(po.status);
@@ -75,7 +75,7 @@ export async function recordPayment(
 }
 
 /** A payment recorded by mistake stops counting; it stays on record as reversed (owner decision 1a). */
-export async function reversePayment(actor: Actor, poId: string, paymentId: number, reason: string): Promise<PurchaseOrderRecord> {
+export async function reversePayment(actor: Actor, poId: string, paymentId: number, reason: string): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     await lockOwnOrder(tx, actor, poId);
     const payment = await payables.lockPayment(tx, poId, paymentId);
@@ -98,7 +98,7 @@ export async function reversePayment(actor: Actor, poId: string, paymentId: numb
 }
 
 /** The supplier's credit against an order: damaged goods, an overcharge, a negotiated price. */
-export async function recordCreditNote(actor: Actor, poId: string, credit: { amount: Money; reason: string }): Promise<PurchaseOrderRecord> {
+export async function recordCreditNote(actor: Actor, poId: string, credit: { amount: Money; reason: string }): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
     const po = await lockOwnOrder(tx, actor, poId);
     policy.checkCreditable(po.status);

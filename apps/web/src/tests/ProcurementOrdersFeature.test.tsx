@@ -6,7 +6,7 @@
 // an order shows its PO number. Every mocked answer is checked against its
 // contract.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -35,6 +35,7 @@ function order(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     id: '42', poNumber: 'PO-000042', branchId: 1, supplierId: 7, supplierName: 'Acme Distributors', status: 'draft',
     totalAmount: 200, currency: 'ETB', expectedDeliveryDate: null, notes: null, receivingBranchId: 1, receivingLocationId: null,
     receivingLocationName: null, financialStatus: 'unpaid', paymentTerms: 'credit', createdBy: 3, approvedBy: null,
+    approvedAt: null, approvalKind: null, approvalReason: null, approvalThreshold: 1000, creatorIsOnlyApprover: false,
     closedReason: null, closedBy: null, closedAt: null, createdAt: CREATED, updatedAt: CREATED,
     receivedValue: 0, amountPaid: 0, creditNotesTotal: 0, outstandingAmount: 0, orderedQuantityTotal: 10, receivedQuantityTotal: 0,
     lineItems: [], receipts: [], payments: [], creditNotes: [],
@@ -142,6 +143,42 @@ describe('Procurement: who may take each step', () => {
     const user = await openOrder();
     await user.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(posted()).toEqual([{ path: '/purchase-orders/42/approve', body: undefined }]));
+  });
+
+  it('lets the only approver approve the order they created, asking why (#164; was: no Approve, the order stuck in pending approval)', async () => {
+    me = profile(['Admin'], { id: 3 });
+    po = order({ status: 'pending_approval', createdBy: 3, totalAmount: 1250, creatorIsOnlyApprover: true });
+    const user = await openOrder();
+    expect(screen.getByText(/No other Admin or Manager can approve it, so its creator may, with a reason/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    expect(await within(dialog).findByText('A reason is required')).toBeInTheDocument();
+    await user.type(within(dialog).getByRole('textbox'), 'Only approver; urgent restock');
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(posted()).toEqual([{ path: '/purchase-orders/42/approve', body: { reason: 'Only approver; urgent restock' } }]));
+  });
+
+  it('says what an order waits for, and how it was approved (#164; was: nothing on screen)', async () => {
+    me = profile(['Admin'], { id: 3 });
+    po = order({ status: 'pending_approval', createdBy: 3, totalAmount: 1250 });
+    await openOrder();
+    expect(screen.getByText(/Waiting for approval by an Admin or Manager other than its creator/)).toBeInTheDocument();
+    cleanup();
+
+    po = order({ status: 'draft' });
+    await openOrder();
+    expect(screen.getByText(/Approved on submit up to ETB 1000.00; above that/)).toBeInTheDocument();
+    cleanup();
+
+    po = order({ status: 'approved', approvalKind: 'automatic', approvedBy: 3, approvedAt: CREATED });
+    await openOrder();
+    expect(screen.getByText(/Approved on submit on .*: at or under the approval threshold/)).toBeInTheDocument();
+    cleanup();
+
+    po = order({ status: 'ordered', approvalKind: 'sole_approver', approvedBy: 3, approvedAt: CREATED, approvalReason: 'Urgent restock' });
+    await openOrder();
+    expect(screen.getByText(/Approved by its creator, the only approver of the branch on .*: Urgent restock/)).toBeInTheDocument();
   });
 
   it('offers the receiving branch receiving only, and the ordering branch no receiving (was: every step in both)', async () => {

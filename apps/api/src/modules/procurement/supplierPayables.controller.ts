@@ -14,7 +14,7 @@ import { buildCsv, sendCsv, SUPPLIER_LEDGER_COLUMNS } from '../../lib/csvBuilder
 import { scopedBranchOrAll } from '../../lib/scope.js';
 import { valid } from '../../middleware/validate.js';
 import { toPurchaseOrderResponse } from './procurement.mapper.js';
-import type { Actor, PurchaseOrderRecord } from './procurement.types.js';
+import type { Actor, PurchaseOrderView } from './procurement.types.js';
 import * as service from './supplierPayables.service.js';
 
 /**
@@ -35,7 +35,7 @@ function actor(req: Request): Actor {
   return { staffId, role, roles: roles?.length ? roles : [role], branchId };
 }
 
-function send(res: Response, record: PurchaseOrderRecord, status = 200): void {
+function send(res: Response, record: PurchaseOrderView, status = 200): void {
   const body: PurchaseOrder = toPurchaseOrderResponse(record);
   res.status(status).json(body);
 }

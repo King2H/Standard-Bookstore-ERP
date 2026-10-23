@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Money } from '@bms/shared';
 import {
-  checkCanApprove,
+  approvalKindFor,
   checkCanCancel,
   checkCanClose,
   checkOrderingBranch,
@@ -48,11 +48,19 @@ describe('status', () => {
     expect(() => statusAfterSubmit('approved', Money.of(1), Money.of(1000))).toThrow(expect.objectContaining({ code: 'PO_INVALID_STATUS' }));
   });
 
-  it('refuses self-approval', () => {
-    expect(() => checkCanApprove({ status: 'pending_approval', createdBy: 7 }, actor)).toThrow(
+  it('refuses self-approval while another approver can approve', () => {
+    const pending = { status: 'pending_approval' as const, creatorIsOnlyApprover: false };
+    expect(() => approvalKindFor({ ...pending, createdBy: 7 }, actor, 'x')).toThrow(
       expect.objectContaining({ code: 'SELF_APPROVAL_NOT_ALLOWED' }),
     );
-    expect(() => checkCanApprove({ status: 'pending_approval', createdBy: 8 }, actor)).not.toThrow();
+    expect(approvalKindFor({ ...pending, createdBy: 8 }, actor, null)).toBe('approver');
+  });
+
+  it('lets the only approver approve their own order, with a reason (#164)', () => {
+    const own = { status: 'pending_approval' as const, createdBy: 7, creatorIsOnlyApprover: true };
+    expect(() => approvalKindFor(own, actor, null)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(approvalKindFor(own, actor, 'Only approver')).toBe('sole_approver');
+    expect(() => approvalKindFor({ ...own, status: 'approved' }, actor, 'x')).toThrow(expect.objectContaining({ code: 'PO_INVALID_STATUS' }));
   });
 
   it('cancels until anything arrives', () => {

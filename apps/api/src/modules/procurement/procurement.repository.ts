@@ -8,6 +8,7 @@ import type {
   LineRecord,
   NewLine,
   PaymentTerms,
+  PurchaseOrderApprovalKind,
   PurchaseOrderChanges,
   PurchaseOrderFilter,
   PurchaseOrderRecord,
@@ -44,6 +45,16 @@ function selectOrders(q: Queryable) {
       'po.payment_terms',
       'po.created_by',
       'po.approved_by',
+      'po.approved_at',
+      'po.approval_kind',
+      'po.approval_reason',
+      // Another active Admin or Manager of the ordering branch, or one with access to all branches,
+      // who could approve it (#164). Super_Admin does not approve (3a).
+      sql<boolean>`NOT EXISTS (
+        SELECT 1 FROM staff s JOIN staff_branch_roles r ON r.staff_id = s.id
+        WHERE s.id <> po.created_by AND s.is_active AND r.role IN ('Admin', 'Manager')
+          AND (r.branch_id = po.branch_id OR s.is_all_branches)
+      )`.as('creator_is_only_approver'),
       'po.closed_reason',
       'po.closed_by',
       'po.closed_at',
@@ -338,13 +349,22 @@ export async function setStatus(
   q: Queryable,
   id: string,
   status: PurchaseOrderStatus,
-  extra: { approvedBy?: number | null; closed?: { by: number; reason: string | null } } = {},
+  extra: {
+    /** Who approved it, how and why; null clears it (an order sent for approval). */
+    approval?: { by: number; kind: PurchaseOrderApprovalKind; reason: string | null } | null;
+    closed?: { by: number; reason: string | null };
+  } = {},
 ): Promise<void> {
   await q
     .updateTable('purchase_orders')
     .set({
       status,
-      ...(extra.approvedBy !== undefined && { approved_by: extra.approvedBy }),
+      ...(extra.approval !== undefined && {
+        approved_by: extra.approval?.by ?? null,
+        approval_kind: extra.approval?.kind ?? null,
+        approval_reason: extra.approval?.reason ?? null,
+        approved_at: extra.approval ? sql<Date>`now()` : null,
+      }),
       ...(extra.closed && { closed_by: extra.closed.by, closed_reason: extra.closed.reason, closed_at: sql<Date>`now()` }),
       updated_at: sql`now()`,
     })

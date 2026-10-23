@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import {
+  ApprovePurchaseOrderRequestSchema,
   ClosePurchaseOrderRequestSchema,
   CreatePurchaseOrderRequestSchema,
   IdParamsSchema,
@@ -15,7 +16,7 @@ import { assertLocationUsable, bookingBranch, scopedBranch } from '../../lib/sco
 import { valid } from '../../middleware/validate.js';
 import { toPurchaseOrderResponse } from './procurement.mapper.js';
 import * as service from './procurement.service.js';
-import type { Actor, NewLine, PurchaseOrderRecord } from './procurement.types.js';
+import type { Actor, NewLine, PurchaseOrderView } from './procurement.types.js';
 
 /**
  * HTTP side of purchase orders (A3): validated request -> service -> response.
@@ -28,6 +29,7 @@ export const schemas = {
   create: { body: CreatePurchaseOrderRequestSchema },
   update: { params: IdParamsSchema, body: UpdatePurchaseOrderRequestSchema },
   receive: { params: IdParamsSchema, body: ReceivePurchaseOrderRequestSchema },
+  approve: { params: IdParamsSchema, body: ApprovePurchaseOrderRequestSchema },
   close: { params: IdParamsSchema, body: ClosePurchaseOrderRequestSchema },
 };
 
@@ -47,7 +49,7 @@ function lines(items: PurchaseOrderLineInput[]): NewLine[] {
   }));
 }
 
-function send(res: Response, record: PurchaseOrderRecord, status = 200): void {
+function send(res: Response, record: PurchaseOrderView, status = 200): void {
   const body: PurchaseOrder = toPurchaseOrderResponse(record);
   res.status(status).json(body);
 }
@@ -115,7 +117,8 @@ export async function submit(req: Request, res: Response): Promise<void> {
 }
 
 export async function approve(req: Request, res: Response): Promise<void> {
-  send(res, await service.approve(actor(req), idOf(req)));
+  const { params, body } = valid(req, schemas.approve);
+  send(res, await service.approve(actor(req), String(params.id), body.reason ?? null));
 }
 
 export async function markAsOrdered(req: Request, res: Response): Promise<void> {
