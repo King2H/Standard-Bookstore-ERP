@@ -23,6 +23,7 @@ export interface OrderDbRow {
   created_by: number;
   created_at: Date;
   updated_at: Date;
+  amount_paid: string;
   payment_method?: string | null;
   due_date?: string | null;
 }
@@ -50,7 +51,7 @@ export function toOrderRow(row: OrderDbRow): OrderRow {
     id: String(row.id), orderNumber: row.order_number,
     customerId: row.customer_id, branchId: row.branch_id,
     locationId: row.location_id, channel: row.channel,
-    status: row.status, paymentStatus: row.payment_status,
+    status: row.status, paymentStatus: row.payment_status, amountPaid: Number(row.amount_paid),
     saleType: (row.sale_type ?? 'cash_sale') as SaleType,
     currency: row.currency, subtotal: Number(row.subtotal),
     discountAmount: Number(row.discount_amount),

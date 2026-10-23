@@ -32,7 +32,7 @@ describe('Stock leaving in a sale', () => {
     const orders = `SELECT id FROM orders WHERE branch_id IN (${branches})`;
     const sales = `SELECT id FROM transactions WHERE branch_id IN (${branches})`;
     for (const statement of [
-      `DELETE FROM order_payments WHERE order_id IN (${orders})`,
+      `WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (${orders}))) DELETE FROM order_payments WHERE order_id IN (${orders})`,
       `DELETE FROM inventory_reservations WHERE order_id IN (${orders})`,
       `DELETE FROM order_line_items WHERE order_id IN (${orders})`,
       `DELETE FROM orders WHERE id IN (${orders})`,

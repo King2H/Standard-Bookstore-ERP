@@ -64,7 +64,7 @@ describe('Order payments', () => {
     for (const statement of [
       `DELETE FROM bank_reconciliation WHERE bank_account_id IN (${accounts})`,
       `DELETE FROM order_refunds WHERE order_id IN (${orders})`,
-      `DELETE FROM order_payments WHERE order_id IN (${orders})`,
+      `WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (${orders}))) DELETE FROM order_payments WHERE order_id IN (${orders})`,
       `DELETE FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id IN (${orders})`,
       `DELETE FROM inventory_reservations WHERE order_id IN (${orders})`,
       `DELETE FROM order_line_items WHERE order_id IN (${orders})`,

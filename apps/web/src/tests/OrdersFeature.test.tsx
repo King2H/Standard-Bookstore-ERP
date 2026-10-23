@@ -30,7 +30,7 @@ function profile(roles: string[]): ProfileResponse {
 function order(over: Partial<Order> = {}): Order {
   return contract(OrderSchema, {
     id: '10', orderNumber: 'ORD-20261018-0001', customerId: null, branchId: 1, locationId: 7, channel: 'in_store',
-    status: 'CONFIRMED', paymentStatus: 'paid', saleType: 'cash_sale', currency: 'ETB', subtotal: 50, discountAmount: 0,
+    status: 'CONFIRMED', paymentStatus: 'paid', amountPaid: 0, saleType: 'cash_sale', currency: 'ETB', subtotal: 50, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 50, cancelReason: null, notes: null, createdBy: 9,
     createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: 'cash', dueDate: null,
     ...over,
@@ -211,6 +211,30 @@ describe('steps on an order', () => {
     await user.type(within(dialog).getByRole('textbox'), 'Customer changed mind');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel Order' }));
     await waitFor(() => expect(posted('/orders/10/cancel')).toEqual([{ reason: 'Customer changed mind' }]));
+  });
+
+  it('says what a paid order took and asks how it goes back, then sends it (#167; was: the money kept, nothing owed back)', async () => {
+    orders = [order({ amountPaid: 50, customerId: 5, allowedActions: ['cancel', 'fulfill'] })];
+    const { user } = await openPage();
+    await user.click(within(await rowOf()).getByRole('button', { name: 'Cancel' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('It took ETB 50.00, which goes back now.');
+    expect(within(dialog).getByRole('radio', { name: 'Refund the way it was paid' })).toBeChecked();
+    await user.click(within(dialog).getByRole('radio', { name: 'Store credit for the customer' }));
+    await user.type(within(dialog).getByRole('textbox'), 'Customer withdrew');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel Order' }));
+    await waitFor(() => expect(posted('/orders/10/cancel')).toEqual([{ reason: 'Customer withdrew', refundTo: 'store_credit' }]));
+  });
+
+  it('offers store credit only for an order with a customer', async () => {
+    orders = [order({ amountPaid: 50, customerId: null, allowedActions: ['cancel', 'fulfill'] })];
+    const { user } = await openPage();
+    await user.click(within(await rowOf()).getByRole('button', { name: 'Cancel' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getAllByRole('radio').map((r) => r.closest('label')?.textContent?.trim())).toEqual(['Refund the way it was paid']);
+    await user.type(within(dialog).getByRole('textbox'), 'Walk-in left');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel Order' }));
+    await waitFor(() => expect(posted('/orders/10/cancel')).toEqual([{ reason: 'Walk-in left', refundTo: 'original' }]));
   });
 
   it('fulfils a confirmed order', async () => {

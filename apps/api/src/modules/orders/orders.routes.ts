@@ -21,7 +21,8 @@ router.delete('/orders/:id', authenticate, inBranch, requireRole('Admin'), valid
 
 router.post('/orders/:id/confirm', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.confirm), orders.confirm);
 router.post('/orders/:id/fulfill', authenticate, inBranch, requirePermission('PROCESS_PAYMENT'), validate(schemas.byId), orders.fulfill);
-router.post('/orders/:id/cancel', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.cancel), orders.cancel);
+// Whoever sells cancels an unpaid order; whoever refunds one that took payments (#167, orders.policy.ts).
+router.post('/orders/:id/cancel', authenticate, inBranch, validate(schemas.cancel), orders.cancel);
 
 // Retired endpoints answer 410 (#69). Payments, part payments of a credit
 // order included, are recorded with POST /payments, which keeps the payment,

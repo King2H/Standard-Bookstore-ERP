@@ -92,7 +92,7 @@ describe('Receivables', () => {
   async function cleanUp() {
     const branches = `SELECT id FROM branches WHERE name LIKE '${BRANCH_PREFIX}%'`;
     for (const sql of [
-      `DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches}))`,
+      `WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches})))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches}))`,
       `DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches}))`,
       `DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id IN (${branches}))`,
       `DELETE FROM exchange_items WHERE exchange_id IN (SELECT id FROM exchanges WHERE branch_id IN (${branches}))`,

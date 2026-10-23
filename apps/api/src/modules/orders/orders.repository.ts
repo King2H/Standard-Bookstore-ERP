@@ -14,12 +14,20 @@ const ORDER_COLUMNS = [
   'o.updated_at',
 ] as const;
 
+/** Payments taken less refunds (#167): what cancelling the order gives back. */
+const AMOUNT_PAID = sql<string>`(
+  COALESCE((SELECT SUM(op.amount) FROM order_payments op
+            WHERE op.order_id = o.id AND op.status IN ('success', 'partially_refunded', 'refunded')), 0)
+  - COALESCE((SELECT SUM(r.refund_amount) FROM order_refunds r WHERE r.order_id = o.id), 0)
+)`.as('amount_paid');
+
 /** The order with the method of its first payment and its receivable's due date. */
 export async function findById(q: Queryable, id: string | number, opts: { forUpdate?: boolean } = {}): Promise<OrderRow | undefined> {
   let query = q
     .selectFrom('orders as o')
     .select(ORDER_COLUMNS)
     .select([
+      AMOUNT_PAID,
       sql<string | null>`(SELECT op.payment_method FROM order_payments op WHERE op.order_id = o.id ORDER BY op.created_at ASC LIMIT 1)`.as('payment_method'),
       sql<string | null>`(SELECT TO_CHAR(r.due_date, 'YYYY-MM-DD') FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = o.id LIMIT 1)`.as('due_date'),
     ])
@@ -69,7 +77,7 @@ export async function list(
   if (filter.dateTo) query = query.where('o.created_at', '<=', sql<Date>`${filter.dateTo}`);
 
   const [rows, count] = await Promise.all([
-    query.select(ORDER_COLUMNS).orderBy('o.created_at', 'desc').limit(page.limit).offset(page.offset).execute(),
+    query.select(ORDER_COLUMNS).select(AMOUNT_PAID).orderBy('o.created_at', 'desc').limit(page.limit).offset(page.offset).execute(),
     query.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirstOrThrow(),
   ]);
   return { items: rows.map((r) => toOrderRow(r as OrderDbRow)), total: Number(count.total) };

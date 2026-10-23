@@ -107,7 +107,8 @@ export async function reopenOnRefund(
   opts: { sourceType: ReceivableSourceType; sourceEntityId: number | string; newOutstandingAmount: MoneyInput },
 ): Promise<void> {
   const r = await receivables.lockBySource(q, opts.sourceType, opts.sourceEntityId);
-  if (!r || r.status === 'WrittenOff') return;
+  // A written-off or cancelled debt stays closed: the sale it was for is gone (#167).
+  if (!r || r.status === 'WrittenOff' || r.status === 'Cancelled') return;
   const outstanding = Money.min(r.originalAmount, Money.max(0, Money.of(opts.newOutstandingAmount).round(2)));
   if (!outstanding.greaterThan(0)) return;
   const status = policy.statusForDueDate({ ...r, outstandingAmount: outstanding }, r.dueDate, await receivables.today(q));

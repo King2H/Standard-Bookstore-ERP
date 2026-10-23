@@ -140,7 +140,7 @@ describe('Inventory Consistency Scenarios', () => {
     if (branchId) {
       // Payment Mode Capture: cash_sale confirms now write an order_payments
       // row, which must be cleaned up before orders (FK).
-      await db.query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
+      await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1))) DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]).catch(() => {});
       await db.query(`DELETE FROM inventory_reservations WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
       await db.query(`DELETE FROM order_line_items WHERE order_id IN (SELECT id FROM orders WHERE branch_id = $1)`, [branchId]);
       await db.query(`DELETE FROM orders WHERE branch_id = $1`, [branchId]);
@@ -252,7 +252,7 @@ describe('Inventory Consistency Scenarios', () => {
     expect(qty).toBe(0);
 
     // Cleanup
-    await db.query(`DELETE FROM order_payments WHERE order_id = $1`, [orderId]).catch(() => {});
+    await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id = $1)) DELETE FROM order_payments WHERE order_id = $1`, [orderId]).catch(() => {});
     await db.query(`DELETE FROM inventory_reservations WHERE order_id = $1`, [orderId]).catch(() => {});
     await db.query(`DELETE FROM order_line_items WHERE order_id = $1`, [orderId]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
@@ -293,7 +293,7 @@ describe('Inventory Consistency Scenarios', () => {
     const cancelRes = await request(getTestApp())
       .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ reason: 'Test cancellation' });
+      .send({ reason: 'Test cancellation', refundTo: 'original' });
     expect(cancelRes.status).toBe(200);
 
     // Assert: stock restored to 10
@@ -344,7 +344,7 @@ describe('Inventory Consistency Scenarios', () => {
     const cancelRes = await request(getTestApp())
       .post(`/api/v1/orders/${orderId}/cancel`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ reason: 'Test' });
+      .send({ reason: 'Test', refundTo: 'original' });
 
     // Assert: rejected with ORDER_ALREADY_FULFILLED
     expect(cancelRes.status).toBe(422);

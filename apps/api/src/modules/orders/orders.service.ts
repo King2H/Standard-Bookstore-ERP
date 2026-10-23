@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { Money } from '@bms/shared';
+import { Money, type CancelRefundTo } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
@@ -8,6 +8,8 @@ import { insertOutbox, insertOutboxEvent, type OutboxEventType } from '../../lib
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
 import { cancelReceivable, createReceivable } from '../receivables/receivables.service.js';
+import { returnOrderPayments } from '../payments/payments.service.js';
+import type { Permission } from '../../lib/permissions.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
@@ -302,10 +304,22 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
  * cost it left at, reservations are released and an open receivable is
  * cancelled. The order's finances are frozen from then on.
  */
-export async function cancel(orderId: string | number, reason: string, staffCtx: StaffCtx): Promise<OrderRow> {
+/**
+ * Cancels an order: reserved stock goes back, its debt is cancelled, and the
+ * money it took goes back in the same transaction (#167), the way it was paid
+ * or as store credit for its customer.
+ */
+export async function cancel(
+  orderId: string | number,
+  reason: string,
+  staffCtx: StaffCtx,
+  opts: { permissions: readonly Permission[]; refundTo?: CancelRefundTo },
+): Promise<OrderRow> {
   await withTransaction({}, async (tx, client) => {
     const order = await loadOrder(tx, orderId, { forUpdate: true });
     const { restoresStock } = policy.checkCanCancel(order.status);
+    const amountPaid = Money.of(order.amountPaid);
+    policy.checkCancelReturn(amountPaid, opts.permissions, opts.refundTo, order.customerId !== null);
 
     if (restoresStock) {
       const locationId = await stockLocation(tx, order, staffCtx);
@@ -332,14 +346,20 @@ export async function cancel(orderId: string | number, reason: string, staffCtx:
     }
 
     // The debt goes with the order: Cancelled, neither paid nor written off.
-    // Payments already taken stay; they are refunded through Payments.
-    if (await orders.hasReceivable(tx, order.id, { openOnly: true })) {
-      await cancelReceivable(tx, { sourceType: 'order_credit_sale', sourceEntityId: order.id, paymentsReturned: false });
+    // Money taken goes back now, so the debt is cancelled in full first and a
+    // refund cannot make it owed again (#167).
+    const paid = amountPaid.greaterThan(0);
+    if (await orders.hasReceivable(tx, order.id, { openOnly: !paid })) {
+      await cancelReceivable(tx, { sourceType: 'order_credit_sale', sourceEntityId: order.id, paymentsReturned: paid });
     }
+    const returned = paid
+      ? await returnOrderPayments(tx, staffCtx, order.id, { to: opts.refundTo!, reason: `Order cancelled: ${reason}` })
+      : Money.of(0);
 
     await orders.setStatus(tx, order.id, 'CANCELLED', reason);
     await audit(tx, staffCtx, 'UPDATE', String(orderId), {
       action: 'cancel', fromStatus: order.status, toStatus: 'CANCELLED', reason, financialLifecycleFrozen: true,
+      ...(returned.greaterThan(0) && { moneyReturned: returned.toNumber(), refundTo: opts.refundTo }),
       note: 'Payment collection disabled. Receivable voided. No further financial transactions allowed.',
     });
     await publish(client, 'order.cancelled', { ...order, id: String(orderId) }, staffCtx, { reason });

@@ -37,7 +37,7 @@ function toResponse(req: Request, order: OrderRow): Order {
     ...order,
     paymentMethod: order.paymentMethod ?? null,
     dueDate: order.dueDate ?? null,
-    allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType),
+    allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType, order.amountPaid),
   };
 }
 
@@ -99,7 +99,8 @@ export async function fulfill(req: Request, res: Response): Promise<void> {
 
 export async function cancel(req: Request, res: Response): Promise<void> {
   const { params, body } = valid(req, schemas.cancel);
-  res.json(toResponse(req, await service.cancel(params.id, body.reason, req.staff!)));
+  const permissions = (req.staff!.permissions ?? []) as Permission[];
+  res.json(toResponse(req, await service.cancel(params.id, body.reason, req.staff!, { permissions, refundTo: body.refundTo })));
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {

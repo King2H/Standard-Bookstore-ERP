@@ -20165,6 +20165,9 @@
                           "paymentStatus": {
                             "type": "string"
                           },
+                          "amountPaid": {
+                            "type": "number"
+                          },
                           "saleType": {
                             "type": "string",
                             "enum": [
@@ -20318,6 +20321,7 @@
                           "channel",
                           "status",
                           "paymentStatus",
+                          "amountPaid",
                           "saleType",
                           "currency",
                           "subtotal",
@@ -20581,6 +20585,9 @@
                     "paymentStatus": {
                       "type": "string"
                     },
+                    "amountPaid": {
+                      "type": "number"
+                    },
                     "saleType": {
                       "type": "string",
                       "enum": [
@@ -20734,6 +20741,7 @@
                     "channel",
                     "status",
                     "paymentStatus",
+                    "amountPaid",
                     "saleType",
                     "currency",
                     "subtotal",
@@ -20807,6 +20815,9 @@
                     "paymentStatus": {
                       "type": "string"
                     },
+                    "amountPaid": {
+                      "type": "number"
+                    },
                     "saleType": {
                       "type": "string",
                       "enum": [
@@ -20960,6 +20971,7 @@
                     "channel",
                     "status",
                     "paymentStatus",
+                    "amountPaid",
                     "saleType",
                     "currency",
                     "subtotal",
@@ -21126,6 +21138,9 @@
                     "paymentStatus": {
                       "type": "string"
                     },
+                    "amountPaid": {
+                      "type": "number"
+                    },
                     "saleType": {
                       "type": "string",
                       "enum": [
@@ -21279,6 +21294,7 @@
                     "channel",
                     "status",
                     "paymentStatus",
+                    "amountPaid",
                     "saleType",
                     "currency",
                     "subtotal",
@@ -21575,7 +21591,7 @@
     "/orders/{id}/cancel": {
       "post": {
         "operationId": "cancelOrder",
-        "summary": "Cancel an unfulfilled order: restores stock and cancels its receivable",
+        "summary": "Cancel an unfulfilled order: restores stock, cancels its receivable and gives back what it took, the way it was paid or as store credit (refundTo). Unpaid: CREATE_SALE; paid: PROCESS_REFUND",
         "tags": [
           "Orders"
         ],
@@ -21602,6 +21618,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500
+                  },
+                  "refundTo": {
+                    "type": "string",
+                    "enum": [
+                      "original",
+                      "store_credit"
+                    ]
                   }
                 },
                 "required": [
@@ -21662,6 +21685,9 @@
                     },
                     "paymentStatus": {
                       "type": "string"
+                    },
+                    "amountPaid": {
+                      "type": "number"
                     },
                     "saleType": {
                       "type": "string",
@@ -21816,6 +21842,7 @@
                     "channel",
                     "status",
                     "paymentStatus",
+                    "amountPaid",
                     "saleType",
                     "currency",
                     "subtotal",
@@ -22079,6 +22106,9 @@
                     "paymentStatus": {
                       "type": "string"
                     },
+                    "amountPaid": {
+                      "type": "number"
+                    },
                     "saleType": {
                       "type": "string",
                       "enum": [
@@ -22232,6 +22262,7 @@
                     "channel",
                     "status",
                     "paymentStatus",
+                    "amountPaid",
                     "saleType",
                     "currency",
                     "subtotal",
@@ -22388,6 +22419,9 @@
                     "paymentStatus": {
                       "type": "string"
                     },
+                    "amountPaid": {
+                      "type": "number"
+                    },
                     "saleType": {
                       "type": "string",
                       "enum": [
@@ -22541,6 +22575,7 @@
                     "channel",
                     "status",
                     "paymentStatus",
+                    "amountPaid",
                     "saleType",
                     "currency",
                     "subtotal",

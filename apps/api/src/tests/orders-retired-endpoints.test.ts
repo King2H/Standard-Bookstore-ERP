@@ -27,7 +27,7 @@ describe('Collecting payment on a credit order', () => {
     const branches = (await db.query(`SELECT id FROM branches WHERE name LIKE $1`, [`${BRANCH_PREFIX}%`])).rows.map((r) => r.id);
     if (branches.length) {
       const ids = `(SELECT id FROM orders WHERE branch_id = ANY($1))`;
-      await db.query(`DELETE FROM order_payments WHERE order_id IN ${ids}`, [branches]);
+      await db.query(`WITH refunds AS (DELETE FROM order_refunds WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id IN ${ids})) DELETE FROM order_payments WHERE order_id IN ${ids}`, [branches]);
       await db.query(`DELETE FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id IN ${ids}`, [branches]);
       await db.query(`DELETE FROM inventory_reservations WHERE order_id IN ${ids}`, [branches]);
       await db.query(`DELETE FROM inventory_history WHERE location_id IN (SELECT id FROM locations WHERE branch_id = ANY($1))`, [branches]);

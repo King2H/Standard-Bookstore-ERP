@@ -162,7 +162,11 @@ export async function refundsOf(q: Queryable, paymentId: string): Promise<Refund
 
 export async function insertRefund(
   q: Queryable,
-  r: { payment: PaymentRecord; amount: Money; reason: string; bankAccountId: number | null; processedBy: number },
+  r: {
+    payment: PaymentRecord; amount: Money; reason: string; bankAccountId: number | null; processedBy: number;
+    /** How the money went back; the payment's own method unless it went to store credit (#167). */
+    method?: string;
+  },
 ): Promise<RefundRecord> {
   const row = await q
     .insertInto('order_refunds')
@@ -171,7 +175,7 @@ export async function insertRefund(
       order_id: r.payment.orderId,
       refund_amount: r.amount.toFixed(2),
       reason: r.reason,
-      method: r.payment.paymentMethod,
+      method: r.method ?? r.payment.paymentMethod,
       bank_account_id: r.bankAccountId,
       processed_by: r.processedBy,
     })

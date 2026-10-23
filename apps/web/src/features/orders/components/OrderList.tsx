@@ -1,5 +1,5 @@
 import { Fragment, useState, type MouseEvent } from 'react';
-import { Money, type Order } from '@bms/shared';
+import { Money, type CancelOrderRequest, type Order } from '@bms/shared';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import BankAccountSelect from '../../../components/BankAccountSelect.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../components/Pagination.js';
@@ -15,6 +15,7 @@ import { useCancelOrder, useConfirmOrder, useDeleteOrder, useFulfillOrder, useOr
 import {
   canDeleteOrder, cashConfirmBody, cashPaymentProblem, isDeletable, PENDING_FULFILLMENT, STATUS_FILTERS,
 } from '../rules.js';
+import { CancelOrderDialog } from './CancelOrderDialog.js';
 import { OrderDetail } from './OrderDetail.js';
 import { OrderSlip } from './OrderSlip.js';
 
@@ -107,14 +108,20 @@ export function OrderList({ initialContext = {}, onNavigate }: {
     confirm.mutate({ id: order.id, body: cashConfirmBody(confirmMethod, confirmProof, confirmBankAccountId) }, { onSuccess: updated, onError });
   }
 
-  function answer(reason?: string) {
+  function answer() {
     if (!asking) return;
     const done = () => setAsking(null);
-    if (asking.kind === 'cancel') {
-      cancel.mutate({ id: asking.order.id, reason: reason ?? '' }, { onSuccess: () => { done(); updated(); }, onError });
-    } else {
+    if (asking.kind === 'delete') {
       remove.mutate(asking.order.id, { onSuccess: () => { done(); showToast('Order deleted', 'success'); }, onError });
     }
+  }
+
+  function cancelAsked(body: CancelOrderRequest) {
+    if (asking?.kind !== 'cancel') return;
+    cancel.mutate({ id: asking.order.id, body }, {
+      onSuccess: () => { setAsking(null); updated(); if (body.refundTo) showToast('The money the order took went back', 'success'); },
+      onError,
+    });
   }
 
   function actionsOf(order: Order) {
@@ -275,16 +282,7 @@ export function OrderList({ initialContext = {}, onNavigate }: {
       {printing && <OrderSlip orderId={printing} onClose={() => setPrinting(null)} />}
 
       {asking?.kind === 'cancel' && (
-        <ActionDialog
-          title="Cancel Order"
-          message={`Cancel ${asking.order.orderNumber}? A confirmed order's books go back to stock.`}
-          confirmLabel="Cancel Order"
-          reason={{ label: 'Why is this order being cancelled?', max: 500 }}
-          tone="red"
-          busy={cancel.isPending}
-          onConfirm={answer}
-          onCancel={() => setAsking(null)}
-        />
+        <CancelOrderDialog order={asking.order} currency={currency} busy={cancel.isPending} onConfirm={cancelAsked} onCancel={() => setAsking(null)} />
       )}
       {asking?.kind === 'delete' && (
         <ActionDialog
