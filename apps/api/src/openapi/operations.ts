@@ -1683,7 +1683,7 @@ function orderOperations(): ApiOperation[] {
       operationId: 'cancelOrder',
       method: 'post',
       path: '/orders/{id}/cancel',
-      summary: 'Cancel an unfulfilled order: restores stock, cancels its receivable and gives back what it took, the way it was paid or as store credit (refundTo). Unpaid: CREATE_SALE; paid: PROCESS_REFUND',
+      summary: 'Cancel an unfulfilled order: restores stock, cancels its receivable and gives back what it took, the way it was paid or as store credit (refundTo). CREATE_SALE, and PROCESS_REFUND when it took payments',
       tag,
       request: { params: IdParamsSchema, body: CancelOrderRequestSchema },
       responses: order('The cancelled order'),

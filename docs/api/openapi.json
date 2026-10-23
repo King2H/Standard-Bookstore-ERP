@@ -21591,7 +21591,7 @@
     "/orders/{id}/cancel": {
       "post": {
         "operationId": "cancelOrder",
-        "summary": "Cancel an unfulfilled order: restores stock, cancels its receivable and gives back what it took, the way it was paid or as store credit (refundTo). Unpaid: CREATE_SALE; paid: PROCESS_REFUND",
+        "summary": "Cancel an unfulfilled order: restores stock, cancels its receivable and gives back what it took, the way it was paid or as store credit (refundTo). CREATE_SALE, and PROCESS_REFUND when it took payments",
         "tags": [
           "Orders"
         ],

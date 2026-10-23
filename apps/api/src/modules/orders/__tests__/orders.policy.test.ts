@@ -133,11 +133,18 @@ describe('confirming an order', () => {
 describe('cancelling an order that took payments (#167)', () => {
   const seller = ['CREATE_SALE', 'PROCESS_PAYMENT'] as const;
   const refunder = ['CREATE_SALE', 'PROCESS_PAYMENT', 'PROCESS_REFUND'] as const;
+  const finance = ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'] as const;
 
   it('leaves an unpaid order to whoever sells, and one that took payments to whoever refunds', () => {
     expect(() => checkCancelReturn(Money.of(0), [...seller], undefined, false)).not.toThrow();
     expect(() => checkCancelReturn(Money.of(5), [...seller], 'original', true)).toThrow(expect.objectContaining({ statusCode: 403 }));
     expect(() => checkCancelReturn(Money.of(5), [...refunder], 'original', false)).not.toThrow();
+  });
+
+  it('keeps cancelling to the selling roles: refunding alone does not cancel an order (was: Finance_Officer could)', () => {
+    expect(() => checkCancelReturn(Money.of(5), [...finance], 'original', true)).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(() => checkCancelReturn(Money.of(0), [...finance], undefined, true)).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(computeOrderAllowedActions('CONFIRMED', [...finance], 'paid', 'cash_sale', 12.99)).toEqual(['fulfill']);
   });
 
   it('asks how the money goes back; store credit needs a customer', () => {

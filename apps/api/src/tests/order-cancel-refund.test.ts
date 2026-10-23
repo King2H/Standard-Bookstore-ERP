@@ -23,6 +23,7 @@ describe('Cancelling an order that took payments (#167)', () => {
   let price: number;
   let sales: string;
   let manager: string;
+  let finance: string;
   const api = () => request(getTestApp());
   const as = (r: request.Test, token = manager) => r.set('Authorization', `Bearer ${token}`).set('X-Branch-Id', String(branchId));
 
@@ -80,6 +81,7 @@ describe('Cancelling an order that took payments (#167)', () => {
     branchId = (await createTestBranch({ name: `${BRANCH_PREFIX}A` })).branchId;
     sales = (await createTestStaff({ username: `${STAFF_PREFIX}sales`, role: 'Sales', branchId })).token;
     manager = (await createTestStaff({ username: `${STAFF_PREFIX}mgr`, role: 'Manager', branchId })).token;
+    finance = (await createTestStaff({ username: `${STAFF_PREFIX}fin`, role: 'Finance_Officer', branchId })).token;
     locationId = (await one(
       `INSERT INTO locations (branch_id, name, is_default_fulfillment) VALUES ($1, 'Ord Cancel Loc', true) RETURNING id`, [branchId],
     )).id;
@@ -138,13 +140,17 @@ describe('Cancelling an order that took payments (#167)', () => {
     expect(await money(id)).toMatchObject({ status: 'CONFIRMED', refunded: '0' });
   });
 
-  it('leaves an order that took payments to the roles that refund (was: Sales cancelled it and could not refund)', async () => {
+  it('leaves an order that took payments to the roles that both sell and refund (was: Sales cancelled it and could not refund)', async () => {
     const paid = await order('cash_sale');
     expect((await confirm(paid, { paymentMethod: 'cash' })).status).toBe(200);
     const view = await as(api().get(`/api/v1/orders/${paid}`), sales);
     expect(view.body.allowedActions).not.toContain('cancel');
     expect(view.body.amountPaid).toBe(price);
     expect((await cancel(paid, { refundTo: 'original' }, sales)).status).toBe(403);
+    expect((await money(paid)).status).toBe('CONFIRMED');
+    const financeView = await as(api().get(`/api/v1/orders/${paid}`), finance);
+    expect(financeView.body.allowedActions).not.toContain('cancel');
+    expect((await cancel(paid, { refundTo: 'original' }, finance)).status).toBe(403);
     expect((await money(paid)).status).toBe('CONFIRMED');
 
     const unpaid = await order('credit_sale');

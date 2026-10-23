@@ -60,10 +60,11 @@ export function checkCanCancel(status: string): { restoresStock: boolean } {
 }
 
 /**
- * Who cancels and how the money goes back (#167): an order that took no money
- * is cancelled by whoever sells; one that took payments by whoever refunds
- * (decision 2a), saying how the money goes back: the way it was paid, or as
- * store credit for the order's customer (1a).
+ * Who cancels and how the money goes back (#167): whoever sells cancels an
+ * order, as before; one that took payments also needs PROCESS_REFUND (decision
+ * 2a; strict permissions, owner 2026-10-23: refunding alone does not cancel),
+ * saying how the money goes back: the way it was paid, or as store credit for
+ * the order's customer (1a).
  */
 export function checkCancelReturn(
   amountPaid: Money,
@@ -71,12 +72,10 @@ export function checkCancelReturn(
   refundTo: 'original' | 'store_credit' | undefined,
   hasCustomer: boolean,
 ): void {
-  if (!amountPaid.greaterThan(0)) {
-    if (!permissions.includes('CREATE_SALE')) throw new ForbiddenError('Only staff who sell may cancel an order');
-    return;
-  }
+  if (!permissions.includes('CREATE_SALE')) throw new ForbiddenError('Only staff who sell may cancel an order');
+  if (!amountPaid.greaterThan(0)) return;
   if (!permissions.includes('PROCESS_REFUND')) {
-    throw new ForbiddenError('An order that took payments is cancelled by a Manager, Admin or Finance_Officer, who gives the money back');
+    throw new ForbiddenError('An order that took payments is cancelled by a Manager or Admin, who gives the money back');
   }
   if (!refundTo) {
     throw new ValidationError('The order took payments: say how the money goes back (refundTo: original or store_credit)', { field: 'refundTo' });
@@ -121,7 +120,7 @@ export function computeOrderAllowedActions(
 ): string[] {
   const can = (p: Permission) => permissions.includes(p);
   // An order that took payments is cancelled by whoever refunds, giving the money back (#167).
-  const cancel = can(amountPaid > 0 ? 'PROCESS_REFUND' : 'CREATE_SALE') ? ['cancel'] : [];
+  const cancel = can('CREATE_SALE') && (amountPaid <= 0 || can('PROCESS_REFUND')) ? ['cancel'] : [];
   const cancelOrFulfill = [...cancel, ...(can('PROCESS_PAYMENT') ? ['fulfill'] : [])];
 
   switch (status) {
