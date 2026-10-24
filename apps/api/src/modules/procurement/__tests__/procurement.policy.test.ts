@@ -11,6 +11,7 @@ import {
   orderTotal,
   statusAfterReceipt,
   statusAfterSubmit,
+  stockByLocation,
 } from '../procurement.policy.js';
 import { ROLE_PERMISSIONS } from '../../../lib/permissions.js';
 
@@ -81,5 +82,28 @@ describe('status', () => {
     expect(() => checkReceiptLine(line, '6', 1, 1)).toThrow(expect.objectContaining({ code: 'LINE_ITEM_MISMATCH' }));
     expect(statusAfterReceipt([{ quantity: 2, receivedQuantity: 2 }, { quantity: 1, receivedQuantity: 0 }])).toBe('partially_received');
     expect(statusAfterReceipt([{ quantity: 2, receivedQuantity: 2 }])).toBe('received');
+  });
+});
+
+describe('stock by location for the buyer (owner correction, 2026-10-23)', () => {
+  it('merges on hand and on order by location, drops empty locations, and puts a location not chosen yet last', () => {
+    expect(stockByLocation(
+      [
+        { locationId: 2, locationName: 'Store', quantity: 4 },
+        { locationId: 1, locationName: 'Shop', quantity: 50 },
+        { locationId: 3, locationName: 'Back Room', quantity: 0 },
+        { locationId: 4, locationName: 'Annex', quantity: -2 },
+      ],
+      [
+        { locationId: null, locationName: null, quantity: 8 },
+        { locationId: 1, locationName: 'Shop', quantity: 15 },
+        { locationId: 5, locationName: 'Window', quantity: 0 },
+      ],
+    )).toEqual([
+      { locationId: 4, locationName: 'Annex', onHand: -2, onOrder: 0 },
+      { locationId: 1, locationName: 'Shop', onHand: 50, onOrder: 15 },
+      { locationId: 2, locationName: 'Store', onHand: 4, onOrder: 0 },
+      { locationId: null, locationName: null, onHand: 0, onOrder: 8 },
+    ]);
   });
 });

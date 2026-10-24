@@ -1,5 +1,5 @@
 import type {
-  BookAvailabilityListResponse, CatalogSearchResponse, CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest,
+  BooksToOrderResponse, CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest,
   CreateSupplierPaymentRequest, PurchaseOrder, PurchaseOrderListResponse, PurchaseOrderStatus, ReceivePurchaseOrderRequest,
   SupplierLedgerResponse, UpdatePurchaseOrderRequest,
 } from '@bms/shared';
@@ -57,19 +57,13 @@ export const searchSuppliersToBuyFrom = async (text: string) =>
   (await listSuppliers({ q: text || undefined, status: 'active', isBlacklisted: 'false', pageSize: 10 }))
     .items.map((s) => ({ id: s.id, label: s.name }));
 
-/** A book to order; with a location, its stock there, so the buyer sees what is already on hand. */
-export type BookToBuy = { id: number; title: string; isbn: string | null; isActive: boolean; available: number | null };
-
-export async function searchBooksToBuy(text: string, at: { branchId: number | null; locationId: number | null }): Promise<BookToBuy[]> {
-  if (at.locationId) {
-    const res = await api.get<BookAvailabilityListResponse>(
-      `/books/with-availability${toQuery({ q: text, pageSize: 10, branchId: at.branchId ?? undefined, locationId: at.locationId })}`,
-    );
-    return res.items.map((b) => ({ id: b.id, title: b.title, isbn: b.isbn, isActive: b.isActive, available: b.availability?.available ?? null }));
-  }
-  const res = await api.get<CatalogSearchResponse>(`/catalog/search${toQuery({ q: text })}`);
-  return res.results.map((b) => ({ id: b.id, title: b.title, isbn: b.isbn, isActive: b.isActive, available: null }));
-}
+/**
+ * Books to order, found by typing, with the stock of each location of the
+ * branch: on hand and on order. Without `branchId`, the session's branch;
+ * another branch needs access to all branches.
+ */
+export const searchBooksToOrder = (q: string, branchId?: number) =>
+  api.get<BooksToOrderResponse>(`/purchase-orders/books${toQuery({ q, branchId })}`);
 
 /** A payment to the supplier against an order; the ordering branch pays. */
 export const recordSupplierPayment = (id: string, body: CreateSupplierPaymentRequest) =>

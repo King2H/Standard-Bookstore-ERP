@@ -6,13 +6,13 @@
 // list keeps the order's lines; and receiving checks its notes. Every
 // mocked answer is checked against its contract.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   BookAvailabilityListResponseSchema, BookSchema, BranchListResponseSchema, CatalogSearchResponseSchema, LocationListResponseSchema,
   ProfileResponseSchema, PurchaseOrderListResponseSchema, PurchaseOrderSchema, SupplierListResponseSchema,
-  type Book, type ProfileResponse, type PurchaseOrder,
+  type Book, type ProfileResponse, type PurchaseOrder, BooksToOrderResponseSchema,
 } from '@bms/shared';
 import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 import { ToastProvider } from '../components/Toast.js';
@@ -94,6 +94,18 @@ function stubApi() {
       return json(contract(BookAvailabilityListResponseSchema, {
         items: [{ ...book(1, 'Animal Farm'), availability: { locationId: 2, locationName: 'Back Store', onHand: 3, reserved: 0, available: 3 } }],
         total: 1, page: 1, pageSize: 10, totalPages: 1,
+      }));
+    }
+    if (u.pathname === '/purchase-orders/books') {
+      return json(contract(BooksToOrderResponseSchema, {
+        branchId: Number(q.get('branchId') ?? 1),
+        items: [{
+          id: 1, title: 'Animal Farm', isbn: '9780306406101',
+          stock: [
+            { locationId: 2, locationName: 'Back Store', onHand: 40, onOrder: 15 },
+            { locationId: 1, locationName: 'Shop Floor', onHand: 6, onOrder: 0 },
+          ],
+        }],
       }));
     }
     if (u.pathname === '/purchase-orders' && method === 'GET') {
@@ -180,6 +192,41 @@ describe('Procurement: the order form', () => {
     await user.click(screen.getByRole('button', { name: 'Save as Draft' }));
     await waitFor(() => expect(posted('POST', '/purchase-orders')).toHaveLength(1));
     expect(posted('POST', '/purchase-orders')[0]).toMatchObject({ supplierId: 7, receivingBranchId: null, receivingLocationId: 2 });
+  });
+
+  it('shows under each book the stock of every location of the branch, on hand and on order, and keeps it under the chosen book (owner correction; was: one "avail" figure, only once a location was chosen)', async () => {
+    const user = await openNewOrder();
+    await user.type(screen.getByPlaceholderText('Type to search books…'), 'Anim');
+    const list = await screen.findByRole('listbox');
+    expect(within(list).getByText('Stock at Main Branch')).toBeInTheDocument();
+    expect(await within(list).findByText('Back Store: 40 on hand · 15 on order')).toBeInTheDocument();
+    expect(within(list).getByText('Shop Floor: 6 on hand')).toBeInTheDocument();
+    fireEvent.mouseDown(within(list).getByText('Animal Farm'));
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(await screen.findByText('Back Store: 40 on hand · 15 on order')).toBeInTheDocument();
+    const search = calls.find((c) => c.path.startsWith('/purchase-orders/books'))!;
+    expect(new URL(search.path, 'http://x').searchParams.get('branchId')).toBeNull();
+  });
+
+  it('shows another receiving branch\'s stock only to staff with access to all branches; others see their own branch', async () => {
+    const user = await openNewOrder();
+    await waitFor(() => expect(selectWith('Same as order branch (default)').options.length).toBe(3));
+    await user.selectOptions(selectWith('Same as order branch (default)'), '2');
+    await user.type(screen.getByPlaceholderText('Type to search books…'), 'Anim');
+    expect(within(await screen.findByRole('listbox')).getByText('Stock at Main Branch')).toBeInTheDocument();
+    await within(screen.getByRole('listbox')).findByText('Animal Farm');
+    expect(new URL(calls.find((c) => c.path.startsWith('/purchase-orders/books'))!.path, 'http://x').searchParams.get('branchId')).toBeNull();
+    cleanup();
+
+    me = { ...profile(['Purchasor']), isAllBranches: true };
+    const again = await openNewOrder();
+    await waitFor(() => expect(selectWith('Same as order branch (default)').options.length).toBe(3));
+    await again.selectOptions(selectWith('Same as order branch (default)'), '2');
+    calls = [];
+    await again.type(screen.getByPlaceholderText('Type to search books…'), 'Anim');
+    expect(await within(await screen.findByRole('listbox')).findByText('Stock at Bole Branch')).toBeInTheDocument();
+    await within(screen.getByRole('listbox')).findByText('Animal Farm');
+    expect(new URL(calls.find((c) => c.path.startsWith('/purchase-orders/books'))!.path, 'http://x').searchParams.get('branchId')).toBe('2');
   });
 
   it('works out the total with Money (was: floating point, 1.005 showed as 1.00)', async () => {

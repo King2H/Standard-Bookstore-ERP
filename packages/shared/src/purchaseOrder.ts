@@ -166,6 +166,45 @@ export const PurchaseOrderListQuerySchema = ListPagingQuerySchema.extend({
 });
 export type PurchaseOrderListQuery = z.infer<typeof PurchaseOrderListQuerySchema>;
 
+/**
+ * A book to order, found by typing (GET /purchase-orders/books): the stock of
+ * each location of the branch, on hand and still to arrive on approved,
+ * ordered or part-received orders, so the buyer sees what the shop and the
+ * store hold before ordering more. The branch is the session's unless the
+ * staff member has access to all branches.
+ */
+export const BooksToOrderQuerySchema = z.object({
+  q: z.string().trim().min(2).max(100),
+  branchId: IdSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(20).default(10),
+});
+export type BooksToOrderQuery = z.infer<typeof BooksToOrderQuerySchema>;
+
+export const BookStockAtLocationSchema = z.object({
+  /** Null: copies on order whose receiving location is not chosen yet. */
+  locationId: z.number().int().nullable(),
+  locationName: z.string().nullable(),
+  onHand: z.number().int(),
+  /** Ordered and not yet received. */
+  onOrder: z.number().int().min(0),
+});
+export type BookStockAtLocation = z.infer<typeof BookStockAtLocationSchema>;
+
+export const BookToOrderSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  isbn: z.string().nullable(),
+  /** Locations holding or awaiting copies; empty when the branch has none. */
+  stock: z.array(BookStockAtLocationSchema),
+});
+export type BookToOrder = z.infer<typeof BookToOrderSchema>;
+
+export const BooksToOrderResponseSchema = z.object({
+  branchId: z.number().int(),
+  items: z.array(BookToOrderSchema),
+});
+export type BooksToOrderResponse = z.infer<typeof BooksToOrderResponseSchema>;
+
 export const PurchaseOrderListResponseSchema = z.object({
   items: z.array(PurchaseOrderSchema),
   total: z.number().int().min(0),

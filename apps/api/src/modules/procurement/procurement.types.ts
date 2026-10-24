@@ -158,3 +158,18 @@ export interface PurchaseOrderFilter {
 }
 
 export type Paging = { page: number; pageSize: number };
+
+/** A book's copies at one location of a branch: on hand, and ordered but not yet received. */
+export interface LocationStock {
+  locationId: number | null;
+  locationName: string | null;
+  onHand: number;
+  onOrder: number;
+}
+
+export interface BookToOrder {
+  id: number;
+  title: string;
+  isbn: string | null;
+  stock: LocationStock[];
+}

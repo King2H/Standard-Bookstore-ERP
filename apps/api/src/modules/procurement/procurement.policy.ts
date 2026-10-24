@@ -1,6 +1,6 @@
 import { Money } from '@bms/shared';
 import { BranchAccessError, BusinessError, ValidationError } from '../../lib/errors.js';
-import type { Actor, FinancialStatus, NewLine, PurchaseOrderRecord, PurchaseOrderStatus } from './procurement.types.js';
+import type { Actor, FinancialStatus, LocationStock, NewLine, PurchaseOrderRecord, PurchaseOrderStatus } from './procurement.types.js';
 
 /**
  * Rules of purchase orders (A5), pure: who may act on an order, which status
@@ -113,4 +113,26 @@ export function checkReceiptLine(
 
 export function statusAfterReceipt(lines: Array<{ quantity: number; receivedQuantity: number }>): 'received' | 'partially_received' {
   return lines.every((l) => l.receivedQuantity >= l.quantity) ? 'received' : 'partially_received';
+}
+
+/**
+ * A book's stock by location: what is on hand and what is on order, one row per
+ * location holding or awaiting copies, by location name (a location not chosen
+ * yet last).
+ */
+export function stockByLocation(
+  onHand: Array<{ locationId: number; locationName: string; quantity: number }>,
+  onOrder: Array<{ locationId: number | null; locationName: string | null; quantity: number }>,
+): LocationStock[] {
+  const rows = new Map<number | null, LocationStock>();
+  const row = (locationId: number | null, locationName: string | null) => {
+    const found = rows.get(locationId) ?? { locationId, locationName, onHand: 0, onOrder: 0 };
+    rows.set(locationId, found);
+    return found;
+  };
+  for (const r of onHand) row(r.locationId, r.locationName).onHand += r.quantity;
+  for (const r of onOrder) row(r.locationId, r.locationName).onOrder += r.quantity;
+  return [...rows.values()]
+    .filter((r) => r.onHand !== 0 || r.onOrder > 0)
+    .sort((a, b) => (a.locationName === null ? 1 : b.locationName === null ? -1 : a.locationName.localeCompare(b.locationName)));
 }

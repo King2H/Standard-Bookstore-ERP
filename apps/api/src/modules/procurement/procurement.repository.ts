@@ -467,3 +467,48 @@ export async function settlement(q: Queryable, poId: string): Promise<{ received
 export async function setFinancialStatus(q: Queryable, poId: string, status: FinancialStatus): Promise<void> {
   await q.updateTable('purchase_orders').set({ financial_status: status, updated_at: sql`now()` }).where('id', '=', poId).execute();
 }
+
+/** Copies on hand of these books at each location of the branch. */
+export async function stockOnHand(
+  q: Queryable,
+  branchId: number,
+  bookIds: number[],
+): Promise<Array<{ bookId: number; locationId: number; locationName: string; quantity: number }>> {
+  if (bookIds.length === 0) return [];
+  return q
+    .selectFrom('inventory as i')
+    .innerJoin('locations as l', 'l.id', 'i.location_id')
+    .select(['i.book_id as bookId', 'l.id as locationId', 'l.name as locationName', 'i.quantity'])
+    .where('l.branch_id', '=', branchId)
+    .where('i.book_id', 'in', bookIds)
+    .execute();
+}
+
+/**
+ * Copies of these books still to arrive at each location of the branch, on
+ * orders it receives that are approved, ordered or part-received. A null
+ * location: the order has no receiving location yet.
+ */
+export async function stockOnOrder(
+  q: Queryable,
+  branchId: number,
+  bookIds: number[],
+): Promise<Array<{ bookId: number; locationId: number | null; locationName: string | null; quantity: number }>> {
+  if (bookIds.length === 0) return [];
+  const rows = await q
+    .selectFrom('po_line_items as li')
+    .innerJoin('purchase_orders as po', 'po.id', 'li.po_id')
+    .leftJoin('locations as l', 'l.id', 'po.receiving_location_id')
+    .select([
+      'li.book_id as bookId',
+      'po.receiving_location_id as locationId',
+      'l.name as locationName',
+      sql<string>`SUM(GREATEST(li.quantity - li.received_quantity, 0))`.as('quantity'),
+    ])
+    .where(sql<number>`COALESCE(po.receiving_branch_id, po.branch_id)`, '=', branchId)
+    .where('po.status', 'in', ['approved', 'ordered', 'partially_received'])
+    .where('li.book_id', 'in', bookIds)
+    .groupBy(['li.book_id', 'po.receiving_location_id', 'l.name'])
+    .execute();
+  return rows.map((r) => ({ ...r, quantity: Number(r.quantity) }));
+}
