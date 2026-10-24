@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type {
   CollectReceivableRequestSchema, CreatePaymentRequestSchema, OrderBalance, Payment, PaymentListResponse, PaymentRefund,
-  PaymentStatus, PosCollectRequest, PosTransaction, Receivable, RefundPaymentRequest, UnpaidListResponse,
+  PaymentStatus, PaymentsLedger, PosCollectRequest, PosTransaction, Receivable, RefundPaymentRequest, UnpaidListResponse,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
@@ -23,6 +23,13 @@ export type UnpaidParams = {
 };
 
 /** What customers still owe in the branch: credit orders, POS credit sales and exchange differences. */
+/**
+ * Every payment in and refund out of the branch in a date range (both days
+ * included): the Payments ledger, a report (VIEW_REPORTS).
+ */
+export const getMoneyInOut = (range: { dateFrom: string; dateTo: string }) =>
+  api.get<PaymentsLedger>(`/reports/payments-ledger${toQuery(range)}`);
+
 export const listUnpaid = (params: UnpaidParams) => api.get<UnpaidListResponse>(`/payments/unpaid-orders${toQuery(params)}`);
 
 export type HistoryParams = {

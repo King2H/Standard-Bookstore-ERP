@@ -74,7 +74,7 @@ const PERIOD_KPIS = {
   netSales: 3000, grossProfit: 2000, grossMarginPct: 66.7,
   previous: { dateFrom: '2026-08-11', dateTo: '2026-08-11', netSales: 2500, grossProfit: 1500, grossMarginPct: 60 },
   netSalesChangePct: 20, grossProfitChangePct: 33.3,
-  cashCollected: 4000, previousCashCollected: 3500,
+  cashIn: 4500, cashOut: 500, cashCollected: 4000, previousCashCollected: 3500,
 };
 
 

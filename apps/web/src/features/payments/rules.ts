@@ -1,6 +1,6 @@
 import {
   CollectReceivableRequestSchema, Money, OrderPaymentMethodSchema, PosPaymentMethodSchema,
-  type Payment, type ProfileResponse, type UnpaidItem,
+  type Payment, type PaymentsLedgerRow, type ProfileResponse, type UnpaidItem,
 } from '@bms/shared';
 import { proofError, type PaymentProof } from '../../lib/paymentProof.js';
 import type { PaymentMethodCode } from '../../lib/paymentMethods.js';
@@ -18,6 +18,22 @@ const holds = (me: Account | undefined, allowed: string[]) => (me?.currentRoles 
 
 /** Taking a payment: the roles that see payments (PROCESS_PAYMENT). */
 export const canTakePayment = (me: Account | undefined) => holds(me, ['Sales', 'Manager', 'Admin', 'Finance_Officer']);
+
+/** Money In & Out reads the Payments ledger, a report: VIEW_REPORTS (Super_Admin has no Payments page). */
+export const canSeeMoneyInOut = (me: Account | undefined) => holds(me, ['Manager', 'Admin', 'Finance_Officer']);
+
+/**
+ * Customer money of the ledger: what came in, what went back and what is left,
+ * as the Dashboard's Cash Collected counts it. Supplier payments (PO) are the
+ * shop's own spending, not customer money.
+ */
+export function customerMoney(rows: PaymentsLedgerRow[]) {
+  const customer = rows.filter((r) => r.referenceType !== 'PO');
+  const sum = (direction: 'IN' | 'OUT') => Money.sum(customer.filter((r) => r.direction === direction).map((r) => r.amount));
+  const moneyIn = sum('IN');
+  const moneyOut = sum('OUT');
+  return { rows: customer, moneyIn, moneyOut, net: moneyIn.minus(moneyOut) };
+}
 
 /** Refunding a payment: PROCESS_REFUND. */
 export const canRefundPayment = (me: Account | undefined) => holds(me, ['Manager', 'Admin', 'Finance_Officer']);

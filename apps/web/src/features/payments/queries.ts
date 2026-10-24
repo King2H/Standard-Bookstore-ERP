@@ -5,7 +5,7 @@ import { orderKeys } from '../orders/queries.js';
 import { posKeys } from '../pos/queries.js';
 import { receivableKeys } from '../receivables/queries.js';
 import {
-  collectPosSale, collectReceivable, getOrderBalance, getPayment, listPayments, listUnpaid, recordOrderPayment, refundPayment,
+  collectPosSale, collectReceivable, getMoneyInOut, getOrderBalance, getPayment, listPayments, listUnpaid, recordOrderPayment, refundPayment,
   type HistoryParams, type NewOrderPayment, type ReceivableCollection, type UnpaidParams,
 } from './api.js';
 
@@ -16,6 +16,7 @@ export const paymentKeys = {
   history: (params: HistoryParams) => [...paymentKeys.all, 'history', params] as const,
   detail: (id: string) => [...paymentKeys.all, 'detail', id] as const,
   balance: (orderId: string) => [...paymentKeys.all, 'balance', orderId] as const,
+  moneyInOut: (range: { dateFrom: string; dateTo: string }) => [...paymentKeys.all, 'money', range] as const,
 };
 
 /** Refreshed every 30 seconds: other tills take payments too. */
@@ -28,6 +29,10 @@ export function useUnpaid(params: UnpaidParams, enabled = true) {
 
 export function usePaymentHistory(params: HistoryParams) {
   return useQuery({ queryKey: paymentKeys.history(params), queryFn: () => listPayments(params), placeholderData: keepPreviousData });
+}
+
+export function useMoneyInOut(range: { dateFrom: string; dateTo: string }, enabled = true) {
+  return useQuery({ queryKey: paymentKeys.moneyInOut(range), queryFn: () => getMoneyInOut(range), enabled, placeholderData: keepPreviousData });
 }
 
 export function usePayment(id: string) {

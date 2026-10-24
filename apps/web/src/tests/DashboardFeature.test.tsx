@@ -10,10 +10,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cloneElement, type ReactElement } from 'react';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { shortMoney } from '../features/dashboard/components/cards.js';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  InventoryReportSchema, KpiReportSchema, PaymentListResponseSchema, PaymentReportSchema, PeriodKpisSchema,
+  InventoryReportSchema, KpiReportSchema, PaymentListResponseSchema, PaymentReportSchema, PaymentsLedgerSchema, type PaymentsLedgerRow, PeriodKpisSchema,
   ProfileResponseSchema, SalesReportSchema,
   type InventoryReport, type KpiReport, type PaymentReport, type ProfileResponse, type SalesReport,
 } from '@bms/shared';
@@ -51,12 +52,19 @@ const KPIS = contract(KpiReportSchema, { ...ZERO_KPIS, outstandingBalance: 8000,
 const PERIOD = contract(PeriodKpisSchema, {
   period: 'today', dateFrom: '2026-10-20', dateTo: '2026-10-20', netSales: 3000, grossProfit: 2000, grossMarginPct: 66.7,
   previous: { dateFrom: '2026-10-19', dateTo: '2026-10-19', netSales: 2500, grossProfit: 1500, grossMarginPct: 60 },
-  netSalesChangePct: 20, grossProfitChangePct: 33.3, cashCollected: 4000, previousCashCollected: 3500,
+  netSalesChangePct: 20, grossProfitChangePct: 33.3, cashIn: 4500, cashOut: 500, cashCollected: 4000, previousCashCollected: 3500,
 });
 const INVENTORY = contract(InventoryReportSchema, {
   summary: { totalBooks: 1, totalStockUnits: 9, availableStock: 9, reservedStock: 0, lowStockItems: 2, outOfStockItems: 0 },
   lowStockItems: [], topSellingBooks: [], stockMovement: [],
 });
+const LEDGER: PaymentsLedgerRow[] = ([
+  ['IN', 'ORDER', 'ORD-20261020-0001', 14.99], ['IN', 'ORDER', 'ORD-20261020-0002', 14.99], ['IN', 'POS', 'POS-20261020-0001', 29.98],
+  ['OUT', 'RETURN', 'RET-20261020-0001', 14.99], ['OUT', 'ORDER', 'ORD-20261020-0002', 14.99], ['OUT', 'PO', 'PO-000003', 500],
+] as const).map(([direction, referenceType, referenceNo, amount], i) => ({
+  receiptNo: `R-${i}`, party: referenceType === 'PO' ? 'Book Distributors Inc' : 'Walk-in', referenceType, referenceNo, paymentMethod: 'cash',
+  payerBank: '', paymentReference: '', amount, direction, date: '2026-10-20 09:00', user: 'admin',
+}));
 const SALES = EMPTY_REPORTS.sales;
 const PAYMENTS = EMPTY_REPORTS.payments;
 
@@ -89,6 +97,7 @@ function stubApi() {
     if (p === '/reports/inventory') return json(inventory);
     if (p === '/reports/sales') return sales ? json(sales) : json({ error: 'X', message: 'no', details: {} }, 500);
     if (p === '/reports/payments') return json(payments);
+    if (p === '/reports/payments-ledger') return json(contract(PaymentsLedgerSchema, { rows: LEDGER }));
     const empty = emptyReport(p);
     if (empty) return json(empty);
     if (p === '/payments') return json(contract(PaymentListResponseSchema, { items: [], total: 0, page: 1, totalPages: 0 }));
@@ -214,15 +223,59 @@ describe('filters and actions', () => {
   });
 });
 
+describe('Cash Collected', () => {
+  it('shows what is left after refunds, with the money in and out under it (owner decision; was: payments as taken, refunds never taken off)', async () => {
+    await openDashboard();
+    const card = (await screen.findByText(/^Cash Collected/)).closest('div')!.parentElement!;
+    expect(within(card).getByText('ETB 4.0K')).toBeInTheDocument();
+    expect(within(card).getByText('In ETB 4.5K · Out ETB 500')).toBeInTheDocument();
+  });
+
+  it('shortens an amount below zero too, as a period can give back more than it took (was: "ETB -1500")', () => {
+    expect(shortMoney(-1500, 'ETB')).toBe('ETB -1.5K');
+    expect(shortMoney(-2_500_000, 'ETB')).toBe('ETB -2.5M');
+    expect(shortMoney(-40, 'ETB')).toBe('ETB -40');
+  });
+});
+
 describe('drill-downs', () => {
-  it('leave the branch to the session, and Cash Collected opens Payments History on its period (decision 2a)', async () => {
+  it('leave the branch to the session, and Cash Collected opens Money In & Out on its period (owner decision b; was: Payment History, order payments only)', async () => {
     const { user, onNavigate } = await openDashboard();
     await user.click(await screen.findByText('Outstanding Receivables'));
     await user.click(screen.getByText(/^Cash Collected/));
     expect(onNavigate.mock.calls).toEqual([
       ['receivables', { status: 'Pending,PartiallyPaid,Overdue' }],
-      ['payments', { tab: 'history', dateFrom: '2026-10-20', dateTo: '2026-10-20' }],
+      ['payments', { tab: 'money', dateFrom: '2026-10-20', dateTo: '2026-10-20' }],
     ]);
+  });
+
+  it('Money In & Out lists every customer payment and refund of the period, and adds up to the card (supplier payments left out)', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ToastProvider><PaymentsPage initialContext={{ tab: 'money', dateFrom: '2026-10-20', dateTo: '2026-10-20' }} /></ToastProvider>
+      </QueryClientProvider>,
+    );
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('POS-20261020-0001')).toBeInTheDocument();
+    expect(within(table).getByText('RET-20261020-0001')).toBeInTheDocument();
+    expect(within(table).queryByText('PO-000003')).not.toBeInTheDocument();
+    expect(screen.getByText('In ETB 59.96')).toBeInTheDocument();
+    expect(screen.getByText('Out ETB 29.98')).toBeInTheDocument();
+    expect(screen.getByText('Net ETB 29.98')).toBeInTheDocument();
+    expect(screen.getByLabelText('From')).toHaveValue('2026-10-20');
+    expect(screen.getByLabelText('To')).toHaveValue('2026-10-20');
+    const asked = new URL(calls.find((c) => c.path.startsWith('/reports/payments-ledger'))!.path, 'http://x').searchParams;
+    expect([asked.get('dateFrom'), asked.get('dateTo')]).toEqual(['2026-10-20', '2026-10-20']);
+  });
+
+  it('offers Money In & Out to the roles that read reports only (the API\'s VIEW_REPORTS)', async () => {
+    me = profile(['Sales']);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={qc}><ToastProvider><PaymentsPage /></ToastProvider></QueryClientProvider>);
+    await screen.findByText(/Pending Payments/);
+    await settle();
+    expect(screen.queryByText(/Money In & Out/)).not.toBeInTheDocument();
   });
 
   it('Payments History takes the period and shows it as a filter to clear (was: the dates were dropped)', async () => {

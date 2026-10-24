@@ -129,6 +129,7 @@ export type GrossProfitTrend = z.infer<typeof GrossProfitTrendSchema>;
 export const KpiReportSchema = z.object({
   dailySales: z.number(),
   monthlySales: z.number(),
+  /** Cash collected today and this month, net of refunds, as the Payments report counts it. */
   dailyRevenue: z.number(),
   monthlyRevenue: z.number(),
   averageOrderValue: z.number(),
@@ -175,7 +176,14 @@ export const PeriodKpisSchema = PeriodFiguresSchema.extend({
   /** Change against the previous equivalent period; null when that was 0. */
   netSalesChangePct: z.number().nullable(),
   grossProfitChangePct: z.number().nullable(),
+  /**
+   * Customer money for the period, as the Payments report counts it: money
+   * in (payments), money out (refunds), and what is left (in less out).
+   */
+  cashIn: z.number(),
+  cashOut: z.number(),
   cashCollected: z.number(),
+  /** What was left in the previous equivalent period. */
   previousCashCollected: z.number(),
 });
 export type PeriodKpis = z.infer<typeof PeriodKpisSchema>;
@@ -286,6 +294,7 @@ export type PaymentsLedgerRow = z.infer<typeof PaymentsLedgerRowSchema>;
 
 /** Every receipt and payment: customers in and out, suppliers out. */
 export const PaymentsLedgerSchema = z.object({ rows: z.array(PaymentsLedgerRowSchema) });
+export type PaymentsLedger = z.infer<typeof PaymentsLedgerSchema>;
 
 // ── Exchanges ─────────────────────────────────────────────────────────────────
 

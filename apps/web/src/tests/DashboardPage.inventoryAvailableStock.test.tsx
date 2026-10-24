@@ -61,7 +61,7 @@ beforeEach(() => {
         netSales: 0, grossProfit: 0, grossMarginPct: 0,
         previous: { dateFrom: '', dateTo: '', netSales: 0, grossProfit: 0, grossMarginPct: 0 },
         netSalesChangePct: null, grossProfitChangePct: null,
-        cashCollected: 0, previousCashCollected: 0,
+        cashIn: 0, cashOut: 0, cashCollected: 0, previousCashCollected: 0,
       });
     }
     if (path.startsWith('/reports/kpis'))      return Promise.resolve(EMPTY_KPIS);

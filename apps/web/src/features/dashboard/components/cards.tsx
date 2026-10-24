@@ -5,9 +5,12 @@ import type { KpiPeriod } from '@bms/shared';
 
 /** An amount in short form (K, M), in the shop's currency (was: always "ETB"). */
 export function shortMoney(n: number, currency: string): string {
-  if (n >= 1_000_000) return `${currency} ${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${currency} ${(n / 1_000).toFixed(1)}K`;
-  return `${currency} ${n.toFixed(0)}`;
+  // A period's cash can be below zero: it gave back more than it took.
+  const sign = n < 0 ? '-' : '';
+  const a = Math.abs(n);
+  if (a >= 1_000_000) return `${currency} ${sign}${(a / 1_000_000).toFixed(1)}M`;
+  if (a >= 1_000) return `${currency} ${sign}${(a / 1_000).toFixed(1)}K`;
+  return `${currency} ${sign}${a.toFixed(0)}`;
 }
 
 export function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; value: string; sub?: string; icon: ReactNode; color: string; onClick?: () => void }) {
