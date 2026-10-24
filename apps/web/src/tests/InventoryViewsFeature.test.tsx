@@ -29,9 +29,9 @@ function profile(roles: string[]): ProfileResponse {
   });
 }
 
-const level = (bookId: number, title: string, averageCost = 10): StockLevel => contract(StockLevelSchema, {
+const level = (bookId: number, title: string, averageCost = 10, damaged = 0, damagedValue = 0): StockLevel => contract(StockLevelSchema, {
   bookId, bookTitle: title, bookIsbn: `978030640615${bookId}`, bookIsActive: true, locationId: 1, locationName: 'Shop Floor',
-  branchId: 1, quantity: 12, reserved: 0, available: 12, reorderPoint: 5, averageCost, version: 3, isLowStock: false, updatedAt: CREATED,
+  branchId: 1, quantity: 12, reserved: 0, available: 12, reorderPoint: 5, averageCost, damaged, damagedValue, version: 3, isLowStock: false, updatedAt: CREATED,
 });
 
 type Call = { method: string; path: string; body: unknown };
@@ -51,7 +51,10 @@ function stubApi() {
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/inventory/low-stock') return json(contract(StockLevelListResponseSchema, list([])));
     if (u.pathname === '/inventory/history') return json(contract(StockMovementListResponseSchema, list([])));
-    if (u.pathname === '/inventory') return json(contract(StockLevelListResponseSchema, list([level(1, 'Animal Farm'), level(2, 'Burmese Days', 0)])));
+    if (u.pathname === '/inventory') {
+      return json(contract(StockLevelListResponseSchema, list([level(1, 'Animal Farm', 10, 3, 12), level(2, 'Burmese Days', 0)])));
+    }
+    if (u.pathname.startsWith('/inventory/damaged/')) return json(contract(StockLevelSchema, level(1, 'Animal Farm', 10, 2, 8)));
     if (method === 'PUT') return json(contract(StockLevelSchema, level(1, 'Animal Farm')));
     if (u.pathname === '/inventory/revalue') return json(contract(StockLevelSchema, level(2, 'Burmese Days', 11.25)));
     return json({ items: [] });
@@ -179,6 +182,58 @@ describe('Inventory: stock cost (#163)', () => {
   });
 });
 
+describe('Inventory: damaged copies (#168)', () => {
+  it('shows each row\'s damaged copies, counted apart (was: not shown)', async () => {
+    await renderPage();
+    expect(screen.getByRole('columnheader', { name: 'Damaged' })).toBeInTheDocument();
+    expect(within(rowOf('Animal Farm')).getByRole('button', { name: /3 damaged/ })).toBeInTheDocument();
+    expect(within(rowOf('Burmese Days')).queryByRole('button', { name: /damaged/ })).not.toBeInTheDocument();
+  });
+
+  it('writes damaged copies off with a reason, checked before sending, showing the loss (was: no way out)', async () => {
+    const user = userEvent.setup();
+    me = profile(['Stock_Clerk']);
+    await renderPage();
+    await user.click(within(rowOf('Animal Farm')).getByRole('button', { name: /3 damaged/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/kept apart at .*12\.00/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Write off' }));
+    expect(await within(dialog).findByText('A reason is required')).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    await user.clear(within(dialog).getByLabelText('Copies'));
+    await user.type(within(dialog).getByLabelText('Copies'), '4');
+    expect(await within(dialog).findByText('At most 3')).toBeInTheDocument();
+    await user.clear(within(dialog).getByLabelText('Copies'));
+    await user.type(within(dialog).getByLabelText('Copies'), '1');
+    expect(within(dialog).getByText(/Loss: .*4\.00/)).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Reason'), 'Water damage');
+    await user.click(within(dialog).getByRole('button', { name: 'Write off' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
+    const sent = calls.find((c) => c.method === 'POST');
+    expect(sent?.path).toBe('/inventory/damaged/write-off');
+    expect(sent?.body).toEqual({ bookId: 1, locationId: 1, quantity: 1, reason: 'Water damage', version: 3 });
+  });
+
+  it('puts repaired copies back for sale (was: no way out)', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(within(rowOf('Animal Farm')).getByRole('button', { name: /3 damaged/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByLabelText(/Repaired/));
+    await user.type(within(dialog).getByLabelText('Reason'), 'Cover reglued');
+    await user.click(within(dialog).getByRole('button', { name: 'Back for sale' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
+    expect(calls.find((c) => c.method === 'POST')?.path).toBe('/inventory/damaged/repair');
+  });
+
+  it('offers a Purchasor the count but no action, which the API refuses', async () => {
+    me = profile(['Purchasor']);
+    await renderPage();
+    expect(within(rowOf('Animal Farm')).queryByRole('button', { name: /damaged/ })).not.toBeInTheDocument();
+    expect(within(rowOf('Animal Farm')).getByText('3')).toBeInTheDocument();
+  });
+});
+
 describe('Inventory: history and search', () => {
   it('filters History by the reasons movements are recorded with (was: also "Stock Out", never recorded)', async () => {
     const user = userEvent.setup();
@@ -186,7 +241,7 @@ describe('Inventory: history and search', () => {
     await user.click(screen.getByRole('button', { name: /History/ }));
     const reasons = screen.getAllByRole('combobox').find((c) => within(c).queryByRole('option', { name: 'All Reasons' }))!;
     expect(within(reasons).getAllByRole('option').map((o) => (o as HTMLOptionElement).value).filter(Boolean))
-      .toEqual(['correction', 'damage', 'initial', 'loss', 'return', 'revaluation', 'sale', 'stock_in', 'transfer_in', 'transfer_out']);
+      .toEqual(['correction', 'damage', 'damage_repaired', 'damage_write_off', 'initial', 'loss', 'return', 'revaluation', 'sale', 'stock_in', 'transfer_in', 'transfer_out']);
   });
 
   it('asks once typing pauses (was: a request for every key)', async () => {

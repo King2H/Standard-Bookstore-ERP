@@ -20,6 +20,9 @@ export interface StockLevelRecord {
   reserved: number;
   reorderPoint: number;
   averageCost: Money;
+  /** Damaged copies, kept apart from those for sale with their own value (#168). */
+  damaged: number;
+  damagedValue: Money;
   version: number;
   updatedAt: Date;
 }
@@ -81,6 +84,8 @@ export interface LockedLevel {
   version: number;
   reorderPoint: number;
   averageCost: Money;
+  damaged: number;
+  damagedValue: Money;
 }
 
 /** One inventory_history row; `unitCost` values the units moved (null when unknown). */
@@ -126,6 +131,21 @@ export interface StockChange {
  * shrinkage in stock history and reports, so every caller names its reason.
  */
 export type IssueReason = 'sale' | 'loss' | 'correction';
+
+/** Damaged copies coming in, at what each cost (#168); 0 when it is unknown or already counted as a loss. */
+export interface DamagedReceipt extends StockChange {
+  unitCost?: MoneyInput;
+}
+
+/** Damaged copies leaving by hand: written off, or back for sale after repair (#168). */
+export interface DamagedChange {
+  bookId: number;
+  locationId: number;
+  quantity: number;
+  reason: string;
+  /** The row's version when the change was asked; checked when given. */
+  version?: number;
+}
 
 export interface StockIssue extends StockChange {
   reasonCode: IssueReason;

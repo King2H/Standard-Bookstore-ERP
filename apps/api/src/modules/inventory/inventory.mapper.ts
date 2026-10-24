@@ -14,6 +14,8 @@ export interface StockLevelRow {
   reserved: number | string;
   reorder_point: number;
   average_cost: string;
+  damaged_quantity: number;
+  damaged_value: string;
   version: number;
   updated_at: Date;
 }
@@ -50,6 +52,8 @@ export function toStockLevelRecord(row: StockLevelRow): StockLevelRecord {
     reserved: Number(row.reserved),
     reorderPoint: row.reorder_point,
     averageCost: Money.of(row.average_cost),
+    damaged: row.damaged_quantity,
+    damagedValue: Money.of(row.damaged_value),
     version: row.version,
     updatedAt: row.updated_at,
   };
@@ -92,6 +96,8 @@ export function toStockLevelResponse(r: StockLevelRecord): StockLevel {
     available: r.quantity,
     reorderPoint: r.reorderPoint,
     averageCost: r.averageCost.toNumber(4),
+    damaged: r.damaged,
+    damagedValue: r.damagedValue.toNumber(),
     version: r.version,
     isLowStock: r.quantity <= r.reorderPoint,
     updatedAt: r.updatedAt.toISOString(),
@@ -106,6 +112,7 @@ export function toLocationStockResponse(r: LocationStockRecord): LocationStock {
   return {
     ...r,
     available: r.quantity,
-    sellable: Math.max(0, r.quantity - r.damaged),
+    // Damaged copies are counted apart, never in the quantity (was: taken off it again).
+    sellable: Math.max(0, r.quantity),
   };
 }

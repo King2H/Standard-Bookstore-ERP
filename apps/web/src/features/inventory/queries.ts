@@ -1,9 +1,10 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  AdjustStockRequest, ReorderPointRequest, RevalueStockRequest, StockInRequest, StockOutRequest, TransferStockRequest,
+  AdjustStockRequest, DamagedStockRequest, ReorderPointRequest, RevalueStockRequest, StockInRequest, StockOutRequest, TransferStockRequest,
 } from '@bms/shared';
 import {
-  adjustStock, listLowStock, listStockLevels, listStockMovements, revalueStock, setReorderPoint, stockIn, stockOut, transferStock,
+  adjustStock, listLowStock, listStockLevels, listStockMovements, repairDamaged, revalueStock, setReorderPoint, stockIn, stockOut,
+  transferStock, writeOffDamaged,
   type StockLevelParams, type StockMovementParams,
 } from './api.js';
 
@@ -61,6 +62,16 @@ export function useRevalueStock() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: RevalueStockRequest) => revalueStock(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
+  });
+}
+
+/** Damaged copies written off or put back for sale (#168). */
+export function useDamagedStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ action, body }: { action: 'write_off' | 'repair'; body: DamagedStockRequest }) =>
+      action === 'write_off' ? writeOffDamaged(body) : repairDamaged(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: inventoryKeys.all }),
   });
 }

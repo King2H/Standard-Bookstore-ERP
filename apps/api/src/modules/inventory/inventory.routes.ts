@@ -24,6 +24,8 @@ router.post('/inventory/adjust', authenticate, canMoveStock, validate(schemas.ad
 router.post('/inventory/transfer', authenticate, canMoveStock, validate(schemas.transfer), inventory.transfer);
 router.post('/inventory/stock-in', authenticate, canMoveStock, validate(schemas.stockIn), inventory.stockIn);
 router.post('/inventory/stock-out', authenticate, canMoveStock, validate(schemas.stockOut), inventory.stockOut);
+router.post('/inventory/damaged/write-off', authenticate, canMoveStock, validate(schemas.damaged), inventory.writeOffDamaged);
+router.post('/inventory/damaged/repair', authenticate, canMoveStock, validate(schemas.damaged), inventory.repairDamaged);
 router.put('/inventory/reorder-point', authenticate, canManage, validate(schemas.reorderPoint), inventory.reorderPoint);
 router.post('/inventory/revalue', authenticate, canManage, validate(schemas.revalue), inventory.revalue);
 router.post('/inventory/initialize', authenticate, canManage, inventory.initialize);

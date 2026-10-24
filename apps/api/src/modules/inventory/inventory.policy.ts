@@ -89,6 +89,19 @@ export function averageCostAfterReceipt(quantity: number, averageCost: Money, re
 }
 
 /**
+ * What `quantity` damaged copies are worth (#168): their share of the
+ * damaged value, the last ones taking what is left of it. Refused when fewer
+ * are counted damaged.
+ */
+export function damagedShare(damaged: number, damagedValue: Money, quantity: number): Money {
+  if (quantity > damaged) {
+    throw new BusinessError('INSUFFICIENT_STOCK', `Only ${damaged} damaged copies are counted here`, { damaged, requested: quantity });
+  }
+  if (quantity === damaged) return damagedValue;
+  return damagedValue.times(quantity).dividedBy(damaged).round(2);
+}
+
+/**
  * The alert a stock change raises: only when it crosses a threshold, so a
  * shelf that stays low does not alert again on every sale (owner decision, #21).
  */

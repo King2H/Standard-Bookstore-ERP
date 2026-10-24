@@ -18,6 +18,10 @@ export const StockLevelSchema = z.object({
   reorderPoint: z.number().int(),
   /** What one copy here cost, as a weighted average; 0 while no cost is known (#163). */
   averageCost: z.number(),
+  /** Damaged copies here, counted apart from `quantity` and not for sale (#168). */
+  damaged: z.number().int(),
+  /** What the damaged copies cost, kept apart from the value of the stock for sale. */
+  damagedValue: z.number(),
   /** Send it back with the next change to this row; a stale value gets 409 VERSION_CONFLICT. */
   version: z.number().int(),
   isLowStock: z.boolean(),
@@ -186,6 +190,20 @@ export const RevalueStockRequestSchema = z.object({
   version: z.number().int().min(0),
 });
 export type RevalueStockRequest = z.infer<typeof RevalueStockRequestSchema>;
+
+/**
+ * Damaged copies leaving by hand (#168): written off, or put back for sale
+ * after repair. The reason goes to the history and the audit log.
+ */
+export const DamagedStockRequestSchema = z.object({
+  bookId: IdSchema,
+  locationId: IdSchema,
+  quantity: z.number().int().positive(),
+  reason: z.string().trim().min(1, 'Required').max(500),
+  /** The row's version as read; a stale one gets 409 VERSION_CONFLICT. */
+  version: z.number().int().min(0).optional(),
+});
+export type DamagedStockRequest = z.infer<typeof DamagedStockRequestSchema>;
 
 export const StockOutRequestSchema = z.object({
   bookId: IdSchema,
