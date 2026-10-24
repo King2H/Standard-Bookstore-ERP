@@ -12,7 +12,7 @@ const ORDER_COLUMNS = [
   'o.id', 'o.order_number', 'o.customer_id', 'o.branch_id', 'o.location_id', 'o.channel', 'o.status',
   'o.payment_status', 'o.sale_type', 'o.currency', 'o.subtotal', 'o.discount_amount', 'o.discount_total',
   'o.tax_rate', 'o.tax_amount', 'o.total', 'o.cancel_reason', 'o.notes', 'o.created_by', 'o.created_at',
-  'o.updated_at',
+  'o.updated_at', 'o.fulfilled_at',
 ] as const;
 
 /** Payments taken less refunds (#167): what cancelling the order gives back. */
@@ -46,6 +46,9 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
       'oli.id', 'oli.order_id', 'oli.book_id', 'b.title as book_title', 'b.isbn as book_isbn', 'oli.quantity',
       'oli.unit_price', 'oli.discount_amount', 'oli.total_price', 'oli.qty_reserved', 'oli.qty_fulfilled',
       'oli.is_backordered', 'oli.unit_cost',
+      sql<string>`COALESCE((
+        SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+        WHERE rli.order_line_item_id = oli.id AND r.status = 'completed'), 0)`.as('qty_returned'),
     ])
     .where('oli.order_id', '=', orderId)
     .orderBy('oli.id')
@@ -56,6 +59,7 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
 export interface OrderFilter {
   branchId?: number;
   customerId?: number;
+  orderNumber?: string;
   statuses?: string[];
   paymentStatus?: string;
   channel?: string;
@@ -71,6 +75,7 @@ export async function list(
   let query = q.selectFrom('orders as o');
   if (filter.branchId) query = query.where('o.branch_id', '=', filter.branchId);
   if (filter.customerId) query = query.where('o.customer_id', '=', filter.customerId);
+  if (filter.orderNumber) query = query.where(sql`upper(o.order_number)`, '=', filter.orderNumber.toUpperCase());
   if (filter.statuses?.length) query = query.where('o.status', 'in', filter.statuses);
   if (filter.paymentStatus) query = query.where('o.payment_status', '=', filter.paymentStatus);
   if (filter.channel) query = query.where('o.channel', '=', filter.channel);
@@ -201,6 +206,11 @@ export async function setStatus(q: Queryable, orderId: string, status: string, c
     .set({ status, ...(cancelReason !== undefined ? { cancel_reason: cancelReason } : {}), updated_at: sql`now()` })
     .where('id', '=', orderId)
     .execute();
+}
+
+/** Records when the goods were handed over: the return window counts from it (#166). */
+export async function setFulfilled(q: Queryable, orderId: string): Promise<void> {
+  await q.updateTable('orders').set({ fulfilled_at: sql`now()` }).where('id', '=', orderId).execute();
 }
 
 export async function setPaymentStatus(q: Queryable, orderId: string, paymentStatus: OrderPaymentStatus): Promise<void> {

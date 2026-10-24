@@ -94,11 +94,11 @@ describe('Orders on the shared contracts', () => {
     expect(cancelled.body).toMatchObject({ status: 'CANCELLED', cancelReason: 'Customer changed mind' });
   });
 
-  it('offers a legacy fulfilled order Print, not a Return with no endpoint (owner decision 3a)', async () => {
+  it('offers a legacy fulfilled order Print and Return, through Returns (owner decision 3a, #166)', async () => {
     const created = await draft();
-    await db.query(`UPDATE orders SET status = 'FULFILLED' WHERE id = $1`, [created.body.id]);
+    await db.query(`UPDATE orders SET status = 'FULFILLED', fulfilled_at = now() WHERE id = $1`, [created.body.id]);
     const res = await auth(api().get(`/api/v1/orders/${created.body.id}`));
-    expect(res.body.allowedActions).toEqual(['print']);
+    expect(res.body.allowedActions).toEqual(['print', 'return']);
   });
 
   it('replays an order creation sent twice with the same Idempotency-Key', async () => {

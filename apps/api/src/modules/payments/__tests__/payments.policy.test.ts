@@ -3,7 +3,7 @@ import { Money } from '@bms/shared';
 import { checkCanPay, checkCanRefund, orderPaymentStatus, outstanding, refundBankAccount } from '../payments.policy.js';
 import type { OrderForPayment, PaymentRecord } from '../payments.types.js';
 
-const takings = (paid: string, refunded = '0') => ({ paid: Money.of(paid), refunded: Money.of(refunded) });
+const takings = (paid: string, refunded = '0', returned = '0') => ({ paid: Money.of(paid), refunded: Money.of(refunded), returned: Money.of(returned) });
 const order = (o: Partial<OrderForPayment> = {}): OrderForPayment => ({
   id: '1', orderNumber: 'ORD-1', branchId: 1, status: 'CONFIRMED', saleType: 'credit_sale',
   total: Money.of('100'), customerId: 7, paymentStatus: 'unpaid', ...o,
@@ -27,6 +27,16 @@ describe('orderPaymentStatus', () => {
   it('is paid at exactly the total', () => {
     expect(orderPaymentStatus(order(), Money.of(100), takings('100'))).toBe('paid');
     expect(outstanding(Money.of(100), takings('100', '25.5')).toFixed()).toBe('25.50');
+  });
+
+  it('no longer counts what a return took back (#166)', () => {
+    // Cash order of 100, 40 returned and refunded: the 60 kept is paid.
+    expect(orderPaymentStatus(order({ saleType: 'cash_sale' }), Money.of(100), takings('100', '40', '40'))).toBe('paid');
+    // Credit order of 100, 30 paid, 40 returned on a credit note: 30 still owed.
+    expect(orderPaymentStatus(order(), Money.of(100), takings('30', '0', '40'))).toBe('partial');
+    expect(outstanding(Money.of(100), takings('30', '0', '40')).toFixed()).toBe('30.00');
+    // Returned whole on a credit note: nothing owed, nothing paid.
+    expect(orderPaymentStatus(order(), Money.of(100), takings('0', '0', '100'))).toBe('paid');
   });
 });
 

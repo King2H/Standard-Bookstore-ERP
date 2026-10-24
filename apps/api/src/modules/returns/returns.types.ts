@@ -27,7 +27,21 @@ export interface SaleForReturn {
   daysSinceSale: number;
 }
 
-/** A line of the sale, with what earlier returns already took back from it. */
+/** The delivered customer order a return is made against, read under lock (#166). */
+export interface OrderForReturn {
+  id: string;
+  branchId: number;
+  customerId: number | null;
+  status: string;
+  orderNumber: string;
+  saleType: 'cash_sale' | 'credit_sale';
+  /** Where the order's stock left from: the returned books go back there. */
+  locationId: number | null;
+  /** Whole days since delivery, in the database's calendar; null when never delivered. */
+  daysSinceDelivery: number | null;
+}
+
+/** A line of the sale or order, with what earlier returns already took back from it. */
 export interface SaleLine {
   id: string;
   bookId: number;
@@ -53,7 +67,8 @@ export interface RefundPart {
 }
 
 export interface ReturnLineRequest {
-  transactionLineItemId: number;
+  /** The line of the sale or order the return names. */
+  lineId: number;
   quantity: number;
   disposition: 'SELLABLE' | 'DAMAGED';
 }
@@ -61,8 +76,10 @@ export interface ReturnLineRequest {
 export interface ReturnRecord {
   id: string;
   returnNumber: string;
-  transactionId: string;
-  transactionNumber: string;
+  transactionId: string | null;
+  transactionNumber: string | null;
+  orderId: string | null;
+  orderNumber: string | null;
   branchId: number;
   customerId: number | null;
   totalRefundAmount: Money;
@@ -79,7 +96,8 @@ export interface ReturnRecord {
 export interface ReturnLineRecord {
   id: string;
   returnId: string;
-  transactionLineItemId: string;
+  transactionLineItemId: string | null;
+  orderLineItemId: string | null;
   bookId: number;
   bookTitle: string;
   quantity: number;
@@ -100,6 +118,7 @@ export interface ReturnFilter {
   branchId: number;
   customerId?: number;
   transactionId?: number;
+  orderId?: number;
   status?: 'completed' | 'rejected';
   dateFrom?: string;
   dateTo?: string;

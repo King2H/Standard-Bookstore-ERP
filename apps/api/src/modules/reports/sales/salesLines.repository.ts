@@ -337,7 +337,7 @@ async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesL
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title, b.isbn AS book_isbn,
        rli.quantity, rli.unit_price, rli.line_refund_amount,
-       COALESCE(otli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
+       COALESCE(otli.unit_cost, ooli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
        r.refund_method,
        s.username AS staff_username
      FROM return_line_items rli
@@ -345,10 +345,13 @@ async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesL
      JOIN books b ON b.id = rli.book_id
      JOIN branches br ON br.id = r.branch_id
      LEFT JOIN transactions t ON t.id = r.transaction_id
-     LEFT JOIN locations loc ON loc.id = t.location_id
+     LEFT JOIN orders o ON o.id = r.order_id
+     LEFT JOIN locations loc ON loc.id = COALESCE(t.location_id, o.location_id)
      LEFT JOIN customers c ON c.id = r.customer_id
      LEFT JOIN staff s ON s.id = r.processed_by
      LEFT JOIN transaction_line_items otli ON otli.id = rli.transaction_line_item_id
+     -- An order's line (#166): the cost the order's books left at.
+     LEFT JOIN order_line_items ooli ON ooli.id = rli.order_line_item_id
      ${costBasisLateralJoin('rli.book_id')}
      ${where}
      ORDER BY r.created_at`,

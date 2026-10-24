@@ -46,7 +46,7 @@ function order(over: Partial<Order> = {}): Order {
     id: '20', orderNumber: 'ORD-20261018-0020', customerId: null, branchId: 1, locationId: 7, channel: 'in_store',
     status: 'DRAFT', paymentStatus: 'unpaid', amountPaid: 0, saleType: 'cash_sale', currency: 'ETB', subtotal: 30, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 30, cancelReason: null, notes: null, createdBy: 9,
-    createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: null, dueDate: null,
+    createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: null, dueDate: null, fulfilledAt: null,
     ...over,
   });
 }

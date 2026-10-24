@@ -28,6 +28,8 @@ export interface OrderTakings {
   /** Every successful payment, refunded or not. */
   paid: Money;
   refunded: Money;
+  /** What completed returns took back of the order (#166): no longer owed. */
+  returned: Money;
 }
 
 export interface PaymentRecord {

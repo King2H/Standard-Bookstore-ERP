@@ -1,25 +1,27 @@
 import { useState } from 'react';
-import { Money, type PosTransaction } from '@bms/shared';
+import { Money } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
+import type { ReturnableSale } from '../api.js';
 import { useCreateReturn, useSaleByNumber } from '../queries.js';
-import { approverRole, canProcessReturn, lineValue } from '../rules.js';
+import { approverRole, canProcessReturn, lineValue, returnable } from '../rules.js';
 
 type Disposition = 'SELLABLE' | 'DAMAGED';
 
 /**
- * A return at the counter: find the sale by its number, pick what comes back
- * and in what state, and process it. The refund goes back the way the sale
- * was paid, so nothing here chooses a method.
+ * A return at the counter: find the sale or the delivered customer order by
+ * its number (#166), pick what comes back and in what state, and process it.
+ * The refund goes back the way it was paid, so nothing here chooses a method.
+ * `initialNumber` comes from an order's Return action.
  */
-export function NewReturn() {
+export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
   const { showToast } = useToast();
   const currency = useCurrency();
   const { data: me } = useMyProfile();
-  const [txSearch, setTxSearch] = useState('');
-  const [txSearchInput, setTxSearchInput] = useState('');
-  const [selectedTx, setSelectedTx] = useState<PosTransaction | null>(null);
+  const [txSearch, setTxSearch] = useState(initialNumber.toUpperCase());
+  const [txSearchInput, setTxSearchInput] = useState(initialNumber.toUpperCase());
+  const [selectedTx, setSelectedTx] = useState<ReturnableSale | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [damaged, setDamaged] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState('');
@@ -29,7 +31,8 @@ export function NewReturn() {
   const approver = approverRole(me);
 
   const tx = selectedTx ?? txData ?? null;
-  const lines = tx?.lineItems ?? [];
+  const lines = tx?.lines ?? [];
+  const isOrder = tx?.kind === 'order';
   const totalRefund = Money.sum(lines.map((li) => lineValue(li, quantities[li.id] ?? 0)));
 
   function setQty(lineId: string, val: number, max: number) {
@@ -43,7 +46,7 @@ export function NewReturn() {
 
   function handleSearch() {
     const val = txSearchInput.trim().toUpperCase();
-    if (val.length < 6) { showToast('Enter a valid transaction number', 'error'); return; }
+    if (val.length < 6) { showToast('Enter a valid transaction or order number', 'error'); return; }
     setSelectedTx(null);
     setTxSearch(val);
   }
@@ -53,13 +56,13 @@ export function NewReturn() {
     const selectedLines = lines
       .filter((li) => (quantities[li.id] ?? 0) > 0)
       .map((li) => ({
-        transactionLineItemId: Number(li.id),
+        ...(isOrder ? { orderLineItemId: Number(li.id) } : { transactionLineItemId: Number(li.id) }),
         quantity: quantities[li.id],
         disposition: (damaged[li.id] ? 'DAMAGED' : 'SELLABLE') as Disposition,
       }));
     if (selectedLines.length === 0) { showToast('Select at least one item to return', 'error'); return; }
     createReturn.mutate(
-      { transactionId: Number(tx.id), reason: reason || undefined, lines: selectedLines },
+      { ...(isOrder ? { orderId: Number(tx.id) } : { transactionId: Number(tx.id) }), reason: reason || undefined, lines: selectedLines },
       {
         onSuccess: (ret) => {
           showToast(`Return ${ret.returnNumber} processed`, 'success');
@@ -77,14 +80,14 @@ export function NewReturn() {
 
       {/* Step 1: Find transaction */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 1 — Find Transaction</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 1 — Find the Sale or Order</h3>
         <div className="flex gap-2">
           <input
-            aria-label="Transaction number"
+            aria-label="Transaction or order number"
             value={txSearchInput}
             onChange={(e) => setTxSearchInput(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="Enter transaction number (e.g. POS-20250101-0001)"
+            placeholder="Transaction or order number (e.g. POS-20250101-0001, ORD-20250101-0001)"
             className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           />
           <button onClick={handleSearch} disabled={txLoading}
@@ -92,50 +95,55 @@ export function NewReturn() {
             {txLoading ? 'Searching...' : 'Search'}
           </button>
         </div>
-        {txError && <p className="text-xs text-red-500">Transaction not found. Check the transaction number and try again.</p>}
+        {txError && <p className="text-xs text-red-500">No sale or order with this number in this branch. Check the number and try again.</p>}
         {txData && !selectedTx && (
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1">
-            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Tx #</span><span className="font-mono text-gray-900 dark:text-white">{txData.transactionNumber}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Total</span><span className="text-gray-900 dark:text-white">{currency} {Money.of(txData.grandTotal).toFixed()}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Paid</span><span className="text-gray-900 dark:text-white">{currency} {Money.of(txData.amountPaid).toFixed()}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">{txData.kind === 'order' ? 'Order #' : 'Tx #'}</span><span className="font-mono text-gray-900 dark:text-white">{txData.number}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Total</span><span className="text-gray-900 dark:text-white">{currency} {Money.of(txData.total).toFixed()}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Paid</span><span className="text-gray-900 dark:text-white">{currency} {Money.of(txData.paid).toFixed()}</span></div>
             <div className="flex justify-between items-center">
               <span className="text-gray-500 dark:text-gray-400">Status</span>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${txData.status === 'voided' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>{txData.status}</span>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${!txData.returnable ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>{txData.status}</span>
             </div>
-            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Date</span><span className="text-gray-900 dark:text-white">{new Date(txData.createdAt).toLocaleString()}</span></div>
-            {txData.status !== 'voided' && (
+            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">{txData.kind === 'order' && txData.returnable ? 'Delivered' : 'Date'}</span><span className="text-gray-900 dark:text-white">{new Date(txData.date).toLocaleString()}</span></div>
+            {txData.returnable ? (
               <button onClick={() => setSelectedTx(txData)} className="w-full mt-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors">
-                Use this transaction →
+                {txData.kind === 'order' ? 'Use this order →' : 'Use this transaction →'}
               </button>
+            ) : txData.kind === 'order' && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 pt-1">This order was not delivered: cancel it in Orders instead of returning it.</p>
             )}
           </div>
         )}
         {selectedTx && (
           <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 rounded-lg px-3 py-2">
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">✓ {selectedTx.transactionNumber}</span>
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">✓ {selectedTx.number}</span>
             <button onClick={clear} className="text-xs text-gray-500 hover:text-red-500 transition-colors">Change</button>
           </div>
         )}
       </div>
 
       {/* Step 2: Select items */}
-      {tx && tx.lineItems && (
+      {tx && tx.returnable && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 2 — Select Items to Return</h3>
           <div className="space-y-2">
-            {tx.lineItems.map((li) => (
+            {lines.map((li) => (
               <div key={li.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{li.bookTitle}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{currency} {Money.of(li.unitPrice).toFixed()} × {li.quantity} sold</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {currency} {Money.of(li.unitPrice).toFixed()} × {li.quantity} {isOrder ? 'delivered' : 'sold'}
+                    {li.returned ? ` · ${li.returned} returned` : ''}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Return:</span>
-                  <input type="number" min="0" max={li.quantity} value={quantities[li.id] ?? 0}
+                  <input type="number" min="0" max={returnable(li)} value={quantities[li.id] ?? 0}
                     aria-label={`Quantity of ${li.bookTitle} to return`}
-                    onChange={(e) => setQty(li.id, parseInt(e.target.value) || 0, li.quantity)}
+                    onChange={(e) => setQty(li.id, parseInt(e.target.value) || 0, returnable(li))}
                     className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-center focus:outline-hidden focus:ring-1 focus:ring-blue-500" />
-                  <span className="text-xs text-gray-400">/ {li.quantity}</span>
+                  <span className="text-xs text-gray-400">/ {returnable(li)}</span>
                 </div>
                 {/* Damaged books are kept apart from the stock for sale. */}
                 <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title="Kept apart, not for sale">
@@ -154,13 +162,13 @@ export function NewReturn() {
       )}
 
       {/* Step 3: Refund details + approval + submit */}
-      {tx && (
+      {tx && tx.returnable && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 3 — Refund Details</h3>
 
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            The refund goes back the way the sale was paid. On a credit sale it is first set against what the customer still owes, as a credit note.
-            After the return window, store policy may allow store credit only.
+            The refund goes back the way the {isOrder ? 'order' : 'sale'} was paid. On a credit {isOrder ? 'order' : 'sale'} it is first set against what the customer still owes, as a credit note.
+            After the return window{isOrder ? ', counted from delivery,' : ''} store policy may allow store credit only.
           </p>
 
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for return (optional)"

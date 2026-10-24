@@ -558,6 +558,7 @@ export interface OrderRefunds {
   processed_by: number;
   reason: string;
   refund_amount: Numeric;
+  return_id: Int8 | null;
   tenant_id: Generated<number>;
 }
 
@@ -571,6 +572,7 @@ export interface Orders {
   customer_id: number | null;
   discount_amount: Generated<Numeric>;
   discount_total: Generated<Numeric>;
+  fulfilled_at: Timestamp | null;
   id: Generated<Int8>;
   location_id: number | null;
   notes: string | null;
@@ -715,10 +717,11 @@ export interface ReturnLineItems {
   discount_type: Generated<string>;
   id: Generated<Int8>;
   line_refund_amount: Numeric;
+  order_line_item_id: Int8 | null;
   quantity: number;
   return_id: Int8;
   tenant_id: Generated<number>;
-  transaction_line_item_id: Int8;
+  transaction_line_item_id: Int8 | null;
   unit_price: Numeric;
 }
 
@@ -728,6 +731,7 @@ export interface Returns {
   created_at: Generated<Timestamp>;
   customer_id: number | null;
   id: Generated<Int8>;
+  order_id: Int8 | null;
   processed_by: number;
   reason: string | null;
   refund_method: string;
@@ -735,7 +739,7 @@ export interface Returns {
   status: Generated<string>;
   tenant_id: Generated<number>;
   total_refund_amount: Numeric;
-  transaction_id: Int8;
+  transaction_id: Int8 | null;
 }
 
 export interface Staff {

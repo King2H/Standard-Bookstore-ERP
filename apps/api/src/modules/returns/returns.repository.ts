@@ -10,6 +10,7 @@ import {
   type ReturnRow,
 } from './returns.mapper.js';
 import type {
+  OrderForReturn,
   RefundMethod,
   RefundPart,
   RefundRecord,
@@ -67,6 +68,94 @@ export async function lockSale(q: Queryable, id: number): Promise<SaleForReturn 
     }
   );
 }
+
+// ── The customer order being returned (#166) ─────────────────────────────────
+
+/**
+ * The order, locked until the transaction ends, like a sale: returns on one
+ * order run one after another, and its payments are refunded under the same lock.
+ */
+export async function lockOrder(q: Queryable, id: number): Promise<OrderForReturn | undefined> {
+  const row = await q
+    .selectFrom('orders')
+    .select([
+      'id',
+      'branch_id',
+      'customer_id',
+      'status',
+      'order_number',
+      'sale_type',
+      // Where confirming took the stock from; the order's location otherwise.
+      sql<number | null>`COALESCE((
+        SELECT h.location_id FROM inventory_history h
+        WHERE h.reference_type = 'order_confirmed' AND h.reference_id = orders.id
+        ORDER BY h.id LIMIT 1), location_id)`.as('stock_location_id'),
+      sql<number | null>`CURRENT_DATE - fulfilled_at::date`.as('days_since_delivery'),
+    ])
+    .where('id', '=', String(id))
+    .forUpdate()
+    .executeTakeFirst();
+  return (
+    row && {
+      id: String(row.id),
+      branchId: row.branch_id,
+      customerId: row.customer_id,
+      status: row.status,
+      orderNumber: row.order_number,
+      saleType: row.sale_type as OrderForReturn['saleType'],
+      locationId: row.stock_location_id,
+      daysSinceDelivery: row.days_since_delivery === null ? null : Number(row.days_since_delivery),
+    }
+  );
+}
+
+/** The branch's fulfilment location, for an order that names none and left no stock record. */
+export async function branchLocation(q: Queryable, branchId: number): Promise<number | null> {
+  const row = await q
+    .selectFrom('locations')
+    .select('id')
+    .where('branch_id', '=', branchId)
+    .orderBy(sql`is_default_fulfillment DESC`)
+    .orderBy('id')
+    .limit(1)
+    .executeTakeFirst();
+  return row?.id ?? null;
+}
+
+/** The order's lines, with what completed returns already took back from each. */
+export async function orderLines(q: Queryable, orderId: string): Promise<SaleLine[]> {
+  const rows = await q
+    .selectFrom('order_line_items as li')
+    .select([
+      'li.id',
+      'li.book_id',
+      'li.quantity',
+      'li.unit_price',
+      'li.total_price',
+      'li.unit_cost',
+      sql<string>`COALESCE((
+        SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+        WHERE rli.order_line_item_id = li.id AND r.status = 'completed'), 0)`.as('returned_quantity'),
+      sql<string>`COALESCE((
+        SELECT SUM(rli.line_refund_amount) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+        WHERE rli.order_line_item_id = li.id AND r.status = 'completed'), 0)`.as('returned_value'),
+    ])
+    .where('li.order_id', '=', orderId)
+    .orderBy('li.id')
+    .execute();
+  return rows.map((r) => ({
+    id: String(r.id),
+    bookId: r.book_id,
+    quantity: r.quantity,
+    unitPrice: Money.of(r.unit_price),
+    lineTotal: Money.of(r.total_price),
+    unitCost: r.unit_cost === null ? null : Money.of(r.unit_cost),
+    returnedQuantity: Number(r.returned_quantity),
+    returnedValue: Money.of(r.returned_value),
+  }));
+}
+
+// ── Lines of either sale ──────────────────────────────────────────────────────
 
 /** The sale's lines, with what completed returns already took back from each. */
 export async function saleLines(q: Queryable, transactionId: string): Promise<SaleLine[]> {
@@ -163,7 +252,9 @@ export async function insertReturn(
   q: Queryable,
   r: {
     returnNumber: string;
-    transactionId: string;
+    /** The sale returned: a counter sale or a customer order, never both. */
+    transactionId: string | null;
+    orderId: string | null;
     branchId: number;
     customerId: number | null;
     total: Money;
@@ -178,6 +269,7 @@ export async function insertReturn(
     .values({
       return_number: r.returnNumber,
       transaction_id: r.transactionId,
+      order_id: r.orderId,
       branch_id: r.branchId,
       customer_id: r.customerId,
       total_refund_amount: r.total.toFixed(2),
@@ -195,19 +287,25 @@ export async function insertReturn(
 export async function insertLine(
   q: Queryable,
   returnId: string,
-  line: { transactionLineItemId: string; bookId: number; quantity: number; unitPrice: Money; value: Money },
+  line: { transactionLineItemId: string | null; orderLineItemId: string | null; bookId: number; quantity: number; unitPrice: Money; value: Money },
 ): Promise<void> {
   await q
     .insertInto('return_line_items')
     .values({
       return_id: returnId,
       transaction_line_item_id: line.transactionLineItemId,
+      order_line_item_id: line.orderLineItemId,
       book_id: line.bookId,
       quantity: line.quantity,
       unit_price: line.unitPrice.toFixed(2),
       line_refund_amount: line.value.toFixed(2),
     })
     .execute();
+}
+
+/** The way the return went back, once an order's payments were refunded (#166). */
+export async function setRefundMethod(q: Queryable, returnId: string, method: RefundMethod | 'mixed'): Promise<void> {
+  await q.updateTable('returns').set({ refund_method: method }).where('id', '=', returnId).execute();
 }
 
 export async function insertRefund(q: Queryable, returnId: string, part: RefundPart, bankAccountId: number | null = null): Promise<string> {
@@ -237,12 +335,15 @@ export async function lastBankAccount(q: Queryable, transactionId: string): Prom
 function selectReturns(q: Queryable) {
   return q
     .selectFrom('returns as r')
-    .innerJoin('transactions as t', 't.id', 'r.transaction_id')
+    .leftJoin('transactions as t', 't.id', 'r.transaction_id')
+    .leftJoin('orders as o', 'o.id', 'r.order_id')
     .select([
       'r.id',
       'r.return_number',
       'r.transaction_id',
       't.transaction_number',
+      'r.order_id',
+      'o.order_number',
       'r.branch_id',
       'r.customer_id',
       'r.total_refund_amount',
@@ -268,6 +369,7 @@ export async function returnLines(q: Queryable, returnId: string): Promise<Retur
       'rli.id',
       'rli.return_id',
       'rli.transaction_line_item_id',
+      'rli.order_line_item_id',
       'rli.book_id',
       'b.title as book_title',
       'rli.quantity',
@@ -280,11 +382,28 @@ export async function returnLines(q: Queryable, returnId: string): Promise<Retur
   return rows.map((r) => toLineRecord(r as ReturnLineRow));
 }
 
+/**
+ * How the return's value went back: its credit notes and counter-sale
+ * refunds, and the refunds of an order's payments made for it (#166).
+ */
 export async function refunds(q: Queryable, returnId: string): Promise<RefundRecord[]> {
   const rows = await q
     .selectFrom('refunds')
     .select(['id', 'return_id', 'method', 'amount', 'created_at'])
     .where('return_id', '=', returnId)
+    .unionAll(
+      q
+        .selectFrom('order_refunds')
+        .select([
+          'id',
+          sql<string>`return_id`.as('return_id'),
+          sql<string>`COALESCE(method, 'cash')`.as('method'),
+          'refund_amount as amount',
+          'created_at',
+        ])
+        .where('return_id', '=', returnId),
+    )
+    .orderBy('created_at')
     .orderBy('id')
     .execute();
   return rows.map((r) => toRefundRecord(r as RefundRow));
@@ -294,6 +413,7 @@ export async function list(q: Queryable, filter: ReturnFilter, page: Page): Prom
   let query = selectReturns(q).where('r.branch_id', '=', filter.branchId);
   if (filter.customerId !== undefined) query = query.where('r.customer_id', '=', filter.customerId);
   if (filter.transactionId !== undefined) query = query.where('r.transaction_id', '=', String(filter.transactionId));
+  if (filter.orderId !== undefined) query = query.where('r.order_id', '=', String(filter.orderId));
   if (filter.status) query = query.where('r.status', '=', filter.status);
   if (filter.dateFrom) query = query.where('r.created_at', '>=', sql<Date>`${filter.dateFrom}::date`);
   // Through the end of that day.

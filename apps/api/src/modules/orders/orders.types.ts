@@ -41,6 +41,8 @@ export interface OrderRow {
   paymentMethod?: string | null;
   /** Credit sale due date (YYYY-MM-DD), from the linked receivable. */
   dueDate?: string | null;
+  /** When the goods were handed over (#166). */
+  fulfilledAt: string | null;
 }
 
 export interface OrderLineItemRow {
@@ -49,6 +51,8 @@ export interface OrderLineItemRow {
   qtyReserved: number; qtyFulfilled: number; isBackordered: boolean;
   /** Cost this line was posted at (Weighted Average Cost at confirm() time). Null until confirmed, or for pre-migration rows. */
   unitCost: number | null;
+  /** Copies brought back through Returns (#166). */
+  qtyReturned: number;
 }
 
 /** A priced line, ready to insert. Amounts are decimal strings, as stored. */

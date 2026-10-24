@@ -23,6 +23,7 @@ export interface OrderDbRow {
   created_by: number;
   created_at: Date;
   updated_at: Date;
+  fulfilled_at: Date | null;
   amount_paid: string;
   payment_method?: string | null;
   due_date?: string | null;
@@ -42,6 +43,7 @@ export interface LineItemDbRow {
   qty_fulfilled: number;
   is_backordered: boolean;
   unit_cost: string | null;
+  qty_returned: string | number;
 }
 
 // Numeric columns arrive as exact decimal strings; the API returns them as
@@ -63,6 +65,7 @@ export function toOrderRow(row: OrderDbRow): OrderRow {
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     paymentMethod: row.payment_method ?? null,
     dueDate: row.due_date ?? null,
+    fulfilledAt: row.fulfilled_at?.toISOString() ?? null,
   };
 }
 
@@ -75,5 +78,6 @@ export function toLineItemRow(row: LineItemDbRow): OrderLineItemRow {
     qtyReserved: row.qty_reserved, qtyFulfilled: row.qty_fulfilled,
     isBackordered: row.is_backordered,
     unitCost: row.unit_cost != null ? Number(row.unit_cost) : null,
+    qtyReturned: Number(row.qty_returned),
   };
 }

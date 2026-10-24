@@ -57,7 +57,7 @@ export async function findOrder(q: Queryable, orderId: string, opts: { forUpdate
 }
 
 export async function takings(q: Queryable, orderId: string): Promise<OrderTakings> {
-  const [paid, refunded] = await Promise.all([
+  const [paid, refunded, returned] = await Promise.all([
     q
       .selectFrom('order_payments')
       .select(sql<string>`COALESCE(SUM(amount), 0)`.as('total'))
@@ -69,8 +69,14 @@ export async function takings(q: Queryable, orderId: string): Promise<OrderTakin
       .select(sql<string>`COALESCE(SUM(refund_amount), 0)`.as('total'))
       .where('order_id', '=', orderId)
       .executeTakeFirstOrThrow(),
+    q
+      .selectFrom('returns')
+      .select(sql<string>`COALESCE(SUM(total_refund_amount), 0)`.as('total'))
+      .where('order_id', '=', orderId)
+      .where('status', '=', 'completed')
+      .executeTakeFirstOrThrow(),
   ]);
-  return { paid: Money.of(paid.total), refunded: Money.of(refunded.total) };
+  return { paid: Money.of(paid.total), refunded: Money.of(refunded.total), returned: Money.of(returned.total) };
 }
 
 export async function setOrderPaymentStatus(q: Queryable, orderId: string, status: OrderPaymentStatus): Promise<void> {
@@ -167,6 +173,8 @@ export async function insertRefund(
     payment: PaymentRecord; amount: Money; reason: string; bankAccountId: number | null; processedBy: number;
     /** How the money went back; the payment's own method unless it went to store credit (#167). */
     method?: string;
+    /** The return the money went back for (#166). */
+    returnId?: string | null;
   },
 ): Promise<RefundRecord> {
   const row = await q
@@ -179,6 +187,7 @@ export async function insertRefund(
       method: r.method ?? r.payment.paymentMethod,
       bank_account_id: r.bankAccountId,
       processed_by: r.processedBy,
+      return_id: r.returnId ?? null,
     })
     .returning(REFUND_COLUMNS)
     .executeTakeFirstOrThrow();
@@ -257,11 +266,13 @@ export async function listUnpaid(q: Queryable, filter: UnpaidFilter, page: Page)
     LEFT JOIN customers c ON c.id = o.customer_id
     CROSS JOIN LATERAL (
       SELECT COALESCE((SELECT SUM(amount) FROM order_payments WHERE order_id = o.id AND status IN (${sql.join(RECEIVED)})), 0)
-           - COALESCE((SELECT SUM(refund_amount) FROM order_refunds WHERE order_id = o.id), 0) AS net_paid
+           - COALESCE((SELECT SUM(refund_amount) FROM order_refunds WHERE order_id = o.id), 0) AS net_paid,
+             -- What returns took back is no longer owed (#166).
+             COALESCE((SELECT SUM(total_refund_amount) FROM returns WHERE order_id = o.id AND status = 'completed'), 0) AS returned
     ) n
     WHERE o.sale_type = 'credit_sale'
       AND upper(o.status) NOT IN ('CANCELLED', 'DRAFT', 'PENDING')
-      AND n.net_paid < o.total
+      AND n.net_paid < o.total - n.returned
       AND NOT EXISTS (
         SELECT 1 FROM receivables wr
         WHERE wr.source_type = 'order_credit_sale' AND wr.source_entity_id = o.id AND wr.status = 'WrittenOff'

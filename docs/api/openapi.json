@@ -20062,6 +20062,16 @@
             }
           },
           {
+            "name": "orderNumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
             "name": "status",
             "in": "query",
             "required": false,
@@ -20272,6 +20282,11 @@
                                     "number",
                                     "null"
                                   ]
+                                },
+                                "qtyReturned": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
                                 }
                               },
                               "required": [
@@ -20287,7 +20302,8 @@
                                 "qtyReserved",
                                 "qtyFulfilled",
                                 "isBackordered",
-                                "unitCost"
+                                "unitCost",
+                                "qtyReturned"
                               ],
                               "additionalProperties": false
                             }
@@ -20305,6 +20321,12 @@
                             ]
                           },
                           "dueDate": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "fulfilledAt": {
                             "type": [
                               "string",
                               "null"
@@ -20336,7 +20358,8 @@
                           "updatedAt",
                           "allowedActions",
                           "paymentMethod",
-                          "dueDate"
+                          "dueDate",
+                          "fulfilledAt"
                         ],
                         "additionalProperties": false
                       }
@@ -20692,6 +20715,11 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -20707,7 +20735,8 @@
                           "qtyReserved",
                           "qtyFulfilled",
                           "isBackordered",
-                          "unitCost"
+                          "unitCost",
+                          "qtyReturned"
                         ],
                         "additionalProperties": false
                       }
@@ -20725,6 +20754,12 @@
                       ]
                     },
                     "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
                       "type": [
                         "string",
                         "null"
@@ -20756,7 +20791,8 @@
                     "updatedAt",
                     "allowedActions",
                     "paymentMethod",
-                    "dueDate"
+                    "dueDate",
+                    "fulfilledAt"
                   ],
                   "additionalProperties": false
                 }
@@ -20922,6 +20958,11 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -20937,7 +20978,8 @@
                           "qtyReserved",
                           "qtyFulfilled",
                           "isBackordered",
-                          "unitCost"
+                          "unitCost",
+                          "qtyReturned"
                         ],
                         "additionalProperties": false
                       }
@@ -20955,6 +20997,12 @@
                       ]
                     },
                     "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
                       "type": [
                         "string",
                         "null"
@@ -20986,7 +21034,8 @@
                     "updatedAt",
                     "allowedActions",
                     "paymentMethod",
-                    "dueDate"
+                    "dueDate",
+                    "fulfilledAt"
                   ],
                   "additionalProperties": false
                 }
@@ -21245,6 +21294,11 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -21260,7 +21314,8 @@
                           "qtyReserved",
                           "qtyFulfilled",
                           "isBackordered",
-                          "unitCost"
+                          "unitCost",
+                          "qtyReturned"
                         ],
                         "additionalProperties": false
                       }
@@ -21278,6 +21333,12 @@
                       ]
                     },
                     "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
                       "type": [
                         "string",
                         "null"
@@ -21309,7 +21370,8 @@
                     "updatedAt",
                     "allowedActions",
                     "paymentMethod",
-                    "dueDate"
+                    "dueDate",
+                    "fulfilledAt"
                   ],
                   "additionalProperties": false
                 }
@@ -21793,6 +21855,11 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -21808,7 +21875,8 @@
                           "qtyReserved",
                           "qtyFulfilled",
                           "isBackordered",
-                          "unitCost"
+                          "unitCost",
+                          "qtyReturned"
                         ],
                         "additionalProperties": false
                       }
@@ -21826,6 +21894,12 @@
                       ]
                     },
                     "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
                       "type": [
                         "string",
                         "null"
@@ -21857,7 +21931,8 @@
                     "updatedAt",
                     "allowedActions",
                     "paymentMethod",
-                    "dueDate"
+                    "dueDate",
+                    "fulfilledAt"
                   ],
                   "additionalProperties": false
                 }
@@ -22213,6 +22288,11 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -22228,7 +22308,8 @@
                           "qtyReserved",
                           "qtyFulfilled",
                           "isBackordered",
-                          "unitCost"
+                          "unitCost",
+                          "qtyReturned"
                         ],
                         "additionalProperties": false
                       }
@@ -22246,6 +22327,12 @@
                       ]
                     },
                     "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
                       "type": [
                         "string",
                         "null"
@@ -22277,7 +22364,8 @@
                     "updatedAt",
                     "allowedActions",
                     "paymentMethod",
-                    "dueDate"
+                    "dueDate",
+                    "fulfilledAt"
                   ],
                   "additionalProperties": false
                 }
@@ -22526,6 +22614,11 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -22541,7 +22634,8 @@
                           "qtyReserved",
                           "qtyFulfilled",
                           "isBackordered",
-                          "unitCost"
+                          "unitCost",
+                          "qtyReturned"
                         ],
                         "additionalProperties": false
                       }
@@ -22559,6 +22653,12 @@
                       ]
                     },
                     "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
                       "type": [
                         "string",
                         "null"
@@ -22590,7 +22690,8 @@
                     "updatedAt",
                     "allowedActions",
                     "paymentMethod",
-                    "dueDate"
+                    "dueDate",
+                    "fulfilledAt"
                   ],
                   "additionalProperties": false
                 }
@@ -43500,6 +43601,11 @@
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
                   },
+                  "orderId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "reason": {
                     "type": "string",
                     "maxLength": 1000
@@ -43511,6 +43617,11 @@
                       "type": "object",
                       "properties": {
                         "transactionLineItemId": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "orderLineItemId": {
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
@@ -43530,14 +43641,12 @@
                         }
                       },
                       "required": [
-                        "transactionLineItemId",
                         "quantity"
                       ]
                     }
                   }
                 },
                 "required": [
-                  "transactionId",
                   "lines"
                 ]
               }
@@ -43559,10 +43668,28 @@
                       "type": "string"
                     },
                     "transactionId": {
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "transactionNumber": {
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "orderId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "orderNumber": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "branchId": {
                       "type": "integer",
@@ -43648,7 +43775,16 @@
                             "type": "string"
                           },
                           "transactionLineItemId": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "orderLineItemId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "bookId": {
                             "type": "integer",
@@ -43674,6 +43810,7 @@
                           "id",
                           "returnId",
                           "transactionLineItemId",
+                          "orderLineItemId",
                           "bookId",
                           "bookTitle",
                           "quantity",
@@ -43728,6 +43865,8 @@
                     "returnNumber",
                     "transactionId",
                     "transactionNumber",
+                    "orderId",
+                    "orderNumber",
                     "branchId",
                     "customerId",
                     "totalRefundAmount",
@@ -43865,6 +44004,16 @@
             }
           },
           {
+            "name": "orderId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
             "name": "status",
             "in": "query",
             "required": false,
@@ -43915,10 +44064,28 @@
                             "type": "string"
                           },
                           "transactionId": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "transactionNumber": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "orderId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "orderNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "branchId": {
                             "type": "integer",
@@ -44004,7 +44171,16 @@
                                   "type": "string"
                                 },
                                 "transactionLineItemId": {
-                                  "type": "string"
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "orderLineItemId": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
                                 },
                                 "bookId": {
                                   "type": "integer",
@@ -44030,6 +44206,7 @@
                                 "id",
                                 "returnId",
                                 "transactionLineItemId",
+                                "orderLineItemId",
                                 "bookId",
                                 "bookTitle",
                                 "quantity",
@@ -44084,6 +44261,8 @@
                           "returnNumber",
                           "transactionId",
                           "transactionNumber",
+                          "orderId",
+                          "orderNumber",
                           "branchId",
                           "customerId",
                           "totalRefundAmount",
@@ -44201,10 +44380,28 @@
                       "type": "string"
                     },
                     "transactionId": {
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "transactionNumber": {
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "orderId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "orderNumber": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "branchId": {
                       "type": "integer",
@@ -44290,7 +44487,16 @@
                             "type": "string"
                           },
                           "transactionLineItemId": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "orderLineItemId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "bookId": {
                             "type": "integer",
@@ -44316,6 +44522,7 @@
                           "id",
                           "returnId",
                           "transactionLineItemId",
+                          "orderLineItemId",
                           "bookId",
                           "bookTitle",
                           "quantity",
@@ -44370,6 +44577,8 @@
                     "returnNumber",
                     "transactionId",
                     "transactionNumber",
+                    "orderId",
+                    "orderNumber",
                     "branchId",
                     "customerId",
                     "totalRefundAmount",

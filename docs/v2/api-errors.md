@@ -134,6 +134,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `ORDER_CANCELLED`
 - `ORDER_HAS_DEPENDENCIES`
 - `ORDER_INVALID`
+- `ORDER_NOT_DELIVERED`
 - `ORDER_NOT_ELIGIBLE`
 - `OVER_RECEIPT`
 - `OVER_RETURN`

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema } from './common.js';
 
-/** Contracts for /api/v1/returns: books brought back from a counter sale (#21). */
+/** Contracts for /api/v1/returns: books brought back from a counter sale (#21) or a delivered customer order (#166). */
 
 /**
  * How a return's value went back: the payment methods of the sale (owner
@@ -14,7 +14,9 @@ export type RefundMethod = z.infer<typeof RefundMethodSchema>;
 export const ReturnLineSchema = z.object({
   id: z.string(),
   returnId: z.string(),
-  transactionLineItemId: z.string(),
+  /** The line of the sale returned: a counter sale's or an order's, never both. */
+  transactionLineItemId: z.string().nullable(),
+  orderLineItemId: z.string().nullable(),
   bookId: z.number().int(),
   bookTitle: z.string(),
   quantity: z.number().int(),
@@ -34,9 +36,14 @@ export const ReturnSchema = z.object({
   id: z.string(),
   /** RET-YYYYMMDD-NNNN. */
   returnNumber: z.string(),
-  transactionId: z.string(),
+  /** The counter sale returned, or null for an order. */
+  transactionId: z.string().nullable(),
   /** The sale's POS-YYYYMMDD-NNNN. */
-  transactionNumber: z.string(),
+  transactionNumber: z.string().nullable(),
+  /** The customer order returned, or null for a counter sale (#166). */
+  orderId: z.string().nullable(),
+  /** The order's ORD- number. */
+  orderNumber: z.string().nullable(),
   branchId: z.number().int(),
   customerId: z.number().int().nullable(),
   /** What the returned books were worth: credited and refunded together. */
@@ -60,6 +67,7 @@ const DateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a date, 
 export const ReturnListQuerySchema = ListPagingQuerySchema.extend({
   customerId: IdSchema.optional(),
   transactionId: IdSchema.optional(),
+  orderId: IdSchema.optional(),
   status: z.enum(['completed', 'rejected']).optional(),
   /** From this day on. */
   dateFrom: DateOnlySchema.optional(),
@@ -76,8 +84,10 @@ export const ReturnListResponseSchema = z.object({
 });
 export type ReturnListResponse = z.infer<typeof ReturnListResponseSchema>;
 
+/** A line of the sale the return names: transactionLineItemId for a counter sale, orderLineItemId for an order. */
 export const ReturnLineInputSchema = z.object({
-  transactionLineItemId: IdSchema,
+  transactionLineItemId: IdSchema.optional(),
+  orderLineItemId: IdSchema.optional(),
   quantity: z.number().int().positive(),
   /** SELLABLE (default) goes back on the shelf; DAMAGED is kept apart, not for sale. */
   disposition: z.enum(['SELLABLE', 'DAMAGED']).default('SELLABLE'),
@@ -86,11 +96,33 @@ export type ReturnLineInput = z.infer<typeof ReturnLineInputSchema>;
 
 /**
  * The refund goes back the way the sale was paid, so the request names no
- * method; returns above the approval limit are for a Manager or Admin.
+ * method; returns above the approval limit are for a Manager or Admin. A
+ * return names one sale: a counter sale (transactionId) or a delivered
+ * order (orderId), and its lines name lines of that sale.
  */
-export const CreateReturnRequestSchema = z.object({
-  transactionId: IdSchema,
-  reason: z.string().max(1000).optional(),
-  lines: z.array(ReturnLineInputSchema).min(1, 'At least one line item is required'),
-});
+export const CreateReturnRequestSchema = z
+  .object({
+    transactionId: IdSchema.optional(),
+    orderId: IdSchema.optional(),
+    reason: z.string().max(1000).optional(),
+    lines: z.array(ReturnLineInputSchema).min(1, 'At least one line item is required'),
+  })
+  .superRefine((body, ctx) => {
+    const byOrder = body.orderId !== undefined;
+    if (byOrder === (body.transactionId !== undefined)) {
+      ctx.addIssue({ code: 'custom', path: ['transactionId'], message: 'Name either transactionId or orderId' });
+      return;
+    }
+    body.lines.forEach((line, i) => {
+      const named = byOrder ? line.orderLineItemId : line.transactionLineItemId;
+      const other = byOrder ? line.transactionLineItemId : line.orderLineItemId;
+      if (named === undefined || other !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['lines', i, byOrder ? 'orderLineItemId' : 'transactionLineItemId'],
+          message: byOrder ? 'A line of an order names its orderLineItemId' : 'A line of a counter sale names its transactionLineItemId',
+        });
+      }
+    });
+  });
 export type CreateReturnRequest = z.infer<typeof CreateReturnRequestSchema>;

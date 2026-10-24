@@ -26,6 +26,8 @@ export const OrderLineItemSchema = z.object({
   isBackordered: z.boolean(),
   /** Cost the line left stock at (set at confirmation). */
   unitCost: z.number().nullable(),
+  /** Copies of the line brought back through Returns (#166). */
+  qtyReturned: z.number().int(),
 });
 export type OrderLineItem = z.infer<typeof OrderLineItemSchema>;
 
@@ -61,11 +63,15 @@ export const OrderSchema = z.object({
   paymentMethod: z.string().nullable(),
   /** Due date of a credit sale's receivable (YYYY-MM-DD). */
   dueDate: z.string().nullable(),
+  /** When the order was delivered; the return window counts from it (#166). */
+  fulfilledAt: z.string().nullable(),
 });
 export type Order = z.infer<typeof OrderSchema>;
 
 export const OrderListQuerySchema = ListPagingQuerySchema.extend({
   customerId: IdSchema.optional(),
+  /** The order with this ORD- number. */
+  orderNumber: z.string().trim().min(1).max(64).optional(),
   /** One status, or several separated by commas: "CONFIRMED,PAID". */
   status: z.string().optional(),
   paymentStatus: z.string().optional(),
