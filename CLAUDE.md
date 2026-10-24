@@ -42,6 +42,7 @@ npm run migrate                  # apply database migrations (as the owner, MIGR
 npm run db:app-role              # create the API's database user (DATABASE_URL) after migrating
 npm run db:types                 # regenerate Kysely types after a migration (CI checks them)
 npm run db:check                 # read-only data consistency report, every tenant (exits 1 on an error)
+npm run db:demo                  # load demo books, suppliers and customers into an empty shop (a fresh install has none)
 npm run dev:api                  # API on :3000
 npm run dev:web                  # web on :5173 (proxies /api)
 npm run lint                     # ESLint for api, web, shared

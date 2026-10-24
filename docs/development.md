@@ -129,7 +129,7 @@ A finding is fixed by the issue that owns it (a repair migration), never by hand
 database. Stock with no cost (`stock.valued`) gets one in the app: Inventory, Stock Levels, the
 "No cost" badge or Revalue (Admin, Manager), with the reason. Test data found in your own database (branches at "123 Test Street", staff named
 "Test Staff") comes from test runs before the tests had their own database (#45). To be rid of it,
-reset to an empty database as below; the startup seed recreates the demo data.
+reset to an empty database as below.
 
 **Reset the test database.** Drop it; the next `npm test` recreates it.
 
@@ -145,6 +145,14 @@ docker compose down -v
 docker compose up -d postgres
 npm run migrate
 npm run db:app-role
+```
+
+**Demo data.** A fresh install has no books, suppliers or customers: the shop enters its own.
+To try the system with eight demo books, two suppliers and three customers (no store credit or
+points), load them into the empty shop. It refuses once the shop has books, customers or suppliers.
+
+```powershell
+npm run db:demo
 ```
 
 ## Troubleshooting

@@ -23,8 +23,7 @@ async function reseed() {
     // ── Restore Main Branch ──────────────────────────────────────────────
     await client.query(`
       INSERT INTO branches (id, name, address, contact_info, operating_hours, is_active)
-      VALUES (1, 'Main Branch', '1 Bookstore Avenue, City',
-        '{"phone":"555-0100","email":"main@bookstore.com"}',
+      VALUES (1, 'Main Branch', '', '{}',
         '{"mon":"09:00-18:00","tue":"09:00-18:00","wed":"09:00-18:00","thu":"09:00-18:00","fri":"09:00-18:00","sat":"10:00-16:00","sun":"closed"}',
         true)
       ON CONFLICT (id) DO UPDATE SET is_active = true, name = 'Main Branch'

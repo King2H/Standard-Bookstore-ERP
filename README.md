@@ -571,6 +571,8 @@ Open http://localhost:5173
 
 These accounts are created only on a fresh install. While either one still uses the default password, it must be changed at next login. Restarting the server never resets passwords (before v1.1.1 it did).
 
+A fresh install has Main Branch (no address or phone yet), its "Main Floor" location, the two accounts and the default settings, and no books, suppliers or customers. To try the system with demo data, run `npm run db:demo` on the empty shop.
+
 **Login flow**: Enter username + password → system shows available branches → select branch (or auto-selects if only one) → logged in.
 
 Note: superadmin and admin both have `is_all_branches = true` and land on the Dashboard after login.
@@ -581,7 +583,7 @@ Note: superadmin and admin both have `is_all_branches = true` and land on the Da
 cd apps/api && npm test
 ```
 
-Tests use prefix-based cleanup — seed data is never touched.
+Tests use prefix-based cleanup — seed data is never touched. The test database is a shop with the demo data loaded (`npm run db:demo`).
 Current: 42 test files, 517 tests, 507 passing. The 10 failures are all in `bankAccount.test.ts`, expected while the Bank Accounts module is disabled at the API layer (see "Legacy Code Audit" above) — every other suite passes. Run in batches of 5–8 files rather than the full suite in one `vitest run` if you hit `ECONNREFUSED`/connection-pool errors — a known artifact of this project's shared-DB integration-test setup under a single Postgres connection pool, not a code defect.
 
 ## Restoring Seed Data

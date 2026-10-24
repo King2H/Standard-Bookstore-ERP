@@ -20,6 +20,7 @@
     "db:types": "npm run db:types --workspace=apps/api",
     "db:app-role": "npm run db:app-role --workspace=apps/api",
     "db:check": "npm run db:check --workspace=apps/api",
+    "db:demo": "npm run db:demo --workspace=apps/api",
     "openapi": "npm run openapi --workspace=apps/api",
     "lint": "eslint apps/api/src apps/web/src packages/shared/src --ext .ts,.tsx",
     "format": "prettier --write \"apps/**/*.{ts,tsx}\" \"packages/**/*.ts\""
