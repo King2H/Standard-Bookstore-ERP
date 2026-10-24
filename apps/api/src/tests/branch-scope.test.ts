@@ -47,8 +47,8 @@ describe('Branch scope', () => {
       [branchId, `${BRANCH_PREFIX} Loc ${label}`],
     );
     const order = await db.query(
-      `INSERT INTO orders (order_number, branch_id, location_id, created_by, status)
-       VALUES ($1, $2, $3, $4, 'COMPLETED') RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, location_id, created_by, status, currency)
+       VALUES ($1, $2, $3, $4, 'COMPLETED', 'ETB') RETURNING id`,
       [`SCOPE-${label}-${Date.now()}`, branchId, loc.rows[0].id, staffId],
     );
     return order.rows[0].id as number;

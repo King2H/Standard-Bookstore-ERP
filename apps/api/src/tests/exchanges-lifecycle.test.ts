@@ -45,8 +45,8 @@ describe('Exchanges — retired lifecycle', () => {
     const book = (await db.query(`SELECT id FROM books WHERE is_active = true ORDER BY id LIMIT 1`)).rows[0].id;
     lifecycleExchangeId = String((await db.query(
       `INSERT INTO exchanges (exchange_reference, branch_id, status, lifecycle_status, total_incoming_value, total_outgoing_value,
-                              net_balance, settlement_type, created_by)
-       VALUES ('EXC-LC-TEST-0001', $1, 'Completed', 'COMPLETED', 10, 10, 0, 'Even', $2) RETURNING id`,
+                              net_balance, settlement_type, created_by, currency)
+       VALUES ('EXC-LC-TEST-0001', $1, 'Completed', 'COMPLETED', 10, 10, 0, 'Even', $2, 'ETB') RETURNING id`,
       [branchId, managerId],
     )).rows[0].id);
     await db.query(

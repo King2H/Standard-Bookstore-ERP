@@ -109,8 +109,8 @@ describe('Export Integrity (Module 7)', () => {
     // to look up (most-recent po_line_items row for the book) — the PO
     // itself doesn't need to be received for this lookup.
     const poRes = await db.query(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, created_by, notes)
-       VALUES ($1, $2, 'draft', $3, $4, 'exp_test cost basis PO')
+      `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, created_by, notes, currency)
+       VALUES ($1, $2, 'draft', $3, $4, 'exp_test cost basis PO', 'ETB')
        RETURNING id`,
       [branchId, supplierId, PURCHASE_COST, staffId],
     );
@@ -126,9 +126,9 @@ describe('Export Integrity (Module 7)', () => {
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
-         $4, $5, $6, $6, 0.00, 'paid', $7, now(), now())
+         $4, $5, $6, $6, 0.00, 'paid', $7, now(), now(), 'ETB')
        ON CONFLICT (tenant_id, order_number) DO NOTHING
        RETURNING id`,
       [`${ORDER_PREFIX}A`, customerId, branchId, ORDER_TOTAL, ORDER_SUBTOTAL, ORDER_DISCOUNT, staffId],

@@ -108,9 +108,9 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
-         $4, $5, $6, $6, 0.00, 'paid', $7, now(), now())
+         $4, $5, $6, $6, 0.00, 'paid', $7, now(), now(), 'ETB')
        RETURNING id`,
       [`${REF_PREFIX}ORD-A`, customerId, branchId, ORDER_TOTAL, ORDER_SUBTOTAL, ORDER_DISCOUNT, staffId],
     );
@@ -126,9 +126,9 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'Cancelled', 'cash_sale',
-         500.00, 500.00, 0.00, 0.00, 0.00, 'unpaid', $4, now(), now())
+         500.00, 500.00, 0.00, 0.00, 0.00, 'unpaid', $4, now(), now(), 'ETB')
        RETURNING id`,
       [`${REF_PREFIX}ORD-CANCEL`, customerId, branchId, staffId],
     );
@@ -143,8 +143,8 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     const txRes = await db.query(
       `INSERT INTO transactions (
          branch_id, location_id, customer_id, staff_id, transaction_number,
-         subtotal, discount_total, tax_total, grand_total, status, payment_status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0.00, $8, 'completed', 'paid')
+         subtotal, discount_total, tax_total, grand_total, status, payment_status, currency
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0.00, $8, 'completed', 'paid', 'ETB')
        RETURNING id`,
       [branchId, locationId, customerId, staffId, `${REF_PREFIX}POS-A`, POS_UNIT_PRICE, POS_DISCOUNT, POS_LINE_TOTAL],
     );
@@ -166,8 +166,8 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     const voidedRes = await db.query(
       `INSERT INTO transactions (
          branch_id, location_id, customer_id, staff_id, transaction_number,
-         subtotal, discount_total, tax_total, grand_total, status, payment_status
-       ) VALUES ($1, $2, $3, $4, $5, 300.00, 0.00, 0.00, 300.00, 'voided', 'paid')
+         subtotal, discount_total, tax_total, grand_total, status, payment_status, currency
+       ) VALUES ($1, $2, $3, $4, $5, 300.00, 0.00, 0.00, 300.00, 'voided', 'paid', 'ETB')
        RETURNING id`,
       [branchId, locationId, customerId, staffId, `${REF_PREFIX}POS-VOID`],
     );
@@ -214,8 +214,8 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     const exchangeRes = await db.query(
       `INSERT INTO exchanges (
          exchange_reference, branch_id, location_id, customer_id, status,
-         total_incoming_value, total_outgoing_value, net_balance, settlement_type, created_by
-       ) VALUES ($1, $2, $3, $4, 'Completed', $5, $6, $7, 'Customer_Pays', $8)
+         total_incoming_value, total_outgoing_value, net_balance, settlement_type, created_by, currency
+       ) VALUES ($1, $2, $3, $4, 'Completed', $5, $6, $7, 'Customer_Pays', $8, 'ETB')
        RETURNING id`,
       [`${REF_PREFIX}EXC-A`, branchId, locationId, customerId, EXCHANGE_INCOMING, EXCHANGE_OUTGOING, EXCHANGE_OUTGOING - EXCHANGE_INCOMING, staffId],
     );
@@ -235,8 +235,8 @@ describe('FinancialReportService — unified Sales CSV export & Dashboard reconc
     const cancelledExchangeRes = await db.query(
       `INSERT INTO exchanges (
          exchange_reference, branch_id, location_id, customer_id, status,
-         total_incoming_value, total_outgoing_value, net_balance, settlement_type, created_by
-       ) VALUES ($1, $2, $3, $4, 'Cancelled', 200.00, 200.00, 0.00, 'Even', $5)
+         total_incoming_value, total_outgoing_value, net_balance, settlement_type, created_by, currency
+       ) VALUES ($1, $2, $3, $4, 'Cancelled', 200.00, 200.00, 0.00, 'Even', $5, 'ETB')
        RETURNING id`,
       [`${REF_PREFIX}EXC-CANCEL`, branchId, locationId, customerId, staffId],
     );

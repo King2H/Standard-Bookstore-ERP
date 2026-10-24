@@ -740,7 +740,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
                               }`}
                               title={`Switch to ${item.discountMode === 'Percentage' ? 'Amount' : 'Percentage'}`}
                             >
-                              {item.discountMode === 'Percentage' ? '%' : 'ETB'}
+                              {item.discountMode === 'Percentage' ? '%' : currency}
                             </button>
 
                             {/* Value input */}

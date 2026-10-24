@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
+import { SHOP_CURRENCY } from '../config/config.repository.js';
 import { toReceivableRecord, type ReceivableRow } from './receivables.mapper.js';
 import type {
   NewReceivable,
@@ -128,7 +129,7 @@ export async function insert(q: Queryable, r: NewReceivable): Promise<void> {
       branch_id: r.branchId,
       original_amount: amount,
       outstanding_amount: amount,
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       due_date: r.dueDate === null ? null : sql<Date>`${r.dueDate}::date`,
       status: 'Pending',
       notes: r.notes,

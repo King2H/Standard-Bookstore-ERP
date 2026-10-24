@@ -304,8 +304,8 @@ describe('Locations', () => {
     const locationId = createRes.body.id as number;
 
     const order = await db.query(
-      `INSERT INTO orders (order_number, branch_id, location_id, created_by, status)
-       VALUES ($1, $2, $3, $4, 'COMPLETED') RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, location_id, created_by, status, currency)
+       VALUES ($1, $2, $3, $4, 'COMPLETED', 'ETB') RETURNING id`,
       [`LOC-TEST-${locationId}`, branchId, locationId, adminStaffId],
     );
 
@@ -332,8 +332,8 @@ describe('Locations', () => {
     const locationId = createRes.body.id as number;
 
     const sale = await db.query(
-      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total)
-       VALUES ($1, $2, $3, $4, 0, 0) RETURNING id`,
+      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total, currency)
+       VALUES ($1, $2, $3, $4, 0, 0, 'ETB') RETURNING id`,
       [`LOC-TEST-POS-${locationId}`, branchId, locationId, adminStaffId],
     );
 

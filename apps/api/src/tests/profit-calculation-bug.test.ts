@@ -112,10 +112,10 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'CONFIRMED', 'credit_sale',
          500.00, 500.00, 0.00, 0.00, 0.00,
-         'unpaid', $4, now(), now())
+         'unpaid', $4, now(), now(), 'ETB')
        ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${ORDER_PREFIX}A`, testCustomerId, testBranchId, testStaffId],
     );
@@ -126,10 +126,10 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          400.00, 500.00, 100.00, 100.00, 0.00,
-         'paid', $4, now(), now())
+         'paid', $4, now(), now(), 'ETB')
        ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${ORDER_PREFIX}B`, testCustomerId, testBranchId, testStaffId],
     );
@@ -140,10 +140,10 @@ describe('Bug 2 -- Profit Calculation Bug Condition Exploration', () => {
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          300.00, 300.00, 0.00, 0.00, 0.00,
-         'paid', $4, now(), now())
+         'paid', $4, now(), now(), 'ETB')
        ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${ORDER_PREFIX}C`, testCustomerId, testBranchId, testStaffId],
     );
@@ -672,10 +672,10 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'CONFIRMED', 'credit_sale',
          500.00, 500.00, 0.00, 0.00, 0.00,
-         'unpaid', $4, now(), now())
+         'unpaid', $4, now(), now(), 'ETB')
        ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${FIX_VERIFY_ORDER_PREFIX}A`, fixCustomerId, fixBranchId, fixStaffId],
     );
@@ -685,10 +685,10 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          400.00, 500.00, 100.00, 100.00, 0.00,
-         'paid', $4, now(), now())
+         'paid', $4, now(), now(), 'ETB')
        ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${FIX_VERIFY_ORDER_PREFIX}B`, fixCustomerId, fixBranchId, fixStaffId],
     );
@@ -698,10 +698,10 @@ describe('Bug 2 -- Fix Verification: netProfit and fulfilledRevenue Fields', () 
       `INSERT INTO orders (
          order_number, customer_id, branch_id, status, sale_type,
          total, subtotal, discount_amount, discount_total, tax_amount,
-         payment_status, created_by, created_at, updated_at
+         payment_status, created_by, created_at, updated_at, currency
        ) VALUES ($1, $2, $3, 'FULFILLED', 'cash_sale',
          300.00, 300.00, 0.00, 0.00, 0.00,
-         'paid', $4, now(), now())
+         'paid', $4, now(), now(), 'ETB')
        ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [`${FIX_VERIFY_ORDER_PREFIX}C`, fixCustomerId, fixBranchId, fixStaffId],
     );

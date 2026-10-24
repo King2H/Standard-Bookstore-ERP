@@ -45,12 +45,12 @@ describe('Data consistency check', () => {
     // Orders: a cancelled order still holding a reservation; a "paid" order with no payment; a number ahead of today's counter.
     const today = await one<string>(`SELECT TO_CHAR(CURRENT_DATE, 'YYYYMMDD')`);
     const cancelled = await one(
-      `INSERT INTO orders (order_number, branch_id, created_by, status, total, payment_status) VALUES ($1, $2, $3, 'CANCELLED', 10, 'unpaid') RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, created_by, status, total, payment_status, currency) VALUES ($1, $2, $3, 'CANCELLED', 10, 'unpaid', 'ETB') RETURNING id`,
       [`${MARK}-CANCELLED`, branchId, staffId],
     );
     await client.query(`INSERT INTO inventory_reservations (order_id, book_id, location_id, quantity, status) VALUES ($1, $2, $3, 1, 'reserved')`, [cancelled, book1, loc]);
     const paidOrder = await one(
-      `INSERT INTO orders (order_number, branch_id, created_by, status, total, payment_status) VALUES ($1, $2, $3, 'CONFIRMED', 10, 'paid') RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, created_by, status, total, payment_status, currency) VALUES ($1, $2, $3, 'CONFIRMED', 10, 'paid', 'ETB') RETURNING id`,
       [`ORD-${today}-9999`, branchId, staffId],
     );
 
@@ -58,26 +58,26 @@ describe('Data consistency check', () => {
     const customerId = await one(`INSERT INTO customers (customer_code, full_name) VALUES ('CUS-99999', $1) RETURNING id`, [`${MARK} Customer`]);
     for (const [status, owes, orderId] of [['Pending', 20, cancelled], ['Settled', 5, paidOrder]] as const) {
       await client.query(
-        `INSERT INTO receivables (source_type, source_ref_id, source_entity_id, customer_id, branch_id, original_amount, outstanding_amount, status)
-         VALUES ('order_credit_sale', $1, $2, $3, $4, 10, $5, $6)`,
+        `INSERT INTO receivables (source_type, source_ref_id, source_entity_id, customer_id, branch_id, original_amount, outstanding_amount, status, currency)
+         VALUES ('order_credit_sale', $1, $2, $3, $4, 10, $5, $6, 'ETB')`,
         [`${MARK}-${status}`, orderId, customerId, branchId, owes, status],
       );
     }
 
     // An order cancelled with its payment kept (before #167).
     const keptMoney = await one(
-      `INSERT INTO orders (order_number, branch_id, created_by, status, total, payment_status) VALUES ($1, $2, $3, 'CANCELLED', 10, 'paid') RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, created_by, status, total, payment_status, currency) VALUES ($1, $2, $3, 'CANCELLED', 10, 'paid', 'ETB') RETURNING id`,
       [`${MARK}-KEPT`, branchId, staffId],
     );
     await client.query(
-      `INSERT INTO order_payments (payment_reference, order_id, amount, payment_method, processed_by, status) VALUES ($1, $2, 10, 'cash', $3, 'success')`,
+      `INSERT INTO order_payments (payment_reference, order_id, amount, payment_method, processed_by, status, currency) VALUES ($1, $2, 10, 'cash', $3, 'success', 'ETB')`,
       [`${MARK}-PAY`, keptMoney, staffId],
     );
 
     // Purchase orders: "ordered" with copies received; paid beyond its total.
     const supplierId = await one(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [`${MARK} Supplier`]);
     const poId = await one(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, created_by, status, total_amount) VALUES ($1, $2, $3, 'ordered', 50) RETURNING id`,
+      `INSERT INTO purchase_orders (branch_id, supplier_id, created_by, status, total_amount, currency) VALUES ($1, $2, $3, 'ordered', 50, 'ETB') RETURNING id`,
       [branchId, supplierId, staffId],
     );
     await client.query(`INSERT INTO po_line_items (po_id, book_id, quantity, unit_cost, received_quantity) VALUES ($1, $2, 5, 10, 2)`, [poId, book1]);
@@ -103,6 +103,12 @@ describe('Data consistency check', () => {
     await client.query(
       `INSERT INTO bank_reconciliation (bank_account_id, amount, direction, source_type, source_id, status) VALUES ($1, 20, 'in', 'order_payment', 'y', 'cleared')`,
       [account],
+    );
+
+    // Currency: an order kept in a currency that is not the shop's.
+    await client.query(
+      `INSERT INTO orders (order_number, branch_id, created_by, currency) VALUES ($1, $2, $3, 'XYZ')`,
+      [`${MARK}-XYZ`, branchId, staffId],
     );
 
     // Test data: an account named as the test helpers name theirs.
@@ -133,6 +139,7 @@ describe('Data consistency check', () => {
     ['bank.cleared-one-line', /: 0 matched lines$/],
     ['numbers.daily-counters-ahead', /^ORD-\d{8}: highest used 9999/],
     ['numbers.customer-counter-ahead', /^CUS: highest used 99999/],
+    ['currency.shop', /^orders \d+: XYZ, the shop's is ETB$/],
     ['test-data.branches', new RegExp(`${MARK} Branch$`)],
     ['test-data.staff', /dbcheck_staff$/],
   ])('reports a row that breaks %s', (id, ref) => {
@@ -151,6 +158,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/17 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/18 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

@@ -37,6 +37,22 @@ const dailyNumbers = DAILY_SERIES.map(
     FROM ${table} WHERE ${column} ~ '^${series}-[0-9]{8}-[0-9]+$'`,
 ).join(' UNION ALL ');
 
+// The tables that store a currency (#181).
+const CURRENCY_TABLES = [
+  'transactions', 'orders', 'order_payments', 'receivables', 'financial_transactions',
+  'exchanges', 'exchange_settlement_entries', 'installment_plans', 'purchase_orders', 'bank_accounts',
+];
+
+const inOtherCurrency = CURRENCY_TABLES.map(
+  (table) => `
+    SELECT t.tenant_id, '${table} ' || t.id || ': ' || t.currency || ', the shop''s is ' || s.currency AS ref
+    FROM ${table} t
+    CROSS JOIN LATERAL (
+      SELECT COALESCE((SELECT value #>> '{}' FROM system_config c WHERE c.tenant_id = t.tenant_id AND c.key = 'base_currency'), 'ETB') AS currency
+    ) s
+    WHERE t.currency <> s.currency`,
+).join(' UNION ALL ');
+
 const CLOSED_ORDER = `lower(o.status) IN ('cancelled', 'fulfilled', 'completed')`;
 
 export const CHECKS: readonly Check[] = [
@@ -251,6 +267,16 @@ export const CHECKS: readonly Check[] = [
       SELECT d.tenant_id, 'CUS: highest used ' || d.used || ', counter at ' || COALESCE(c.last_value::text, 'none') AS ref
       FROM d LEFT JOIN document_counters c ON c.tenant_id = d.tenant_id AND c.series = 'CUS' AND c.period = ''
       WHERE c.last_value IS NULL OR c.last_value < d.used`,
+  },
+
+  // ── Currency ───────────────────────────────────────────────────────────────
+  {
+    id: 'currency.shop',
+    area: 'Currency',
+    // The currency changes only while nothing is kept in it, and amounts are never converted (#181).
+    title: "Every record is in the shop's currency",
+    severity: 'error',
+    sql: inOtherCurrency,
   },
 
   // ── Test data ──────────────────────────────────────────────────────────────

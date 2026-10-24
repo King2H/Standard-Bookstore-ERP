@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Money, type PurchaseOrder } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
+import { useCurrency } from '../../../lib/useCurrency.js';
 import { SearchPicker } from '../../../shared/components/SearchPicker.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useOpenBranches } from '../../branches/queries.js';
@@ -61,7 +62,7 @@ const SELECT = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px
 const SMALL = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 const LABEL = 'block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1';
 
-/** A new purchase order, or a draft's changes. Orders are in ETB. */
+/** A new purchase order, or a draft's changes, in the shop's currency (#181). */
 export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
   editing?: PurchaseOrder;
   onSaved: (po: PurchaseOrder) => void;
@@ -69,6 +70,8 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
 }) {
   const { showToast } = useToast();
   const { data: me } = useMyProfile();
+  const shopCurrency = useCurrency();
+  const currency = editing?.currency ?? shopCurrency;
   const save = useSavePurchaseOrder(editing?.id);
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<OrderFormValues>({
     resolver: zodResolver(OrderFormSchema),
@@ -131,7 +134,7 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
             </div>
             <div>
               <label className={LABEL}>Currency</label>
-              <p className="px-3 py-2 text-sm text-gray-900 dark:text-white">ETB</p>
+              <p className="px-3 py-2 text-sm text-gray-900 dark:text-white">{currency}</p>
             </div>
             <div>
               <label htmlFor="po-terms" className={LABEL}>Payment Terms</label>
@@ -199,7 +202,7 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
             </div>
           ))}
           <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">Total: ETB {amount(total)}</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">Total: {currency} {amount(total)}</span>
           </div>
         </div>
 

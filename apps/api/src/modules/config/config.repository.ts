@@ -91,23 +91,40 @@ export async function deleteBranch(q: Queryable, branchId: number, key: string):
 }
 
 /**
- * Whether the tenant has recorded any money: a sale, order, exchange, return,
- * purchase order past draft, payment, receivable, bank statement line, or
- * stock received at a cost. A draft purchase order is a quote, not money (a
- * fresh install comes with two).
+ * What keeps the tenant's currency (#181, owner decision 3a): any sale,
+ * order, exchange, return, purchase order (a draft too), supplier payment,
+ * ledger entry, receivable, bank account, or stock received at a cost.
+ * Amounts are kept as entered, never converted, so none may be relabelled.
+ * Returns what holds it, in words, or nothing.
  */
-export async function hasRecordedMoney(q: Queryable): Promise<boolean> {
-  const { rows } = await sql<{ recorded: boolean }>`
-    SELECT EXISTS (SELECT 1 FROM transactions)
-        OR EXISTS (SELECT 1 FROM orders)
-        OR EXISTS (SELECT 1 FROM exchanges)
-        OR EXISTS (SELECT 1 FROM returns)
-        OR EXISTS (SELECT 1 FROM purchase_orders WHERE status <> 'draft')
-        OR EXISTS (SELECT 1 FROM supplier_payments)
-        OR EXISTS (SELECT 1 FROM financial_transactions)
-        OR EXISTS (SELECT 1 FROM receivables)
-        OR EXISTS (SELECT 1 FROM bank_statement_lines)
-        OR EXISTS (SELECT 1 FROM inventory_history WHERE unit_cost > 0) AS recorded
+export async function findCurrencyHolders(q: Queryable): Promise<string[]> {
+  const { rows } = await sql<{ holder: string }>`
+    SELECT holder FROM (VALUES
+      ('sales', EXISTS (SELECT 1 FROM transactions)),
+      ('orders', EXISTS (SELECT 1 FROM orders)),
+      ('exchanges', EXISTS (SELECT 1 FROM exchanges)),
+      ('returns', EXISTS (SELECT 1 FROM returns)),
+      ('purchase orders', EXISTS (SELECT 1 FROM purchase_orders)),
+      ('supplier payments', EXISTS (SELECT 1 FROM supplier_payments)),
+      ('payments', EXISTS (SELECT 1 FROM financial_transactions)),
+      ('receivables', EXISTS (SELECT 1 FROM receivables)),
+      ('bank accounts', EXISTS (SELECT 1 FROM bank_accounts)),
+      ('stock at a cost', EXISTS (SELECT 1 FROM inventory_history WHERE unit_cost > 0))
+    ) AS h (holder, held)
+    WHERE held
   `.execute(q);
-  return rows[0].recorded;
+  return rows.map((r) => r.holder);
+}
+
+/**
+ * The shop's currency as an SQL value, read in the statement that stores it:
+ * every record names the currency it was made in (#181). ETB when it is not
+ * set, as `getBaseCurrency` reads it.
+ */
+export const SHOP_CURRENCY = sql<string>`COALESCE((SELECT value #>> '{}' FROM system_config WHERE key = 'base_currency'), 'ETB')`;
+
+/** The shop's currency, as `SHOP_CURRENCY` reads it. */
+export async function findShopCurrency(q: Queryable): Promise<string> {
+  const { rows } = await sql<{ currency: string }>`SELECT ${SHOP_CURRENCY} AS currency`.execute(q);
+  return rows[0].currency;
 }

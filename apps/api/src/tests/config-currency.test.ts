@@ -11,7 +11,8 @@ import { DEFAULT_ADMIN_PASSWORD_HASH } from '../db/seed.js';
 // The shop's currency is one setting for every branch: a fresh install starts
 // in ETB, the currency every amount is recorded in (1a); no branch overrides
 // it (2a); Super_Admin changes it only while no money is recorded, as amounts
-// are never converted (3a).
+// are never converted (3a). Since #181 a draft purchase order holds it too
+// (shop-currency.test.ts).
 
 const PREFIX = 'cfgcur_test_';
 const BRANCH_PREFIX = 'Config Currency ';
@@ -167,23 +168,12 @@ describe('The base currency', () => {
       const token = login.body.accessToken as string;
       const setCurrency = (value: string) => as(api().put('/api/v1/config/system/base_currency'), token).send({ value });
 
-      // A draft purchase order is a quote, not money: a fresh install comes with two.
-      const supplier = (await owner.query(
-        `INSERT INTO suppliers (tenant_id, name, contact_info) VALUES ($1, 'Currency Supplier', '{}') RETURNING id`, [tenant],
-      )).rows[0].id;
-      const po = (await owner.query(
-        `INSERT INTO purchase_orders (tenant_id, branch_id, supplier_id, created_by) VALUES ($1, $2, $3, $4) RETURNING id, status`,
-        [tenant, branch, supplier, staff],
-      )).rows[0];
-      expect(po.status).toBe('draft');
       expect((await setCurrency('USD')).status).toBe(200);
       expect((await as(api().get('/api/v1/config/currency'), token)).body).toEqual({ currency: 'USD' });
 
-      await owner.query(`UPDATE purchase_orders SET status = 'pending_approval' WHERE id = $1`, [po.id]);
-      expect((await setCurrency('ETB')).body.error).toBe('CURRENCY_IN_USE');
-      await owner.query(`UPDATE purchase_orders SET status = 'draft' WHERE id = $1`, [po.id]);
-
-      await owner.query(`INSERT INTO orders (tenant_id, order_number, branch_id, created_by) VALUES ($1, $2, $3, $4)`, [tenant, `${PREFIX}1`, branch, staff]);
+      await owner.query(
+        `INSERT INTO orders (tenant_id, order_number, branch_id, created_by, currency) VALUES ($1, $2, $3, $4, 'USD')`, [tenant, `${PREFIX}1`, branch, staff],
+      );
       const refused = await setCurrency('ETB');
       expect(refused.status).toBe(422);
       expect(refused.body.error).toBe('CURRENCY_IN_USE');
