@@ -1,9 +1,12 @@
+import { createRequire } from 'node:module';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
 import { db } from '../db/index.js';
+import { decryptPii, piiLookupHash } from '../lib/piiEncryption.js';
+import { ownerDb } from './helpers/ownerDb.js';
 
 // #90: customer phone and email were stored in plain text next to their
 // encrypted copies. Only the encrypted copy and the lookup hash are kept now;
@@ -72,8 +75,31 @@ describe('Customer phone and email at rest', () => {
     expect(res.body.error).toBe('DUPLICATE_CONTACT');
   });
 
-  it('migrated customers that had only a plain phone show it from the encrypted copy (demo customer CUS-0001)', async () => {
-    const res = await as(api().get('/api/v1/customers?q=CUS-0001'));
-    expect(res.body.items).toEqual([expect.objectContaining({ customerCode: 'CUS-0001', phone: '555-1001', email: 'alice@example.com' })]);
+  // A customer from before the migration, with only plain contacts (the demo customers had them; a
+  // fresh install no longer keeps those, so one is made here). Rolled back: the plain columns return
+  // only for this test.
+  it('migrated customers that had only a plain phone show it from the encrypted copy', async () => {
+    const migration = createRequire(import.meta.url)('../db/migrations/1700000052_customer_contacts_encrypted_only.cjs') as {
+      up: (pgm: { db: { query: (text: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> }; dropColumns: (table: string, columns: string[]) => void }) => Promise<void>;
+    };
+    const client = await ownerDb().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`ALTER TABLE customers ADD COLUMN phone text, ADD COLUMN email text`);
+      const id = (await client.query(
+        `INSERT INTO customers (tenant_id, customer_code, full_name, phone, email) VALUES (1, 'CUS-PII-OLD', $1, '555-1001', 'Alice@Example.com') RETURNING id`,
+        [NAME],
+      )).rows[0].id;
+      const dropped: string[] = [];
+      await migration.up({ db: client, dropColumns: (table, columns) => dropped.push(`ALTER TABLE ${table} DROP COLUMN ${columns.join(', DROP COLUMN ')}`) });
+      for (const statement of dropped) await client.query(statement);
+
+      const row = (await client.query(`SELECT phone_encrypted, email_encrypted, phone_lookup, email_lookup FROM customers WHERE id = $1`, [id])).rows[0];
+      expect({ phone: decryptPii(row.phone_encrypted), email: decryptPii(row.email_encrypted) }).toEqual({ phone: '555-1001', email: 'Alice@Example.com' });
+      expect({ phone: row.phone_lookup, email: row.email_lookup }).toEqual({ phone: piiLookupHash('555-1001'), email: piiLookupHash('alice@example.com') });
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
   });
 });

@@ -13,6 +13,7 @@
     "db:types": "dotenv -e ../../.env -- kysely-codegen",
     "db:app-role": "dotenv -e ../../.env -- tsx scripts/app-role.ts",
     "db:check": "dotenv -e ../../.env -- tsx scripts/db-check.ts",
+    "db:demo": "dotenv -e ../../.env -- tsx scripts/demo-data.ts",
     "openapi": "tsx src/openapi/write.ts",
     "test": "vitest run",
     "test:watch": "vitest",
