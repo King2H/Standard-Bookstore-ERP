@@ -4,7 +4,8 @@ import { useToast } from '../../../components/Toast.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../components/Pagination.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useSetReorderPoint, useStockLevels } from '../queries.js';
-import { canMoveStock, canRevalue, canSetReorderPoint, hasNoCost } from '../rules.js';
+import { canHandleDamaged, canMoveStock, canRevalue, canSetReorderPoint, canUseLocation, hasNoCost } from '../rules.js';
+import { DamagedDialog } from './DamagedDialog.js';
 import { RevalueDialog } from './RevalueDialog.js';
 import { SkeletonRow, fmtDateShort, useDebounce } from './shared.js';
 
@@ -37,6 +38,7 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
   const [editRow, setEditRow] = useState<StockLevel | null>(null);
   const [newReorder, setNewReorder] = useState('');
   const [costRow, setCostRow] = useState<StockLevel | null>(null);
+  const [damagedRow, setDamagedRow] = useState<StockLevel | null>(null);
   useEffect(() => setPage(1), [q, lowOnly, status]);
 
   const { data, isLoading, isFetching, isError, refetch } = useStockLevels({
@@ -100,6 +102,7 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
               <th className={`${TH} text-right`}>On Hand</th>
               <th className={`${TH} text-right`}>Reserved</th>
               <th className={`${TH} text-right`}>Available</th>
+              <th className={`${TH} text-right`} title="Counted apart from the copies for sale">Damaged</th>
               <th className={`${TH} text-right`}>Reorder At</th>
               <th className={`${TH} text-center`}>Status</th>
               <th className="px-4 py-3 text-left" aria-sort={sortBy === 'updatedAt' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}>
@@ -112,9 +115,9 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
-            {isLoading ? [...Array(6)].map((_, i) => <SkeletonRow key={i} cols={hasActions ? 9 : 8} />) :
+            {isLoading ? [...Array(6)].map((_, i) => <SkeletonRow key={i} cols={hasActions ? 10 : 9} />) :
              !data?.items.length ? (
-              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 text-sm">No inventory records found</td></tr>
+              <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400 text-sm">No inventory records found</td></tr>
             ) : data.items.map(row => (
               // `group` lets the row's actions brighten on hover (was: missing, so they stayed faded).
               <tr key={`${row.bookId}-${row.locationId}`} className={`group hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors ${row.isLowStock ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}`}>
@@ -139,6 +142,18 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
                 <td className="px-4 py-3 text-right text-sm text-gray-400 dark:text-gray-500">{row.reserved}</td>
                 <td className="px-4 py-3 text-right">
                   <span className={`text-sm font-semibold ${row.available === 0 ? 'text-red-500 dark:text-red-400' : row.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{row.available}</span>
+                </td>
+                <td className="px-4 py-3 text-right text-sm">
+                  {canHandleDamaged(me, row) && canUseLocation(me, row.locationId) ? (
+                    // Damaged copies leave by hand: written off or back for sale (#168).
+                    <button type="button" title="Write off or put back for sale" aria-label={`${row.damaged} damaged: write off or put back`}
+                      onClick={() => setDamagedRow(row)}
+                      className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-900 rounded-full font-medium transition-colors">
+                      {row.damaged} damaged…
+                    </button>
+                  ) : (
+                    <span className={row.damaged > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-300 dark:text-gray-600'}>{row.damaged}</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">{row.reorderPoint}</td>
                 <td className="px-4 py-3 text-center">
@@ -188,6 +203,7 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
       </div>
 
       {costRow && <RevalueDialog row={costRow} onClose={() => setCostRow(null)} />}
+      {damagedRow && <DamagedDialog row={damagedRow} onClose={() => setDamagedRow(null)} />}
 
       {data && (
         <Pagination page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}

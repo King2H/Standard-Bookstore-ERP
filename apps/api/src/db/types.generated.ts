@@ -411,6 +411,7 @@ export interface Inventory {
   average_cost: Generated<Numeric>;
   book_id: number;
   damaged_quantity: Generated<number>;
+  damaged_value: Generated<Numeric>;
   inventory_value: Generated<Numeric | null>;
   location_id: number;
   quantity: Generated<number>;

@@ -35,7 +35,7 @@ function profile(roles: string[], restrictedTo?: (typeof SHOP)[]): ProfileRespon
 
 const level = (bookId: number, title: string, at = SHOP, version = 3, quantity = 12): StockLevel => contract(StockLevelSchema, {
   bookId, bookTitle: title, bookIsbn: `978030640615${bookId}`, bookIsActive: true, locationId: at.id, locationName: at.name,
-  branchId: 1, quantity, reserved: 0, available: quantity, reorderPoint: 5, averageCost: 10, version, isLowStock: false, updatedAt: CREATED,
+  branchId: 1, quantity, reserved: 0, available: quantity, reorderPoint: 5, averageCost: 10, damaged: 0, damagedValue: 0, version, isLowStock: false, updatedAt: CREATED,
 });
 
 const location = (l: typeof SHOP) => ({ ...l, branchId: 1, createdAt: CREATED });

@@ -18,6 +18,8 @@ import * as stock from './inventory.repository.js';
 import type {
   Actor,
   Adjustment,
+  DamagedChange,
+  DamagedReceipt,
   LocationStockRecord,
   LockedLevel,
   Paged,
@@ -165,14 +167,17 @@ export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promis
 }
 
 /**
- * Damaged books coming back (a damaged return): counted apart, not for sale,
- * so the quantity on hand and its value stay as they were.
+ * Damaged books coming in (a damaged return or trade-in): counted apart, not
+ * for sale, with their cost kept apart too (#168, owner decision 2a). The
+ * quantity on hand and its value stay as they were.
  */
-export async function receiveDamaged(tx: Queryable, change: StockChange): Promise<void> {
+export async function receiveDamaged(tx: Queryable, change: DamagedReceipt): Promise<void> {
   checkQuantity(change.quantity);
+  const unitCost = Money.of(change.unitCost ?? 0);
+  if (unitCost.isNegative()) throw new ValidationError('A unit cost cannot be negative', { field: 'unitCost' });
   await stock.ensureLevel(tx, change.bookId, change.locationId);
   const level = await lockOrThrow(tx, change.bookId, change.locationId);
-  await stock.addDamaged(tx, change.bookId, change.locationId, change.quantity);
+  await stock.addDamaged(tx, change.bookId, change.locationId, change.quantity, unitCost.times(change.quantity).round(2));
   await stock.insertMovement(tx, {
     bookId: change.bookId,
     locationId: change.locationId,
@@ -184,19 +189,22 @@ export async function receiveDamaged(tx: Queryable, change: StockChange): Promis
     referenceId: change.referenceId ?? null,
     notes: change.notes ?? null,
     staffId: change.staffCtx.staffId,
-    unitCost: null,
+    unitCost,
   });
 }
 
-/** Damaged books leaving (a voided exchange that brought them in): the quantity on hand stays as it was. */
-export async function issueDamaged(tx: Queryable, change: StockChange): Promise<void> {
+/** Takes damaged copies out with their share of the damaged value; what each was worth. */
+async function takeDamaged(tx: Queryable, level: LockedLevel, change: { bookId: number; locationId: number; quantity: number }) {
   checkQuantity(change.quantity);
+  const value = policy.damagedShare(level.damaged, level.damagedValue, change.quantity);
+  await stock.removeDamaged(tx, change.bookId, change.locationId, change.quantity, value);
+  return { value, unitCost: value.dividedBy(change.quantity).round(4) };
+}
+
+/** Damaged books leaving with the document that brought them in (a voided exchange): the quantity on hand stays as it was. */
+export async function issueDamaged(tx: Queryable, change: StockChange): Promise<void> {
   const level = await lockOrThrow(tx, change.bookId, change.locationId);
-  if (!(await stock.removeDamaged(tx, change.bookId, change.locationId, change.quantity))) {
-    throw new BusinessError('INSUFFICIENT_STOCK', `Fewer than ${change.quantity} damaged copies of book ${change.bookId} are left here`, {
-      requested: change.quantity,
-    });
-  }
+  const { unitCost } = await takeDamaged(tx, level, change);
   await stock.insertMovement(tx, {
     bookId: change.bookId,
     locationId: change.locationId,
@@ -208,7 +216,76 @@ export async function issueDamaged(tx: Queryable, change: StockChange): Promise<
     referenceId: change.referenceId ?? null,
     notes: change.notes ?? null,
     staffId: change.staffCtx.staffId,
-    unitCost: null,
+    unitCost,
+  });
+}
+
+/**
+ * Writes damaged copies off (#168): they leave with their value, a loss
+ * recorded with the reason in the history and the audit log. The copies for
+ * sale are untouched.
+ */
+export async function writeOffDamaged(actor: Actor, change: DamagedChange): Promise<StockLevelRecord> {
+  return withTransaction({}, async (tx) => {
+    const level = await lockOrThrow(tx, change.bookId, change.locationId);
+    if (change.version !== undefined) policy.checkVersion(level.version, change.version);
+    const { value, unitCost } = await takeDamaged(tx, level, change);
+    await stock.insertMovement(tx, {
+      bookId: change.bookId,
+      locationId: change.locationId,
+      qtyBefore: level.quantity,
+      qtyAfter: level.quantity,
+      movementType: 'stock_out',
+      reasonCode: 'damage_write_off',
+      referenceType: null,
+      referenceId: null,
+      notes: change.reason,
+      staffId: actor.staffId,
+      unitCost,
+    });
+    await audit(tx, actor, 'inventory_damaged', change, {
+      action: 'write_off',
+      quantity: change.quantity,
+      value: value.toFixed(2),
+      damagedBefore: level.damaged,
+      damagedAfter: level.damaged - change.quantity,
+      reason: change.reason,
+    });
+    return levelOrThrow(tx, change.bookId, change.locationId);
+  });
+}
+
+/**
+ * Puts repaired copies back for sale (#168) at the cost they were kept at,
+ * weighed into the average like any arrival; copies that had no cost come
+ * back at 0.
+ */
+export async function repairDamaged(actor: Actor, change: DamagedChange): Promise<StockLevelRecord> {
+  return withTransaction({}, async (tx) => {
+    const level = await lockOrThrow(tx, change.bookId, change.locationId);
+    if (change.version !== undefined) policy.checkVersion(level.version, change.version);
+    const { value, unitCost } = await takeDamaged(tx, level, change);
+    await receiveStock(tx, {
+      bookId: change.bookId,
+      locationId: change.locationId,
+      quantity: change.quantity,
+      reasonCode: 'damage_repaired',
+      notes: change.reason,
+      staffCtx: actor,
+      unitCost,
+      costMayBeZero: true,
+    });
+    await audit(tx, actor, 'inventory_damaged', change, {
+      action: 'repair',
+      quantity: change.quantity,
+      value: value.toFixed(2),
+      damagedBefore: level.damaged,
+      damagedAfter: level.damaged - change.quantity,
+      qtyBefore: level.quantity,
+      qtyAfter: level.quantity + change.quantity,
+      reason: change.reason,
+    });
+    return levelOrThrow(tx, change.bookId, change.locationId);
   });
 }
 

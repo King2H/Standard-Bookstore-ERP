@@ -148,6 +148,8 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
     for (const i of incoming) {
       const change = { bookId: i.bookId, locationId: input.locationId, quantity: i.quantity, referenceId: id, staffCtx: actor };
       if (i.condition === 'damaged') {
+        // At no cost: the sales report counts its allowance as a loss when it
+        // comes in, so a repair must not charge it again on resale (#168).
         await inventoryService.receiveDamaged(tx, { ...change, referenceType: 'exchange_damaged', notes: 'Customer exchange: damaged trade-in' });
       } else {
         // The value given for the book is its cost in stock.

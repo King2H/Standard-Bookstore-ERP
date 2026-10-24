@@ -4,6 +4,7 @@ import {
   BookStockParamsSchema,
   BookStockQuerySchema,
   BranchPagingQuerySchema,
+  DamagedStockRequestSchema,
   ReorderPointRequestSchema,
   RevalueStockRequestSchema,
   StockInRequestSchema,
@@ -40,6 +41,7 @@ export const schemas = {
   revalue: { body: RevalueStockRequestSchema },
   stockIn: { body: StockInRequestSchema },
   stockOut: { body: StockOutRequestSchema },
+  damaged: { body: DamagedStockRequestSchema },
   bookStock: { params: BookStockParamsSchema, query: BookStockQuerySchema },
 };
 
@@ -138,6 +140,22 @@ export async function stockOut(req: Request, res: Response): Promise<void> {
   const { body: issue } = valid(req, schemas.stockOut);
   await assertLocationUsable(req, issue.locationId);
   const body: StockLevel = toStockLevelResponse(await service.stockOut(actor(req), issue));
+  res.json(body);
+}
+
+/** Damaged copies written off (#168), at a location one may use. */
+export async function writeOffDamaged(req: Request, res: Response): Promise<void> {
+  const { body: change } = valid(req, schemas.damaged);
+  await assertLocationUsable(req, change.locationId);
+  const body: StockLevel = toStockLevelResponse(await service.writeOffDamaged(actor(req), change));
+  res.json(body);
+}
+
+/** Damaged copies put back for sale after repair (#168). */
+export async function repairDamaged(req: Request, res: Response): Promise<void> {
+  const { body: change } = valid(req, schemas.damaged);
+  await assertLocationUsable(req, change.locationId);
+  const body: StockLevel = toStockLevelResponse(await service.repairDamaged(actor(req), change));
   res.json(body);
 }
 

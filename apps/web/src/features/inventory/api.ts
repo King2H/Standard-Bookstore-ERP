@@ -1,5 +1,5 @@
 import type {
-  AdjustStockRequest, ReorderPointRequest, RevalueStockRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse,
+  AdjustStockRequest, DamagedStockRequest, ReorderPointRequest, RevalueStockRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse,
   StockOutRequest, TransferStockRequest, TransferStockResponse,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
@@ -42,6 +42,12 @@ export const setReorderPoint = (body: ReorderPointRequest) => api.put<StockLevel
 
 /** Sets the average cost of the copies on hand, with the reason; no copies move (#163). */
 export const revalueStock = (body: RevalueStockRequest) => api.post<StockLevel>('/inventory/revalue', body);
+
+/** Damaged copies written off, with the reason; their value leaves as a loss (#168). */
+export const writeOffDamaged = (body: DamagedStockRequest) => api.post<StockLevel>('/inventory/damaged/write-off', body);
+
+/** Damaged copies put back for sale after repair, at the cost they were kept at (#168). */
+export const repairDamaged = (body: DamagedStockRequest) => api.post<StockLevel>('/inventory/damaged/repair', body);
 
 /** Stock received by hand; purchase orders are received in Procurement. */
 export const stockIn = (body: StockInRequest) => api.post<StockLevel>('/inventory/stock-in', body);

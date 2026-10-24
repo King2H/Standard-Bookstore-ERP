@@ -18,6 +18,9 @@ export const canSetReorderPoint = (me: Account | undefined) => holds(me, ['Admin
 export const canRevalue = (me: Account | undefined, row: Pick<StockLevel, 'quantity'>) =>
   row.quantity > 0 && holds(me, ['Admin', 'Manager']);
 
+/** Writing damaged copies off or putting them back for sale (#168): the stock movers, where there are some. */
+export const canHandleDamaged = (me: Account | undefined, row: Pick<StockLevel, 'damaged'>) => row.damaged > 0 && canMoveStock(me);
+
 /** Copies on hand with no cost: they add nothing to the inventory value until revalued. */
 export const hasNoCost = (row: Pick<StockLevel, 'averageCost' | 'quantity'>) => row.averageCost === 0 && row.quantity > 0;
 
@@ -56,7 +59,8 @@ export const ADJUSTMENT_DIRECTION: Record<AdjustmentReason, 'add' | 'remove' | n
 
 /** The reason codes stock movements are recorded with, as History shows and filters them. */
 export const REASON_LABELS: Record<string, string> = {
-  correction: 'Correction', damage: 'Damage', initial: 'Initial', loss: 'Loss', return: 'Return', revaluation: 'Revalued', sale: 'Sale',
+  correction: 'Correction', damage: 'Damage', damage_repaired: 'Repaired', damage_write_off: 'Written Off', initial: 'Initial', loss: 'Loss',
+  return: 'Return', revaluation: 'Revalued', sale: 'Sale',
   stock_in: 'Stock In', transfer_in: 'Transfer In', transfer_out: 'Transfer Out',
 };
 

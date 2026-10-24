@@ -664,6 +664,9 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - GET /api/v1/inventory/low-stock / GET /api/v1/inventory/history
 - POST /api/v1/inventory/stock-in|stock-out|adjust|transfer
 - PUT /api/v1/inventory/reorder-point / POST /api/v1/inventory/initialize
+- POST /api/v1/inventory/damaged/write-off|repair — body: { bookId, locationId, quantity, reason, version? }. Damaged copies are
+  counted apart with their own value (`damaged`, `damagedValue` on a stock level); a write-off takes that value out as a loss,
+  a repair puts the copies back for sale at it (#168). Admin, Manager, Stock_Clerk.
 
 ### Suppliers
 - GET/POST /api/v1/suppliers / GET/PUT /api/v1/suppliers/:id

@@ -107,7 +107,10 @@ async function restock(
       staffCtx: actor,
     };
     if (l.disposition === 'DAMAGED') {
-      await inventoryService.receiveDamaged(q, { ...change, reasonCode: 'damage', notes: `Damaged return – ${l.quantity} unit(s)` });
+      // Kept apart at the cost the books left at (#168).
+      await inventoryService.receiveDamaged(q, {
+        ...change, reasonCode: 'damage', notes: `Damaged return – ${l.quantity} unit(s)`, unitCost: l.line.unitCost ?? 0,
+      });
     } else {
       await inventoryService.receiveStock(q, {
         ...change, reasonCode: 'return', notes: `Return of ${l.quantity} unit(s)`, unitCost: l.line.unitCost ?? 0, costMayBeZero: true,

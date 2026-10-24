@@ -51,6 +51,8 @@ const LEVEL_COLUMNS = [
   reservedUnits.as('reserved'),
   'i.reorder_point',
   'i.average_cost',
+  'i.damaged_quantity',
+  'i.damaged_value',
   'i.version',
   'i.updated_at',
 ] as const;
@@ -143,7 +145,7 @@ export async function locationBranch(q: Queryable, locationId: number): Promise<
 export async function lockLevel(q: Queryable, bookId: number, locationId: number): Promise<LockedLevel | undefined> {
   const row = await q
     .selectFrom('inventory')
-    .select(['quantity', 'version', 'reorder_point', 'average_cost'])
+    .select(['quantity', 'version', 'reorder_point', 'average_cost', 'damaged_quantity', 'damaged_value'])
     .where('book_id', '=', bookId)
     .where('location_id', '=', locationId)
     .forUpdate()
@@ -154,6 +156,8 @@ export async function lockLevel(q: Queryable, bookId: number, locationId: number
       version: row.version,
       reorderPoint: row.reorder_point,
       averageCost: Money.of(row.average_cost),
+      damaged: row.damaged_quantity,
+      damagedValue: Money.of(row.damaged_value),
     }
   );
 }
@@ -200,27 +204,34 @@ export async function setAverageCost(q: Queryable, bookId: number, locationId: n
     .execute();
 }
 
-/** Damaged units are counted apart from the quantity for sale. */
-export async function addDamaged(q: Queryable, bookId: number, locationId: number, quantity: number): Promise<void> {
+/** Damaged units are counted apart from the quantity for sale, with their value (#168). */
+export async function addDamaged(q: Queryable, bookId: number, locationId: number, quantity: number, value: Money): Promise<void> {
   await q
     .updateTable('inventory')
-    .set((eb) => ({ damaged_quantity: eb(eb.fn.coalesce('damaged_quantity', sql<number>`0`), '+', quantity), updated_at: sql`now()` }))
+    .set((eb) => ({
+      damaged_quantity: eb('damaged_quantity', '+', quantity),
+      damaged_value: eb('damaged_value', '+', value.toFixed(2)),
+      version: eb('version', '+', 1),
+      updated_at: sql`now()`,
+    }))
     .where('book_id', '=', bookId)
     .where('location_id', '=', locationId)
     .execute();
 }
 
-/** Takes damaged units out; false when fewer than `quantity` are counted damaged. */
-export async function removeDamaged(q: Queryable, bookId: number, locationId: number, quantity: number): Promise<boolean> {
-  const row = await q
+/** Takes damaged units out with their share of the value; the caller checked there are enough. */
+export async function removeDamaged(q: Queryable, bookId: number, locationId: number, quantity: number, value: Money): Promise<void> {
+  await q
     .updateTable('inventory')
-    .set((eb) => ({ damaged_quantity: eb('damaged_quantity', '-', quantity), updated_at: sql`now()` }))
+    .set((eb) => ({
+      damaged_quantity: eb('damaged_quantity', '-', quantity),
+      damaged_value: eb('damaged_value', '-', value.toFixed(2)),
+      version: eb('version', '+', 1),
+      updated_at: sql`now()`,
+    }))
     .where('book_id', '=', bookId)
     .where('location_id', '=', locationId)
-    .where('damaged_quantity', '>=', quantity)
-    .returning('book_id')
-    .executeTakeFirst();
-  return row !== undefined;
+    .execute();
 }
 
 /** False when there is no stock row for the book at the location. */
