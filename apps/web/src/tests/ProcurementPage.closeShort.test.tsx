@@ -1,6 +1,6 @@
 // Purchase orders (#21): a part-received order closes short with a reason
 // (asked in the app's own dialog since #23),
-// and orders are in ETB, so the form offers no currency to type.
+// and orders are in the shop's currency (#181), so the form offers none to type.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -47,6 +47,7 @@ beforeEach(() => {
   postMock.mockReset();
   getMock.mockImplementation((path: string) => {
     if (path === '/staff/me') return Promise.resolve({ id: 5, currentRoles: ['Manager'], currentBranchId: 1 });
+    if (path === '/config/currency') return Promise.resolve({ currency: 'USD' });
     if (path.startsWith('/purchase-orders?')) return Promise.resolve({ items: [PO], total: 1, page: 1, totalPages: 1 });
     if (path.startsWith('/purchase-orders/42')) return Promise.resolve(DETAIL);
     return Promise.resolve({ items: [] });
@@ -67,12 +68,14 @@ describe('ProcurementPage', () => {
     await waitFor(() => expect(postMock).toHaveBeenCalledWith('/purchase-orders/42/close', { reason: 'Out of print' }));
   });
 
-  it('offers no currency to type on a new order', async () => {
+  it("shows a new order in the shop's currency, with none to type (#181; was: always ETB)", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: /New PO/ }));
     expect(await screen.findByText('Currency')).toBeInTheDocument();
-    expect(screen.getByText('ETB')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('ETB')).not.toBeInTheDocument();
+    expect(await screen.findByText('USD')).toBeInTheDocument();
+    expect(screen.getByText('Total: USD 0.00')).toBeInTheDocument();
+    expect(screen.queryByText('ETB')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('USD')).not.toBeInTheDocument();
   });
 });

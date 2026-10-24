@@ -128,7 +128,7 @@ Key rules:
 - Loyalty accounts (config-driven accrual/redemption) + store credit accounts
 
 **Slice 11 — POS Transactions**
-- Single-step atomic transaction engine; currency locked to ETB
+- Single-step atomic transaction engine; stored in the shop's currency (one setting, ETB on a fresh install)
 - Config-driven tax + per-role max discount; inventory decremented via stock_out
 - Customer integration: loyalty accrual, redemption, store credit deduction
 - Credit sales: payment_status (paid/partial/credit), amount_paid, amount_due
@@ -150,7 +150,7 @@ Key rules:
 
 **Slice 13 — Order Management**
 - Full order lifecycle: Pending, Confirmed, In_Progress, Fulfilled, Cancelled
-- Order number format: ORD-YYYYMMDD-XXXX; currency locked to ETB
+- Order number format: ORD-YYYYMMDD-XXXX; stored in the shop's currency (one setting, ETB on a fresh install)
 - payment_status field (unpaid/partial/paid/refunded) — updated by Payments module (Slice 14)
 - Stock reservation on confirmation: qty_reserved tracked on order_line_items
 - Backorder flag set automatically when stock insufficient at confirmation
@@ -163,7 +163,7 @@ Key rules:
 - 8 integration tests
 
 **Slice 14 — Payment Management ✅**
-- Payment reference format: PAY-YYYYMMDD-XXXX; currency locked to ETB
+- Payment reference format: PAY-YYYYMMDD-XXXX; stored in the shop's currency (one setting, ETB on a fresh install)
 - Payment methods: cash, bank, mobile, card, store_credit, loyalty_points, other (extensible for Slice 15)
 - Payment status lifecycle: success → refunded / partially_refunded
 - Total payment cannot exceed order total (422 EXCEEDS_ORDER_TOTAL)
@@ -177,7 +177,7 @@ Key rules:
 - 8 integration tests passing
 
 **Slice 15 — Merchant Exchange ✅**
-- Exchange reference format: EXC-YYYYMMDD-XXXX; currency locked to ETB
+- Exchange reference format: EXC-YYYYMMDD-XXXX; stored in the shop's currency (one setting, ETB on a fresh install)
 - Single-step atomic exchange: validates books/stock, updates inventory, computes net balance, determines settlement
 - net_balance = total_outgoing_value − total_incoming_value; settlement_type: Even / Customer_Pays / Store_Refunds
 - Incoming items increase stock; outgoing items decrease stock — all within one DB transaction

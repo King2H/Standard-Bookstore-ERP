@@ -129,6 +129,8 @@ export interface NewPurchaseOrder {
   notes: string | null;
   paymentTerms: PaymentTerms;
   lineItems: NewLine[];
+  /** Must be the shop's when given (#181). */
+  currency?: string;
 }
 
 /** A draft's changes; undefined leaves a field as it is. */
@@ -140,6 +142,8 @@ export interface PurchaseOrderChanges {
   notes?: string | null;
   paymentTerms?: PaymentTerms;
   lineItems?: NewLine[];
+  /** Must be the shop's when given (#181). */
+  currency?: string;
 }
 
 export interface Receipt {

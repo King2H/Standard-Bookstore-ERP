@@ -95,6 +95,7 @@ export async function create(req: Request, res: Response): Promise<void> {
     notes: body.notes ?? null,
     paymentTerms: body.paymentTerms,
     lineItems: lines(body.lineItems),
+    currency: body.currency,
   });
   send(res, record, 201);
 }
@@ -111,6 +112,7 @@ export async function update(req: Request, res: Response): Promise<void> {
       notes: body.notes,
       paymentTerms: body.paymentTerms,
       lineItems: body.lineItems && lines(body.lineItems),
+      currency: body.currency,
     }),
   );
 }

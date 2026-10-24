@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
+import { SHOP_CURRENCY } from '../config/config.repository.js';
 import {
   toLineRecord,
   toPaymentRecord,
@@ -183,7 +184,7 @@ export async function insertTransaction(
       amount_paid: t.amountPaid.toFixed(2),
       amount_due: t.amountDue.toFixed(2),
       payment_status: t.paymentStatus,
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       status: 'completed',
     })
     .returning('id')

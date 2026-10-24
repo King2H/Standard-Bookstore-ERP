@@ -105,9 +105,11 @@ describe('the currency (one for every branch)', () => {
     expect(mergeEffective([row('base_currency', 'ETB')], [row('base_currency', 'USD')])).toEqual([{ ...row('base_currency', 'ETB'), source: 'system' }]);
   });
 
-  it('changes only while no money is recorded; saving the same one is no change', () => {
-    expect(() => checkCurrencyChange('ETB', 'USD', false)).not.toThrow();
-    expect(() => checkCurrencyChange('ETB', 'ETB', true)).not.toThrow();
-    expect(() => checkCurrencyChange('ETB', 'USD', true)).toThrow(expect.objectContaining({ code: 'CURRENCY_IN_USE', statusCode: 422 }));
+  it('changes only while nothing is kept in it, naming what is; saving the same one is no change', () => {
+    expect(() => checkCurrencyChange('ETB', 'USD', [])).not.toThrow();
+    expect(() => checkCurrencyChange('ETB', 'ETB', ['orders'])).not.toThrow();
+    expect(() => checkCurrencyChange('ETB', 'USD', ['purchase orders', 'bank accounts'])).toThrow(expect.objectContaining({
+      code: 'CURRENCY_IN_USE', statusCode: 422, message: expect.stringContaining('(purchase orders, bank accounts)'),
+    }));
   });
 });

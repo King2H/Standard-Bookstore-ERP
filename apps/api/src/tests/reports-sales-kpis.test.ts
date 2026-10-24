@@ -29,7 +29,7 @@ describe('Sales and KPI reports', () => {
 
   async function order(number: string, status: string, total: number): Promise<number> {
     const id = (await db.query(
-      `INSERT INTO orders (order_number, branch_id, created_by, status, subtotal, total) VALUES ($1, $2, $3, $4, $5, $5) RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, created_by, status, subtotal, total, currency) VALUES ($1, $2, $3, $4, $5, $5, 'ETB') RETURNING id`,
       [number, branchId, staffId, status, total],
     )).rows[0].id;
     await db.query(

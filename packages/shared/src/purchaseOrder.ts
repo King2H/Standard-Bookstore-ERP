@@ -100,7 +100,7 @@ export const PurchaseOrderSchema = z.object({
   status: PurchaseOrderStatusSchema,
   /** What was ordered. */
   totalAmount: z.number(),
-  /** Always ETB (owner decision 6a). */
+  /** The shop's currency when the order was made (#181). */
   currency: z.string(),
   /** YYYY-MM-DD. */
   expectedDeliveryDate: z.string().nullable(),
@@ -223,8 +223,8 @@ export const PurchaseOrderLineInputSchema = z.object({
 });
 export type PurchaseOrderLineInput = z.infer<typeof PurchaseOrderLineInputSchema>;
 
-/** Orders are in ETB; an old client may still send it. */
-const CurrencySchema = z.literal('ETB', { error: 'Purchase orders are in ETB' });
+/** Orders are in the shop's currency, another is refused (#181); the app no longer sends it. */
+const CurrencySchema = z.string().regex(/^[A-Z]{3}$/, 'A three-letter ISO 4217 code, e.g. ETB');
 
 export const CreatePurchaseOrderRequestSchema = z.object({
   supplierId: IdSchema,

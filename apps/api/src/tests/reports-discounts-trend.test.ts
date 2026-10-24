@@ -25,7 +25,7 @@ describe('Sales report: discounts by preset type and the trend buckets', () => {
   async function order(number: string, status: string, lines: Array<{ price: number; discount: number; type: string }>): Promise<void> {
     const total = lines.reduce((sum, l) => sum + l.price - l.discount, 0);
     const id = (await db.query(
-      `INSERT INTO orders (order_number, branch_id, created_by, status, subtotal, total) VALUES ($1, $2, $3, $4, $5, $5) RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, created_by, status, subtotal, total, currency) VALUES ($1, $2, $3, $4, $5, $5, 'ETB') RETURNING id`,
       [number, branchId, staffId, status, total],
     )).rows[0].id;
     for (const l of lines) {

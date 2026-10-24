@@ -1,6 +1,7 @@
 import { sql, type RawBuilder } from 'kysely';
 import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
+import { SHOP_CURRENCY } from '../config/config.repository.js';
 import {
   toPaymentRecord,
   toRefundRecord,
@@ -123,7 +124,7 @@ export async function insertPayment(
       payment_reference: p.reference,
       order_id: p.orderId,
       amount: p.amount.toFixed(2),
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       payment_method: p.paymentMethod,
       status: 'success',
       transaction_reference: p.transactionReference,
@@ -216,7 +217,7 @@ export async function listHistory(q: Queryable, filter: PaymentFilter, page: Pag
     JOIN orders o ON o.id = p.order_id
     UNION ALL
     SELECT tp.id::text, 'PAY-POS-' || tp.id, t.id::text, t.transaction_number,
-           'pos', tp.amount, 'ETB', tp.method, 'success', tp.reference,
+           'pos', tp.amount, t.currency, tp.method, 'success', tp.reference,
            tp.payer_bank, 'POS Credit Sale Collection', tp.created_at, tp.created_at, t.staff_id, NULL::integer, NULL::text, t.branch_id
     FROM transaction_payments tp
     JOIN transactions t ON t.id = tp.transaction_id

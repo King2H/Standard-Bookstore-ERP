@@ -66,7 +66,7 @@ export async function getEffectiveValues(
 /** The shop's currency, one for every branch; ETB when it cannot be read, so selling screens always get one. */
 export async function getBaseCurrency(): Promise<string> {
   try {
-    return String((await config.findSystemValue(kysely, 'base_currency'))?.value ?? 'ETB');
+    return await config.findShopCurrency(kysely);
   } catch {
     return 'ETB';
   }
@@ -86,7 +86,7 @@ export async function setSystemConfig(actor: Actor, key: string, value: unknown)
   return withTransaction({}, async (tx) => {
     const previous = await config.findSystemValue(tx, key);
     if (key === 'base_currency') {
-      policy.checkCurrencyChange(previous?.value, value, await config.hasRecordedMoney(tx));
+      policy.checkCurrencyChange(previous?.value, value, await config.findCurrencyHolders(tx));
     }
     const record = await config.upsertSystem(tx, { key, value, updatedBy: actor.staffId });
     await insertAuditEntry(tx, {

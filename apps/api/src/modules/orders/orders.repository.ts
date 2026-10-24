@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import type { Queryable } from '../../db/tx.js';
+import { SHOP_CURRENCY } from '../config/config.repository.js';
 import { toLineItemRow, toOrderRow, type OrderDbRow } from './orders.mapper.js';
 import type { OrderLineItemRow, OrderPaymentStatus, OrderRow, OrderTotals, PricedLine, SaleType } from './orders.types.js';
 
@@ -161,7 +162,7 @@ export async function insertOrder(
       channel: order.channel,
       status: 'DRAFT',
       payment_status: 'unpaid',
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       subtotal: order.totals.subtotal,
       discount_amount: order.totals.discountTotal,
       discount_total: order.totals.discountTotal,
@@ -294,7 +295,7 @@ export async function insertPayment(
       payment_reference: p.reference,
       order_id: p.orderId,
       amount: p.amount,
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       payment_method: p.method,
       status: 'success',
       transaction_reference: p.transactionReference,

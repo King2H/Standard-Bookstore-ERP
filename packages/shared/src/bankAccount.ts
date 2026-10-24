@@ -51,8 +51,8 @@ export const CreateBankAccountRequestSchema = z.object({
   bankName: z.string().trim().min(1).max(100),
   accountNumber: AccountNumberSchema,
   iban: AccountNumberSchema.nullable().optional(),
-  /** Accounts are in ETB (owner decision 3a; foreign currency: #106). */
-  currency: z.literal('ETB').default('ETB'),
+  /** Accounts are in the shop's currency, another is refused (#181; foreign currency: #106). */
+  currency: z.string().regex(/^[A-Z]{3}$/, 'A three-letter ISO 4217 code, e.g. ETB').optional(),
 });
 export type CreateBankAccountRequest = z.infer<typeof CreateBankAccountRequestSchema>;
 
@@ -63,7 +63,8 @@ export const UpdateBankAccountRequestSchema = z
     bankName: z.string().trim().min(1).max(100),
     accountNumber: AccountNumberSchema,
     iban: AccountNumberSchema.nullable(),
-    currency: z.literal('ETB'),
+    /** The shop's currency, which the account is already in; another is refused (#181). */
+    currency: z.string().regex(/^[A-Z]{3}$/, 'A three-letter ISO 4217 code, e.g. ETB'),
   })
   .partial();
 export type UpdateBankAccountRequest = z.infer<typeof UpdateBankAccountRequestSchema>;

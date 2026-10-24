@@ -72,7 +72,7 @@ describe('Inventory cost (#163)', () => {
   async function purchaseOrder(bookId: number, unitCost: number, status: string, received = 0) {
     supplierId ??= (await db.query(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [`${BOOK_PREFIX}Supplier`])).rows[0].id;
     const poId = (await db.query(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, created_by, status, total_amount) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      `INSERT INTO purchase_orders (branch_id, supplier_id, created_by, status, total_amount, currency) VALUES ($1, $2, $3, $4, $5, 'ETB') RETURNING id`,
       [branchId, supplierId, clerkId, status, unitCost * 5],
     )).rows[0].id;
     await db.query(`INSERT INTO po_line_items (po_id, book_id, quantity, unit_cost, received_quantity) VALUES ($1, $2, 5, $3, $4)`, [poId, bookId, unitCost, received]);

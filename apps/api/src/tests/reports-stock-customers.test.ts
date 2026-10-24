@@ -36,7 +36,7 @@ describe('Inventory, customer and receivables reports', () => {
 
   async function order(customerId: number, number: string, status: string, total: number): Promise<void> {
     await db.query(
-      `INSERT INTO orders (order_number, branch_id, created_by, customer_id, status, subtotal, total) VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+      `INSERT INTO orders (order_number, branch_id, created_by, customer_id, status, subtotal, total, currency) VALUES ($1, $2, $3, $4, $5, $6, $6, 'ETB')`,
       [number, branchId, staffId, customerId, status, total],
     );
   }

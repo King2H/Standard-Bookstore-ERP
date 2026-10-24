@@ -298,8 +298,8 @@ describe('Receivables', () => {
   it('sums every branch for staff with access to all branches who name none (was: only their own branch)', async () => {
     await exchangeDebt();
     await db.query(
-      `INSERT INTO receivables (source_type, source_ref_id, source_entity_id, customer_id, branch_id, original_amount, outstanding_amount)
-       VALUES ('pos_credit_sale', 'RECVRULE-OTHER', 2000000000, $1, $2, 70, 70)`,
+      `INSERT INTO receivables (source_type, source_ref_id, source_entity_id, customer_id, branch_id, original_amount, outstanding_amount, currency)
+       VALUES ('pos_credit_sale', 'RECVRULE-OTHER', 2000000000, $1, $2, 70, 70, 'ETB')`,
       [customerId, otherBranchId],
     );
     const res = await as(api().get('/api/v1/receivables/summary'), globalAdmin);

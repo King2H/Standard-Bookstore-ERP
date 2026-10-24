@@ -6,6 +6,8 @@ import { withTransaction, type Queryable } from '../../db/tx.js';
 import { encrypt } from '../../lib/encryption.js';
 import { BusinessError, ConflictError, NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { checkShopCurrency } from '../config/config.policy.js';
+import { findShopCurrency } from '../config/config.repository.js';
 import * as policy from './bankAccount.policy.js';
 import * as repo from './bankAccount.repository.js';
 import type { Actor, BankAccountRecord, BankMovement, BankSourceType, NewStatementLine } from './bankAccount.types.js';
@@ -59,6 +61,8 @@ export async function createAccount(actor: Actor, branchId: number, input: Creat
     const id = await withTransaction({}, async (tx) => {
       const branch = await tx.selectFrom('branches').select('id').where('id', '=', branchId).executeTakeFirst();
       if (!branch) throw new NotFoundError('Branch');
+      const currency = await findShopCurrency(tx);
+      checkShopCurrency(input.currency, currency, 'Bank accounts');
       const id = await repo.insertAccount(tx, {
         branchId,
         accountName: input.accountName,
@@ -66,9 +70,9 @@ export async function createAccount(actor: Actor, branchId: number, input: Creat
         accountNumber: encrypt(input.accountNumber),
         accountNumberHash: numberHash(input.accountNumber),
         iban: input.iban ? encrypt(input.iban) : null,
-        currency: input.currency,
+        currency,
       });
-      await audit(tx, actor, 'CREATE', 'bank_account', id, branchId, { accountName: input.accountName, bankName: input.bankName, currency: input.currency });
+      await audit(tx, actor, 'CREATE', 'bank_account', id, branchId, { accountName: input.accountName, bankName: input.bankName, currency });
       return id;
     });
     return getAccount(branchId, id);
@@ -81,15 +85,18 @@ export async function updateAccount(actor: Actor, branchId: number, id: number, 
   try {
     await withTransaction({}, async (tx) => {
       const account = await accountIn(tx, branchId, id, { forUpdate: true });
-      policy.checkEditable(account.hasMovements, input);
+      // Its currency is the shop's and stays so: naming it changes nothing.
+      checkShopCurrency(input.currency, await findShopCurrency(tx), 'Bank accounts');
+      const changes: UpdateBankAccountRequest = { ...input };
+      delete changes.currency;
+      policy.checkEditable(account.hasMovements, changes);
       await repo.updateAccount(tx, id, {
         accountName: input.accountName,
         bankName: input.bankName,
         ...(input.accountNumber !== undefined && { accountNumber: encrypt(input.accountNumber), accountNumberHash: numberHash(input.accountNumber) }),
         ...(input.iban !== undefined && { iban: input.iban ? encrypt(input.iban) : null }),
-        currency: input.currency,
       });
-      await audit(tx, actor, 'UPDATE', 'bank_account', id, branchId, { updatedFields: Object.keys(input) });
+      await audit(tx, actor, 'UPDATE', 'bank_account', id, branchId, { updatedFields: Object.keys(changes) });
     });
   } catch (err) {
     duplicateNumber(err);

@@ -39,16 +39,16 @@ describe('Financial transactions on the shared contracts', () => {
     finance = f.token;
     sales = (await createTestStaff({ username: `${STAFF_PREFIX}sales`, role: 'Sales', branchId: branchA })).token;
     const orderInA = (await db.query(
-      `INSERT INTO orders (order_number, branch_id, status, created_by) VALUES ('FTC-A', $1, 'CONFIRMED', $2) RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, status, created_by, currency) VALUES ('FTC-A', $1, 'CONFIRMED', $2, 'ETB') RETURNING id`,
       [branchA, f.staffId],
     )).rows[0].id;
     orderInB = (await db.query(
-      `INSERT INTO orders (order_number, branch_id, status, created_by) VALUES ('FTC-B', $1, 'CONFIRMED', $2) RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, status, created_by, currency) VALUES ('FTC-B', $1, 'CONFIRMED', $2, 'ETB') RETURNING id`,
       [branchB, f.staffId],
     )).rows[0].id;
     await db.query(
-      `INSERT INTO financial_transactions (type, order_id, idempotency_key, amount, staff_id, branch_id)
-       VALUES ('payment', $1, '${KEY}a', 12.50, $3, $4), ('payment', $2, '${KEY}b', 99.00, $3, $5)`,
+      `INSERT INTO financial_transactions (type, order_id, idempotency_key, amount, staff_id, branch_id, currency)
+       VALUES ('payment', $1, '${KEY}a', 12.50, $3, $4, 'ETB'), ('payment', $2, '${KEY}b', 99.00, $3, $5, 'ETB')`,
       [orderInA, orderInB, f.staffId, branchA, branchB],
     );
   });

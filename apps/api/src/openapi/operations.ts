@@ -743,7 +743,7 @@ function configOperations(): ApiOperation[] {
       operationId: 'setSystemConfig',
       method: 'put',
       path: '/config/system/{key}',
-      summary: 'Set a system setting (Super_Admin); the value must have the key\'s type. The currency changes only while no money is recorded (422 CURRENCY_IN_USE)',
+      summary: 'Set a system setting (Super_Admin); the value must have the key\'s type. The currency changes only while nothing is kept in it, a draft purchase order or a bank account included (422 CURRENCY_IN_USE)',
       tag,
       request: { params: ConfigKeyParamsSchema, body: SetConfigValueRequestSchema },
       responses: { 200: { description: 'The saved setting', schema: ConfigEntrySchema } },

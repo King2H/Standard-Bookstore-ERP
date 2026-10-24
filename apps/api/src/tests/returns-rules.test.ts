@@ -193,13 +193,13 @@ describe('Returns', () => {
 
     it("leaves another order's receivable alone (was: reduced by the refund)", async () => {
       const order = await one(
-        `INSERT INTO orders (branch_id, created_by, order_number, customer_id, status, sale_type, total)
-         VALUES ($1, $2, $3, $4, 'Fulfilled', 'credit_sale', 100) RETURNING id`,
+        `INSERT INTO orders (branch_id, created_by, order_number, customer_id, status, sale_type, total, currency)
+         VALUES ($1, $2, $3, $4, 'Fulfilled', 'credit_sale', 100, 'ETB') RETURNING id`,
         [branchId, managerId, ORDER_NUMBER, customerId],
       );
       const rec = await one(
-        `INSERT INTO receivables (source_type, source_ref_id, source_entity_id, customer_id, branch_id, original_amount, outstanding_amount, status)
-         VALUES ('order_credit_sale', $1, $2, $3, $4, 100, 100, 'Pending') RETURNING id`,
+        `INSERT INTO receivables (source_type, source_ref_id, source_entity_id, customer_id, branch_id, original_amount, outstanding_amount, status, currency)
+         VALUES ('order_credit_sale', $1, $2, $3, $4, 100, 100, 'Pending', 'ETB') RETURNING id`,
         [ORDER_NUMBER, order.id, customerId, branchId],
       );
       const sale = await sell({ customerId });

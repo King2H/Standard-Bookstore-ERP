@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
+import { SHOP_CURRENCY } from '../config/config.repository.js';
 import { toPurchaseOrderRecord, type PurchaseOrderRow } from './procurement.mapper.js';
 import type {
   CreditNoteRecord,
@@ -287,7 +288,7 @@ export async function insertOrder(
       supplier_id: po.supplierId,
       status: 'draft',
       total_amount: po.total.toFixed(2),
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       expected_delivery_date: po.expectedDeliveryDate,
       notes: po.notes,
       created_by: po.createdBy,

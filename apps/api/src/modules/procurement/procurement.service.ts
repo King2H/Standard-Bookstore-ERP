@@ -5,6 +5,8 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BranchAccessError, BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { checkShopCurrency } from '../config/config.policy.js';
+import { findShopCurrency } from '../config/config.repository.js';
 import { getPOApprovalThreshold } from '../config/config.service.js';
 import { searchCatalog } from '../catalog/catalog.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -114,6 +116,7 @@ async function receivingLocation(q: Queryable, branchId: number, locationId: num
 
 export async function createPurchaseOrder(actor: Actor, input: NewPurchaseOrder): Promise<PurchaseOrderView> {
   const id = await withTransaction({}, async (tx) => {
+    checkShopCurrency(input.currency, await findShopCurrency(tx), 'Purchase orders');
     await validateSupplierForProcurement(input.supplierId, tx);
     await checkBooks(tx, input.lineItems);
     const receivingBranchId = input.receivingBranchId ?? input.branchId;
@@ -155,6 +158,7 @@ export async function updatePurchaseOrder(actor: Actor, id: string, ch: Purchase
     const po = await lockOrder(tx, id);
     policy.checkOrderingBranch(po, actor);
     policy.checkEditable(po.status);
+    checkShopCurrency(ch.currency, await findShopCurrency(tx), 'Purchase orders');
     if (ch.supplierId !== undefined) await validateSupplierForProcurement(ch.supplierId, tx);
     if (ch.lineItems) await checkBooks(tx, ch.lineItems);
 

@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { Money } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
+import { SHOP_CURRENCY } from '../config/config.repository.js';
 import { toExchangeRecord, type ExchangeRow } from './exchanges.mapper.js';
 import type {
   Condition,
@@ -220,7 +221,7 @@ export async function insertExchange(
       net_balance: e.net.toFixed(2),
       settlement_type: e.settlementType,
       refund_method: e.refundMethod,
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       notes: e.notes,
       created_by: e.createdBy,
     })
@@ -284,7 +285,7 @@ export async function insertEntry(
       exchange_id: e.exchangeId,
       entry_type: e.entryType,
       amount: e.amount.toFixed(2),
-      currency: 'ETB',
+      currency: SHOP_CURRENCY,
       method: e.method,
       reference: e.reference ?? null,
       payer_bank: e.payerBank ?? null,

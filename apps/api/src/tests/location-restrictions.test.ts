@@ -79,12 +79,12 @@ describe('Location restrictions on sales and stock', () => {
 
     const supplierId = (await db.query(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).rows[0].id;
     poId = (await db.query(
-      `INSERT INTO purchase_orders (branch_id, receiving_branch_id, supplier_id, created_by) VALUES ($1, $1, $2, $3) RETURNING id`,
+      `INSERT INTO purchase_orders (branch_id, receiving_branch_id, supplier_id, created_by, currency) VALUES ($1, $1, $2, $3, 'ETB') RETURNING id`,
       [branchId, supplierId, admin.staffId],
     )).rows[0].id;
     txId = (await db.query(
-      `INSERT INTO transactions (branch_id, location_id, staff_id, subtotal, grand_total, transaction_number)
-       VALUES ($1, $2, $3, 10, 10, 'LOCR-TX-1') RETURNING id`,
+      `INSERT INTO transactions (branch_id, location_id, staff_id, subtotal, grand_total, transaction_number, currency)
+       VALUES ($1, $2, $3, 10, 10, 'LOCR-TX-1', 'ETB') RETURNING id`,
       [branchId, locB, admin.staffId],
     )).rows[0].id;
   });

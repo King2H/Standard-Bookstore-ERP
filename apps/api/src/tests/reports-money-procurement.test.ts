@@ -34,8 +34,8 @@ describe('Payment, exchange, return and procurement reports', () => {
     const voided = status === 'Cancelled';
     return insert(
       `INSERT INTO exchanges (exchange_reference, branch_id, created_by, status, total_incoming_value, total_outgoing_value,
-                              voided_at, voided_by, void_reason)
-       VALUES ($1, $2, $3, $4, 100, 120, $5, $6, $7) RETURNING id`,
+                              voided_at, voided_by, void_reason, currency)
+       VALUES ($1, $2, $3, $4, 100, 120, $5, $6, $7, 'ETB') RETURNING id`,
       [`${REF}${reference}`, branchId, staffId, status, voided ? new Date() : null, voided ? staffId : null, voided ? 'test void' : null],
     );
   }
@@ -79,15 +79,15 @@ describe('Payment, exchange, return and procurement reports', () => {
 
     // An order: 100 cash and 50 mobile in, 30 refunded.
     const orderId = await insert(
-      `INSERT INTO orders (order_number, branch_id, created_by, status, subtotal, total) VALUES ($1, $2, $3, 'CONFIRMED', 150, 150) RETURNING id`,
+      `INSERT INTO orders (order_number, branch_id, created_by, status, subtotal, total, currency) VALUES ($1, $2, $3, 'CONFIRMED', 150, 150, 'ETB') RETURNING id`,
       [`${REF}O1`, branchId, staffId],
     );
     const cashPayment = await insert(
-      `INSERT INTO order_payments (order_id, payment_reference, amount, payment_method, status, processed_by) VALUES ($1, $2, 100, 'cash', 'success', $3) RETURNING id`,
+      `INSERT INTO order_payments (order_id, payment_reference, amount, payment_method, status, processed_by, currency) VALUES ($1, $2, 100, 'cash', 'success', $3, 'ETB') RETURNING id`,
       [orderId, `${REF}OP1`, staffId],
     );
     await db.query(
-      `INSERT INTO order_payments (order_id, payment_reference, amount, payment_method, status, processed_by) VALUES ($1, $2, 50, 'mobile', 'success', $3)`,
+      `INSERT INTO order_payments (order_id, payment_reference, amount, payment_method, status, processed_by, currency) VALUES ($1, $2, 50, 'mobile', 'success', $3, 'ETB')`,
       [orderId, `${REF}OP2`, staffId],
     );
     await db.query(
@@ -97,14 +97,14 @@ describe('Payment, exchange, return and procurement reports', () => {
 
     // A POS sale of 40 cash, 10 of it returned and refunded; a voided sale of 25.
     const sale = await insert(
-      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total, status)
-       VALUES ($1, $2, $3, $4, 40, 40, 'completed') RETURNING id`,
+      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total, status, currency)
+       VALUES ($1, $2, $3, $4, 40, 40, 'completed', 'ETB') RETURNING id`,
       [`${REF}T1`, branchId, locationId, staffId],
     );
     await db.query(`INSERT INTO transaction_payments (transaction_id, method, amount) VALUES ($1, 'cash', 40)`, [sale]);
     const voided = await insert(
-      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total, status)
-       VALUES ($1, $2, $3, $4, 25, 25, 'voided') RETURNING id`,
+      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total, status, currency)
+       VALUES ($1, $2, $3, $4, 25, 25, 'voided', 'ETB') RETURNING id`,
       [`${REF}T2`, branchId, locationId, staffId],
     );
     await db.query(`INSERT INTO transaction_payments (transaction_id, method, amount) VALUES ($1, 'cash', 25)`, [voided]);
@@ -118,20 +118,20 @@ describe('Payment, exchange, return and procurement reports', () => {
     // A completed exchange with 20 cash paid at the counter; a voided one
     // whose 70 was handed back; one whose difference owed was collected later (15).
     const paid = await exchange('E1', 'Completed');
-    await db.query(`INSERT INTO exchange_settlement_entries (exchange_id, entry_type, amount, method) VALUES ($1, 'cash_payment', 20, 'cash')`, [paid]);
+    await db.query(`INSERT INTO exchange_settlement_entries (exchange_id, entry_type, amount, method, currency) VALUES ($1, 'cash_payment', 20, 'cash', 'ETB')`, [paid]);
     const cancelled = await exchange('E2', 'Cancelled');
-    await db.query(`INSERT INTO exchange_settlement_entries (exchange_id, entry_type, amount, method) VALUES ($1, 'cash_payment', 70, 'cash')`, [cancelled]);
+    await db.query(`INSERT INTO exchange_settlement_entries (exchange_id, entry_type, amount, method, currency) VALUES ($1, 'cash_payment', 70, 'cash', 'ETB')`, [cancelled]);
     const owed = await exchange('E3', 'Completed');
     await db.query(
-      `INSERT INTO financial_transactions (type, exchange_id, idempotency_key, amount, method, staff_id, branch_id)
-       VALUES ('payment', $1, $2, 15, 'cash', $3, $4)`,
+      `INSERT INTO financial_transactions (type, exchange_id, idempotency_key, amount, method, staff_id, branch_id, currency)
+       VALUES ('payment', $1, $2, 15, 'cash', $3, $4, 'ETB')`,
       [owed, `${REF}${owed}`, staffId, branchId],
     );
 
     // A PO: 4 of 10 received at 5 (20 owed), 8 paid, goods received 40 days ago.
     const supplierId = await insert(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [`${REF}Supplier`]);
     poId = await insert(
-      `INSERT INTO purchase_orders (supplier_id, branch_id, created_by, status, total_amount) VALUES ($1, $2, $3, 'partially_received', 50) RETURNING id`,
+      `INSERT INTO purchase_orders (supplier_id, branch_id, created_by, status, total_amount, currency) VALUES ($1, $2, $3, 'partially_received', 50, 'ETB') RETURNING id`,
       [supplierId, branchId, staffId],
     );
     await db.query(`INSERT INTO po_line_items (po_id, book_id, quantity, received_quantity, unit_cost) VALUES ($1, $2, 10, 4, 5)`, [poId, bookId]);

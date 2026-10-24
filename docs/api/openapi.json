@@ -6569,9 +6569,8 @@
                     ]
                   },
                   "currency": {
-                    "default": "ETB",
                     "type": "string",
-                    "const": "ETB"
+                    "pattern": "^[A-Z]{3}$"
                   }
                 },
                 "required": [
@@ -6929,7 +6928,7 @@
                   },
                   "currency": {
                     "type": "string",
-                    "const": "ETB"
+                    "pattern": "^[A-Z]{3}$"
                   }
                 }
               }
@@ -12074,7 +12073,7 @@
     "/config/system/{key}": {
       "put": {
         "operationId": "setSystemConfig",
-        "summary": "Set a system setting (Super_Admin); the value must have the key's type. The currency changes only while no money is recorded (422 CURRENCY_IN_USE)",
+        "summary": "Set a system setting (Super_Admin); the value must have the key's type. The currency changes only while nothing is kept in it, a draft purchase order or a bank account included (422 CURRENCY_IN_USE)",
         "tags": [
           "Configuration"
         ],
@@ -28425,7 +28424,7 @@
                   },
                   "currency": {
                     "type": "string",
-                    "const": "ETB"
+                    "pattern": "^[A-Z]{3}$"
                   },
                   "expectedDeliveryDate": {
                     "anyOf": [
@@ -29817,7 +29816,7 @@
                   },
                   "currency": {
                     "type": "string",
-                    "const": "ETB"
+                    "pattern": "^[A-Z]{3}$"
                   },
                   "expectedDeliveryDate": {
                     "anyOf": [

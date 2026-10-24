@@ -10,7 +10,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  BankAccountListResponseSchema, BankAccountSchema, BankEntryListResponseSchema, BranchListResponseSchema,
+  BankAccountListResponseSchema, BankAccountSchema, BankEntryListResponseSchema, BranchListResponseSchema, CurrencyResponseSchema,
   ImportStatementResponseSchema, ProfileResponseSchema, StatementLineListResponseSchema,
   type BankAccount, type BankEntry, type ProfileResponse, type StatementLine,
 } from '@bms/shared';
@@ -68,6 +68,7 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/currency') return json(contract(CurrencyResponseSchema, { currency: 'USD' }));
     if (u.pathname === '/branches') {
       return json(contract(BranchListResponseSchema, page([
         { id: 1, name: 'Head Office' },
@@ -198,6 +199,13 @@ describe('accounts', () => {
     await waitFor(() => expect(sent('POST', '/branches/1/bank-accounts')).toEqual([
       { accountName: 'Savings', bankName: 'Awash', accountNumber: '1000 2000 3000' },
     ]));
+  });
+
+  it("are opened in the shop's currency, sending none (#181; was: \"Accounts are in ETB\")", async () => {
+    const user = await openPage();
+    await user.click(await screen.findByRole('button', { name: /New Account/ }));
+    const dialog = screen.getByRole('dialog', { name: 'New Bank Account' });
+    expect(await within(dialog).findByText("Accounts are in the shop's currency, USD.")).toBeInTheDocument();
   });
 
   it('are edited: the names always, the number only while no money has moved (decision 1a)', async () => {

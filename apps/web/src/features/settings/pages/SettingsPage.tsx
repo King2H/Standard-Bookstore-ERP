@@ -12,7 +12,7 @@ import {
 // ── Config key metadata for display ──────────────────────────────────────────
 
 const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType; description: string }> = {
-  base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. ETB), for every branch. Changes only before any money is recorded' },
+  base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. ETB), for every branch. Changes only while nothing is kept in it, draft purchase orders and bank accounts included' },
   // tax_rate removed — taxation disabled for this phase
   fiscal_year_start_month:          { label: 'Fiscal Year Start Month',      tab: 'General',      type: 'number',  description: 'Month number 1–12 (1 = January)' },
   max_line_discount_pct:            { label: 'Max Line Discount % (per role)',tab: 'Discounts',    type: 'json',    description: 'JSON object: {"Sales":10,"Manager":25,"Admin":50}' },

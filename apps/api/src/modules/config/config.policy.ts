@@ -46,15 +46,26 @@ export function checkBranchOverridable(key: string): void {
 }
 
 /**
- * The currency changes only while no money is recorded: amounts are kept as
- * entered, never converted, so a new currency would relabel them.
+ * The currency changes only while nothing is kept in it, a draft purchase
+ * order or a bank account included (#181, owner decision 3a): amounts are
+ * kept as entered, never converted, so a new currency would relabel them.
  */
-export function checkCurrencyChange(current: unknown, next: unknown, moneyRecorded: boolean): void {
-  if (current !== next && moneyRecorded) {
+export function checkCurrencyChange(current: unknown, next: unknown, holders: string[]): void {
+  if (current !== next && holders.length > 0) {
     throw new BusinessError(
       'CURRENCY_IN_USE',
-      'The currency cannot change once money is recorded: amounts are kept as entered, never converted',
+      `The currency cannot change while records are kept in it (${holders.join(', ')}): amounts are kept as entered, never converted`,
     );
+  }
+}
+
+/**
+ * A record is kept in the shop's currency (#181): a currency the client names
+ * must be it, as nothing is converted (another currency: #106).
+ */
+export function checkShopCurrency(given: string | undefined, shop: string, what: string): void {
+  if (given !== undefined && given !== shop) {
+    throw new ValidationError(`${what} are in the shop's currency, ${shop}`, { currency: given, shopCurrency: shop });
   }
 }
 

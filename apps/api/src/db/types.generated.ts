@@ -313,7 +313,7 @@ export interface Exchanges {
   branch_id: number;
   created_at: Generated<Timestamp>;
   created_by: number;
-  currency: Generated<string>;
+  currency: string;
   customer_id: number | null;
   customer_id_v2: number | null;
   exchange_reference: string;
@@ -342,7 +342,7 @@ export interface ExchangeSettlementEntries {
   authorised_by: number | null;
   bank_account_id: number | null;
   created_at: Generated<Timestamp>;
-  currency: Generated<string>;
+  currency: string;
   entry_type: string;
   exchange_id: Int8;
   id: Generated<Int8>;
@@ -358,7 +358,7 @@ export interface FinancialTransactions {
   amount: Numeric;
   branch_id: number;
   created_at: Generated<Timestamp>;
-  currency: Generated<string>;
+  currency: string;
   exchange_id: Int8 | null;
   id: Generated<Int8>;
   idempotency_key: string;
@@ -384,7 +384,7 @@ export interface IdempotencyKeys {
 export interface InstallmentPlans {
   created_at: Generated<Timestamp>;
   created_by: number;
-  currency: Generated<string>;
+  currency: string;
   deposit_amount: Generated<Numeric>;
   id: Generated<Int8>;
   notes: string | null;
@@ -534,7 +534,7 @@ export interface OrderPayments {
   amount: Numeric;
   bank_account_id: number | null;
   created_at: Generated<Timestamp>;
-  currency: Generated<string>;
+  currency: string;
   id: Generated<Int8>;
   notes: string | null;
   order_id: Int8;
@@ -567,7 +567,7 @@ export interface Orders {
   channel: Generated<string>;
   created_at: Generated<Timestamp>;
   created_by: number;
-  currency: Generated<string>;
+  currency: string;
   customer_id: number | null;
   discount_amount: Generated<Numeric>;
   discount_total: Generated<Numeric>;
@@ -649,7 +649,7 @@ export interface PurchaseOrders {
   closed_reason: string | null;
   created_at: Generated<Timestamp>;
   created_by: number;
-  currency: Generated<string>;
+  currency: string;
   expected_delivery_date: Timestamp | null;
   financial_status: Generated<string>;
   id: Generated<Int8>;
@@ -670,7 +670,7 @@ export interface Receivables {
   cancelled_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   credited_amount: Generated<Numeric>;
-  currency: Generated<string>;
+  currency: string;
   customer_id: number;
   due_date: Timestamp | null;
   id: Generated<Int8>;
@@ -894,7 +894,7 @@ export interface Transactions {
   amount_paid: Generated<Numeric>;
   branch_id: number;
   created_at: Generated<Timestamp>;
-  currency: Generated<string>;
+  currency: string;
   customer_id: number | null;
   discount_total: Generated<Numeric>;
   grand_total: Numeric;

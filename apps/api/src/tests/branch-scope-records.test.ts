@@ -49,26 +49,26 @@ describe('Branch scope for single records', () => {
 
     const order = async (branchId: number, locationId: number, label: string) =>
       (await db.query(
-        `INSERT INTO orders (order_number, branch_id, location_id, created_by, status) VALUES ($1, $2, $3, $4, 'CONFIRMED') RETURNING id`,
+        `INSERT INTO orders (order_number, branch_id, location_id, created_by, status, currency) VALUES ($1, $2, $3, $4, 'CONFIRMED', 'ETB') RETURNING id`,
         [`SCOPEREC-${label}-${Date.now()}`, branchId, locationId, a.staffId],
       )).rows[0].id as number;
     orderA = await order(branchA, locA, 'A');
     orderB = await order(branchB, locB, 'B');
     paymentB = (await db.query(
-      `INSERT INTO order_payments (order_id, amount, payment_method, payment_reference, processed_by, status)
-       VALUES ($1, 10, 'cash', $2, $3, 'success') RETURNING id`,
+      `INSERT INTO order_payments (order_id, amount, payment_method, payment_reference, processed_by, status, currency)
+       VALUES ($1, 10, 'cash', $2, $3, 'success', 'ETB') RETURNING id`,
       [orderB, `SCOPEREC-PAY-${Date.now()}`, a.staffId],
     )).rows[0].id as number;
     posB = (await db.query(
-      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total)
-       VALUES ($1, $2, $3, $4, 0, 0) RETURNING id`,
+      `INSERT INTO transactions (transaction_number, branch_id, location_id, staff_id, subtotal, grand_total, currency)
+       VALUES ($1, $2, $3, $4, 0, 0, 'ETB') RETURNING id`,
       [`SCOPEREC-POS-${Date.now()}`, branchB, locB, a.staffId],
     )).rows[0].id as number;
     const supplierId = (await db.query(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).rows[0].id as number;
     const po = async (branchId: number, receivingBranchId: number | null) =>
       (await db.query(
-        `INSERT INTO purchase_orders (branch_id, receiving_branch_id, supplier_id, status, total_amount, created_by)
-         VALUES ($1, $2, $3, 'draft', 0, $4) RETURNING id`,
+        `INSERT INTO purchase_orders (branch_id, receiving_branch_id, supplier_id, status, total_amount, created_by, currency)
+         VALUES ($1, $2, $3, 'draft', 0, $4, 'ETB') RETURNING id`,
         [branchId, receivingBranchId, supplierId, a.staffId],
       )).rows[0].id as number;
     poB = await po(branchB, null);

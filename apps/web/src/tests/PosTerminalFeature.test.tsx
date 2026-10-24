@@ -10,7 +10,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  BookAvailabilityListResponseSchema, BookSchema, CustomerListResponseSchema, CustomerSchema, EffectiveConfigResponseSchema,
+  BookAvailabilityListResponseSchema, BookSchema, CurrencyResponseSchema, CustomerListResponseSchema, CustomerSchema, EffectiveConfigResponseSchema,
   LocationListResponseSchema, PosTransactionSchema, ProfileResponseSchema,
   type Book, type Customer, type PosTransaction, type ProfileResponse,
 } from '@bms/shared';
@@ -58,6 +58,7 @@ let calls: Call[];
 let me: ProfileResponse;
 let allowNegative: boolean;
 let saleAnswer: PosTransaction;
+let shopCurrency: string;
 
 function stubApi() {
   calls = [];
@@ -69,6 +70,7 @@ function stubApi() {
     const json = (data: unknown) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/currency') return json(contract(CurrencyResponseSchema, { currency: shopCurrency }));
     if (u.pathname === '/branches/1/locations') {
       return json(contract(LocationListResponseSchema, {
         items: [{ id: 7, branchId: 1, name: 'Main Floor', isDefaultFulfillment: true, createdAt: CREATED }], total: 1, accessMode: 'full',
@@ -124,6 +126,7 @@ beforeEach(() => {
   me = profile(['Sales']);
   allowNegative = false;
   saleAnswer = sale();
+  shopCurrency = 'ETB';
   stubApi();
 });
 
@@ -155,6 +158,16 @@ describe('POS terminal: the cart', () => {
     await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
     expect(await screen.findByText('The discount on "Oromay" is more than your limit of 10%')).toBeInTheDocument();
     expect(posted()).toEqual([]);
+  });
+
+  it("offers an amount discount in the shop's currency (#181; was: always ETB)", async () => {
+    shopCurrency = 'USD';
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    const row = screen.getByText('Oromay').closest('tr')!;
+    await user.click(within(row).getByRole('button', { name: '%' }));
+    expect(within(row).getByRole('button', { name: 'USD' })).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'ETB' })).not.toBeInTheDocument();
   });
 
   it('allows the discount of any role held in the branch', async () => {
