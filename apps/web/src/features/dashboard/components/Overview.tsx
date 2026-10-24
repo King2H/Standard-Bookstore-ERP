@@ -7,8 +7,9 @@ import { HighlightKpiCard, KpiCard, kpiToneClass, PERIOD_LABELS, PeriodSelector,
 /**
  * The Live Overview (Sales Performance, Cash & Receivables, Inventory &
  * Operations) and the alerts under it. Drill-downs leave the branch to the
- * session; Cash Collected opens Payments History on its period (owner
- * decision 2a; was: Payments ignored the dates).
+ * session; Cash Collected opens Payments' Money In & Out on its period, the
+ * rows behind its figure (owner decision b; before, Payment History, order
+ * payments only).
  */
 export function Overview({ params, onNavigate }: {
   params: ReportParams;
@@ -110,10 +111,10 @@ export function Overview({ params, onNavigate }: {
                 <KpiCard
                   label={`Cash Collected · ${PERIOD_LABELS[salesPeriod]}`}
                   value={short(periodKpis?.cashCollected ?? kpis.dailyRevenue)}
-                  sub="Settled payments · Payments module"
+                  sub={periodKpis ? `In ${short(periodKpis.cashIn)} · Out ${short(periodKpis.cashOut)}` : 'Payments less refunds'}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a4 4 0 00-8 0v2M5 9h14l1 12H4L5 9z" /></svg>}
                   color={kpiToneClass('positive')}
-                  onClick={() => periodKpis && onNavigate?.('payments', { tab: 'history', dateFrom: periodKpis.dateFrom, dateTo: periodKpis.dateTo })}
+                  onClick={() => periodKpis && onNavigate?.('payments', { tab: 'money', dateFrom: periodKpis.dateFrom, dateTo: periodKpis.dateTo })}
                 />
                 <KpiCard
                   label="Outstanding Receivables"

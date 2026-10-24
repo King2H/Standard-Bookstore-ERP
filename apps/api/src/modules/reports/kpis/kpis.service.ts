@@ -2,27 +2,41 @@ import { Money, type KpiPeriod, type KpiReport, type PeriodKpis } from '@bms/sha
 import { reportDb } from '../../../db/reportDb.js';
 import { netProfit, salesSummary } from '../sales/sales.service.js';
 import { pctChange } from '../sales/sales.policy.js';
+import { moneyTotals } from '../payments/paymentReports.repository.js';
 import * as kpis from './kpis.repository.js';
 import * as policy from './kpis.policy.js';
 
 /** Dashboard KPI use cases (#22), read on the report connection. */
 
+/**
+ * Customer money in a period: what came in, what went back, and what is left,
+ * as the Payments report counts it (owner decision, 2026-10-23), so the
+ * dashboard and the report agree.
+ */
+async function cash(branchId: number | undefined, dateFrom: string, dateTo: string) {
+  const m = await moneyTotals(reportDb, { branchId, dateFrom, dateTo });
+  return { cashIn: policy.total(m.collected), cashOut: policy.total(m.refunded), net: Money.of(m.collected).minus(m.refunded).toNumber() };
+}
+
 export async function getKpis(branchId: number | undefined): Promise<KpiReport> {
   const cal = await kpis.calendar(reportDb);
   const today = { branchId, dateFrom: cal.today, dateTo: cal.today };
   const month = { branchId, dateFrom: cal.month_start, dateTo: cal.today };
-  const [f, dailyProfit, monthlyProfit, daily, monthly] = await Promise.all([
+  const [f, dailyProfit, monthlyProfit, daily, monthly, todayCash, monthCash] = await Promise.all([
     kpis.kpiFigures(reportDb, branchId),
     netProfit(today),
     netProfit(month),
     salesSummary(today),
     salesSummary(month),
+    cash(branchId, today.dateFrom, today.dateTo),
+    cash(branchId, month.dateFrom, month.dateTo),
   ]);
   return {
     dailySales: policy.total(f.dailyOrderSales, f.dailyPosSales, f.dailyExchangeSales),
     monthlySales: policy.total(f.monthlyOrderSales, f.monthlyPosSales, f.monthlyExchangeSales),
-    dailyRevenue: policy.total(f.dailyPosCollected, f.dailyOrderCollected, f.dailyExchangeCollected),
-    monthlyRevenue: policy.total(f.monthlyPosCollected, f.monthlyOrderCollected, f.monthlyExchangeCollected),
+    // Cash collected, net of refunds.
+    dailyRevenue: todayCash.net,
+    monthlyRevenue: monthCash.net,
     averageOrderValue: policy.total(f.averageOrderValue),
     totalActiveCustomers: f.activeCustomers,
     lowStockAlerts: f.lowStockAlerts,
@@ -57,11 +71,11 @@ export async function getKpis(branchId: number | undefined): Promise<KpiReport> 
 /** Sales Performance for a period so far, against the previous equivalent period. */
 export async function getPeriodKpis(branchId: number | undefined, period: KpiPeriod): Promise<PeriodKpis> {
   const r = policy.periodRange(period, await kpis.calendar(reportDb));
-  const [current, previous, cash, prevCash] = await Promise.all([
+  const [current, previous, now, before] = await Promise.all([
     salesSummary({ branchId, dateFrom: r.dateFrom, dateTo: r.dateTo }),
     salesSummary({ branchId, dateFrom: r.prevFrom, dateTo: r.prevTo }),
-    kpis.cashCollected(reportDb, branchId, r.dateFrom, r.dateTo),
-    kpis.cashCollected(reportDb, branchId, r.prevFrom, r.prevTo),
+    cash(branchId, r.dateFrom, r.dateTo),
+    cash(branchId, r.prevFrom, r.prevTo),
   ]);
   return {
     period,
@@ -79,7 +93,9 @@ export async function getPeriodKpis(branchId: number | undefined, period: KpiPer
     },
     netSalesChangePct: pctChange(current.netSalesRevenue, previous.netSalesRevenue),
     grossProfitChangePct: pctChange(current.grossProfit, previous.grossProfit),
-    cashCollected: policy.total(...cash),
-    previousCashCollected: policy.total(...prevCash),
+    cashIn: now.cashIn,
+    cashOut: now.cashOut,
+    cashCollected: now.net,
+    previousCashCollected: before.net,
   };
 }

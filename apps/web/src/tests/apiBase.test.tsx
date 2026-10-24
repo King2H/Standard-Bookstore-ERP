@@ -41,7 +41,7 @@ const EMPTY_INVENTORY = {
 const EMPTY_PERIOD = {
   period: 'today', dateFrom: '', dateTo: '', netSales: 0, grossProfit: 0, grossMarginPct: 0,
   previous: { dateFrom: '', dateTo: '', netSales: 0, grossProfit: 0, grossMarginPct: 0 },
-  netSalesChangePct: null, grossProfitChangePct: null, cashCollected: 0, previousCashCollected: 0,
+  netSalesChangePct: null, grossProfitChangePct: null, cashIn: 0, cashOut: 0, cashCollected: 0, previousCashCollected: 0,
 };
 const ME = {
   id: 9, username: 'me', fullName: 'Me', isActive: true, createdAt: '2026-10-01T00:00:00.000Z', mustChangePassword: false,

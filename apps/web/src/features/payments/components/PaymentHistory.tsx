@@ -16,8 +16,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 /**
  * Payments taken in the branch, newest first; an order payment can be
- * refunded. The Dashboard's Cash Collected opens it on its period (owner
- * decision 2a; was: the dates were dropped), shown as a filter to clear.
+ * refunded. Opened on a period (`tab: 'history'`), it shows the dates as a
+ * filter to clear (was: the dates were dropped).
  */
 export function PaymentHistory({ initialRange }: { initialRange?: { dateFrom: string; dateTo: string } }) {
   const currency = useCurrency();

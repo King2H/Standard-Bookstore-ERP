@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { UnpaidSourceTypeSchema, type UnpaidItem } from '@bms/shared';
 import { DEFAULT_PAGE_SIZE } from '../../../components/Pagination.js';
 import { useToast } from '../../../components/Toast.js';
+import { useMyProfile } from '../../account/queries.js';
 import { listUnpaid } from '../api.js';
 import { CollectPayment } from '../components/CollectPayment.js';
+import { MoneyInOut } from '../components/MoneyInOut.js';
 import { PaymentHistory } from '../components/PaymentHistory.js';
 import { PendingList } from '../components/PendingList.js';
 import { useUnpaid } from '../queries.js';
+import { canSeeMoneyInOut } from '../rules.js';
 
-type Tab = 'pending' | 'collect' | 'history';
+type Tab = 'pending' | 'collect' | 'history' | 'money';
 
 const isDay = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
@@ -19,14 +22,18 @@ const IDLE = 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:te
  * Payments: what customers owe, collecting it, and the payments taken. Orders,
  * Sales History and Receivables open Collect for one debt with `orderId` and
  * `sourceType` (an order, POS sale or receivable id, with 'order', 'pos' or
- * 'exchange_difference'). The Dashboard opens History on a period with
- * `tab: 'history'`, `dateFrom` and `dateTo`.
+ * 'exchange_difference'). History and Money In & Out open on a period with
+ * `tab` ('history' or 'money'), `dateFrom` and `dateTo`; the Dashboard's Cash
+ * Collected opens Money In & Out (owner decision b).
  */
 export default function PaymentsPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
   const { showToast } = useToast();
   const { dateFrom, dateTo } = initialContext;
-  const linkedRange = initialContext.tab === 'history' && isDay(dateFrom) && isDay(dateTo) ? { dateFrom, dateTo } : undefined;
-  const [tab, setTab] = useState<Tab>(initialContext.tab === 'history' ? 'history' : 'pending');
+  const { data: me } = useMyProfile();
+  const linkedRange = isDay(dateFrom) && isDay(dateTo) ? { dateFrom, dateTo } : undefined;
+  const asked: Tab = initialContext.tab === 'history' || initialContext.tab === 'money' ? initialContext.tab : 'pending';
+  const [tab, setTab] = useState<Tab>(asked);
+  const showMoney = canSeeMoneyInOut(me);
   const [selected, setSelected] = useState<UnpaidItem | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -75,6 +82,11 @@ export default function PaymentsPage({ initialContext = {} }: { initialContext?:
         <button onClick={() => setTab('history')} className={`${TAB} ${tab === 'history' ? 'border-b-2 border-blue-600 text-blue-600' : IDLE}`}>
           📋 Payment History
         </button>
+        {showMoney && (
+          <button onClick={() => setTab('money')} className={`${TAB} ${tab === 'money' ? 'border-b-2 border-blue-600 text-blue-600' : IDLE}`}>
+            💵 Money In &amp; Out
+          </button>
+        )}
       </div>
 
       {tab === 'pending' && (
@@ -82,7 +94,8 @@ export default function PaymentsPage({ initialContext = {} }: { initialContext?:
           setPage={setPage} setPageSize={setPageSize} onCollect={collect} />
       )}
       {tab === 'collect' && selected && <CollectPayment key={`${selected.sourceType}:${selected.id}`} item={selected} onDone={close} onCancel={close} />}
-      {tab === 'history' && <PaymentHistory initialRange={linkedRange} />}
+      {tab === 'history' && <PaymentHistory initialRange={asked === 'history' ? linkedRange : undefined} />}
+      {tab === 'money' && showMoney && <MoneyInOut initialRange={asked === 'money' ? linkedRange : undefined} />}
     </div>
   );
 }

@@ -39732,6 +39732,12 @@
                         "null"
                       ]
                     },
+                    "cashIn": {
+                      "type": "number"
+                    },
+                    "cashOut": {
+                      "type": "number"
+                    },
                     "cashCollected": {
                       "type": "number"
                     },
@@ -39749,6 +39755,8 @@
                     "previous",
                     "netSalesChangePct",
                     "grossProfitChangePct",
+                    "cashIn",
+                    "cashOut",
                     "cashCollected",
                     "previousCashCollected"
                   ],

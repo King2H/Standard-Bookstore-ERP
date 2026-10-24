@@ -53,47 +53,9 @@ function exchangeSales(q: Queryable, branchId: number | undefined, when: string)
   );
 }
 
-function posCollected(q: Queryable, branchId: number | undefined, when: string) {
-  const b = branchFilter(branchId, 't');
-  return value(
-    q,
-    `SELECT COALESCE(SUM(tp.amount), 0)::NUMERIC AS val
-     FROM transaction_payments tp JOIN transactions t ON t.id = tp.transaction_id
-     WHERE t.status = 'completed' AND ${when} ${b.cond}`,
-    b.params,
-  );
-}
-
-function orderCollected(q: Queryable, branchId: number | undefined, when: string) {
-  const b = branchFilter(branchId, 'o');
-  return value(
-    q,
-    `SELECT COALESCE(SUM(op.amount), 0)::NUMERIC AS val
-     FROM order_payments op JOIN orders o ON o.id = op.order_id
-     WHERE op.status IN ('success', 'partially_refunded') AND o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}
-       AND ${when} ${b.cond}`,
-    b.params,
-  );
-}
-
-const EXCHANGE_CASH = `CASE WHEN ese.entry_type = 'cash_payment' THEN ese.amount WHEN ese.entry_type = 'cash_refund' THEN -ese.amount ELSE 0 END`;
-
-function exchangeCollected(q: Queryable, branchId: number | undefined, when: string) {
-  const b = branchFilter(branchId, 'e');
-  return value(
-    q,
-    `SELECT COALESCE(SUM(${EXCHANGE_CASH}), 0)::NUMERIC AS val
-     FROM exchange_settlement_entries ese JOIN exchanges e ON e.id = ese.exchange_id
-     WHERE e.status IN ('Completed', 'COMPLETED') AND ${when} ${b.cond}`,
-    b.params,
-  );
-}
-
 export interface KpiFigures {
   dailyOrderSales: string; dailyPosSales: string; dailyExchangeSales: string;
   monthlyOrderSales: string; monthlyPosSales: string; monthlyExchangeSales: string;
-  dailyPosCollected: string; dailyOrderCollected: string; dailyExchangeCollected: string;
-  monthlyPosCollected: string; monthlyOrderCollected: string; monthlyExchangeCollected: string;
   outstanding: string; overdue: string; averageOrderValue: string; inventoryValue: string;
   activeCustomers: number; lowStockAlerts: number; pendingOrders: number; exchangesToday: number;
 }
@@ -105,8 +67,6 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
   const [
     dailyOrderSales, dailyPosSales, dailyExchangeSales,
     monthlyOrderSales, monthlyPosSales, monthlyExchangeSales,
-    dailyPosCollected, dailyOrderCollected, dailyExchangeCollected,
-    monthlyPosCollected, monthlyOrderCollected, monthlyExchangeCollected,
     outstanding, overdue, averageOrderValue, inventoryValue,
     activeCustomers, lowStockAlerts, pendingOrders, exchangesToday,
   ] = await Promise.all([
@@ -116,12 +76,6 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
     orderSales(q, branchId, thisMonth('created_at')),
     posSales(q, branchId, thisMonth('created_at')),
     exchangeSales(q, branchId, thisMonth('created_at')),
-    posCollected(q, branchId, today('tp.created_at')),
-    orderCollected(q, branchId, today('op.processed_at')),
-    exchangeCollected(q, branchId, today('ese.created_at')),
-    posCollected(q, branchId, thisMonth('tp.created_at')),
-    orderCollected(q, branchId, thisMonth('op.processed_at')),
-    exchangeCollected(q, branchId, thisMonth('ese.created_at')),
     value(q, `SELECT COALESCE(SUM(outstanding_amount), 0)::NUMERIC AS val FROM receivables WHERE status IN ('Pending', 'PartiallyPaid', 'Overdue') ${b.cond}`, b.params),
     // Overdue is kept up to date by the receivables' overdue job, not derived here.
     value(q, `SELECT COALESCE(SUM(outstanding_amount), 0)::NUMERIC AS val FROM receivables WHERE status = 'Overdue' ${b.cond}`, b.params),
@@ -136,8 +90,6 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
   return {
     dailyOrderSales, dailyPosSales, dailyExchangeSales,
     monthlyOrderSales, monthlyPosSales, monthlyExchangeSales,
-    dailyPosCollected, dailyOrderCollected, dailyExchangeCollected,
-    monthlyPosCollected, monthlyOrderCollected, monthlyExchangeCollected,
     outstanding, overdue, averageOrderValue, inventoryValue,
     activeCustomers, lowStockAlerts, pendingOrders, exchangesToday,
   };
@@ -161,35 +113,4 @@ export async function calendar(q: Queryable): Promise<Record<string, string>> {
        TO_CHAR(date_trunc('year', CURRENT_DATE) - INTERVAL '1 day', 'YYYY-MM-DD') AS prev_year_end`,
   );
   return row;
-}
-
-/** Cash taken in a date range across POS, orders and exchanges (both ends included). */
-export async function cashCollected(q: Queryable, branchId: number | undefined, dateFrom: string, dateTo: string): Promise<string[]> {
-  const params: unknown[] = branchId ? [dateFrom, dateTo, branchId] : [dateFrom, dateTo];
-  const branch = (alias: string) => (branchId ? `AND ${alias}.branch_id = $3` : '');
-  const range = (column: string) => `${column}::date >= $1::date AND ${column}::date <= $2::date`;
-  return Promise.all([
-    value(
-      q,
-      `SELECT COALESCE(SUM(tp.amount), 0)::NUMERIC AS val
-       FROM transaction_payments tp JOIN transactions t ON t.id = tp.transaction_id
-       WHERE t.status = 'completed' AND ${range('tp.created_at')} ${branch('t')}`,
-      params,
-    ),
-    value(
-      q,
-      `SELECT COALESCE(SUM(op.amount), 0)::NUMERIC AS val
-       FROM order_payments op JOIN orders o ON o.id = op.order_id
-       WHERE op.status IN ('success','partially_refunded') AND o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}
-         AND ${range('op.processed_at')} ${branch('o')}`,
-      params,
-    ),
-    value(
-      q,
-      `SELECT COALESCE(SUM(${EXCHANGE_CASH}), 0)::NUMERIC AS val
-       FROM exchange_settlement_entries ese JOIN exchanges e ON e.id = ese.exchange_id
-       WHERE e.status IN ('Completed','COMPLETED') AND ${range('ese.created_at')} ${branch('e')}`,
-      params,
-    ),
-  ]);
 }
