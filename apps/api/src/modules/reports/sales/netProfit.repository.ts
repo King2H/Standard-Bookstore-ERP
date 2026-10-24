@@ -144,12 +144,19 @@ export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<N
        WHERE ${posCostWhere} AND t.payment_status != 'credit'`,
       posCostParams,
     ),
-    // Q3: Returns value
+    // Q3: Returns value, less what each return set against a debt as a
+    //     credit note: Q5 already leaves that out of the credit collected,
+    //     so taking it off here too would count it twice.
     reportRows(q, 
-      `SELECT COALESCE(SUM(rli.unit_price * rli.quantity), 0)::NUMERIC AS returns_value
-       FROM return_line_items rli
-       JOIN returns r ON r.id = rli.return_id
-       WHERE ${returnConds.join(' AND ')}`,
+      `SELECT COALESCE(SUM(v.value - v.credited), 0)::NUMERIC AS returns_value
+       FROM (
+         SELECT SUM(rli.unit_price * rli.quantity) AS value,
+                COALESCE((SELECT SUM(f.amount) FROM refunds f WHERE f.return_id = r.id AND f.method = 'credit_note'), 0) AS credited
+         FROM return_line_items rli
+         JOIN returns r ON r.id = rli.return_id
+         WHERE ${returnConds.join(' AND ')}
+         GROUP BY r.id
+       ) v`,
       returnParams,
     ),
     // Q3b: Returns cost credit-back. Return Posting Rule: "COGS decreases"
@@ -165,10 +172,12 @@ export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<N
     // itself couldn't have used one either, so crediting one back now that
     // Q2b never charged in the first place would be a phantom credit).
     reportRows(q, 
-      `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, 0) * rli.quantity), 0)::NUMERIC AS returns_cost
+      `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, oli.unit_cost, 0) * rli.quantity), 0)::NUMERIC AS returns_cost
        FROM return_line_items rli
        JOIN returns r ON r.id = rli.return_id
-       JOIN transaction_line_items tli ON tli.id = rli.transaction_line_item_id
+       LEFT JOIN transaction_line_items tli ON tli.id = rli.transaction_line_item_id
+       -- An order's line (#166): charged at its own cost in Q2.
+       LEFT JOIN order_line_items oli ON oli.id = rli.order_line_item_id
        WHERE ${returnConds.join(' AND ')}`,
       returnParams,
     ),

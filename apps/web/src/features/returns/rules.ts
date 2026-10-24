@@ -1,4 +1,4 @@
-import { Money, type PosTransaction, type ProfileResponse } from '@bms/shared';
+import { Money, type ProfileResponse } from '@bms/shared';
 import { paymentMethodPlainLabel } from '../../lib/paymentMethods.js';
 
 /**
@@ -17,7 +17,7 @@ export const canProcessReturn = (me: Account | undefined) => holds(me, ['Sales',
 export const approverRole = (me: Account | undefined): string | undefined =>
   (me?.currentRoles ?? []).find((r) => r === 'Admin' || r === 'Manager');
 
-type SaleLine = NonNullable<PosTransaction['lineItems']>[number];
+type SaleLine = { quantity: number; lineTotal: number };
 
 /** What `quantity` units of a line are worth: their share of what the line cost after its discount, as the API values them. */
 export function lineValue(line: SaleLine, quantity: number): Money {
@@ -31,3 +31,6 @@ export function refundLabel(method: string): string {
   if (method === 'mixed') return 'Mixed';
   return paymentMethodPlainLabel(method);
 }
+
+/** How many units of a line can still come back; unknown returns (a counter sale's) leave it to the API. */
+export const returnable = (line: { quantity: number; returned: number | null }) => line.quantity - (line.returned ?? 0);

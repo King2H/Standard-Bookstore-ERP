@@ -202,18 +202,64 @@ export async function returnOrderPayments(
   orderId: string,
   opts: { to: 'original' | 'store_credit'; reason: string },
 ): Promise<Money> {
+  const parts = await refundOrderPayments(q, actor, orderId, { ...opts, amount: null, returnId: null });
+  return Money.sum(parts.map((p) => p.amount));
+}
+
+/**
+ * Gives back `amount` of what a returned order was paid, in the return's
+ * transaction (#166): from its payments newest first, each the way it was
+ * paid, or as store credit after the return window. Each refund names the
+ * return, so it counts once in Payments and the reports. The order is locked
+ * by the return. Returns how much went back by each method.
+ */
+export function refundReturnedOrder(
+  q: Queryable,
+  actor: Actor,
+  orderId: string,
+  opts: { amount: Money; returnId: string; returnNumber: string; to: 'original' | 'store_credit' },
+): Promise<Array<{ method: string; amount: Money }>> {
+  return refundOrderPayments(q, actor, orderId, { to: opts.to, reason: `Return ${opts.returnNumber}`, amount: opts.amount, returnId: opts.returnId });
+}
+
+/** What a returned order's payments can still give back: paid less refunded. */
+export async function refundableOnOrder(q: Queryable, orderId: string): Promise<Money> {
+  return policy.netPaid(await payments.takings(q, orderId));
+}
+
+/** The order's payment status once a return took part of it back (#166). */
+export async function settleReturnedOrder(q: Queryable, orderId: string): Promise<void> {
+  const order = foundOrder(await payments.findOrder(q, orderId));
+  if (order.total === null) return;
+  await payments.setOrderPaymentStatus(q, order.id, policy.orderPaymentStatus(order, order.total, await payments.takings(q, order.id)));
+}
+
+/**
+ * The refund loop of a cancel and a return: newest payment first, each up to
+ * what it has not given back, until `amount` (everything, when null) went back.
+ */
+async function refundOrderPayments(
+  q: Queryable,
+  actor: Actor,
+  orderId: string,
+  opts: { to: 'original' | 'store_credit'; reason: string; amount: Money | null; returnId: string | null },
+): Promise<Array<{ method: string; amount: Money }>> {
   const order = foundOrder(await payments.findOrder(q, orderId, { forUpdate: true }));
   const taken = (await payments.paymentsOfOrder(q, orderId)).filter((p) => p.status === 'success' || p.status === 'partially_refunded');
-  let returned = Money.of(0);
+  const parts: Array<{ method: string; amount: Money }> = [];
+  let left = opts.amount;
   for (const payment of taken.reverse()) {
+    if (left !== null && !left.greaterThan(0)) break;
     const earlier = Money.sum((await payments.refundsOf(q, payment.id)).map((x) => x.refundAmount));
-    const amount = payment.amount.minus(earlier);
+    const open = payment.amount.minus(earlier);
+    const amount = left === null ? open : Money.min(left, open);
     if (!amount.greaterThan(0)) continue;
     const toCredit = opts.to === 'store_credit';
+    const method = toCredit ? 'store_credit' : payment.paymentMethod;
     const refundTo = toCredit ? null : policy.refundBankAccount(payment, null, bankAccountsEnabled());
     const bankAccountId = refundTo === null ? null : await accountForPayment(q, refundTo, order.branchId);
     const refund = await payments.insertRefund(q, {
-      payment, amount, reason: opts.reason, bankAccountId, processedBy: actor.staffId, ...(toCredit && { method: 'store_credit' }),
+      payment, amount, reason: opts.reason, bankAccountId, processedBy: actor.staffId, returnId: opts.returnId, ...(toCredit && { method }),
     });
     if (bankAccountId !== null) {
       await recordMovement(q, { bankAccountId, direction: 'out', amount, sourceType: 'order_refund', sourceId: refund.id, notes: `Refund of ${payment.paymentReference}` });
@@ -223,18 +269,22 @@ export async function returnOrderPayments(
     } else if (order.customerId !== null && payment.paymentMethod === 'loyalty_points') {
       await customers.addPoints(q, order.customerId, amount.toNumber(), { reason: 'REFUND', transactionRef: payment.paymentReference });
     }
-    await payments.setPaymentStatus(q, payment.id, 'refunded');
+    const paymentStatus = policy.paymentStatusAfterRefund(payment, earlier.plus(amount));
+    await payments.setPaymentStatus(q, payment.id, paymentStatus);
     await audit(q, actor, 'payment_refund', refund.id, {
-      paymentId: payment.id, orderId: Number(order.id), refundAmount: amount.toNumber(),
-      method: toCredit ? 'store_credit' : payment.paymentMethod, reason: opts.reason, orderCancelled: true,
+      paymentId: payment.id, orderId: Number(order.id), refundAmount: amount.toNumber(), method, reason: opts.reason,
+      ...(opts.returnId === null ? { orderCancelled: true } : { returnId: Number(opts.returnId) }),
     });
     await insertOutboxEvent(q, 'payment.refunded', {
       paymentId: payment.id, refundId: refund.id, amount: amount.toNumber(), orderNumber: order.orderNumber, orderId: order.id, branchId: actor.branchId,
     });
-    returned = returned.plus(amount);
+    const part = parts.find((p) => p.method === method);
+    if (part) part.amount = part.amount.plus(amount);
+    else parts.push({ method, amount });
+    if (left !== null) left = left.minus(amount);
   }
-  if (returned.greaterThan(0) && order.total !== null) await settleOrder(q, order, order.total, 'refund');
-  return returned;
+  if (parts.length > 0 && order.total !== null) await settleOrder(q, order, order.total, 'refund');
+  return parts;
 }
 
 export async function refund(actor: Actor, paymentId: string, r: NewRefund): Promise<RefundRecord> {

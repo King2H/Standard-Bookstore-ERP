@@ -1,14 +1,15 @@
 // #23 (M6, step 4): Returns move to features/returns. The page offers only
 // what the API accepts, by any role held in the branch (owner decision 1a),
 // names the sale by its number, and lets damaged books be kept apart (2a).
+// #166: a delivered customer order is returned here too, by its ORD- number.
 // Every mocked answer is checked against its contract.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  PosTransactionListResponseSchema, PosTransactionSchema, ProfileResponseSchema, ReturnListResponseSchema, ReturnSchema,
-  type PosTransaction, type ProfileResponse, type Return,
+  OrderListResponseSchema, OrderSchema, PosTransactionListResponseSchema, PosTransactionSchema, ProfileResponseSchema,
+  ReturnListResponseSchema, ReturnSchema, type Order, type PosTransaction, type ProfileResponse, type Return,
 } from '@bms/shared';
 import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
 import { ToastProvider } from '../components/Toast.js';
@@ -39,7 +40,25 @@ const sale: PosTransaction = contract(PosTransactionSchema, {
 const ret: Return = contract(ReturnSchema, {
   id: '5', returnNumber: 'RET-20261010-0001', transactionId: '41', transactionNumber: 'POS-20261010-0001', branchId: 1,
   customerId: null, totalRefundAmount: 29, refundMethod: 'mixed', status: 'completed', reason: null,
-  processedBy: 9, approvedBy: null, createdAt: CREATED,
+  processedBy: 9, approvedBy: null, createdAt: CREATED, orderId: null, orderNumber: null,
+});
+
+const DELIVERED = '2026-10-19T09:00:00.000Z';
+let delivered: Order;
+const deliveredOrder = (over: Partial<Order> = {}): Order => contract(OrderSchema, {
+  id: '30', orderNumber: 'ORD-20261018-0003', customerId: 5, branchId: 1, locationId: 7, channel: 'in_store',
+  status: 'COMPLETED', paymentStatus: 'paid', amountPaid: 75, saleType: 'cash_sale', currency: 'ETB', subtotal: 75, discountAmount: 0,
+  discountTotal: 0, taxRate: 0, taxAmount: 0, total: 75, cancelReason: null, notes: null, createdBy: 9,
+  createdAt: CREATED, updatedAt: CREATED, allowedActions: ['print', 'return'], paymentMethod: 'cash', dueDate: null, fulfilledAt: DELIVERED,
+  lineItems: [{
+    id: '8', orderId: '30', bookId: 1, bookTitle: 'Oromay', bookIsbn: '2', quantity: 3, unitPrice: 25, discountAmount: 0,
+    totalPrice: 75, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1,
+  }],
+  ...over,
+});
+const orderReturn: Return = contract(ReturnSchema, {
+  ...ret, id: '6', returnNumber: 'RET-20261019-0001', transactionId: null, transactionNumber: null,
+  orderId: '30', orderNumber: 'ORD-20261018-0003', totalRefundAmount: 50, refundMethod: 'cash',
 });
 
 type Call = { method: string; path: string; body?: unknown };
@@ -59,12 +78,17 @@ function stubApi() {
       return json(contract(PosTransactionListResponseSchema, { items: [{ ...sale, lineItems: undefined }], total: 1, page: 1, totalPages: 1 }));
     }
     if (u.pathname === '/pos/transactions/41') return json(sale);
+    if (u.pathname === '/orders') {
+      const found = u.searchParams.get('orderNumber') === delivered.orderNumber ? [{ ...delivered, lineItems: undefined }] : [];
+      return json(contract(OrderListResponseSchema, { items: found, total: found.length, page: 1, pageSize: 1, totalPages: 1 }));
+    }
+    if (u.pathname === '/orders/30') return json(delivered);
     if (method === 'POST' && u.pathname === '/returns') return json(ret, 201);
-    if (u.pathname === '/returns') return json(contract(ReturnListResponseSchema, { items: [ret], total: 1, page: 1, totalPages: 1 }));
+    if (u.pathname === '/returns') return json(contract(ReturnListResponseSchema, { items: [ret, orderReturn], total: 2, page: 1, totalPages: 1 }));
     if (u.pathname === '/returns/5') {
       return json(contract(ReturnSchema, {
         ...ret,
-        lineItems: [{ id: '1', returnId: '5', transactionLineItemId: '7', bookId: 1, bookTitle: 'Fikir Eske Mekabir', quantity: 3, unitPrice: 10, lineRefundAmount: 29 }],
+        lineItems: [{ id: '1', returnId: '5', transactionLineItemId: '7', orderLineItemId: null, bookId: 1, bookTitle: 'Fikir Eske Mekabir', quantity: 3, unitPrice: 10, lineRefundAmount: 29 }],
         refunds: [
           { id: '1', returnId: '5', method: 'credit_note', amount: 20, createdAt: CREATED },
           { id: '2', returnId: '5', method: 'mobile', amount: 9, createdAt: CREATED },
@@ -77,19 +101,19 @@ function stubApi() {
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
-async function openPage() {
+async function openPage(initialContext: Record<string, string> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <ToastProvider><ReturnsPage /></ToastProvider>
+      <ToastProvider><ReturnsPage initialContext={initialContext} /></ToastProvider>
     </QueryClientProvider>,
   );
   await settle();
 }
 
-async function pickSale() {
+async function pickSale(number = 'POS-20261010-0001') {
   const user = userEvent.setup();
-  await user.type(screen.getByPlaceholderText(/transaction number/i), 'POS-20261010-0001');
+  await user.type(screen.getByRole('textbox', { name: 'Transaction or order number' }), number);
   await user.click(screen.getByRole('button', { name: 'Search' }));
   await user.click(await screen.findByRole('button', { name: /Use this transaction/ }));
   await settle();
@@ -100,6 +124,7 @@ beforeEach(() => {
   setAccessToken('x');
   setCurrentBranchId(1);
   me = profile(['Sales']);
+  delivered = deliveredOrder();
   stubApi();
 });
 
@@ -156,7 +181,54 @@ describe('New Return', () => {
   });
 });
 
+describe('Returning a customer order (#166)', () => {
+  it('finds a delivered order by its ORD- number and returns what is left of its lines (was: POS sales only)', async () => {
+    await openPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('textbox', { name: 'Transaction or order number' }), 'ORD-20261018-0003');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.click(await screen.findByRole('button', { name: /Use this order/ }));
+    await settle();
+
+    expect(calls.some((c) => c.path.startsWith('/orders?') && c.path.includes('orderNumber=ORD-20261018-0003'))).toBe(true);
+    expect(screen.getByText(/3 delivered · 1 returned/)).toBeInTheDocument();
+    const qty = screen.getByRole('spinbutton');
+    expect(qty).toHaveAttribute('max', '2');
+    await user.clear(qty);
+    await user.type(qty, '2');
+    expect(screen.getAllByText(/50\.00/).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Process Return' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
+    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
+      orderId: 30, lines: [{ orderLineItemId: 8, quantity: 2, disposition: 'SELLABLE' }],
+    });
+  });
+
+  it("opens on the order an order's Return action names", async () => {
+    await openPage({ sale: 'ORD-20261018-0003' });
+    expect(await screen.findByRole('button', { name: /Use this order/ })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Transaction or order number' })).toHaveValue('ORD-20261018-0003');
+  });
+
+  it('sends an order not delivered yet to be cancelled instead (2a)', async () => {
+    delivered = deliveredOrder({ status: 'CONFIRMED', fulfilledAt: null, allowedActions: ['cancel', 'fulfill'] });
+    await openPage({ sale: 'ORD-20261018-0003' });
+    expect(await screen.findByText(/was not delivered: cancel it in Orders/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Use this order/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Step 3 — Refund Details')).not.toBeInTheDocument();
+  });
+});
+
 describe('Returns History', () => {
+  it('names an order return by the order number', async () => {
+    await openPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Returns History/ }));
+    const row = (await screen.findByText('RET-20261019-0001')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('ORD-20261018-0003')).toBeInTheDocument();
+  });
+
   it('names the sale by its number and leaves the branch to the session (was: the internal id, and the branch sent from the client)', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     await openPage();

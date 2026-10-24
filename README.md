@@ -682,10 +682,13 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - POST /api/v1/pos/transactions/:id/void
 
 ### Returns
-- POST /api/v1/returns — body: { transactionId, refundMethod, reason?, lines, approvedBy? }
-- GET /api/v1/returns — filters: branchId, customerId, transactionId, status
+- POST /api/v1/returns — body: { transactionId | orderId, reason?, lines: [{ transactionLineItemId | orderLineItemId, quantity, disposition? }] }.
+  A return names a counter sale or a delivered customer order (#166); an order not delivered answers 422 `ORDER_NOT_DELIVERED` (cancel it instead).
+  The value goes first against what a credit sale or order still owes (a credit note), the rest back the way it was paid; an order's refunds go through its payments.
+  The return window counts from the sale, or from the order's delivery (`fulfilledAt`).
+- GET /api/v1/returns — filters: customerId, transactionId, orderId, status, dateFrom, dateTo (the branch is the session's)
 - GET /api/v1/returns/:id
-- POST /api/v1/returns/:id/reject
+- POST /api/v1/returns/:id/reject — 410: a return is complete when it is made
 
 ### Orders
 - POST /api/v1/orders — body: { customerId?, locationId?, channel?, notes?, items: [{bookId, quantity, discountAmount?}] }

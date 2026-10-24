@@ -12,19 +12,21 @@ export async function returnLines(q: Queryable, scope: ReportScope): Promise<Rec
     q,
     `SELECT
        TO_CHAR(r.created_at, 'YYYY-MM-DD') AS return_date,
-       r.return_number, t.transaction_number AS original_invoice_no,
+       r.return_number, COALESCE(t.transaction_number, o.order_number) AS original_invoice_no,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title,
        rli.quantity, rli.line_refund_amount,
-       COALESCE(otli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
+       COALESCE(otli.unit_cost, ooli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
        r.refund_method, s.username AS staff_username
      FROM return_line_items rli
      JOIN returns r ON r.id = rli.return_id
      JOIN books b ON b.id = rli.book_id
      LEFT JOIN transactions t ON t.id = r.transaction_id
+     LEFT JOIN orders o ON o.id = r.order_id
      LEFT JOIN customers c ON c.id = r.customer_id
      LEFT JOIN staff s ON s.id = r.processed_by
      LEFT JOIN transaction_line_items otli ON otli.id = rli.transaction_line_item_id
+     LEFT JOIN order_line_items ooli ON ooli.id = rli.order_line_item_id
      ${costBasisLateralJoin('rli.book_id')}
      ${where([...conditions, `r.status = 'completed'`])}
      ORDER BY r.created_at DESC`,

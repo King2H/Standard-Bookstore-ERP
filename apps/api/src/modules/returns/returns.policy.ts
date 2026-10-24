@@ -1,6 +1,6 @@
 import { Money } from '@bms/shared';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
-import type { RefundMethod, RefundPart, SaleForReturn, SaleLine, Tender } from './returns.types.js';
+import type { OrderForReturn, RefundMethod, RefundPart, SaleForReturn, SaleLine, Tender } from './returns.types.js';
 
 /**
  * Rules of returns (A5), pure: which sale and how much of it can come back,
@@ -12,6 +12,19 @@ export function checkSale(sale: SaleForReturn, branchId: number): void {
   // Like recordInBranch() for a write: another branch's sale does not exist here.
   if (sale.branchId !== branchId) throw new NotFoundError('Transaction');
   if (sale.status === 'voided') throw new BusinessError('TRANSACTION_VOIDED', 'Cannot return a voided transaction');
+}
+
+/**
+ * A customer order is returned in its own branch once delivered (#166,
+ * owner decision 2a); before that it is cancelled instead.
+ */
+export function checkOrder(order: OrderForReturn, branchId: number): void {
+  if (order.branchId !== branchId) throw new NotFoundError('Order');
+  if (!['FULFILLED', 'COMPLETED'].includes(order.status.toUpperCase()) || order.daysSinceDelivery === null) {
+    throw new BusinessError('ORDER_NOT_DELIVERED', `Order ${order.orderNumber} was not delivered: cancel it instead of returning it.`, {
+      status: order.status,
+    });
+  }
 }
 
 /**

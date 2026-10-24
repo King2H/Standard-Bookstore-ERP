@@ -134,11 +134,12 @@ export function computeOrderAllowedActions(
       return cancelOrFulfill;
     case 'PAID':
       return cancelOrFulfill;
-    // Returns go through the Returns module; a legacy fulfilled order is printed like a completed one.
+    // A delivered order is returned through Returns, by whoever sells (#166); a
+    // legacy fulfilled order is printed like a completed one.
     case 'FULFILLED':
     case 'COMPLETED':
     case 'Fulfilled':
-      return ['print'];
+      return ['print', ...(can('CREATE_SALE') ? ['return'] : [])];
     default:
       return [];
   }

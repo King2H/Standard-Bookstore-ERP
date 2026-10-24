@@ -5,8 +5,10 @@ import type { RefundMethod, RefundRecord, ReturnLineRecord, ReturnRecord } from 
 export interface ReturnRow {
   id: string | number | bigint;
   return_number: string;
-  transaction_id: string | number | bigint;
-  transaction_number: string;
+  transaction_id: string | number | bigint | null;
+  transaction_number: string | null;
+  order_id: string | number | bigint | null;
+  order_number: string | null;
   branch_id: number;
   customer_id: number | null;
   total_refund_amount: string;
@@ -21,7 +23,8 @@ export interface ReturnRow {
 export interface ReturnLineRow {
   id: string | number | bigint;
   return_id: string | number | bigint;
-  transaction_line_item_id: string | number | bigint;
+  transaction_line_item_id: string | number | bigint | null;
+  order_line_item_id: string | number | bigint | null;
   book_id: number;
   book_title: string | null;
   quantity: number;
@@ -42,8 +45,10 @@ export function toReturnRecord(row: ReturnRow): ReturnRecord {
   return {
     id: String(row.id),
     returnNumber: row.return_number,
-    transactionId: String(row.transaction_id),
+    transactionId: row.transaction_id === null ? null : String(row.transaction_id),
     transactionNumber: row.transaction_number,
+    orderId: row.order_id === null ? null : String(row.order_id),
+    orderNumber: row.order_number,
     branchId: row.branch_id,
     customerId: row.customer_id,
     totalRefundAmount: Money.of(row.total_refund_amount),
@@ -60,7 +65,8 @@ export function toLineRecord(row: ReturnLineRow): ReturnLineRecord {
   return {
     id: String(row.id),
     returnId: String(row.return_id),
-    transactionLineItemId: String(row.transaction_line_item_id),
+    transactionLineItemId: row.transaction_line_item_id === null ? null : String(row.transaction_line_item_id),
+    orderLineItemId: row.order_line_item_id === null ? null : String(row.order_line_item_id),
     bookId: row.book_id,
     bookTitle: row.book_title ?? '',
     quantity: row.quantity,

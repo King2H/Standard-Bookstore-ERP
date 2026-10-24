@@ -64,7 +64,7 @@ export function getById(id: string | number): Promise<OrderRow> {
 }
 
 export async function list(opts: {
-  branchId?: number; customerId?: number; status?: string; paymentStatus?: string;
+  branchId?: number; customerId?: number; orderNumber?: string; status?: string; paymentStatus?: string;
   channel?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number;
 }): Promise<{ items: OrderRow[]; total: number; page: number; totalPages: number }> {
   const page = Math.max(1, opts.page ?? 1);
@@ -289,6 +289,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
 
     const ref = { ...order, id: String(orderId) };
     await orders.setStatus(tx, order.id, 'FULFILLED');
+    await orders.setFulfilled(tx, order.id);
     await audit(tx, staffCtx, 'UPDATE', String(orderId), {
       action: 'fulfill', fromStatus: order.status, toStatus: 'FULFILLED', saleType: order.saleType,
     });

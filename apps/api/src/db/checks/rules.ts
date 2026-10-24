@@ -141,19 +141,21 @@ export const CHECKS: readonly Check[] = [
     area: 'Orders',
     title: "An order's payment status agrees with the payments taken less refunds",
     severity: 'error',
-    // The same rule as payments.policy.ts orderPaymentStatus().
+    // The same rule as payments.policy.ts orderPaymentStatus(): what returns
+    // took back is no longer owed (#166).
     sql: `
       WITH t AS (
         SELECT o.tenant_id, o.order_number, o.sale_type, o.total, o.payment_status,
           COALESCE((SELECT SUM(amount) FROM order_payments p
                     WHERE p.order_id = o.id AND p.status IN ('success', 'partially_refunded', 'refunded')), 0) AS paid,
-          COALESCE((SELECT SUM(refund_amount) FROM order_refunds r WHERE r.order_id = o.id), 0) AS refunded
+          COALESCE((SELECT SUM(refund_amount) FROM order_refunds r WHERE r.order_id = o.id), 0) AS refunded,
+          COALESCE((SELECT SUM(total_refund_amount) FROM returns r WHERE r.order_id = o.id AND r.status = 'completed'), 0) AS returned
         FROM orders o WHERE o.total IS NOT NULL
       ), e AS (
         SELECT *, CASE
           WHEN sale_type <> 'credit_sale' AND paid > 0 AND refunded >= paid THEN 'refunded'
-          WHEN paid - refunded <= 0 THEN 'unpaid'
-          WHEN paid - refunded >= total THEN 'paid'
+          WHEN paid - refunded <= 0 THEN CASE WHEN total - returned > 0 THEN 'unpaid' ELSE 'paid' END
+          WHEN paid - refunded >= total - returned THEN 'paid'
           ELSE 'partial' END AS expected
         FROM t
       )

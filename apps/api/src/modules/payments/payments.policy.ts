@@ -14,9 +14,14 @@ export function netPaid(t: OrderTakings): Money {
   return t.paid.minus(t.refunded);
 }
 
+/** What the order is worth once returns took their part back (#166). */
+export function keptTotal(total: Money, t: OrderTakings): Money {
+  return total.minus(t.returned);
+}
+
 /** What the customer still owes on the order, never below zero. */
 export function outstanding(total: Money, t: OrderTakings): Money {
-  return Money.max(0, total.minus(netPaid(t)));
+  return Money.max(0, keptTotal(total, t).minus(netPaid(t)));
 }
 
 /**
@@ -26,9 +31,11 @@ export function outstanding(total: Money, t: OrderTakings): Money {
  */
 export function orderPaymentStatus(order: Pick<OrderForPayment, 'saleType'>, total: Money, t: OrderTakings): OrderPaymentStatus {
   const net = netPaid(t);
+  const kept = keptTotal(total, t);
   if (order.saleType !== 'credit_sale' && t.paid.greaterThan(0) && !t.refunded.lessThan(t.paid)) return 'refunded';
-  if (!net.greaterThan(0)) return 'unpaid';
-  if (!net.lessThan(total)) return 'paid';
+  // A credit order returned whole on a credit note owes nothing and was paid nothing.
+  if (!net.greaterThan(0)) return kept.greaterThan(0) ? 'unpaid' : 'paid';
+  if (!net.lessThan(kept)) return 'paid';
   return 'partial';
 }
 

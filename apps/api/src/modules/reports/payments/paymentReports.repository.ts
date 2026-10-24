@@ -34,9 +34,10 @@ const CUSTOMER_MONEY = `
     FROM order_refunds ore JOIN orders o2 ON o2.id = ore.order_id
     LEFT JOIN order_payments op2 ON op2.id = ore.payment_id
     UNION ALL
+    -- A credit note took the value off a debt: no money went out.
     SELECT rf.method, rf.amount, 'out', rf.created_at, r.branch_id
     FROM refunds rf JOIN returns r ON r.id = rf.return_id
-    WHERE r.status = 'completed'
+    WHERE r.status = 'completed' AND rf.method <> 'credit_note'
   )`;
 
 export async function moneyTotals(q: Queryable, scope: ReportScope): Promise<{ collected: string; refunded: string }> {
@@ -160,7 +161,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
        JOIN returns r ON r.id = rf.return_id
        LEFT JOIN customers c ON c.id = r.customer_id
        LEFT JOIN staff s ON s.id = r.processed_by
-       WHERE r.status = 'completed' ${returnRefund.and}`,
+       WHERE r.status = 'completed' AND rf.method <> 'credit_note' ${returnRefund.and}`,
       returnRefund.params,
     ),
     reportRows<LedgerRow>(

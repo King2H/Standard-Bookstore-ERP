@@ -184,11 +184,12 @@ describe('Unit Tests: Lifecycle Bugfix (Task 15)', () => {
     expect(cashPaid).toContain('fulfill');
   });
 
-  // ── 15.3: computeOrderAllowedActions('FULFILLED') returns ['print'] ──────────
-  // Returns go through the Returns module (owner decision 3a, #23); there is no order return endpoint.
-  it('15.3 computeOrderAllowedActions(FULFILLED) returns [print]', () => {
+  // ── 15.3: computeOrderAllowedActions('FULFILLED') returns ['print', 'return'] ─
+  // A delivered order is returned through the Returns module (#166), by whoever sells.
+  it('15.3 computeOrderAllowedActions(FULFILLED) returns [print, return]', () => {
     const actions = computeOrderAllowedActions('FULFILLED', fullPerms, 'paid', 'cash_sale');
-    expect(actions).toEqual(['print']);
+    expect(actions).toEqual(['print', 'return']);
+    expect(computeOrderAllowedActions('FULFILLED', ['PROCESS_PAYMENT'], 'paid', 'cash_sale')).toEqual(['print']);
     expect(actions).not.toContain('cancel');
     expect(actions).not.toContain('fulfill');
     expect(actions).not.toContain('confirm');

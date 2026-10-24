@@ -8,7 +8,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  CustomerSchema, OrderListResponseSchema, OrderSchema, ProfileResponseSchema,
+  CustomerSchema, OrderListResponseSchema, OrderSchema, ProfileResponseSchema, ReturnListResponseSchema,
   type Order, type ProfileResponse,
 } from '@bms/shared';
 import OrdersPage from '../features/orders/pages/OrdersPage.js';
@@ -32,15 +32,16 @@ function order(over: Partial<Order> = {}): Order {
     id: '10', orderNumber: 'ORD-20261018-0001', customerId: null, branchId: 1, locationId: 7, channel: 'in_store',
     status: 'CONFIRMED', paymentStatus: 'paid', amountPaid: 0, saleType: 'cash_sale', currency: 'ETB', subtotal: 50, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 50, cancelReason: null, notes: null, createdBy: 9,
-    createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: 'cash', dueDate: null,
+    createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: 'cash', dueDate: null, fulfilledAt: null,
     ...over,
   });
 }
 
 const LINE = {
   id: 'li1', orderId: '10', bookId: 1, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '000', quantity: 2, unitPrice: 25,
-  discountAmount: 0, totalPrice: 50, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null,
+  discountAmount: 0, totalPrice: 50, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0,
 };
+let line = LINE;
 
 type Call = { method: string; path: string; body?: unknown };
 let calls: Call[];
@@ -66,7 +67,17 @@ function stubApi() {
       }));
     }
     const one = u.pathname.match(/^\/orders\/(\w+)$/);
-    if (one && method === 'GET') return json(order({ ...orders.find((o) => o.id === one[1]), lineItems: [LINE] }));
+    if (one && method === 'GET') return json(order({ ...orders.find((o) => o.id === one[1]), lineItems: [line] }));
+    if (u.pathname === '/returns') {
+      return json(contract(ReturnListResponseSchema, {
+        items: u.searchParams.get('orderId') === '10' ? [{
+          id: '5', returnNumber: 'RET-20261019-0001', transactionId: null, transactionNumber: null, orderId: '10',
+          orderNumber: 'ORD-20261018-0001', branchId: 1, customerId: null, totalRefundAmount: 25, refundMethod: 'cash',
+          status: 'completed', reason: null, processedBy: 9, approvedBy: null, createdAt: CREATED,
+        }] : [],
+        total: 1, page: 1, totalPages: 1,
+      }));
+    }
     if (one && method === 'DELETE') return new Response(null, { status: 204 });
     if (method === 'POST' && /^\/orders\/\w+\/(confirm|cancel|fulfill)$/.test(u.pathname)) return json(order());
     if (u.pathname === '/customers/5') {
@@ -245,10 +256,28 @@ describe('steps on an order', () => {
   });
 
   it('offers no button for a step the page does not know (was: one posting to an endpoint that does not exist)', async () => {
-    orders = [order({ status: 'FULFILLED', allowedActions: ['return'] })];
+    orders = [order({ status: 'FULFILLED', allowedActions: ['archive'] })];
     await openPage();
     const row = await rowOf();
-    expect(within(row).queryByRole('button', { name: /return/i })).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /archive/i })).not.toBeInTheDocument();
+  });
+
+  it('returns a delivered order in Returns, opened on it (#166; was: no way to return an order)', async () => {
+    orders = [order({ status: 'COMPLETED', allowedActions: ['print', 'return'], fulfilledAt: CREATED })];
+    const { user, onNavigate } = await openPage();
+    await user.click(within(await rowOf()).getByRole('button', { name: /Return/ }));
+    expect(onNavigate).toHaveBeenCalledWith('returns', { sale: 'ORD-20261018-0001' });
+  });
+
+  it('shows what came back of a delivered order, and its returns; the order stays completed (4a)', async () => {
+    orders = [order({ status: 'COMPLETED', allowedActions: ['print', 'return'], fulfilledAt: CREATED })];
+    line = { ...LINE, qtyReserved: 0, qtyFulfilled: 2, qtyReturned: 1 };
+    const { user } = await openPage();
+    await user.click(await screen.findByText('ORD-20261018-0001'));
+    expect(await screen.findByText('RET-20261019-0001')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Returned' })).toBeInTheDocument();
+    expect(calls.some((c) => c.path.startsWith('/returns?') && c.path.includes('orderId=10'))).toBe(true);
+    line = LINE;
   });
 
   it("prints an order slip, not the whole screen (owner decision 1a)", async () => {

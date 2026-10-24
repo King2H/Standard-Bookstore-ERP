@@ -1,5 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryKeys } from '../inventory/queries.js';
+import { orderKeys } from '../orders/queries.js';
+import { paymentKeys } from '../payments/queries.js';
 import { posKeys } from '../pos/queries.js';
 import { createReturn, findSale, getReturn, listReturns, type ReturnsParams } from './api.js';
 
@@ -8,7 +10,7 @@ export const returnKeys = {
   all: ['returns'] as const,
   list: (params: ReturnsParams) => [...returnKeys.all, 'list', params] as const,
   detail: (id: string) => [...returnKeys.all, 'detail', id] as const,
-  sale: (transactionNumber: string) => [...returnKeys.all, 'sale', transactionNumber] as const,
+  sale: (number: string) => [...returnKeys.all, 'sale', number] as const,
 };
 
 export function useReturns(params: ReturnsParams, enabled = true) {
@@ -19,17 +21,17 @@ export function useReturn(id: string) {
   return useQuery({ queryKey: returnKeys.detail(id), queryFn: () => getReturn(id) });
 }
 
-/** The sale being returned, looked up once a full number is entered. */
-export function useSaleByNumber(transactionNumber: string) {
+/** The sale or order being returned, looked up once a full number is entered. */
+export function useSaleByNumber(number: string) {
   return useQuery({
-    queryKey: returnKeys.sale(transactionNumber),
-    queryFn: () => findSale(transactionNumber),
-    enabled: transactionNumber.length > 5,
+    queryKey: returnKeys.sale(number),
+    queryFn: () => findSale(number),
+    enabled: number.length > 5,
     retry: false,
   });
 }
 
-/** A return puts books back in stock and changes what the sale was paid and owes. */
+/** A return puts books back in stock and changes what the sale or order was paid and owes. */
 export function useCreateReturn() {
   const qc = useQueryClient();
   return useMutation({
@@ -37,6 +39,8 @@ export function useCreateReturn() {
     onSuccess: () => Promise.all([
       qc.invalidateQueries({ queryKey: returnKeys.all }),
       qc.invalidateQueries({ queryKey: posKeys.all }),
+      qc.invalidateQueries({ queryKey: orderKeys.all }),
+      qc.invalidateQueries({ queryKey: paymentKeys.all }),
       qc.invalidateQueries({ queryKey: inventoryKeys.all }),
     ]),
   });

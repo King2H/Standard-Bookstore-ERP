@@ -46,6 +46,7 @@ const ACTION = {
   fulfill: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200',
   cancel:  'text-red-600 hover:bg-red-50 dark:hover:bg-red-950',
   print:   'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800',
+  return:  'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 hover:bg-amber-200',
 };
 
 // Methods a cash order can be paid with at confirmation (orders.policy confirmPaymentMethod).
@@ -188,6 +189,15 @@ export function OrderList({ initialContext = {}, onNavigate }: {
           <button key="print" onClick={(e) => { stop(e); setPrinting(order.id); }}
             className={`text-xs px-2 py-0.5 rounded-sm transition-colors ${ACTION.print}`}>
             🖨 Print
+          </button>
+        );
+      }
+      // A delivered order is returned in Returns, opened on this order (#166).
+      if (action === 'return') {
+        return (
+          <button key="return" onClick={(e) => { stop(e); onNavigate?.('returns', { sale: order.orderNumber }); }}
+            className={`text-xs px-2 py-0.5 rounded-sm transition-colors ${ACTION.return}`}>
+            ↩ Return
           </button>
         );
       }

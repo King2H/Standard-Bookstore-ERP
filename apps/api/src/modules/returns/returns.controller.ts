@@ -32,10 +32,16 @@ function actor(req: Request): Actor {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const { body } = valid(req, schemas.create);
+  // The contract checked that the return names one sale and its lines name lines of it.
   const record = await service.createReturn(actor(req), {
     transactionId: body.transactionId,
+    orderId: body.orderId,
     reason: body.reason ?? null,
-    lines: body.lines,
+    lines: body.lines.map((l) => ({
+      lineId: (l.orderLineItemId ?? l.transactionLineItemId) as number,
+      quantity: l.quantity,
+      disposition: l.disposition,
+    })),
   });
   const response: Return = toReturnResponse(record);
   res.status(201).json(response);
@@ -48,6 +54,7 @@ export async function list(req: Request, res: Response): Promise<void> {
       branchId: scopedBranch(req),
       customerId: query.customerId,
       transactionId: query.transactionId,
+      orderId: query.orderId,
       status: query.status,
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,

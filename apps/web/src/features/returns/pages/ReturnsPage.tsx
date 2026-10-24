@@ -4,8 +4,12 @@ import { ReturnsHistory } from '../components/ReturnsHistory.js';
 
 type Tab = 'new' | 'list';
 
-/** Books brought back from a counter sale: a new return, and the branch's returns. */
-export default function ReturnsPage() {
+/**
+ * Books brought back from a counter sale or a delivered customer order: a new
+ * return, and the branch's returns. An order's Return action opens it with
+ * the order's number (`sale`).
+ */
+export default function ReturnsPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
   const [tab, setTab] = useState<Tab>('new');
 
   return (
@@ -18,7 +22,7 @@ export default function ReturnsPage() {
         ))}
       </div>
 
-      {tab === 'new' && <NewReturn />}
+      {tab === 'new' && <NewReturn initialNumber={initialContext.sale} />}
       {tab === 'list' && <ReturnsHistory />}
     </div>
   );
