@@ -192,8 +192,8 @@ export async function insertTransaction(
   return String(row.id);
 }
 
-export async function insertLine(q: Queryable, transactionId: string, line: PricedLine, unitCost: Money): Promise<void> {
-  await q
+export async function insertLine(q: Queryable, transactionId: string, line: PricedLine, unitCost: Money): Promise<string> {
+  const row = await q
     .insertInto('transaction_line_items')
     .values({
       transaction_id: transactionId,
@@ -207,7 +207,9 @@ export async function insertLine(q: Queryable, transactionId: string, line: Pric
       line_total: line.lineTotal.toFixed(2),
       unit_cost: unitCost.toFixed(2),
     })
-    .execute();
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
 }
 
 export async function insertPayment(q: Queryable, transactionId: string, p: PaymentLine): Promise<string> {

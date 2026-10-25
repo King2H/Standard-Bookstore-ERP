@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, PaginatedSchema } from './common.js';
 import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
+import { SaleServiceLineSchema, ServiceLineInputSchema } from './service.js';
 
 /** Contracts for /api/v1/orders (#20). */
 
@@ -28,6 +29,8 @@ export const OrderLineItemSchema = z.object({
   unitCost: z.number().nullable(),
   /** Copies of the line brought back through Returns (#166). */
   qtyReturned: z.number().int(),
+  /** The service on this line's copies (#169), if any. */
+  service: SaleServiceLineSchema.nullable(),
 });
 export type OrderLineItem = z.infer<typeof OrderLineItemSchema>;
 
@@ -93,6 +96,8 @@ export const OrderLineInputSchema = z.object({
   discountPct: z.number().nullable().optional(),
   discountType: DiscountTypeSchema.optional(),
   discountMode: DiscountModeSchema.optional(),
+  /** A service on some or all of the line's copies (#169); needs a customer on the order. */
+  service: ServiceLineInputSchema.optional(),
 });
 
 export const CreateOrderRequestSchema = z.object({

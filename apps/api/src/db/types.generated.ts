@@ -743,10 +743,40 @@ export interface Returns {
   transaction_id: Int8 | null;
 }
 
+export interface SaleServiceLines {
+  created_at: Generated<Timestamp>;
+  discount_amount: Generated<Numeric>;
+  discount_pct: Generated<Numeric>;
+  id: Generated<Int8>;
+  line_total: Numeric;
+  order_line_item_id: Int8 | null;
+  quantity: number;
+  service_id: number;
+  standard_cost: Numeric;
+  tenant_id: Generated<number>;
+  transaction_line_item_id: Int8 | null;
+  unit_fee: Numeric;
+}
+
 export interface ServiceBranchFees {
   branch_id: number;
   fee: Numeric;
   service_id: number;
+  tenant_id: Generated<number>;
+  updated_at: Generated<Timestamp>;
+  updated_by: number | null;
+}
+
+export interface ServiceJobs {
+  branch_id: number;
+  created_at: Generated<Timestamp>;
+  created_by: number | null;
+  customer_id: number;
+  id: Generated<Int8>;
+  job_number: string;
+  ready_date: Timestamp;
+  service_line_id: Int8;
+  status: Generated<string>;
   tenant_id: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number | null;
@@ -996,7 +1026,9 @@ export interface DB {
   refunds: Refunds;
   return_line_items: ReturnLineItems;
   returns: Returns;
+  sale_service_lines: SaleServiceLines;
   service_branch_fees: ServiceBranchFees;
+  service_jobs: ServiceJobs;
   services: Services;
   staff: Staff;
   staff_branch_roles: StaffBranchRoles;

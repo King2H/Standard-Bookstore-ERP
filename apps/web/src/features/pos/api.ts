@@ -19,6 +19,9 @@ export type SalesParams = {
 
 export const listSales = (params: SalesParams) => api.get<PosTransactionListResponse>(`/pos/transactions${toQuery(params)}`);
 
+/** One sale with its lines, their bindings and jobs (#169). */
+export const getSale = (id: string) => api.get<PosTransaction>(`/pos/transactions/${id}`);
+
 /** Same-day void, with payments going back the way they came. */
 export const voidSale = (id: string) => api.post<PosTransaction>(`/pos/transactions/${id}/void`);
 

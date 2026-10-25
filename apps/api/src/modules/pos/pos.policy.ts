@@ -46,10 +46,15 @@ export function checkDiscounts(lines: PricedLine[], maxPct: number): void {
   }
 }
 
-export function totals(lines: PricedLine[]): { subtotal: Money; discountTotal: Money; taxTotal: Money; grandTotal: Money } {
-  const subtotal = Money.sum(lines.map((l) => l.lineTotal));
+/** The sale's totals: its books, and the fees of its services (#169), each net of its discount. */
+export function totals(
+  lines: PricedLine[],
+  services: { subtotal: Money; discountTotal: Money } = { subtotal: Money.ZERO, discountTotal: Money.ZERO },
+): { subtotal: Money; discountTotal: Money; taxTotal: Money; grandTotal: Money } {
+  const subtotal = Money.sum(lines.map((l) => l.lineTotal)).plus(services.subtotal);
+  const discountTotal = Money.sum(lines.map((l) => l.discountAmount)).plus(services.discountTotal);
   // Tax is not charged yet (ADR-0010: default 0%).
-  return { subtotal, discountTotal: Money.sum(lines.map((l) => l.discountAmount)), taxTotal: Money.ZERO, grandTotal: subtotal };
+  return { subtotal, discountTotal, taxTotal: Money.ZERO, grandTotal: subtotal };
 }
 
 export function paymentStatus(grandTotal: Money, paid: Money): PosPaymentStatus {

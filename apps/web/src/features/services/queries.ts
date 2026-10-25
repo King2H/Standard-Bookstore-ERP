@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ServiceRequest } from '@bms/shared';
+import type { ServiceJobStep, ServiceRequest } from '@bms/shared';
 import {
-  createService, listServices, removeBranchFee, runServiceAction, setBranchFee, updateService,
+  createService, listServices, removeBranchFee, runServiceAction, setBranchFee, stepJob, updateService,
   type ServiceAction, type ServiceParams,
 } from './api.js';
 
@@ -30,3 +30,12 @@ export const useServiceAction = () =>
 /** Sets the session branch's fee, or removes it when `fee` is null. */
 export const useBranchFee = () =>
   useServiceMutation(({ id, fee }: { id: number; fee: string | null }) => (fee === null ? removeBranchFee(id) : setBranchFee(id, { fee })));
+
+/** Moves a sale's binding job one step on; `refresh` names the sale's queries, which carry the job. */
+export function useJobStep(refresh: ReadonlyArray<readonly unknown[]>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, step }: { id: number; step: ServiceJobStep }) => stepJob(id, step),
+    onSuccess: () => Promise.all(refresh.map((queryKey) => qc.invalidateQueries({ queryKey }))),
+  });
+}

@@ -54,6 +54,18 @@ describe('Data consistency check', () => {
       [`ORD-${today}-9999`, branchId, staffId],
     );
 
+    // Services: a confirmed order's service line with no job (#169).
+    const orderLine = await one(`INSERT INTO order_line_items (order_id, book_id, quantity, unit_price, total_price) VALUES ($1, $2, 1, 10, 10) RETURNING id`, [paidOrder, book1]);
+    const formatId = await one(`SELECT id FROM book_formats ORDER BY id LIMIT 1`);
+    const serviceId = await one(
+      `INSERT INTO services (code, name, format_id, fee, standard_cost) VALUES ($1, 'Check binding', $2, 5, 2) RETURNING id`,
+      [`${MARK}-SVC`, formatId],
+    );
+    await client.query(
+      `INSERT INTO sale_service_lines (order_line_item_id, service_id, quantity, unit_fee, line_total, standard_cost) VALUES ($1, $2, 1, 5, 5, 2)`,
+      [orderLine, serviceId],
+    );
+
     // Receivables: owing more than first owed; settled but still owing.
     const customerId = await one(`INSERT INTO customers (customer_code, full_name) VALUES ('CUS-99999', $1) RETURNING id`, [`${MARK} Customer`]);
     for (const [status, owes, orderId] of [['Pending', 20, cancelled], ['Settled', 5, paidOrder]] as const) {
@@ -133,6 +145,7 @@ describe('Data consistency check', () => {
     ['receivables.status-matches-balance', /\(Settled\): owes 5\.00$/],
     ['orders.payment-status', /-9999: paid, payments say unpaid/],
     ['orders.cancelled-money-returned', new RegExp(`^${MARK}-KEPT: holds 10\\.00 \\(paid 10\\.00, refunded 0\\)$`)],
+    ['services.sale-has-job', /^service line \d+ on ORD-\d{8}-9999: no job$/],
     ['procurement.status-matches-lines', /\(ordered\): 2 received/],
     ['procurement.paid-within-total', /paid and credited 60\.00 of 50\.00$/],
     ['bank.matched-line-cleared', /is uncleared$/],
@@ -158,6 +171,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/18 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/19 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

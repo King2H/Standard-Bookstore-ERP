@@ -79,5 +79,6 @@ export function toLineItemRow(row: LineItemDbRow): OrderLineItemRow {
     isBackordered: row.is_backordered,
     unitCost: row.unit_cost != null ? Number(row.unit_cost) : null,
     qtyReturned: Number(row.qty_returned),
+    service: null,
   };
 }

@@ -1,5 +1,5 @@
-import { Money, type LifecycleStatus, type Service, type ServiceKind } from '@bms/shared';
-import type { ServiceRecord } from './services.types.js';
+import { Money, type LifecycleStatus, type SaleServiceLine, type Service, type ServiceJob, type ServiceKind } from '@bms/shared';
+import type { SaleServiceLineRecord, ServiceJobRecord, ServiceRecord } from './services.types.js';
 
 /** The columns services.repository selects. */
 export interface ServiceRow {
@@ -48,5 +48,25 @@ export function toServiceResponse(r: ServiceRecord): Service {
     standardCost: r.standardCost.toNumber(),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+export function toJobResponse(j: ServiceJobRecord): ServiceJob {
+  return { ...j, updatedAt: j.updatedAt.toISOString() };
+}
+
+/** A sale's service line as the sale and order contracts carry it. */
+export function toSaleServiceLineResponse(l: SaleServiceLineRecord): SaleServiceLine {
+  return {
+    id: l.id,
+    serviceId: l.serviceId,
+    serviceCode: l.serviceCode,
+    serviceName: l.serviceName,
+    quantity: l.quantity,
+    unitFee: l.unitFee.toNumber(),
+    discountAmount: l.discountAmount.toNumber(),
+    lineTotal: l.lineTotal.toNumber(),
+    standardCost: l.standardCost.toNumber(),
+    job: l.job && toJobResponse(l.job),
   };
 }

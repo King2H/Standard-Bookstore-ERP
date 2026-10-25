@@ -117,11 +117,13 @@ export function computeOrderAllowedActions(
   _paymentStatus?: string,
   _saleType?: SaleType,
   amountPaid = 0,
+  jobsReady = true,
 ): string[] {
   const can = (p: Permission) => permissions.includes(p);
   // An order that took payments is cancelled by whoever refunds, giving the money back (#167).
   const cancel = can('CREATE_SALE') && (amountPaid <= 0 || can('PROCESS_REFUND')) ? ['cancel'] : [];
-  const cancelOrFulfill = [...cancel, ...(can('PROCESS_PAYMENT') ? ['fulfill'] : [])];
+  // It is delivered with its bound copies, once their jobs are ready (#169).
+  const cancelOrFulfill = [...cancel, ...(can('PROCESS_PAYMENT') && jobsReady ? ['fulfill'] : [])];
 
   switch (status) {
     case 'DRAFT':
@@ -195,12 +197,18 @@ export function priceLine(item: OrderLineInput, unitPrice: number, maxDiscountPc
   };
 }
 
-/** Order totals from its priced lines. Tax is not charged yet (ADR-0010: default 0%). */
-export function orderTotals(lines: PricedLine[]): OrderTotals {
-  const subtotal = Money.sum(lines.map((l) => l.totalPrice));
+/**
+ * Order totals from its priced lines and the fees of its services (#169).
+ * Tax is not charged yet (ADR-0010: default 0%).
+ */
+export function orderTotals(
+  lines: PricedLine[],
+  services: { subtotal: Money; discountTotal: Money } = { subtotal: Money.ZERO, discountTotal: Money.ZERO },
+): OrderTotals {
+  const subtotal = Money.sum(lines.map((l) => l.totalPrice)).plus(services.subtotal);
   return {
     subtotal: subtotal.toFixed(2),
-    discountTotal: Money.sum(lines.map((l) => l.discountAmount)).toFixed(2),
+    discountTotal: Money.sum(lines.map((l) => l.discountAmount)).plus(services.discountTotal).toFixed(2),
     taxRate: '0.0000',
     taxAmount: '0.00',
     total: subtotal.toFixed(2),

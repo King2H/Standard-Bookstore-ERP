@@ -1,4 +1,5 @@
 import { Money } from '@bms/shared';
+import { bindingInput, bindingTotal, type BindingChoice } from '../services/binding.js';
 
 /**
  * A new order's lines, pure: what each is worth after its discount, and what
@@ -19,6 +20,8 @@ export interface OrderLine {
   discount: string;
   /** Available at the order's location, when known. */
   availableStock: number | null;
+  /** Binding on some or all of the line's copies (#169): its own line, under the book. */
+  service?: BindingChoice;
 }
 
 const NUMBER = /^\d+(\.\d{1,2})?$/;
@@ -37,7 +40,9 @@ export function lineDiscount(l: OrderLine): Money {
 
 export const lineTotal = (l: OrderLine) => lineBase(l).minus(lineDiscount(l));
 
-export const orderSubtotal = (lines: OrderLine[]) => Money.sum(lines.map(lineTotal));
+/** The order's total: its books after discount, and the fees of their bindings (#169). */
+export const orderSubtotal = (lines: OrderLine[]) =>
+  Money.sum([...lines.map(lineTotal), ...lines.flatMap((l) => (l.service ? [bindingTotal(l.service)] : []))]);
 
 /**
  * Why the lines cannot be sent, or null: each discount is a number with at
@@ -70,5 +75,6 @@ export function lineInput(l: OrderLine) {
     discountAmount: l.discountMode === 'Amount' ? value : undefined,
     discountType: l.discountType,
     discountMode: l.discountMode,
+    ...(l.service && { service: bindingInput(l.service) }),
   };
 }

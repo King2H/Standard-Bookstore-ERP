@@ -39,7 +39,7 @@ function order(over: Partial<Order> = {}): Order {
 
 const LINE = {
   id: 'li1', orderId: '10', bookId: 1, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '000', quantity: 2, unitPrice: 25,
-  discountAmount: 0, totalPrice: 50, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0,
+  discountAmount: 0, totalPrice: 50, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, service: null,
 };
 let line = LINE;
 

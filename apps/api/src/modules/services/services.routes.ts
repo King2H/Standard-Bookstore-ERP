@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as services from './services.controller.js';
 
@@ -24,5 +24,8 @@ router.post('/services/:id/archive', authenticate, canManage, validate(schemas.b
 router.post('/services/:id/restore', authenticate, canManage, validate(schemas.byId), services.transition('RESTORE'));
 router.put('/services/:id/branch-fee', authenticate, canManage, validate(schemas.branchFee), services.setBranchFee);
 router.delete('/services/:id/branch-fee', authenticate, canManage, validate(schemas.byId), services.removeBranchFee);
+
+// A sale's binding job moves on by whoever sells, in the job's branch (#169 PR 2).
+router.post('/service-jobs/:id/:step', authenticate, requirePermission('CREATE_SALE'), validate(schemas.jobStep), services.stepJob);
 
 export default router;

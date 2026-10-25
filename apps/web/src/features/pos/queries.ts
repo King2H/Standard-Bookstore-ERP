@@ -1,12 +1,18 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryKeys } from '../inventory/queries.js';
-import { createSale, listSales, searchBooksForSale, searchCustomersForSale, voidSale, type SalesParams } from './api.js';
+import { createSale, getSale, listSales, searchBooksForSale, searchCustomersForSale, voidSale, type SalesParams } from './api.js';
 
 /** Query keys for counter sales. Every key starts with `posKeys.all`. */
 export const posKeys = {
   all: ['pos'] as const,
   sales: (params: SalesParams) => [...posKeys.all, 'sales', params] as const,
+  sale: (id: string) => [...posKeys.all, 'sale', id] as const,
 };
+
+/** One sale with its lines, read when its details are opened. */
+export function useSale(id: string | null) {
+  return useQuery({ queryKey: posKeys.sale(id ?? ''), queryFn: () => getSale(id as string), enabled: id !== null });
+}
 
 export function useSales(params: SalesParams) {
   return useQuery({ queryKey: posKeys.sales(params), queryFn: () => listSales(params), placeholderData: keepPreviousData });

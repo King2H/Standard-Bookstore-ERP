@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { PosTransaction } from '@bms/shared';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../components/Pagination.js';
@@ -6,7 +6,8 @@ import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useSales, useVoidSale } from '../queries.js';
-import { canVoid } from '../rules.js';
+import { canSell, canVoid } from '../rules.js';
+import { SaleLines } from './SaleLines.js';
 
 const DATE_INPUT = 'px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
@@ -30,6 +31,7 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', onNavig
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [voiding, setVoiding] = useState<PosTransaction | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
 
   const { data, isLoading } = useSales({ page, pageSize, dateFrom, dateTo });
   const voidSale = useVoidSale();
@@ -79,7 +81,8 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', onNavig
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {(data?.items ?? []).map((tx) => (
-                  <tr key={tx.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
+                  <Fragment key={tx.id}>
+                  <tr className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
                       <button type="button" title="Copy Transaction ID" onClick={() => copy(tx.transactionNumber)}
                         className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors">
@@ -105,6 +108,10 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', onNavig
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{new Date(tx.createdAt).toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
+                        <button type="button" onClick={() => setOpen(open === tx.id ? null : tx.id)} aria-expanded={open === tx.id}
+                          className="text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 px-2 py-1 rounded-lg font-medium transition-colors whitespace-nowrap">
+                          {open === tx.id ? 'Hide' : 'Details'}
+                        </button>
                         {canVoid(me) && tx.voidable && (
                           <button onClick={() => setVoiding(tx)} className="text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-2 py-1 rounded-lg font-medium transition-colors whitespace-nowrap">Void</button>
                         )}
@@ -118,6 +125,12 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', onNavig
                       </div>
                     </td>
                   </tr>
+                  {open === tx.id && (
+                    <tr className="bg-gray-50/60 dark:bg-gray-800/20">
+                      <td colSpan={8} className="px-6 py-3"><SaleLines saleId={tx.id} canStep={canSell(me)} /></td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

@@ -55,6 +55,8 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
       discounts: summary.discounts,
       discountsByType: summary.discountsByType,
       returnsValue: summary.returnsValue,
+      bookSales: summary.bookSales,
+      serviceIncome: summary.serviceIncome,
     },
     byPeriod: byPeriod.map((r) => ({
       period: r.period,
