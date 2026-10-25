@@ -8,6 +8,9 @@ type Account = Pick<ProfileResponse, 'currentRoles'>;
 
 const holds = (me: Account | undefined, allowed: string[]) => (me?.currentRoles ?? []).some((r) => allowed.includes(r));
 
+/** Moving a sale's binding job on: the selling roles (CREATE_SALE), as the API checks (#169). */
+export const canSell = (me: Account | undefined) => holds(me, ['Admin', 'Manager', 'Sales']);
+
 /** Voiding a sale: Manager and Admin (was: offered to Super_Admin, whom the API refuses). */
 export const canVoid = (me: Account | undefined) => holds(me, ['Admin', 'Manager']);
 

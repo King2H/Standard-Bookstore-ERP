@@ -62,6 +62,7 @@ export async function create(req: Request, res: Response): Promise<void> {
       discountAmount: i.discountAmount,
       discountMode: i.discountMode ?? 'Percentage',
       discountType: i.discountType ?? 'Normal',
+      service: i.service,
     })),
     payments: paymentLines(body.payments),
     allowCredit: body.allowCredit,

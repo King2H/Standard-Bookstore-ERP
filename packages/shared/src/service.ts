@@ -70,3 +70,66 @@ export type ServiceRequest = z.infer<typeof ServiceRequestSchema>;
 /** The session branch's own fee (owner decision 2a). */
 export const ServiceBranchFeeRequestSchema = z.object({ fee: FeeSchema });
 export type ServiceBranchFeeRequest = z.infer<typeof ServiceBranchFeeRequestSchema>;
+
+// ── Services on a sale (#169 PR 2) ───────────────────────────────────────────
+
+/**
+ * A service on a book line of a sale or order (owner decision 1a): for some
+ * or all of the line's copies (2a). The fee is the branch's; a discount is
+ * taken only when the service allows it, within the cashier's line limit (3a).
+ */
+export const ServiceLineInputSchema = z.object({
+  serviceId: z.number().int().positive(),
+  quantity: z.number().int().positive(),
+  /** 0 to 100, with discountMode Percentage (the default). */
+  discountPct: z.number().min(0).max(100).optional(),
+  /** With discountMode Amount: the line's discount in money, at most its value. */
+  discountAmount: z.number().min(0).optional(),
+  discountMode: z.enum(['Percentage', 'Amount']).optional(),
+});
+export type ServiceLineInput = z.infer<typeof ServiceLineInputSchema>;
+
+export const ServiceJobStatusSchema = z.enum(['REQUESTED', 'AT_BINDER', 'READY', 'COLLECTED', 'CANCELLED']);
+export type ServiceJobStatus = z.infer<typeof ServiceJobStatusSchema>;
+
+/** The work a service line asks for (4a), opened at the sale, or at an order's confirmation (5a). */
+export const ServiceJobSchema = z.object({
+  /** A bigint, sent as a number. */
+  id: z.number().int(),
+  /** SVC-YYYYMMDD-NNNN. */
+  jobNumber: z.string(),
+  status: ServiceJobStatusSchema,
+  /** The sale's day plus the service's turnaround, YYYY-MM-DD. */
+  readyDate: z.string(),
+  /** Who is called when it is ready. */
+  customerId: z.number().int(),
+  branchId: z.number().int(),
+  updatedAt: z.string(),
+});
+export type ServiceJob = z.infer<typeof ServiceJobSchema>;
+
+/** A service line as the sale recorded it: what was charged and what it cost. */
+export const SaleServiceLineSchema = z.object({
+  id: z.number().int(),
+  serviceId: z.number().int(),
+  serviceCode: z.string(),
+  serviceName: z.string(),
+  quantity: z.number().int(),
+  unitFee: z.number(),
+  discountAmount: z.number(),
+  lineTotal: z.number(),
+  /** The service's standard cost per copy, frozen at the sale. */
+  standardCost: z.number(),
+  /** Null on an order not yet confirmed. */
+  job: ServiceJobSchema.nullable(),
+});
+export type SaleServiceLine = z.infer<typeof SaleServiceLineSchema>;
+
+/** A job's next step: to the binder, back and ready, handed to the customer. */
+export const ServiceJobStepSchema = z.enum(['send', 'ready', 'collect']);
+export type ServiceJobStep = z.infer<typeof ServiceJobStepSchema>;
+
+export const ServiceJobStepParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  step: ServiceJobStepSchema,
+});

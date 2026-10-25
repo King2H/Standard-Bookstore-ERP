@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
 import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
+import { SaleServiceLineSchema, ServiceLineInputSchema } from './service.js';
 
 /** Contracts for /api/v1/pos: counter sales (#21). */
 
@@ -23,6 +24,8 @@ export const PosLineItemSchema = z.object({
   lineTotal: z.number(),
   /** Average cost when sold; null for sales before costs were kept. */
   unitCost: z.number().nullable(),
+  /** The service on this line's copies (#169), if any. */
+  service: SaleServiceLineSchema.nullable(),
 });
 
 export const PosPaymentSchema = z.object({
@@ -122,6 +125,8 @@ export const PosLineInputSchema = z.object({
   discountMode: z.enum(['Percentage', 'Amount']).optional(),
   /** The discount preset the cashier used, recorded on the line; reports break discounts down by it. */
   discountType: z.enum(['Normal', 'Merchant', 'Special']).optional(),
+  /** A service on some or all of the line's copies (#169); needs a customer on the sale. */
+  service: ServiceLineInputSchema.optional(),
 });
 export type PosLineInput = z.infer<typeof PosLineInputSchema>;
 

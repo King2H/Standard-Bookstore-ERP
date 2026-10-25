@@ -11,6 +11,7 @@ import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 import { creditReturn } from '../receivables/receivables.service.js';
+import * as saleServices from '../services/saleServices.service.js';
 import * as policy from './returns.policy.js';
 import * as returns from './returns.repository.js';
 import { refundableOnOrder, refundReturnedOrder, settleReturnedOrder } from '../payments/payments.service.js';
@@ -219,6 +220,8 @@ async function returnSale(
   await assertAssignedLocation(sale.locationId, actor);
 
   const lines = valueLines(await returns.saleLines(tx, sale.id), input.lines, 'Transaction line item');
+  // A bound copy comes back with #169's later rules; refused until then.
+  await saleServices.checkNotBound(tx, { posLineIds: lines.map((l) => l.line.id) });
   const total = Money.sum(lines.map((l) => l.value));
   const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
   policy.checkApproval(total, maxWithoutAuth, actor.roles);
@@ -294,6 +297,7 @@ async function returnOrder(
   await assertAssignedLocation(locationId, actor);
 
   const lines = valueLines(await returns.orderLines(tx, order.id), input.lines, 'Order line item');
+  await saleServices.checkNotBound(tx, { orderLineIds: lines.map((l) => l.line.id) });
   const total = Money.sum(lines.map((l) => l.value));
   const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
   policy.checkApproval(total, maxWithoutAuth, actor.roles);

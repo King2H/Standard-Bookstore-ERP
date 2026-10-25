@@ -1,4 +1,5 @@
 import { Money, type PosTransaction } from '@bms/shared';
+import { toSaleServiceLineResponse } from '../services/services.mapper.js';
 import { isVoidable } from './pos.policy.js';
 import type { PosLineRecord, PosPaymentRecord, PosPaymentStatus, PosTransactionRecord } from './pos.types.js';
 
@@ -90,6 +91,7 @@ export function toLineRecord(row: PosLineRow): PosLineRecord {
     discountAmount: Money.of(row.discount_amount),
     lineTotal: Money.of(row.line_total),
     unitCost: row.unit_cost === null ? null : Money.of(row.unit_cost),
+    service: null,
   };
 }
 
@@ -125,7 +127,8 @@ export function toTransactionResponse(t: PosTransactionRecord): PosTransaction {
     status: t.status,
     createdAt: t.createdAt.toISOString(),
     dueDate: t.dueDate,
-    voidable: isVoidable(t),
+    // A started binding job keeps the sale from being voided (#169).
+    voidable: isVoidable(t) && !(t.lineItems ?? []).some((l) => l.service?.job && !['REQUESTED', 'CANCELLED'].includes(l.service.job.status)),
     ...(t.lineItems && {
       lineItems: t.lineItems.map((l) => ({
         ...l,
@@ -133,6 +136,7 @@ export function toTransactionResponse(t: PosTransactionRecord): PosTransaction {
         discountAmount: l.discountAmount.toNumber(),
         lineTotal: l.lineTotal.toNumber(),
         unitCost: l.unitCost?.toNumber() ?? null,
+        service: l.service && toSaleServiceLineResponse(l.service),
       })),
     }),
     ...(t.payments && {

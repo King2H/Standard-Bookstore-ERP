@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Money, type BookWithAvailabilitySchema, type Customer } from '@bms/shared';
 import type { z } from 'zod';
 import BankAccountSelect from '../../../components/BankAccountSelect.js';
@@ -14,6 +14,8 @@ import { useBranchBankAccounts } from '../../bankAccounts/queries.js';
 import { useLocations } from '../../locations/queries.js';
 import { maxDiscountPct } from '../../pos/rules.js';
 import { useEffectiveSetting } from '../../settings/queries.js';
+import { bindingTotal, fitTo } from '../../services/binding.js';
+import { BindingDialog } from '../../services/components/BindingDialog.js';
 import { discountProblem, lineInput, lineTotal, orderSubtotal, type OrderLine } from '../lines.js';
 import { useBooksForOrder, useConfirmOrder, useCreateOrder, useCustomersForOrder } from '../queries.js';
 import { canCreateOrder, cashConfirmBody, cashPaymentProblem } from '../rules.js';
@@ -48,6 +50,7 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
   const [bookSearch, setBookSearch] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
   const [lines, setLines] = useState<OrderLine[]>([]);
+  const [bindingFor, setBindingFor] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
   const { data: locData } = useLocations(branchId);
@@ -65,7 +68,12 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
   const confirmOrder = useConfirmOrder();
 
   const setLine = (bookId: number, change: Partial<OrderLine>) =>
-    setLines((ls) => ls.map((l) => (l.bookId === bookId ? { ...l, ...change } : l)));
+    setLines((ls) => ls.map((l) => {
+      if (l.bookId !== bookId) return l;
+      const next = { ...l, ...change };
+      // A binding is for no more copies than the line has.
+      return { ...next, service: 'service' in change ? change.service : fitTo(l.service, next.quantity) };
+    }));
 
   function addItem(book: Book) {
     const availableStock = book.availability?.available ?? null;
@@ -100,6 +108,7 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
   function problem(): string | null {
     if (lines.length === 0) return 'Add at least one item';
     if (saleType === 'credit_sale' && !selectedCustomer) return 'Credit sales require a customer';
+    if (lines.some((l) => l.service) && !selectedCustomer) return 'A binding needs a customer, who is called when it is ready';
     if (saleType === 'credit_sale' && !dueDate) return 'Credit sales require a due date';
     const discounts = discountProblem(lines, maxPct);
     if (discounts) return discounts;
@@ -271,7 +280,8 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
         {lines.length > 0 && (
           <div className="space-y-2">
             {lines.map((item) => (
-              <div key={item.bookId} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <Fragment key={item.bookId}>
+              <div className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.bookTitle}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{currency} {item.unitPrice.toFixed()} each</p>
@@ -313,6 +323,20 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
                 </span>
                 <button onClick={() => setLines((ls) => ls.filter((l) => l.bookId !== item.bookId))} className="text-gray-400 hover:text-red-500 text-sm">×</button>
               </div>
+              {item.service ? (
+                <div className="flex items-center gap-3 px-2 -mt-1 text-xs text-gray-700 dark:text-gray-300">
+                  <span className="flex-1">
+                    🧵 {item.service.name} × {item.service.quantity}
+                    <span className="text-gray-400"> · {currency} {item.service.unitFee.toFixed(2)} each{item.service.discountPct > 0 ? ` · −${item.service.discountPct}%` : ''}</span>
+                    <button type="button" onClick={() => setBindingFor(item.bookId)} className="ml-2 text-blue-600 dark:text-blue-400 hover:underline">Change</button>
+                  </span>
+                  <span className="w-20 text-right font-medium">{currency} {bindingTotal(item.service).toFixed()}</span>
+                  <span className="w-3" />
+                </div>
+              ) : (
+                <button type="button" onClick={() => setBindingFor(item.bookId)} className="px-2 -mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline">+ Binding</button>
+              )}
+              </Fragment>
             ))}
             <div className="flex justify-between text-sm font-semibold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
               <span>Subtotal</span><span>{currency} {subtotal.toFixed()}</span>
@@ -325,6 +349,20 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
         className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
         {busy ? 'Creating...' : 'Create Order'}
       </button>
+      {(() => {
+        const line = bindingFor === null ? undefined : lines.find((l) => l.bookId === bindingFor);
+        return line && (
+          <BindingDialog
+            bookTitle={line.bookTitle}
+            bookQuantity={line.quantity}
+            value={line.service}
+            maxDiscountPct={maxPct}
+            onSave={(choice) => { setLine(line.bookId, { service: choice }); setBindingFor(null); }}
+            onRemove={() => { setLine(line.bookId, { service: undefined }); setBindingFor(null); }}
+            onClose={() => setBindingFor(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

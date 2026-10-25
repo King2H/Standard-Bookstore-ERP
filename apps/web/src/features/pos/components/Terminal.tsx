@@ -16,6 +16,8 @@ import { createCustomer } from '../../customers/api.js';
 import { useLocations } from '../../locations/queries.js';
 import { getEffectiveConfig } from '../../settings/api.js';
 import { useEffectiveSetting } from '../../settings/queries.js';
+import { bindingInput, bindingTotal, fitTo } from '../../services/binding.js';
+import { BindingDialog } from '../../services/components/BindingDialog.js';
 import { useBooksForSale, useCreateSale, useCustomersForSale } from '../queries.js';
 import { maxDiscountPct } from '../rules.js';
 import {
@@ -115,6 +117,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
   const [payBankAccountId, setPayBankAccountId]   = useState<number | ''>('');
   const [payProof, setPayProof]                   = useState<PaymentProof>(EMPTY_PROOF);
   const [receipt, setReceipt]                     = useState<Receipt | null>(null);
+  const [bindingFor, setBindingFor]               = useState<number | null>(null);
 
   // Discount state
   const [defaultDiscountType, setDefaultDiscountType]     = useState<DiscountPresetType>('Normal');
@@ -222,6 +225,8 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
   const discountTotal = totals.discountTotal.toNumber();
   const grandTotal = totals.grandTotal.toNumber();
   const remaining = remainingDue.toNumber();
+  // A binding is for a named customer (#169): they are called when it is ready.
+  const needsCustomer = cart.some(i => i.service) && !selectedCustomer;
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -277,7 +282,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
     setCart(c => c.map(i => {
       if (i.bookId !== bookId) return i;
       const updated = recalcLine({ ...i, quantity: Math.max(1, i.quantity + delta) });
-      return { ...updated, isDivergent: checkDivergence(updated) };
+      return { ...updated, service: fitTo(i.service, updated.quantity), isDivergent: checkDivergence(updated) };
     }));
   }
 
@@ -359,8 +364,9 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
     }));
   }
 
-  /** What stops the sale before it is sent, or null: a line discounted more than this cashier may give. */
+  /** What stops the sale before it is sent, or null: a line discounted more than this cashier may give, or a binding with no customer. */
   function discountProblem(): string | null {
+    if (needsCustomer) return 'A binding needs a customer, who is called when it is ready';
     if (maxPct === null) return null;
     const over = lineOverLimit(cart, maxPct);
     return over ? `The discount on "${over.bookTitle}" is more than your limit of ${maxPct}%` : null;
@@ -370,7 +376,11 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
     const change = Money.sum(paymentLines.map(changeOf));
     createSale.mutate({
       locationId: locationId!,
-      items: cart.map(i => ({ bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct, discountAmount: i.discountAmount, discountType: i.discountType as DiscountPresetType, discountMode: i.discountMode as 'Percentage' | 'Amount' })),
+      items: cart.map(i => ({
+        bookId: i.bookId, quantity: i.quantity, discountPct: i.discountPct, discountAmount: i.discountAmount,
+        discountType: i.discountType as DiscountPresetType, discountMode: i.discountMode as 'Percentage' | 'Amount',
+        ...(i.service && { service: bindingInput(i.service) }),
+      })),
       payments: buildPaymentPayload(),
       ...body,
     }, {
@@ -460,12 +470,25 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
                   {(receipt.lineItems ?? []).map((li, i) => (
-                    <tr key={i}>
-                      <td className="py-2 text-xs font-medium text-gray-900 dark:text-white">{li.bookTitle}</td>
-                      <td className="py-2 text-xs text-gray-500">{li.quantity}</td>
-                      <td className="py-2 text-xs text-gray-500">{Number(li.unitPrice).toFixed(2)}</td>
-                      <td className="py-2 text-xs font-semibold text-gray-900 dark:text-white tabular-nums">{Number(li.lineTotal).toFixed(2)}</td>
-                    </tr>
+                    <Fragment key={i}>
+                      <tr>
+                        <td className="py-2 text-xs font-medium text-gray-900 dark:text-white">{li.bookTitle}</td>
+                        <td className="py-2 text-xs text-gray-500">{li.quantity}</td>
+                        <td className="py-2 text-xs text-gray-500">{Number(li.unitPrice).toFixed(2)}</td>
+                        <td className="py-2 text-xs font-semibold text-gray-900 dark:text-white tabular-nums">{Number(li.lineTotal).toFixed(2)}</td>
+                      </tr>
+                      {li.service && (
+                        <tr>
+                          <td className="pb-2 pl-3 text-xs text-gray-600 dark:text-gray-400">
+                            ↳ {li.service.serviceName}
+                            {li.service.job && <span className="block font-mono text-gray-400">{li.service.job.jobNumber} · ready {li.service.job.readyDate}</span>}
+                          </td>
+                          <td className="pb-2 text-xs text-gray-500 align-top">{li.service.quantity}</td>
+                          <td className="pb-2 text-xs text-gray-500 align-top">{Number(li.service.unitFee).toFixed(2)}</td>
+                          <td className="pb-2 text-xs font-semibold text-gray-900 dark:text-white tabular-nums align-top">{Number(li.service.lineTotal).toFixed(2)}</td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -694,12 +717,17 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60 bg-white dark:bg-gray-900">
                     {cart.map(item => (
-                      <tr key={item.bookId} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/20 transition-colors group">
+                      <Fragment key={item.bookId}>
+                      <tr className="hover:bg-gray-50/60 dark:hover:bg-gray-800/20 transition-colors group">
 
                         {/* Book info — compact 2-line */}
                         <td className="px-3 py-2">
                           <p className="font-semibold text-gray-900 dark:text-white text-xs leading-tight truncate max-w-[180px]">{item.bookTitle}</p>
                           <p className="text-xs text-gray-400 mt-0.5 font-mono">{item.bookIsbn}</p>
+                          {!item.service && (
+                            <button type="button" onClick={() => setBindingFor(item.bookId)}
+                              className="mt-0.5 text-xs text-blue-600 dark:text-blue-400 hover:underline">+ Binding</button>
+                          )}
                         </td>
 
                         {/* Qty */}
@@ -791,6 +819,18 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
                           </button>
                         </td>
                       </tr>
+                      {item.service && (
+                        <tr className="bg-blue-50/40 dark:bg-blue-950/10">
+                          <td colSpan={4} className="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300">
+                            🧵 {item.service.name} × {item.service.quantity}
+                            <span className="text-gray-400"> · {currency} {item.service.unitFee.toFixed(2)} each{item.service.discountPct > 0 ? ` · −${item.service.discountPct}%` : ''}</span>
+                            <button type="button" onClick={() => setBindingFor(item.bookId)} className="ml-2 text-blue-600 dark:text-blue-400 hover:underline">Change</button>
+                          </td>
+                          <td className="px-2 py-1.5 text-right text-xs font-bold text-gray-900 dark:text-white tabular-nums">{bindingTotal(item.service).toFixed(2)}</td>
+                          <td></td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -956,12 +996,15 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
                 {remaining > 0.01 && !selectedCustomer && cart.length > 0 && (
                   <p className="text-xs text-gray-400 text-center">Add a customer for credit sale</p>
                 )}
+                {needsCustomer && (
+                  <p className="text-xs text-amber-600 text-center bg-amber-50 dark:bg-amber-950/20 rounded-md py-1">⚠ A binding needs a customer</p>
+                )}
 
                 {/* Complete Sale */}
                 <button
                   id="pos-complete-sale"
                   onClick={handleCompleteSale}
-                  disabled={isSelling || cart.length === 0 || !locationId || Math.abs(remaining) > 0.01}
+                  disabled={isSelling || cart.length === 0 || !locationId || needsCustomer || Math.abs(remaining) > 0.01}
                   className="w-full flex items-center justify-between gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md shadow-emerald-600/20 active:scale-[0.98]"
                 >
                   <span className="text-sm">{isSelling ? '⏳ Processing…' : '✓ Complete Sale'}</span>
@@ -1005,6 +1048,20 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
 
         </div>
       )}
+      {(() => {
+        const line = bindingFor === null ? undefined : cart.find(i => i.bookId === bindingFor);
+        return line && (
+          <BindingDialog
+            bookTitle={line.bookTitle}
+            bookQuantity={line.quantity}
+            value={line.service}
+            maxDiscountPct={maxPct}
+            onSave={(choice) => { setCart(c => c.map(i => i.bookId === line.bookId ? { ...i, service: choice } : i)); setBindingFor(null); }}
+            onRemove={() => { setCart(c => c.map(i => i.bookId === line.bookId ? { ...i, service: undefined } : i)); setBindingFor(null); }}
+            onClose={() => setBindingFor(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

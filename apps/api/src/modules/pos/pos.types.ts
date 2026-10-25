@@ -1,5 +1,6 @@
-import type { Money, PosPaymentMethod, PosPaymentStatus } from '@bms/shared';
+import type { Money, PosPaymentMethod, PosPaymentStatus, ServiceLineInput } from '@bms/shared';
 import type { DiscountMode, DiscountType } from '../../lib/discount.js';
+import type { SaleServiceLineRecord } from '../services/services.types.js';
 
 export type { PosPaymentMethod, PosPaymentStatus };
 
@@ -52,6 +53,8 @@ export interface PosLineRecord {
   discountAmount: Money;
   lineTotal: Money;
   unitCost: Money | null;
+  /** The service on the line's copies (#169), filled in on a single sale. */
+  service: SaleServiceLineRecord | null;
 }
 
 export interface PosPaymentRecord {
@@ -81,6 +84,8 @@ export interface SaleLine {
   discountMode: DiscountMode;
   /** The preset the cashier picked; reports break discounts down by it. */
   discountType: DiscountType;
+  /** A service on some or all of the line's copies (#169). */
+  service?: ServiceLineInput;
 }
 
 /** A sale line priced and discounted, ready to be written. */

@@ -30,6 +30,7 @@ export async function exportCsv(req: Request, res: Response): Promise<void> {
     date: r.date,
     invoice_no: r.invoiceNo,
     source: r.source,
+    kind: r.kind,
     customer: r.customer,
     book: r.book,
     qty: r.qty,
@@ -48,7 +49,7 @@ export async function exportCsv(req: Request, res: Response): Promise<void> {
     user: r.user,
   }));
   csvRows.push({
-    date: '', invoice_no: '', source: '', customer: 'TOTAL', book: '',
+    date: '', invoice_no: '', source: '', kind: '', customer: 'TOTAL', book: '',
     qty: totals.qty, unit_price: '', discount: '',
     gross_amount: totals.grossAmount, return_amount: totals.returnAmount,
     net_sales_amount: totals.netSalesAmount, cost_amount: totals.costAmount,

@@ -126,22 +126,39 @@ export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<N
     // back to costBasis.ts's most-recent-cost lookup only for rows that
     // predate that persistence (oli.unit_cost IS NULL).
     reportRows(q, 
-      `SELECT COALESCE(SUM(COALESCE(oli.unit_cost, lc.unit_cost, 0) * oli.quantity), 0)::NUMERIC AS purchase_cost
-       FROM order_line_items oli
-       JOIN orders o ON o.id = oli.order_id
-       ${costBasisLateralJoin('oli.book_id')}
-       WHERE ${costWhere}`,
+      // With the standard cost of the order's services (#169), frozen at the sale.
+      `SELECT (
+         SELECT COALESCE(SUM(COALESCE(oli.unit_cost, lc.unit_cost, 0) * oli.quantity), 0)
+         FROM order_line_items oli
+         JOIN orders o ON o.id = oli.order_id
+         ${costBasisLateralJoin('oli.book_id')}
+         WHERE ${costWhere}
+       ) + (
+         SELECT COALESCE(SUM(sl.standard_cost * sl.quantity), 0)
+         FROM sale_service_lines sl
+         JOIN order_line_items oli ON oli.id = sl.order_line_item_id
+         JOIN orders o ON o.id = oli.order_id
+         WHERE ${costWhere}
+       )::NUMERIC AS purchase_cost`,
       costParams,
     ),
     // Q2b: POS-based purchase cost — same preference for the persisted
     // sale-time cost over the historical fallback. Excludes credit POS from
     // cost too (not recognized yet).
     reportRows(q, 
-      `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, lc.unit_cost, 0) * tli.quantity), 0)::NUMERIC AS purchase_cost
-       FROM transaction_line_items tli
-       JOIN transactions t ON t.id = tli.transaction_id
-       ${costBasisLateralJoin('tli.book_id')}
-       WHERE ${posCostWhere} AND t.payment_status != 'credit'`,
+      `SELECT (
+         SELECT COALESCE(SUM(COALESCE(tli.unit_cost, lc.unit_cost, 0) * tli.quantity), 0)
+         FROM transaction_line_items tli
+         JOIN transactions t ON t.id = tli.transaction_id
+         ${costBasisLateralJoin('tli.book_id')}
+         WHERE ${posCostWhere} AND t.payment_status != 'credit'
+       ) + (
+         SELECT COALESCE(SUM(sl.standard_cost * sl.quantity), 0)
+         FROM sale_service_lines sl
+         JOIN transaction_line_items tli ON tli.id = sl.transaction_line_item_id
+         JOIN transactions t ON t.id = tli.transaction_id
+         WHERE ${posCostWhere} AND t.payment_status != 'credit'
+       )::NUMERIC AS purchase_cost`,
       posCostParams,
     ),
     // Q3: Returns value, less what each return set against a debt as a

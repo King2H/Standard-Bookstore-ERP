@@ -664,6 +664,8 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - POST /api/v1/services / PUT /api/v1/services/:id / POST .../activate|deactivate|archive|restore — Admin, Manager; codes
   are unique ignoring case and stored uppercase (`DUPLICATE_SERVICE`)
 - PUT/DELETE /api/v1/services/:id/branch-fee — body `{ fee }`: the session branch's own fee, or back to the shop's (Admin, Manager)
+- POST /api/v1/service-jobs/:id/send|ready|collect — moves a binding job of the session branch one step on: Requested → At
+  binder → Ready → Collected (the selling roles). An order's ready jobs are collected when the order is delivered
 
 ### Inventory
 - GET /api/v1/inventory — paginated stock levels
@@ -689,6 +691,10 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - GET /api/v1/pos/transactions/:id
 - POST /api/v1/pos/transactions/:id/payment — collect outstanding balance
 - POST /api/v1/pos/transactions/:id/void
+- A sale's book line may carry a service (#169): `items[].service: { serviceId, quantity, discountPct? }`, for some or all
+  of the line's copies, at the branch's fee; it needs a customer. It is its own line under the book (`lineItems[].service`)
+  and opens a job (`SVC-YYYYMMDD-NNNN`, ready on the sale's day plus the service's turnaround). A void gives the fee back
+  while the job is still Requested and is refused once it has started; a bound copy is not taken back through Returns yet
 
 ### Returns
 - POST /api/v1/returns — body: { transactionId | orderId, reason?, lines: [{ transactionLineItemId | orderLineItemId, quantity, disposition? }] }.
@@ -707,6 +713,8 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - POST /api/v1/orders/:id/progress — mark in progress (Manager, Admin, Stock_Clerk)
 - POST /api/v1/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk)
 - POST /api/v1/orders/:id/cancel — body: { reason } (Manager, Admin)
+- An order's line may carry a service as at the counter (#169); its job opens when the order is confirmed. The order is
+  delivered once its jobs are ready, and cancelled with the fee back while they are still Requested
 - GET /api/v1/orders/:id/payments — list payments for order
 - GET /api/v1/orders/:id/balance — { orderTotal, totalPaid, totalRefunded, outstanding, paymentStatus }
 

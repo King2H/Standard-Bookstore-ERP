@@ -33,7 +33,7 @@ const sale: PosTransaction = contract(PosTransactionSchema, {
   currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: false,
   lineItems: [{
     id: '7', transactionId: '41', bookId: 1, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '1', quantity: 3,
-    unitPrice: 10, discountPct: 0, discountAmount: 1, lineTotal: 29, unitCost: null,
+    unitPrice: 10, discountPct: 0, discountAmount: 1, lineTotal: 29, unitCost: null, service: null,
   }],
 });
 
@@ -52,7 +52,7 @@ const deliveredOrder = (over: Partial<Order> = {}): Order => contract(OrderSchem
   createdAt: CREATED, updatedAt: CREATED, allowedActions: ['print', 'return'], paymentMethod: 'cash', dueDate: null, fulfilledAt: DELIVERED,
   lineItems: [{
     id: '8', orderId: '30', bookId: 1, bookTitle: 'Oromay', bookIsbn: '2', quantity: 3, unitPrice: 25, discountAmount: 0,
-    totalPrice: 75, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1,
+    totalPrice: 75, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1, service: null,
   }],
   ...over,
 });

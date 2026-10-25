@@ -1,6 +1,8 @@
 import type { z } from 'zod';
 import {
   ServiceBranchFeeRequestSchema,
+  ServiceJobSchema,
+  ServiceJobStepParamsSchema,
   ServiceListQuerySchema,
   ServiceListResponseSchema,
   ServiceRequestSchema,
@@ -1407,6 +1409,15 @@ function serviceOperations(): ApiOperation[] {
       request: byId,
       responses: { 200: { description: 'The service after the change', schema: ServiceSchema } },
       errors: [400, 401, 403, 404, 500],
+    },    {
+      operationId: 'stepServiceJob',
+      method: 'post',
+      path: '/service-jobs/{id}/{step}',
+      summary: 'Move a binding job of the session branch one step on: send (to the binder), ready, collect (selling roles, #169)',
+      tag,
+      request: { params: ServiceJobStepParamsSchema },
+      responses: { 200: { description: 'The job after the step', schema: ServiceJobSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
     },
   ];
 }

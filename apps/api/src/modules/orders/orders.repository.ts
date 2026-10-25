@@ -183,8 +183,8 @@ export async function insertOrder(
   return String(row.id);
 }
 
-export async function insertLineItem(q: Queryable, orderId: string, line: PricedLine): Promise<void> {
-  await q
+export async function insertLineItem(q: Queryable, orderId: string, line: PricedLine): Promise<string> {
+  const row = await q
     .insertInto('order_line_items')
     .values({
       order_id: orderId,
@@ -197,7 +197,9 @@ export async function insertLineItem(q: Queryable, orderId: string, line: Priced
       discount_type: line.discountType,
       discount_mode: line.discountMode,
     })
-    .execute();
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
 }
 
 export async function setStatus(q: Queryable, orderId: string, status: string, cancelReason?: string): Promise<void> {

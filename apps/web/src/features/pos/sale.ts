@@ -1,4 +1,5 @@
 import { Money } from '@bms/shared';
+import { bindingDiscount, type BindingChoice } from '../services/binding.js';
 
 /**
  * The counter's arithmetic, pure: line and cart totals, the amounts a cashier
@@ -18,6 +19,8 @@ export interface CartLine {
   discountMode: string;
   lineTotal: number;
   isDivergent?: boolean;
+  /** Binding on some or all of the line's copies (#169): its own line, under the book. */
+  service?: BindingChoice;
 }
 
 /** A line's discount and total, the discount kept between nothing and the line's value. */
@@ -28,9 +31,14 @@ export function recalcLine(line: CartLine): CartLine {
   return { ...line, discountAmount: discount.toNumber(), lineTotal: base.minus(discount).toNumber() };
 }
 
+/** The cart's totals: its books, and the fees of their bindings (#169), each before and after discount. */
 export function cartTotals(lines: CartLine[]): { subtotal: Money; discountTotal: Money; grandTotal: Money } {
-  const subtotal = Money.sum(lines.map((l) => Money.of(l.unitPrice).times(l.quantity).round(2)));
-  const discountTotal = Money.sum(lines.map((l) => Money.of(l.discountAmount)));
+  const fees = lines.flatMap((l) => (l.service ? [l.service] : []));
+  const subtotal = Money.sum([
+    ...lines.map((l) => Money.of(l.unitPrice).times(l.quantity).round(2)),
+    ...fees.map((s) => Money.of(s.unitFee).times(s.quantity).round(2)),
+  ]);
+  const discountTotal = Money.sum([...lines.map((l) => Money.of(l.discountAmount)), ...fees.map(bindingDiscount)]);
   return { subtotal, discountTotal, grandTotal: Money.max(Money.ZERO, subtotal.minus(discountTotal)) };
 }
 

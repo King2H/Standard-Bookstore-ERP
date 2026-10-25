@@ -11,6 +11,8 @@ import { cancelReceivable, createReceivable } from '../receivables/receivables.s
 import { returnOrderPayments } from '../payments/payments.service.js';
 import type { Permission } from '../../lib/permissions.js';
 import * as inventoryService from '../inventory/inventory.service.js';
+import * as saleServices from '../services/saleServices.service.js';
+import { toSaleServiceLineResponse } from '../services/services.mapper.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 import * as policy from './orders.policy.js';
@@ -49,7 +51,12 @@ function publish(client: PoolClient, event: OutboxEventType, order: OrderRow, st
 async function loadOrder(q: Queryable, id: string | number, opts: { forUpdate?: boolean } = {}): Promise<OrderRow> {
   const order = await orders.findById(q, id, opts);
   if (!order) throw new NotFoundError('Order');
-  order.lineItems = await orders.listLineItems(q, order.id);
+  const services = await saleServices.linesByBookLine(q, { orderId: order.id });
+  order.lineItems = (await orders.listLineItems(q, order.id)).map((l) => {
+    const service = services.get(l.id);
+    return { ...l, service: service ? toSaleServiceLineResponse(service) : null };
+  });
+  order.jobsReady = await saleServices.orderDeliverable(q, order.id);
   order.allowedActions = [];
   return order;
 }
@@ -76,8 +83,10 @@ export async function list(opts: {
     { ...opts, statuses },
     { limit: pageSize, offset: (page - 1) * pageSize },
   );
+  // A list offers Fulfill only where the binding jobs are ready, as the order's own page does (#169).
+  const waiting = await saleServices.ordersWaitingOnJobs(kysely, items.map((o) => o.id));
   return {
-    items: items.map((o) => ({ ...o, allowedActions: [] as string[] })),
+    items: items.map((o) => ({ ...o, jobsReady: !waiting.has(o.id), allowedActions: [] as string[] })),
     total,
     page,
     totalPages: Math.ceil(total / pageSize),
@@ -106,6 +115,10 @@ export async function create(
   }
 
   const maxDiscountPct = await getMaxLineDiscountPct(staffCtx.branchId, staffCtx.roles ?? [staffCtx.role]);
+  // A service on a line (#169): priced now, at the branch's fee, like the books.
+  const services = await saleServices.priceServices(kysely, data.items, {
+    branchId: staffCtx.branchId, customerId: data.customerId ?? null, maxDiscountPct,
+  });
   const lines: PricedLine[] = [];
   for (const item of data.items) {
     policy.checkQuantity(item);
@@ -116,7 +129,7 @@ export async function create(
     if (unitPrice === null) throw new BusinessError('PRICE_NOT_SET', 'Price not set for book ' + item.bookId);
     lines.push(policy.priceLine(item, unitPrice, maxDiscountPct));
   }
-  const totals = policy.orderTotals(lines);
+  const totals = policy.orderTotals(lines, saleServices.serviceTotals(services));
 
   // An early refusal, not a promise: a draft neither reserves nor deducts
   // stock, so the figures may change before it is confirmed. confirm() is
@@ -149,7 +162,12 @@ export async function create(
       createdBy: staffCtx.staffId,
       totals,
     });
-    for (const line of lines) await orders.insertLineItem(tx, id, line);
+    for (const [i, line] of lines.entries()) {
+      const lineId = await orders.insertLineItem(tx, id, line);
+      const service = services[i];
+      // Its job opens at confirmation, when the order counts as a sale (5a).
+      if (service) await saleServices.recordServiceLine(tx, { orderLineId: lineId }, service);
+    }
 
     const total = Number(totals.total);
     await audit(tx, staffCtx, 'CREATE', id, { orderNumber, total, saleType, itemCount: lines.length });
@@ -247,6 +265,9 @@ export async function confirm(
     }
 
     await orders.setStatus(tx, order.id, 'CONFIRMED');
+    await saleServices.openOrderJobs(tx, staffCtx, {
+      id: order.id, number: order.orderNumber, branchId: order.branchId, customerId: order.customerId,
+    });
     await audit(tx, staffCtx, 'UPDATE', String(orderId), { action: 'confirm', fromStatus: 'DRAFT', toStatus: 'CONFIRMED' });
     await publish(client, 'order.confirmed', { ...order, id: String(orderId) }, staffCtx);
 
@@ -280,6 +301,8 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
   await withTransaction({ isolationLevel: 'repeatable read' }, async (tx, client) => {
     const order = await loadOrder(tx, orderId, { forUpdate: true });
     policy.checkCanFulfill(order.status);
+    // The bound copies go with the order, once their jobs are ready (#169).
+    await saleServices.collectOnDelivery(tx, staffCtx, { id: order.id, number: order.orderNumber });
 
     const locationId = await stockLocation(tx, order, staffCtx);
     await assertAssignedLocation(locationId, staffCtx);
@@ -321,6 +344,8 @@ export async function cancel(
     const { restoresStock } = policy.checkCanCancel(order.status);
     const amountPaid = Money.of(order.amountPaid);
     policy.checkCancelReturn(amountPaid, opts.permissions, opts.refundTo, order.customerId !== null);
+    // Its binding jobs go with it, while their work has not started (#169).
+    await saleServices.cancelJobs(tx, staffCtx, { orderId: order.id }, order.orderNumber);
 
     if (restoresStock) {
       const locationId = await stockLocation(tx, order, staffCtx);

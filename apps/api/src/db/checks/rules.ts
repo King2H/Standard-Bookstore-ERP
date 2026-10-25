@@ -29,6 +29,7 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['EXC', 'exchanges', 'exchange_reference'],
   ['SPAY', 'supplier_payments', 'payment_number'],
   ['SCN', 'supplier_credit_notes', 'credit_note_number'],
+  ['SVC', 'service_jobs', 'job_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -269,6 +270,24 @@ export const CHECKS: readonly Check[] = [
       SELECT d.tenant_id, 'CUS: highest used ' || d.used || ', counter at ' || COALESCE(c.last_value::text, 'none') AS ref
       FROM d LEFT JOIN document_counters c ON c.tenant_id = d.tenant_id AND c.series = 'CUS' AND c.period = ''
       WHERE c.last_value IS NULL OR c.last_value < d.used`,
+  },
+
+  // ── Services (#169) ────────────────────────────────────────────────────────
+  {
+    id: 'services.sale-has-job',
+    area: 'Services',
+    // A counter sale opens its jobs at once; an order at confirmation (owner decision 5a).
+    title: 'Every service on a sale has its job',
+    severity: 'error',
+    sql: `
+      SELECT sl.tenant_id, 'service line ' || sl.id || ' on ' || COALESCE(t.transaction_number, o.order_number) || ': no job' AS ref
+      FROM sale_service_lines sl
+      LEFT JOIN transaction_line_items tli ON tli.id = sl.transaction_line_item_id
+      LEFT JOIN transactions t ON t.id = tli.transaction_id
+      LEFT JOIN order_line_items oli ON oli.id = sl.order_line_item_id
+      LEFT JOIN orders o ON o.id = oli.order_id
+      WHERE NOT EXISTS (SELECT 1 FROM service_jobs j WHERE j.service_line_id = sl.id)
+        AND (t.id IS NOT NULL OR o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled'))`,
   },
 
   // ── Currency ───────────────────────────────────────────────────────────────

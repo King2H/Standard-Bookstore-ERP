@@ -3,13 +3,16 @@ import {
   IdParamsSchema,
   ServiceBranchFeeRequestSchema,
   ServiceListQuerySchema,
+  ServiceJobStepParamsSchema,
   ServiceRequestSchema,
   type Service,
+  type ServiceJob,
   type ServiceListResponse,
 } from '@bms/shared';
 import { valid } from '../../middleware/validate.js';
-import { toServiceResponse } from './services.mapper.js';
+import { toJobResponse, toServiceResponse } from './services.mapper.js';
 import * as policy from './services.policy.js';
+import * as saleServices from './saleServices.service.js';
 import * as service from './services.service.js';
 import type { Actor, LifecycleAction } from './services.types.js';
 
@@ -24,6 +27,7 @@ export const schemas = {
   create: { body: ServiceRequestSchema },
   update: { params: IdParamsSchema, body: ServiceRequestSchema },
   branchFee: { params: IdParamsSchema, body: ServiceBranchFeeRequestSchema },
+  jobStep: { params: ServiceJobStepParamsSchema },
 };
 
 /** The signed-in staff member; authenticate() runs before every controller. */
@@ -80,4 +84,11 @@ export async function setBranchFee(req: Request, res: Response): Promise<void> {
 
 export async function removeBranchFee(req: Request, res: Response): Promise<void> {
   reply(res, await service.removeBranchFee(actor(req), valid(req, schemas.byId).params.id));
+}
+
+/** Moves a job of the session branch one step on: send, ready, collect (#169 PR 2). */
+export async function stepJob(req: Request, res: Response): Promise<void> {
+  const { params } = valid(req, schemas.jobStep);
+  const body: ServiceJob = toJobResponse(await saleServices.stepJob(actor(req), params.id, params.step));
+  res.json(body);
 }

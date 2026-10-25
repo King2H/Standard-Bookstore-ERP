@@ -3,6 +3,8 @@ import type { DiscountType } from '../../../lib/discount.js';
 export type { ReportFilters, ReportScope } from '../reportScope.js';
 
 export type TransactionType = 'ORDER' | 'POS' | 'RETURN' | 'EXCHANGE';
+/** What a line sold: copies of a book, or a service on them (#169). */
+export type LineKind = 'BOOK' | 'SERVICE';
 export type LinePaymentStatus = 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
 
 /**
@@ -12,6 +14,7 @@ export type LinePaymentStatus = 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
 export interface SalesLineRecord {
   transactionDate: string;      // YYYY-MM-DD, in the database session's calendar
   transactionType: TransactionType;
+  kind: LineKind;
   referenceNumber: string;
   branch: string;
   locationName: string;
@@ -42,6 +45,10 @@ export interface SalesSummary {
   returnsValue: number;         // positive magnitude
   exchangeDifference: number;   // signed: outgoing − incoming across all exchange lines
   netSalesRevenue: number;      // grossSales − discounts − returnsValue + exchangeDifference
+  /** Order and POS book lines after discount; with serviceIncome, what was sold before returns and exchanges. */
+  bookSales: number;
+  /** Order and POS service fees after discount (#169). */
+  serviceIncome: number;
   costAmount: number;
   grossProfit: number;          // netSalesRevenue − costAmount
   grossMarginPct: number;       // grossProfit / netSalesRevenue × 100 (0 when netSalesRevenue is 0)

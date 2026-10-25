@@ -92,6 +92,7 @@
 // with, by construction, since Prompt 2 designates accrual as canonical for
 // those specific cards/columns.
 
+import { Money } from '@bms/shared';
 import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
 import { costBasisLateralJoin } from '../../../lib/costBasis.js';
@@ -234,6 +235,7 @@ async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLi
     return {
       transactionDate: row.transaction_date as string,
       transactionType: 'ORDER',
+      kind: 'BOOK',
       referenceNumber: row.reference_number as string,
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
@@ -303,6 +305,7 @@ async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLine
     return {
       transactionDate: row.transaction_date as string,
       transactionType: 'POS',
+      kind: 'BOOK',
       referenceNumber: row.reference_number as string,
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
@@ -317,6 +320,103 @@ async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLine
       paymentMethod: mapPaymentMethod(row.payment_method as string | null),
       cashCollected: parseFloat((row.cash_collected as string | number | null) as string ?? '0'),
       receivableBalance: parseFloat((row.receivable_balance as string | number | null) as string ?? '0'),
+      staffUsername: (row.staff_username as string | null) ?? '',
+    };
+  });
+}
+
+// ── SERVICE rows (#169) ──────────────────────────────────────────────────────
+//
+// A service's fee on a counter sale or an order, one row per service line,
+// under the sale's own type and number: netAmount is the line total after
+// its discount; costAmount is the standard cost frozen at the sale. The sale
+// totals include the fee, so these rows keep net sales equal to them. Draft,
+// cancelled and voided sales are left out, as for their books.
+
+async function getServiceRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
+  const pos = buildDateBranchConditions(filters, 't');
+  pos.conditions.unshift(`t.status != 'voided'`);
+  const ord = buildDateBranchConditions(filters, 'o');
+  ord.conditions.unshift(`o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}`);
+  const columns = `
+       sl.quantity, sl.unit_fee, sl.discount_amount, sl.line_total, sl.standard_cost,
+       s.name AS service_name, b.title AS book_title, b.isbn AS book_isbn,
+       br.name AS branch, loc.name AS location_name, COALESCE(c.full_name, 'Walk-in') AS customer_name, st.username AS staff_username`;
+  const [posRes, orderRes] = await Promise.all([
+    reportRows(q,
+      `SELECT TO_CHAR(t.created_at, 'YYYY-MM-DD') AS transaction_date, t.transaction_number AS reference_number, 'POS' AS source,
+         t.payment_status, tpay.method AS payment_method, tcash.paid AS cash_collected, trec.outstanding_amount AS receivable_balance,
+         ${columns}
+       FROM sale_service_lines sl
+       JOIN services s ON s.id = sl.service_id
+       JOIN transaction_line_items tli ON tli.id = sl.transaction_line_item_id
+       JOIN transactions t ON t.id = tli.transaction_id
+       JOIN books b ON b.id = tli.book_id
+       JOIN branches br ON br.id = t.branch_id
+       LEFT JOIN locations loc ON loc.id = t.location_id
+       LEFT JOIN customers c ON c.id = t.customer_id
+       LEFT JOIN staff st ON st.id = t.staff_id
+       ${POS_CASH_LATERAL}
+       LEFT JOIN LATERAL (
+         SELECT tp.method FROM transaction_payments tp WHERE tp.transaction_id = t.id ORDER BY tp.created_at DESC LIMIT 1
+       ) tpay ON true
+       WHERE ${pos.conditions.join(' AND ')}
+       ORDER BY t.created_at, sl.id`,
+      pos.params,
+    ),
+    reportRows(q,
+      `SELECT TO_CHAR(o.created_at, 'YYYY-MM-DD') AS transaction_date, o.order_number AS reference_number, 'ORDER' AS source,
+         o.payment_status, opay.payment_method, ocash.paid AS cash_collected, orec.outstanding_amount AS receivable_balance,
+         ${columns}
+       FROM sale_service_lines sl
+       JOIN services s ON s.id = sl.service_id
+       JOIN order_line_items oli ON oli.id = sl.order_line_item_id
+       JOIN orders o ON o.id = oli.order_id
+       JOIN books b ON b.id = oli.book_id
+       JOIN branches br ON br.id = o.branch_id
+       LEFT JOIN locations loc ON loc.id = o.location_id
+       LEFT JOIN customers c ON c.id = o.customer_id
+       LEFT JOIN staff st ON st.id = o.created_by
+       ${ORDER_CASH_LATERAL}
+       LEFT JOIN LATERAL (
+         SELECT op.payment_method FROM order_payments op
+         WHERE op.order_id = o.id AND op.status IN ('success', 'partially_refunded')
+         ORDER BY op.created_at DESC LIMIT 1
+       ) opay ON true
+       WHERE ${ord.conditions.join(' AND ')}
+       ORDER BY o.created_at, sl.id`,
+      ord.params,
+    ),
+  ]);
+
+  return [...posRes, ...orderRes].map((row): SalesLineRecord => {
+    const quantity = row.quantity as number;
+    const unitPrice = Money.of(row.unit_fee as string);
+    const netAmount = Money.of(row.line_total as string);
+    const costAmount = Money.of(row.standard_cost as string).times(quantity).round(2);
+    const isPos = row.source === 'POS';
+    return {
+      transactionDate: row.transaction_date as string,
+      transactionType: isPos ? 'POS' : 'ORDER',
+      kind: 'SERVICE',
+      referenceNumber: row.reference_number as string,
+      branch: row.branch as string,
+      locationName: (row.location_name as string | null) ?? '',
+      customerName: row.customer_name as string,
+      bookTitle: `${row.service_name as string} (${row.book_title as string})`,
+      bookIsbn: (row.book_isbn as string | null) ?? '',
+      quantity,
+      unitPrice: unitPrice.toNumber(),
+      discountAmount: Money.of(row.discount_amount as string).toNumber(),
+      grossAmount: unitPrice.times(quantity).round(2).toNumber(),
+      netAmount: netAmount.toNumber(),
+      discountType: null,
+      costAmount: costAmount.toNumber(),
+      grossProfit: netAmount.minus(costAmount).toNumber(),
+      paymentStatus: isPos ? mapPosPaymentStatus(row.payment_status as string) : mapOrderPaymentStatus(row.payment_status as string),
+      paymentMethod: mapPaymentMethod(row.payment_method as string | null),
+      cashCollected: Money.of((row.cash_collected as string | number | null) ?? 0).toNumber(),
+      receivableBalance: Money.of((row.receivable_balance as string | number | null) ?? 0).toNumber(),
       staffUsername: (row.staff_username as string | null) ?? '',
     };
   });
@@ -371,6 +471,7 @@ async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesL
     return {
       transactionDate: row.transaction_date as string,
       transactionType: 'RETURN',
+      kind: 'BOOK',
       referenceNumber: row.reference_number as string,
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
@@ -525,6 +626,7 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
     return {
       transactionDate: row.transaction_date as string,
       transactionType: 'EXCHANGE',
+      kind: 'BOOK',
       referenceNumber: row.reference_number as string,
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
@@ -558,12 +660,13 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
 // ── All lines ─────────────────────────────────────────────────────────────────
 
 export async function salesLines(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
-  const [orderRows, posRows, returnRows, exchangeRows] = await Promise.all([
+  const [orderRows, posRows, serviceRows, returnRows, exchangeRows] = await Promise.all([
     getOrderRows(q, filters),
     getPosRows(q, filters),
+    getServiceRows(q, filters),
     getReturnRows(q, filters),
     getExchangeRows(q, filters),
   ]);
-  return [...orderRows, ...posRows, ...returnRows, ...exchangeRows]
+  return [...orderRows, ...posRows, ...serviceRows, ...returnRows, ...exchangeRows]
     .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
 }

@@ -64,6 +64,10 @@ export const SalesReportSchema = z.object({
     /** The discounts by the preset the line used; they add up to discounts. */
     discountsByType: z.object({ Normal: z.number(), Merchant: z.number(), Special: z.number() }),
     returnsValue: z.number(),
+    /** Book lines of orders and counter sales, after discount (#169). */
+    bookSales: z.number(),
+    /** Service fees of orders and counter sales, after discount (#169). */
+    serviceIncome: z.number(),
   }),
   byPeriod: z.array(
     z.object({ period: z.string(), totalSales: z.number(), totalOrders: z.number().int(), averageOrderValue: z.number() }),
@@ -82,6 +86,8 @@ export const SalesLineSchema = z.object({
   date: z.string(),
   invoiceNo: z.string(),
   source: SalesSourceSchema,
+  /** Copies of a book, or a service on them (#169): the service's name with the book's title. */
+  kind: z.enum(['BOOK', 'SERVICE']),
   customer: z.string(),
   book: z.string(),
   /** Negative for a return. */

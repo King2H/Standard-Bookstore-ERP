@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Money } from '@bms/shared';
 import { PrintSlip, SlipRow } from '../../../components/PrintSlip.js';
 import { paymentMethodPlainLabel } from '../../../lib/paymentMethods.js';
@@ -35,12 +36,26 @@ export function OrderSlip({ orderId, onClose }: { orderId: string; onClose: () =
             </thead>
             <tbody>
               {order.lineItems.map((li) => (
-                <tr key={li.id} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-1 pr-2">{li.bookTitle}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{li.quantity}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{Money.of(li.unitPrice).toFixed()}</td>
-                  <td className="py-1 text-right tabular-nums">{Money.of(li.totalPrice).toFixed()}</td>
-                </tr>
+                <Fragment key={li.id}>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <td className="py-1 pr-2">{li.bookTitle}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums">{li.quantity}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums">{Money.of(li.unitPrice).toFixed()}</td>
+                    <td className="py-1 text-right tabular-nums">{Money.of(li.totalPrice).toFixed()}</td>
+                  </tr>
+                  {/* The binding is its own line, under its book (#169). */}
+                  {li.service && (
+                    <tr className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="py-1 pr-2 pl-3">
+                        ↳ {li.service.serviceName}
+                        {li.service.job && <span className="block text-xs text-gray-500">{li.service.job.jobNumber} · ready {li.service.job.readyDate}</span>}
+                      </td>
+                      <td className="py-1 pr-2 text-right tabular-nums align-top">{li.service.quantity}</td>
+                      <td className="py-1 pr-2 text-right tabular-nums align-top">{Money.of(li.service.unitFee).toFixed()}</td>
+                      <td className="py-1 text-right tabular-nums align-top">{Money.of(li.service.lineTotal).toFixed()}</td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

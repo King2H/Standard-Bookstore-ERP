@@ -9,6 +9,7 @@ import { accountForPayment, movementNote, recordMovement } from '../bankAccount/
 import { getMaxLineDiscountPct } from '../config/config.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
+import * as saleServices from '../services/saleServices.service.js';
 import {
   cancelReceivable,
   checkNotWrittenOff,
@@ -92,8 +93,12 @@ async function spendFromAccounts(q: Queryable, customerId: number | null, paymen
 
 export async function getById(id: string): Promise<PosTransactionRecord> {
   const t = found(await pos.findTransaction(kysely, id));
-  const [lineItems, payments] = await Promise.all([pos.lineItems(kysely, id), pos.payments(kysely, id)]);
-  return { ...t, lineItems, payments };
+  const [lineItems, payments, services] = await Promise.all([
+    pos.lineItems(kysely, id),
+    pos.payments(kysely, id),
+    saleServices.linesByBookLine(kysely, { transactionId: id }),
+  ]);
+  return { ...t, lineItems: lineItems.map((l) => ({ ...l, service: services.get(l.id) ?? null })), payments };
 }
 
 export function list(filter: PosFilter, paging: Paging): Promise<{ items: PosTransactionRecord[]; total: number }> {
@@ -132,8 +137,11 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
     }
 
     const lines = await priceLines(tx, sale);
-    policy.checkDiscounts(lines, await getMaxLineDiscountPct(sale.branchId, actor.roles ?? [actor.role]));
-    const totals = policy.totals(lines);
+    const maxDiscountPct = await getMaxLineDiscountPct(sale.branchId, actor.roles ?? [actor.role]);
+    policy.checkDiscounts(lines, maxDiscountPct);
+    // A service on a line (#169): the branch's fee, kept on its own line under the book.
+    const services = await saleServices.priceServices(tx, sale.items, { branchId: sale.branchId, customerId: sale.customerId, maxDiscountPct });
+    const totals = policy.totals(lines, saleServices.serviceTotals(services));
     const paid = sumOf(sale.payments);
     policy.checkSalePayments(
       { grandTotal: totals.grandTotal, paid, allowCredit: sale.allowCredit, customerId: sale.customerId, dueDate: sale.dueDate },
@@ -156,7 +164,7 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
     });
 
     // Each line is posted at the average cost it leaves stock at, frozen on the line.
-    for (const line of lines) {
+    for (const [i, line] of lines.entries()) {
       const { unitCost } = await inventoryService.issueStock(tx, {
         bookId: line.bookId,
         locationId: sale.locationId,
@@ -166,7 +174,13 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
         reasonCode: 'sale',
         staffCtx: actor,
       });
-      await pos.insertLine(tx, id, line, unitCost);
+      const lineId = await pos.insertLine(tx, id, line, unitCost);
+      const service = services[i];
+      if (service) {
+        const serviceLineId = await saleServices.recordServiceLine(tx, { posLineId: lineId }, service);
+        await saleServices.openJob(tx, actor, { id: serviceLineId, turnaroundDays: service.turnaroundDays },
+          { branchId: sale.branchId, customerId: sale.customerId as number, number: transactionNumber });
+      }
     }
     await spendFromAccounts(tx, sale.customerId, sale.payments, { id, number: transactionNumber, refType: 'transaction' });
     await insertPayments(tx, { id, number: transactionNumber, branchId: sale.branchId }, sale.payments);
@@ -198,6 +212,7 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
       amountDue: due.toNumber(),
       paymentStatus: status,
       itemCount: lines.length,
+      serviceTotal: saleServices.serviceTotals(services).subtotal.toNumber(),
     });
     if (status === 'paid') {
       await insertOutboxEvent(tx, 'pos.sale_completed', {
@@ -281,6 +296,8 @@ export async function voidTransaction(actor: Actor, txId: string): Promise<PosTr
   await withTransaction({}, async (tx) => {
     const t = found(await pos.findTransaction(tx, txId, { forUpdate: true }));
     policy.checkCanVoid(t);
+    // Its binding jobs go with it, while their work has not started (#169).
+    await saleServices.cancelJobs(tx, actor, { transactionId: t.id }, t.transactionNumber);
     await cancelReceivable(tx, { sourceType: 'pos_credit_sale', sourceEntityId: t.id, paymentsReturned: true });
 
     for (const line of await pos.lineItems(tx, t.id)) {

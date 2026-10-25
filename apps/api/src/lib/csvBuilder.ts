@@ -43,6 +43,7 @@ export const SALES_COLUMNS: CsvColumnDef[] = [
   { key: 'date',                header: 'Date',                type: 'string'  },
   { key: 'invoice_no',          header: 'Invoice No',          type: 'string'  },
   { key: 'source',              header: 'Source',              type: 'string'  },
+  { key: 'kind',                header: 'Line',                type: 'string'  },
   { key: 'customer',            header: 'Customer',            type: 'string'  },
   { key: 'book',                header: 'Book',                type: 'string'  },
   { key: 'qty',                 header: 'Qty',                 type: 'integer' },

@@ -28,8 +28,12 @@ export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
   let returnsValue = Money.ZERO;
   let exchangeDifference = Money.ZERO;
   let costAmount = Money.ZERO;
+  let bookSales = Money.ZERO;
+  let serviceIncome = Money.ZERO;
   for (const row of rows) {
     if (row.transactionType === 'ORDER' || row.transactionType === 'POS') {
+      if (row.kind === 'SERVICE') serviceIncome = serviceIncome.plus(row.netAmount);
+      else bookSales = bookSales.plus(row.netAmount);
       grossSales = grossSales.plus(row.grossAmount);
       discounts = discounts.plus(row.discountAmount);
       const type = row.discountType ?? 'Normal';
@@ -51,6 +55,8 @@ export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
     returnsValue: returnsValue.toNumber(),
     exchangeDifference: exchangeDifference.toNumber(),
     netSalesRevenue: netSalesRevenue.toNumber(),
+    bookSales: bookSales.round(2).toNumber(),
+    serviceIncome: serviceIncome.round(2).toNumber(),
     costAmount: cost.toNumber(),
     grossProfit: grossProfit.toNumber(),
     grossMarginPct: ratioPct(grossProfit, netSalesRevenue),
@@ -68,6 +74,7 @@ export function detailRows(records: SalesLineRecord[]): { rows: SalesLine[]; tot
     date: r.transactionDate,
     invoiceNo: r.referenceNumber,
     source: r.transactionType,
+    kind: r.kind,
     customer: r.customerName,
     book: r.bookTitle,
     qty: r.quantity,

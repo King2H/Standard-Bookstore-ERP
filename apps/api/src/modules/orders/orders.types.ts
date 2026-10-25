@@ -1,3 +1,4 @@
+import type { SaleServiceLine, ServiceLineInput } from '@bms/shared';
 import type { DiscountMode, DiscountType } from '../../lib/discount.js';
 
 export interface StaffCtx { staffId: number; role: string; roles?: string[]; branchId: number; }
@@ -24,6 +25,8 @@ export interface OrderLineInput {
   discountPct?: number;
   discountType?: DiscountType;
   discountMode?: DiscountMode;
+  /** A service on some or all of the line's copies (#169). */
+  service?: ServiceLineInput;
 }
 
 export interface OrderRow {
@@ -43,6 +46,8 @@ export interface OrderRow {
   dueDate?: string | null;
   /** When the goods were handed over (#166). */
   fulfilledAt: string | null;
+  /** False while a binding job is not ready: the order waits for it (#169). */
+  jobsReady?: boolean;
 }
 
 export interface OrderLineItemRow {
@@ -53,6 +58,8 @@ export interface OrderLineItemRow {
   unitCost: number | null;
   /** Copies brought back through Returns (#166). */
   qtyReturned: number;
+  /** The service on the line's copies (#169). */
+  service: SaleServiceLine | null;
 }
 
 /** A priced line, ready to insert. Amounts are decimal strings, as stored. */
