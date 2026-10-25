@@ -743,6 +743,33 @@ export interface Returns {
   transaction_id: Int8 | null;
 }
 
+export interface ServiceBranchFees {
+  branch_id: number;
+  fee: Numeric;
+  service_id: number;
+  tenant_id: Generated<number>;
+  updated_at: Generated<Timestamp>;
+  updated_by: number | null;
+}
+
+export interface Services {
+  code: string;
+  created_at: Generated<Timestamp>;
+  created_by: number | null;
+  discountable: Generated<boolean>;
+  fee: Numeric;
+  format_id: number | null;
+  id: Generated<number>;
+  kind: Generated<string>;
+  name: string;
+  standard_cost: Generated<Numeric>;
+  status: Generated<string>;
+  tenant_id: Generated<number>;
+  turnaround_days: Generated<number>;
+  updated_at: Generated<Timestamp>;
+  updated_by: number | null;
+}
+
 export interface Staff {
   created_at: Generated<Timestamp>;
   failed_login_attempts: Generated<number>;
@@ -969,6 +996,8 @@ export interface DB {
   refunds: Refunds;
   return_line_items: ReturnLineItems;
   returns: Returns;
+  service_branch_fees: ServiceBranchFees;
+  services: Services;
   staff: Staff;
   staff_branch_roles: StaffBranchRoles;
   staff_locations: StaffLocations;

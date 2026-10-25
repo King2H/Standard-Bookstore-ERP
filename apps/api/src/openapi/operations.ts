@@ -1,5 +1,10 @@
 import type { z } from 'zod';
 import {
+  ServiceBranchFeeRequestSchema,
+  ServiceListQuerySchema,
+  ServiceListResponseSchema,
+  ServiceRequestSchema,
+  ServiceSchema,
   BankAccountBranchParamsSchema,
   CustomerReportSchema,
   GrossProfitTrendSchema,
@@ -269,6 +274,7 @@ export const operations: ApiOperation[] = [
   ...branchOperations(),
   ...catalogOperations(),
   ...catalogReferenceOperations(),
+  ...serviceOperations(),
   ...configOperations(),
   ...locationOperations(),
   ...customerOperations(),
@@ -1318,6 +1324,89 @@ function catalogReferenceOperations(): ApiOperation[] {
       summary: 'The book editions, in display order',
       tag,
       responses: { 200: { description: 'All editions', schema: BookLookupListResponseSchema } },
+    },
+  ];
+}
+
+function serviceOperations(): ApiOperation[] {
+  const tag = 'Services';
+  const manage = 'Admin, Manager';
+  const byId = { params: IdParamsSchema };
+  const lifecycle = [
+    ['archive', 'Archive a service (from active or inactive); hidden from sales'],
+    ['restore', 'Restore an archived service to active'],
+    ['deactivate', 'Set an active service inactive'],
+    ['activate', 'Set an inactive service active; an archived one must be restored'],
+  ] as const;
+  return [
+    {
+      operationId: 'listServices',
+      method: 'get',
+      path: '/services',
+      summary: "List services by name, with the session branch's fee (active only unless ?status= says otherwise)",
+      tag,
+      request: { query: ServiceListQuerySchema },
+      responses: { 200: { description: 'One page of services', schema: ServiceListResponseSchema } },
+    },
+    {
+      operationId: 'createService',
+      method: 'post',
+      path: '/services',
+      summary: `Add a service; codes are unique ignoring case and kept in capitals (${manage})`,
+      tag,
+      request: { body: ServiceRequestSchema },
+      responses: { 201: { description: 'The new service', schema: ServiceSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+    {
+      operationId: 'getService',
+      method: 'get',
+      path: '/services/{id}',
+      summary: "One service, with the session branch's fee",
+      tag,
+      request: byId,
+      responses: { 200: { description: 'The service', schema: ServiceSchema } },
+      errors: [400, 401, 404, 500],
+    },
+    {
+      operationId: 'updateService',
+      method: 'put',
+      path: '/services/{id}',
+      summary: `Change a service (${manage})`,
+      tag,
+      request: { params: IdParamsSchema, body: ServiceRequestSchema },
+      responses: { 200: { description: 'The service after the change', schema: ServiceSchema } },
+      errors: [400, 401, 403, 404, 409, 500],
+    },
+    ...lifecycle.map(([action, summary]): ApiOperation => ({
+      operationId: `${action}Service`,
+      method: 'post',
+      path: `/services/{id}/${action}`,
+      summary: `${summary}; repeating the current status changes nothing (${manage})`,
+      tag,
+      request: byId,
+      responses: { 200: { description: 'The service after the change', schema: ServiceSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
+    })),
+    {
+      operationId: 'setServiceBranchFee',
+      method: 'put',
+      path: '/services/{id}/branch-fee',
+      summary: `Set the session branch's own fee; the standard cost stays the shop's (${manage})`,
+      tag,
+      request: { params: IdParamsSchema, body: ServiceBranchFeeRequestSchema },
+      responses: { 200: { description: 'The service after the change', schema: ServiceSchema } },
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'removeServiceBranchFee',
+      method: 'delete',
+      path: '/services/{id}/branch-fee',
+      summary: `Back to the shop's fee in the session branch (${manage})`,
+      tag,
+      request: byId,
+      responses: { 200: { description: 'The service after the change', schema: ServiceSchema } },
+      errors: [400, 401, 403, 404, 500],
     },
   ];
 }

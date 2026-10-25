@@ -41,6 +41,7 @@ export * from './paymentProof.js';
 export * from './pos.js';
 export * from './purchaseOrder.js';
 export * from './return.js';
+export * from './service.js';
 export * from './receivable.js';
 export * from './report.js';
 export * from './staff.js';

@@ -658,6 +658,12 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - POST /api/v1/books/quick-register — lightweight catalog-only registration (metadata, no inventory row) for a book encountered via Exchange trade-in that isn't already in the catalog (Sales, Manager, Admin)
 - GET/POST /api/v1/authors|categories|publishers / PUT/DELETE .../:id
 - GET /api/v1/book-formats / GET /api/v1/book-editions
+- GET /api/v1/services (`?q=&status=`) / GET /api/v1/services/:id — services a sale carries next to its books (binding:
+  the cover it produces, fee, standard cost, discountable, turnaround in days); every role reads them, with the fee the
+  session branch charges (`effectiveFee`)
+- POST /api/v1/services / PUT /api/v1/services/:id / POST .../activate|deactivate|archive|restore — Admin, Manager; codes
+  are unique ignoring case and stored uppercase (`DUPLICATE_SERVICE`)
+- PUT/DELETE /api/v1/services/:id/branch-fee — body `{ fee }`: the session branch's own fee, or back to the shop's (Admin, Manager)
 
 ### Inventory
 - GET /api/v1/inventory — paginated stock levels

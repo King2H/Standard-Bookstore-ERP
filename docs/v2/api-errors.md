@@ -78,6 +78,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `DUPLICATE_ISBN`
 - `DUPLICATE_LOCATION_NAME`
 - `DUPLICATE_PUBLISHER`
+- `DUPLICATE_SERVICE`
 - `DUPLICATE_SUPPLIER_NAME`
 - `DUPLICATE_USERNAME`
 - `IDEMPOTENCY_CONFLICT`
