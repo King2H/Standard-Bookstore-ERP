@@ -14,6 +14,7 @@ import bankAccountRouter from './modules/bankAccount/bankAccount.routes.js';
 import locationRouter from './modules/location/location.routes.js';
 import catalogRouter from './modules/catalog/catalog.routes.js';
 import catalogReferenceRouter from './modules/catalogReference/catalogReference.routes.js';
+import servicesRouter from './modules/services/services.routes.js';
 import inventoryRouter from './modules/inventory/inventory.routes.js';
 import supplierRouter from './modules/supplier/supplier.routes.js';
 import procurementRouter from './modules/procurement/procurement.routes.js';
@@ -82,6 +83,7 @@ export function createApp() {
   api.use(locationRouter);
   api.use(catalogRouter);
   api.use(catalogReferenceRouter);
+  api.use(servicesRouter);
   api.use(inventoryRouter);
   api.use(supplierRouter);
   api.use(procurementRouter);

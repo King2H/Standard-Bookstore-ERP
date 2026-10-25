@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { ReferenceTab } from '../../catalogReference/components/ReferenceTab.js';
+import { ServicesTab } from '../../services/components/ServicesTab.js';
 import { BooksTab } from '../components/BooksTab.js';
 
-type Tab = 'books' | 'authors' | 'categories' | 'publishers';
+type Tab = 'books' | 'authors' | 'categories' | 'publishers' | 'services';
 
 const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'books', label: 'Books', icon: '📖' },
   { id: 'authors', label: 'Authors', icon: '✍️' },
   { id: 'categories', label: 'Categories', icon: '🏷️' },
   { id: 'publishers', label: 'Publishers', icon: '🏢' },
+  { id: 'services', label: 'Services', icon: '🧵' },
 ];
 
-/** The catalog: books, and the authors, categories and publishers they link to. */
+/** The catalog: books, the authors, categories and publishers they link to, and the services sold with them (#169). */
 export default function CatalogPage() {
   const [tab, setTab] = useState<Tab>('books');
   return (
@@ -25,7 +27,7 @@ export default function CatalogPage() {
         ))}
       </div>
       <div className="flex-1 min-h-0">
-        {tab === 'books' ? <BooksTab /> : <ReferenceTab kind={tab} />}
+        {tab === 'books' ? <BooksTab /> : tab === 'services' ? <ServicesTab /> : <ReferenceTab kind={tab} />}
       </div>
     </div>
   );
