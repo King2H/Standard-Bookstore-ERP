@@ -65,6 +65,7 @@ export async function getKpis(branchId: number | undefined): Promise<KpiReport> 
     grossProfitUnified: monthly.grossProfit,
     overdueReceivablesAmount: policy.total(f.overdue),
     inventoryValue: policy.total(f.inventoryValue),
+    inventoryInTransit: policy.total(f.inventoryInTransit),
   };
 }
 

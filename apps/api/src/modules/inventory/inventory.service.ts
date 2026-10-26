@@ -31,6 +31,7 @@ import type {
   StockMovementFilter,
   StockMovementRecord,
   StockReceipt,
+  StockSending,
 } from './inventory.types.js';
 
 /**
@@ -154,7 +155,7 @@ export async function receiveStock(tx: Queryable, receipt: StockReceipt): Promis
     locationId,
     qtyBefore: before.quantity,
     qtyAfter: after,
-    movementType: 'stock_in',
+    movementType: receipt.movementType ?? 'stock_in',
     reasonCode: receipt.reasonCode ?? 'return',
     referenceType: receipt.referenceType ?? null,
     referenceId: receipt.referenceId ?? null,
@@ -428,6 +429,44 @@ export async function moveStock(
     reasonCode: 'transfer_in',
   });
   await alertOnThreshold(tx, bookId, fromLocationId, source.quantity);
+}
+
+/**
+ * Copies leaving for another branch on a transfer note (#170, decision 3a):
+ * at the source's average cost, which travels with them, and never below
+ * zero, whatever the branch allows for sales. The average there stays.
+ */
+export async function sendStock(tx: Queryable, sending: StockSending): Promise<{ unitCost: Money }> {
+  const { bookId, locationId, quantity } = sending;
+  checkQuantity(quantity);
+  // A location holding none of the book is refused like one holding too few.
+  await stock.ensureLevel(tx, bookId, locationId);
+  const before = await lockOrThrow(tx, bookId, locationId);
+  const available = Math.max(0, before.quantity);
+  if (available < quantity) {
+    const level = await levelOrThrow(tx, bookId, locationId);
+    throw new BusinessError(
+      'INSUFFICIENT_STOCK',
+      `Insufficient stock for "${level.bookTitle}" at ${level.locationName}. Available: ${available}, Requested: ${quantity}`,
+    );
+  }
+  const after = before.quantity - quantity;
+  await stock.updateLevel(tx, bookId, locationId, { quantity: after });
+  await stock.insertMovement(tx, {
+    bookId,
+    locationId,
+    qtyBefore: before.quantity,
+    qtyAfter: after,
+    movementType: 'transfer_out',
+    reasonCode: 'transfer_out',
+    referenceType: 'branch_transfer',
+    referenceId: sending.transferId,
+    notes: sending.notes ?? null,
+    staffId: sending.staffCtx.staffId,
+    unitCost: before.averageCost,
+  });
+  await alertOnThreshold(tx, bookId, locationId, before.quantity);
+  return { unitCost: before.averageCost };
 }
 
 /**

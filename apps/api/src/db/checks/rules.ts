@@ -30,6 +30,7 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['SPAY', 'supplier_payments', 'payment_number'],
   ['SCN', 'supplier_credit_notes', 'credit_note_number'],
   ['SVC', 'service_jobs', 'job_number'],
+  ['TRF', 'branch_transfers', 'transfer_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -214,6 +215,77 @@ export const CHECKS: readonly Check[] = [
       )
       SELECT tenant_id, 'purchase order ' || id || ': paid and credited ' || settled || ' of ' || total_amount AS ref
       FROM m WHERE settled > total_amount`,
+  },
+
+  // ── Transfers between branches (#170) ─────────────────────────────────────
+  {
+    id: 'transfers.lines-match-events',
+    area: 'Transfers',
+    title: 'A transfer line\'s counts agree with its receipts and resolutions',
+    severity: 'error',
+    sql: `
+      WITH e AS (
+        SELECT line_id,
+          SUM(quantity) FILTER (WHERE kind = 'received') AS received,
+          SUM(quantity) FILTER (WHERE kind = 'lost') AS lost,
+          SUM(quantity) FILTER (WHERE kind = 'damaged') AS damaged,
+          SUM(quantity) FILTER (WHERE kind = 'returned') AS returned
+        FROM branch_transfer_events GROUP BY line_id
+      ), c AS (
+        SELECT t.tenant_id, t.transfer_number, tl.book_id, k.kind, k.counted, COALESCE(k.events, 0) AS events
+        FROM branch_transfer_lines tl
+        JOIN branch_transfers t ON t.id = tl.transfer_id
+        LEFT JOIN e ON e.line_id = tl.id
+        CROSS JOIN LATERAL (VALUES
+          ('received', tl.received_quantity, e.received), ('lost', tl.lost_quantity, e.lost),
+          ('damaged', tl.damaged_quantity, e.damaged), ('returned', tl.returned_quantity, e.returned)
+        ) AS k(kind, counted, events)
+      )
+      SELECT tenant_id, transfer_number || ': book ' || book_id || ' counts ' || counted || ' ' || kind || ', its events ' || events AS ref
+      FROM c WHERE counted <> events`,
+  },
+  {
+    id: 'transfers.status-matches-lines',
+    area: 'Transfers',
+    title: 'A transfer\'s status agrees with what its lines received and resolved',
+    severity: 'error',
+    sql: `
+      WITH l AS (
+        SELECT transfer_id, SUM(quantity) AS sent,
+          SUM(received_quantity + lost_quantity + damaged_quantity + returned_quantity) AS accounted,
+          SUM(received_quantity) AS received,
+          BOOL_AND(unit_cost IS NOT NULL) AS all_costed,
+          BOOL_OR(unit_cost IS NOT NULL) AS any_costed
+        FROM branch_transfer_lines GROUP BY transfer_id
+      )
+      SELECT t.tenant_id, t.transfer_number || ' (' || t.status || '): ' || l.accounted || ' of ' || l.sent || ' accounted for' AS ref
+      FROM branch_transfers t JOIN l ON l.transfer_id = t.id
+      WHERE (t.status IN ('draft', 'cancelled') AND (l.accounted > 0 OR l.any_costed))
+         OR (t.status IN ('in_transit', 'partially_received', 'received', 'closed') AND NOT l.all_costed)
+         OR (t.status = 'in_transit' AND l.accounted > 0)
+         OR (t.status = 'partially_received' AND (l.accounted = 0 OR l.accounted = l.sent))
+         OR (t.status = 'received' AND l.received <> l.sent)
+         OR (t.status = 'closed' AND (l.accounted <> l.sent OR l.received = l.sent))`,
+  },
+  {
+    id: 'transfers.stock-history',
+    area: 'Transfers',
+    title: 'What a transfer sent and received is in the stock history',
+    severity: 'error',
+    sql: `
+      WITH h AS (
+        SELECT reference_id, book_id,
+          -SUM(delta) FILTER (WHERE movement_type = 'transfer_out') AS sent,
+          SUM(delta) FILTER (WHERE movement_type = 'transfer_in' AND reason_code = 'transfer_in') AS received
+        FROM inventory_history WHERE reference_type = 'branch_transfer' GROUP BY reference_id, book_id
+      )
+      SELECT t.tenant_id, t.transfer_number || ': book ' || tl.book_id || ' sent ' || tl.quantity || ' (history ' || COALESCE(h.sent, 0)
+             || '), received ' || tl.received_quantity || ' (history ' || COALESCE(h.received, 0) || ')' AS ref
+      FROM branch_transfer_lines tl
+      JOIN branch_transfers t ON t.id = tl.transfer_id
+      LEFT JOIN h ON h.reference_id = t.id AND h.book_id = tl.book_id
+      WHERE t.status NOT IN ('draft', 'cancelled')
+        AND (COALESCE(h.sent, 0) <> tl.quantity OR COALESCE(h.received, 0) <> tl.received_quantity)`,
   },
 
   // ── Bank ───────────────────────────────────────────────────────────────────

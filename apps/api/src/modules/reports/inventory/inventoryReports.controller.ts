@@ -19,6 +19,6 @@ export async function exportCsv(req: Request, res: Response): Promise<void> {
 }
 
 export async function valuationCsv(req: Request, res: Response): Promise<void> {
-  const rows = await service.getStockExportRows(reportFilters(req).branchId);
+  const rows = await service.getValuationRows(reportFilters(req).branchId);
   sendCsv(res, `inventory-valuation-${today()}.csv`, buildCsv(rows as unknown as Record<string, unknown>[], INVENTORY_VALUATION_COLUMNS));
 }

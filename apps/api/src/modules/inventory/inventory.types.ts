@@ -163,6 +163,18 @@ export interface StockReceipt extends StockChange {
    * order (owner decision 5a), copies coming back that left at cost 0.
    */
   costMayBeZero?: boolean;
+  /** Copies arriving from another branch on a transfer note (#170); stock_in otherwise. */
+  movementType?: 'stock_in' | 'transfer_in';
+}
+
+/** Copies leaving for another branch on a transfer note (#170). */
+export interface StockSending {
+  bookId: number;
+  locationId: number;
+  quantity: number;
+  staffCtx: Actor;
+  transferId: number;
+  notes?: string;
 }
 
 export interface Adjustment {

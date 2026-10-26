@@ -123,6 +123,7 @@ export const RECEIVABLES_AGING_COLUMNS: CsvColumnDef[] = [
 export const INVENTORY_VALUATION_COLUMNS: CsvColumnDef[] = [
   { key: 'title',               header: 'Book',                type: 'string'  },
   { key: 'isbn',                header: 'ISBN',                 type: 'string'  },
+  { key: 'location',            header: 'Location',             type: 'string'  },
   { key: 'quantity_on_hand',    header: 'Qty On Hand',          type: 'integer' },
   { key: 'average_cost',        header: 'Average Cost',         type: 'number'  },
   { key: 'inventory_value',     header: 'Inventory Value',      type: 'number'  },
