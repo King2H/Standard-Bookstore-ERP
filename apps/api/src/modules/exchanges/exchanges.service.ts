@@ -11,6 +11,7 @@ import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { checkTender } from '../pos/pos.policy.js';
 import { cancelReceivable, createReceivable } from '../receivables/receivables.service.js';
+import * as saleServices from '../services/saleServices.service.js';
 import * as policy from './exchanges.policy.js';
 import * as exchanges from './exchanges.repository.js';
 import type { Actor, ExchangeFilter, ExchangeRecord, NewExchange, Paging, PaymentLine } from './exchanges.types.js';
@@ -42,8 +43,12 @@ function audit(q: Queryable, actor: Actor, action: string, id: string, meta: Rec
 
 export async function getById(id: string): Promise<ExchangeRecord> {
   const e = found(await exchanges.findExchange(kysely, id));
-  const [{ incoming, outgoing }, settlementEntries] = await Promise.all([exchanges.items(kysely, id), exchanges.settlementEntries(kysely, id)]);
-  return { ...e, incomingItems: incoming, outgoingItems: outgoing, settlementEntries };
+  const [{ incoming, outgoing }, settlementEntries, services] = await Promise.all([
+    exchanges.items(kysely, id),
+    exchanges.settlementEntries(kysely, id),
+    saleServices.linesByBookLine(kysely, { exchangeId: id }),
+  ]);
+  return { ...e, incomingItems: incoming, outgoingItems: outgoing.map((o) => ({ ...o, service: services.get(o.id) ?? null })), settlementEntries };
 }
 
 export function list(filter: ExchangeFilter, paging: Paging): Promise<{ items: ExchangeRecord[]; total: number }> {
@@ -90,7 +95,7 @@ async function spendFromAccounts(q: Queryable, customerId: number | null, paymen
  * An exchange at the counter: the books brought in are valued (at most their
  * selling price) and go to stock at that value, damaged ones kept apart; the
  * books taken out are priced from the catalog and leave stock at their
- * average cost. The difference is settled now: the customer pays it, or
+ * average cost, a binding on them at the branch's fee (#169 PR 4). The difference is settled now: the customer pays it, or
  * leaves the rest on credit; or the store gives it back as store credit or
  * cash. All in one transaction: an exchange that cannot record its debt does
  * not happen.
@@ -118,8 +123,12 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       outgoing.push({ ...o, price });
     }
 
+    // Exchanges carry no discount, on books or fees (owner decision 2a); a binding needs a customer.
+    const services = await saleServices.priceServices(tx, input.outgoing, { branchId: input.branchId, customerId: input.customerId, maxDiscountPct: 0 });
+    const fees = saleServices.serviceTotals(services).subtotal;
+
     const totalIncoming = Money.sum(incoming.map((i) => i.unitValue.times(i.quantity))).round(2);
-    const totalOutgoing = Money.sum(outgoing.map((o) => o.price.times(o.quantity))).round(2);
+    const totalOutgoing = Money.sum(outgoing.map((o) => o.price.times(o.quantity))).plus(fees).round(2);
     policy.checkApproval(totalIncoming, Money.of(await getMaxReturnValueWithoutAuth()), actor.roles);
 
     const net = totalOutgoing.minus(totalIncoming);
@@ -159,12 +168,18 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       }
       await exchanges.insertIncoming(tx, id, i);
     }
-    for (const o of outgoing) {
+    for (const [n, o] of outgoing.entries()) {
       const { unitCost } = await inventoryService.issueStock(tx, {
         bookId: o.bookId, locationId: input.locationId, quantity: o.quantity, referenceType: 'exchange_out', referenceId: id,
         reasonCode: 'sale', staffCtx: actor,
       });
-      await exchanges.insertOutgoing(tx, id, { ...o, unitCost });
+      const lineId = await exchanges.insertOutgoing(tx, id, { ...o, unitCost });
+      const service = services[n];
+      if (service && input.customerId !== null) {
+        const serviceLineId = await saleServices.recordServiceLine(tx, { exchangeLineId: lineId }, service);
+        await saleServices.openJob(tx, actor, { id: serviceLineId, turnaroundDays: service.turnaroundDays },
+          { branchId: input.branchId, customerId: input.customerId, number: reference });
+      }
     }
 
     await spendFromAccounts(tx, input.customerId, input.payments, reference);
@@ -204,6 +219,7 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       exchangeReference: reference,
       totalIncoming: totalIncoming.toNumber(),
       totalOutgoing: totalOutgoing.toNumber(),
+      serviceFees: fees.toNumber(),
       netBalance: net.toNumber(),
       settlementType: type,
       paid: paid.toNumber(),
@@ -230,13 +246,15 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
  * back both ways, store credit and points the customer paid with go back to
  * the account, money paid otherwise is handed back (recorded in the audit
  * entry), store credit the exchange gave is taken back while unspent, and a
- * receivable is cancelled. The exchange is locked, so two voids cannot both
- * move its stock.
+ * receivable is cancelled. Its binding jobs are cancelled while Requested;
+ * once their work started, or a binding fee was given back, it stands (#169
+ * PR 4). The exchange is locked, so two voids cannot both move its stock.
  */
 export async function voidExchange(actor: Actor, id: string, reason: string): Promise<ExchangeRecord> {
   await withTransaction({}, async (tx) => {
     const e = found(await exchanges.findExchange(tx, id, { forUpdate: true }));
     policy.checkCanVoid(e);
+    await saleServices.cancelJobs(tx, actor, { exchangeId: id }, e.exchangeReference);
     const locationId = e.locationId!;
     const { incoming, outgoing } = await exchanges.items(tx, id);
     const entries = await exchanges.settlementEntries(tx, id);

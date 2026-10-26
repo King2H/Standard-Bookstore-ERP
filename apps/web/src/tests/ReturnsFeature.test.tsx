@@ -40,7 +40,7 @@ const sale: PosTransaction = contract(PosTransactionSchema, {
 const ret: Return = contract(ReturnSchema, {
   id: '5', returnNumber: 'RET-20261010-0001', transactionId: '41', transactionNumber: 'POS-20261010-0001', branchId: 1,
   customerId: null, totalRefundAmount: 29, refundMethod: 'mixed', status: 'completed', reason: null,
-  processedBy: 9, approvedBy: null, createdAt: CREATED, orderId: null, orderNumber: null,
+  processedBy: 9, approvedBy: null, createdAt: CREATED, orderId: null, orderNumber: null, exchangeId: null, exchangeReference: null,
 });
 
 const DELIVERED = '2026-10-19T09:00:00.000Z';

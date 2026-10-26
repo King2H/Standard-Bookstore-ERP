@@ -276,18 +276,20 @@ export const CHECKS: readonly Check[] = [
   {
     id: 'services.sale-has-job',
     area: 'Services',
-    // A counter sale opens its jobs at once; an order at confirmation (owner decision 5a).
+    // A counter sale and an exchange (#169 PR 4) open their jobs at once; an order at confirmation (owner decision 5a).
     title: 'Every service on a sale has its job',
     severity: 'error',
     sql: `
-      SELECT sl.tenant_id, 'service line ' || sl.id || ' on ' || COALESCE(t.transaction_number, o.order_number) || ': no job' AS ref
+      SELECT sl.tenant_id, 'service line ' || sl.id || ' on ' || COALESCE(t.transaction_number, o.order_number, e.exchange_reference) || ': no job' AS ref
       FROM sale_service_lines sl
       LEFT JOIN transaction_line_items tli ON tli.id = sl.transaction_line_item_id
       LEFT JOIN transactions t ON t.id = tli.transaction_id
       LEFT JOIN order_line_items oli ON oli.id = sl.order_line_item_id
       LEFT JOIN orders o ON o.id = oli.order_id
+      LEFT JOIN exchange_outgoing_items eo ON eo.id = sl.exchange_outgoing_item_id
+      LEFT JOIN exchanges e ON e.id = eo.exchange_id
       WHERE NOT EXISTS (SELECT 1 FROM service_jobs j WHERE j.service_line_id = sl.id)
-        AND (t.id IS NOT NULL OR o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled'))`,
+        AND (t.id IS NOT NULL OR e.id IS NOT NULL OR o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled'))`,
   },
 
   {

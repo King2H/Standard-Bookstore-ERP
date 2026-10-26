@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
 import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
+import { SaleServiceLineSchema, ServiceLineInputSchema } from './service.js';
 
 /** Contracts for /api/v1/exchanges: books brought in for books taken out, at the counter (#21). */
 
@@ -15,6 +16,8 @@ export const ExchangeItemSchema = z.object({
   totalPrice: z.number(),
   /** Incoming books: damaged ones are kept apart from stock for sale. */
   condition: z.enum(['resellable', 'damaged']).optional(),
+  /** Outgoing books: a binding on some or all of the copies (#169 PR 4), on a single exchange. */
+  service: SaleServiceLineSchema.nullable().optional(),
 });
 
 export const ExchangeSettlementEntrySchema = z.object({
@@ -117,6 +120,8 @@ export const ExchangeIncomingItemInputSchema = z.object({
 export const ExchangeOutgoingItemInputSchema = z.object({
   bookId: IdSchema,
   quantity: z.number().int().positive(),
+  /** A binding on some or all of the copies (#169 PR 4), at the branch's fee: exchanges carry no discount (2a). Needs a customer. */
+  service: ServiceLineInputSchema.pick({ serviceId: true, quantity: true }).optional(),
 });
 
 export const ExchangePaymentInputSchema = z

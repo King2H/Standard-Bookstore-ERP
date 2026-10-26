@@ -61,7 +61,11 @@ export async function priceServices(
 export { serviceTotals } from './saleServices.policy.js';
 
 /** Records a book line's service line; returns its id. */
-export function recordServiceLine(q: Queryable, bookLine: { posLineId: string } | { orderLineId: string }, line: PricedServiceLine): Promise<number> {
+export function recordServiceLine(
+  q: Queryable,
+  bookLine: { posLineId: string } | { orderLineId: string } | { exchangeLineId: string },
+  line: PricedServiceLine,
+): Promise<number> {
   return repo.insertServiceLine(q, bookLine, line);
 }
 
@@ -100,7 +104,7 @@ export async function openOrderJobs(q: Queryable, actor: Actor, order: { id: str
 /** The service lines of a sale, by the book line they belong to. */
 export async function linesByBookLine(q: Queryable, sale: SaleRef): Promise<Map<string, SaleServiceLineRecord>> {
   const lines = await repo.linesOf(q, sale);
-  return new Map(lines.map((l) => [(l.posLineId ?? l.orderLineId) as string, l]));
+  return new Map(lines.map((l) => [(l.posLineId ?? l.orderLineId ?? l.exchangeLineId) as string, l]));
 }
 
 /**
@@ -217,9 +221,9 @@ export async function listJobs(f: JobFilter, paging: { page: number; pageSize: n
       bookTitle: r.book_title,
       customerName: r.customer_name,
       customerPhone: decryptPii(r.phone_encrypted),
-      source: r.transaction_id !== null ? 'POS' : 'ORDER',
-      saleId: String(r.transaction_id ?? r.order_id),
-      saleNumber: (r.transaction_number ?? r.order_number) as string,
+      source: r.transaction_id !== null ? 'POS' : r.order_id !== null ? 'ORDER' : 'EXCHANGE',
+      saleId: String(r.transaction_id ?? r.order_id ?? r.exchange_id),
+      saleNumber: (r.transaction_number ?? r.order_number ?? r.exchange_reference) as string,
     })),
   };
 }

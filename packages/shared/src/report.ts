@@ -66,7 +66,7 @@ export const SalesReportSchema = z.object({
     returnsValue: z.number(),
     /** Book lines of orders and counter sales, after discount (#169). */
     bookSales: z.number(),
-    /** Service fees of orders and counter sales, after discount (#169). */
+    /** Service fees of orders, counter sales and exchanges (PR 4), after discount (#169). */
     serviceIncome: z.number(),
   }),
   byPeriod: z.array(

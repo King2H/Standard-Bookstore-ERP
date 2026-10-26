@@ -73,7 +73,7 @@ function stubApi() {
         items: u.searchParams.get('orderId') === '10' ? [{
           id: '5', returnNumber: 'RET-20261019-0001', transactionId: null, transactionNumber: null, orderId: '10',
           orderNumber: 'ORD-20261018-0001', branchId: 1, customerId: null, totalRefundAmount: 25, refundMethod: 'cash',
-          status: 'completed', reason: null, processedBy: 9, approvedBy: null, createdAt: CREATED,
+          status: 'completed', reason: null, processedBy: 9, approvedBy: null, createdAt: CREATED, exchangeId: null, exchangeReference: null,
         }] : [],
         total: 1, page: 1, totalPages: 1,
       }));

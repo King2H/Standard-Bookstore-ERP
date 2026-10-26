@@ -338,11 +338,14 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
   pos.conditions.unshift(`t.status != 'voided'`);
   const ord = buildDateBranchConditions(filters, 'o');
   ord.conditions.unshift(`o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}`);
+  // Bindings on an exchange's outgoing books (#169 PR 4): Quick Exchanges only, voided ones left out.
+  const exc = buildDateBranchConditions(filters, 'e');
+  exc.conditions.unshift(`e.status IN ('Completed','COMPLETED') AND e.lifecycle_status IS NULL`);
   const columns = `
        sl.quantity, sl.unit_fee, sl.discount_amount, sl.line_total, sl.standard_cost,
        s.name AS service_name, b.title AS book_title, b.isbn AS book_isbn,
        br.name AS branch, loc.name AS location_name, COALESCE(c.full_name, 'Walk-in') AS customer_name, st.username AS staff_username`;
-  const [posRes, orderRes] = await Promise.all([
+  const [posRes, orderRes, exchangeRes] = await Promise.all([
     reportRows(q,
       `SELECT TO_CHAR(t.created_at, 'YYYY-MM-DD') AS transaction_date, t.transaction_number AS reference_number, 'POS' AS source,
          t.payment_status, tpay.method AS payment_method, tcash.paid AS cash_collected, trec.outstanding_amount AS receivable_balance,
@@ -387,17 +390,43 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
        ORDER BY o.created_at, sl.id`,
       ord.params,
     ),
+    reportRows(q,
+      `SELECT TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date, e.exchange_reference AS reference_number, 'EXCHANGE' AS source,
+         erecst.status AS payment_status, epay.method AS payment_method, ecash.net_cash AS cash_collected, erec.outstanding_amount AS receivable_balance,
+         ${columns}
+       FROM sale_service_lines sl
+       JOIN services s ON s.id = sl.service_id
+       JOIN exchange_outgoing_items eo ON eo.id = sl.exchange_outgoing_item_id
+       JOIN exchanges e ON e.id = eo.exchange_id
+       JOIN books b ON b.id = eo.book_id
+       JOIN branches br ON br.id = e.branch_id
+       LEFT JOIN locations loc ON loc.id = e.location_id
+       LEFT JOIN customers c ON c.id = e.customer_id
+       LEFT JOIN staff st ON st.id = e.created_by
+       ${EXCHANGE_CASH_LATERAL}
+       LEFT JOIN LATERAL (
+         SELECT ese.method FROM exchange_settlement_entries ese
+         WHERE ese.exchange_id = e.id AND ese.entry_type IN ('cash_payment', 'cash_refund') AND ese.method IS NOT NULL
+         ORDER BY ese.id DESC LIMIT 1
+       ) epay ON true
+       LEFT JOIN LATERAL (
+         SELECT rec.status FROM receivables rec WHERE rec.source_type = 'exchange_difference' AND rec.source_entity_id = e.id LIMIT 1
+       ) erecst ON true
+       WHERE ${exc.conditions.join(' AND ')}
+       ORDER BY e.created_at, sl.id`,
+      exc.params,
+    ),
   ]);
 
-  return [...posRes, ...orderRes].map((row): SalesLineRecord => {
+  return [...posRes, ...orderRes, ...exchangeRes].map((row): SalesLineRecord => {
     const quantity = row.quantity as number;
     const unitPrice = Money.of(row.unit_fee as string);
     const netAmount = Money.of(row.line_total as string);
     const costAmount = Money.of(row.standard_cost as string).times(quantity).round(2);
-    const isPos = row.source === 'POS';
+    const source = row.source as 'POS' | 'ORDER' | 'EXCHANGE';
     return {
       transactionDate: row.transaction_date as string,
-      transactionType: isPos ? 'POS' : 'ORDER',
+      transactionType: source,
       kind: 'SERVICE',
       referenceNumber: row.reference_number as string,
       branch: row.branch as string,
@@ -413,7 +442,9 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
       discountType: null,
       costAmount: costAmount.toNumber(),
       grossProfit: netAmount.minus(costAmount).toNumber(),
-      paymentStatus: isPos ? mapPosPaymentStatus(row.payment_status as string) : mapOrderPaymentStatus(row.payment_status as string),
+      paymentStatus: source === 'POS' ? mapPosPaymentStatus(row.payment_status as string)
+        : source === 'ORDER' ? mapOrderPaymentStatus(row.payment_status as string)
+        : mapReceivableStatusToPaymentStatus((row.payment_status as string | null) ?? null),
       paymentMethod: mapPaymentMethod(row.payment_method as string | null),
       cashCollected: Money.of((row.cash_collected as string | number | null) ?? 0).toNumber(),
       receivableBalance: Money.of((row.receivable_balance as string | number | null) ?? 0).toNumber(),
@@ -519,11 +550,13 @@ async function getServiceReturnRows(q: Queryable, filters: ReportScope): Promise
      JOIN services sv ON sv.id = sl.service_id
      LEFT JOIN transaction_line_items tli ON tli.id = sl.transaction_line_item_id
      LEFT JOIN order_line_items oli ON oli.id = sl.order_line_item_id
-     JOIN books b ON b.id = COALESCE(tli.book_id, oli.book_id)
+     LEFT JOIN exchange_outgoing_items eo ON eo.id = sl.exchange_outgoing_item_id
+     JOIN books b ON b.id = COALESCE(tli.book_id, oli.book_id, eo.book_id)
      JOIN branches br ON br.id = r.branch_id
      LEFT JOIN transactions t ON t.id = r.transaction_id
      LEFT JOIN orders o ON o.id = r.order_id
-     LEFT JOIN locations loc ON loc.id = COALESCE(t.location_id, o.location_id)
+     LEFT JOIN exchanges e ON e.id = r.exchange_id
+     LEFT JOIN locations loc ON loc.id = COALESCE(t.location_id, o.location_id, e.location_id)
      LEFT JOIN customers c ON c.id = r.customer_id
      LEFT JOIN staff s ON s.id = r.processed_by
      WHERE ${conditions.join(' AND ')}

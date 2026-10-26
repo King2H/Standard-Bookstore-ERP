@@ -75,6 +75,15 @@ export interface ReturnLineRequest {
   defective?: boolean;
 }
 
+/** An exchange a binding fee comes back from (#169 PR 4). */
+export interface ExchangeForReturn {
+  id: string;
+  branchId: number;
+  customerId: number | null;
+  reference: string;
+  voided: boolean;
+}
+
 export interface ReturnRecord {
   id: string;
   returnNumber: string;
@@ -82,6 +91,9 @@ export interface ReturnRecord {
   transactionNumber: string | null;
   orderId: string | null;
   orderNumber: string | null;
+  /** The exchange whose binding fee came back (#169 PR 4). */
+  exchangeId: string | null;
+  exchangeReference: string | null;
   branchId: number;
   customerId: number | null;
   totalRefundAmount: Money;

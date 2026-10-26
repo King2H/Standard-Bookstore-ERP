@@ -9,6 +9,8 @@ export interface ReturnRow {
   transaction_number: string | null;
   order_id: string | number | bigint | null;
   order_number: string | null;
+  exchange_id: string | number | bigint | null;
+  exchange_reference: string | null;
   branch_id: number;
   customer_id: number | null;
   total_refund_amount: string;
@@ -49,6 +51,8 @@ export function toReturnRecord(row: ReturnRow): ReturnRecord {
     transactionNumber: row.transaction_number,
     orderId: row.order_id === null ? null : String(row.order_id),
     orderNumber: row.order_number,
+    exchangeId: row.exchange_id === null ? null : String(row.exchange_id),
+    exchangeReference: row.exchange_reference,
     branchId: row.branch_id,
     customerId: row.customer_id,
     totalRefundAmount: Money.of(row.total_refund_amount),

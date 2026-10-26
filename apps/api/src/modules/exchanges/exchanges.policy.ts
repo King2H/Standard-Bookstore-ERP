@@ -77,13 +77,16 @@ export function checkSettlement(
 }
 
 /** A Quick Exchange is voided on the day it was made (owner decision 5a); later, a new exchange or a return. */
-export function checkCanVoid(e: Pick<ExchangeRecord, 'status' | 'lifecycleStatus' | 'madeOn' | 'today' | 'voidedAt'>): void {
+export function checkCanVoid(e: Pick<ExchangeRecord, 'status' | 'lifecycleStatus' | 'madeOn' | 'today' | 'voidedAt' | 'hasReturns'>): void {
   if (e.voidedAt !== null) throw new BusinessError('ALREADY_VOIDED', 'Exchange is already voided');
   if (e.lifecycleStatus !== null || e.status !== 'Completed') {
     throw new BusinessError('EXCHANGE_NOT_CANCELLABLE', 'Only a completed exchange can be voided');
   }
   if (!isVoidable(e)) {
     throw new BusinessError('VOID_WINDOW_CLOSED', 'An exchange can be voided only on the day it was made; use a new exchange or a return instead');
+  }
+  if (e.hasReturns) {
+    throw new BusinessError('EXCHANGE_HAS_RETURNS', 'A binding fee on this exchange was given back; it can no longer be voided');
   }
 }
 

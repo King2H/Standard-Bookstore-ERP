@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Money, type Customer } from '@bms/shared';
 import BankAccountSelect from '../../../components/BankAccountSelect.js';
 import PaymentProofFields from '../../../components/PaymentProofFields.js';
@@ -11,6 +11,8 @@ import { useMyProfile } from '../../account/queries.js';
 import { useBranchBankAccounts } from '../../bankAccounts/queries.js';
 import { useLocations } from '../../locations/queries.js';
 import { AMOUNT_MESSAGE, isAmount } from '../../pos/sale.js';
+import { bindingTotal, fitTo } from '../../services/binding.js';
+import { BindingDialog } from '../../services/components/BindingDialog.js';
 import { useBooksForExchange, useCreateExchange, useCustomersForExchange } from '../queries.js';
 import { exchangeTotals, tradeInProblem, type IncomingLine, type OutgoingLine } from '../rules.js';
 import { QuickRegisterDialog } from './QuickRegisterDialog.js';
@@ -53,6 +55,7 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
   const [registering, setRegistering] = useState<string | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerPick | null>(null);
+  const [bindingFor, setBindingFor] = useState<number | null>(null);
 
   // With Bank Accounts on, a bank payment names the account it went to (#21).
   const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(branchId, payMethod === 'bank');
@@ -96,8 +99,14 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
     setPayAmount(''); setPayProof(EMPTY_PROOF); setAllowCredit(false); setRefundMethod('store_credit');
   }
 
+  /** An outgoing line's copies; its binding is kept to them (#169 PR 4). */
+  function setOutgoingQuantity(bookId: number, quantity: number) {
+    setOutgoingItems((items) => items.map((i) => i.bookId === bookId ? { ...i, quantity, binding: fitTo(i.binding, quantity) } : i));
+  }
+
   function submitExchange() {
     if (incomingItems.length === 0 && outgoingItems.length === 0) { showToast('Add at least one item', 'error'); return; }
+    if (outgoingItems.some((o) => o.binding) && !selectedCustomer) { showToast('A binding needs a customer, who is called when it is ready', 'error'); return; }
     if (!locationId) { showToast('Select a location — every exchange moves physical stock', 'error'); return; }
     // An allowance becomes the book's cost in stock; the API holds it to the selling price.
     const tradeIn = tradeInProblem(incomingItems, me);
@@ -123,7 +132,9 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
       locationId,
       customerId: selectedCustomer?.id ?? undefined,
       incomingItems: incomingItems.map((i) => ({ bookId: i.bookId, quantity: i.quantity, unitPrice: Money.of(i.allowance.trim()).toNumber(), condition: i.condition })),
-      outgoingItems: outgoingItems.map((o) => ({ bookId: o.bookId, quantity: o.quantity })),
+      outgoingItems: outgoingItems.map((o) => ({
+        bookId: o.bookId, quantity: o.quantity, ...(o.binding && { service: { serviceId: o.binding.serviceId, quantity: o.binding.quantity } }),
+      })),
       payments: paid.greaterThan(0)
         ? [{
             method: payMethod,
@@ -163,7 +174,7 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
       {/* Customer — needed for credit, store credit and loyalty points. */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-          Customer <span className="text-gray-400 font-normal">(needed for credit, store credit and points)</span>
+          Customer <span className="text-gray-400 font-normal">(needed for credit, store credit, points and bindings)</span>
         </h3>
         {selectedCustomer ? (
           <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 rounded-lg px-3 py-2">
@@ -272,14 +283,29 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-200 dark:border-blue-800 p-4 space-y-2">
           <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400">📤 Outgoing (Customer Takes)</h3>
           {outgoingItems.length === 0 ? <p className="text-xs text-gray-400">No items yet</p> : outgoingItems.map((item) => (
-            <div key={item.bookId} className="flex items-center gap-2 text-xs">
+            <Fragment key={item.bookId}>
+            <div className="flex items-center gap-2 text-xs">
               <span className="flex-1 min-w-0 truncate text-gray-900 dark:text-white">{item.bookTitle}</span>
               <input type="number" min="1" aria-label={`Quantity of ${item.bookTitle} taken`} value={item.quantity}
-                onChange={(e) => setOutgoingItems((items) => items.map((i) => i.bookId === item.bookId ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))}
+                onChange={(e) => setOutgoingQuantity(item.bookId, parseInt(e.target.value) || 1)}
                 className="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
               <span className="w-20 text-right text-gray-700 dark:text-gray-300" title="Catalog price">{currency} {item.unitPrice.toFixed()}</span>
               <button onClick={() => setOutgoingItems((items) => items.filter((i) => i.bookId !== item.bookId))} className="text-red-500 hover:text-red-700">×</button>
             </div>
+            {/* A binding on some or all of the copies, at the branch's fee, no discount (#169 PR 4). */}
+            {item.binding ? (
+              <div className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 pl-2">
+                <span className="flex-1">
+                  🧵 {item.binding.name} × {item.binding.quantity}
+                  <button type="button" onClick={() => setBindingFor(item.bookId)} className="ml-2 text-blue-600 dark:text-blue-400 hover:underline">Change</button>
+                </span>
+                <span className="w-20 text-right">{currency} {bindingTotal(item.binding).toFixed()}</span>
+                <span className="w-3" />
+              </div>
+            ) : (
+              <button type="button" onClick={() => setBindingFor(item.bookId)} className="pl-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">+ Binding</button>
+            )}
+            </Fragment>
           ))}
           <div className="text-xs font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-blue-100 dark:border-blue-900">Total: {currency} {outgoingTotal.toFixed()}</div>
         </div>
@@ -327,6 +353,18 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
           </button>
         </div>
       )}
+
+      {(() => {
+        const line = bindingFor === null ? undefined : outgoingItems.find((o) => o.bookId === bindingFor);
+        const save = (binding: OutgoingLine['binding']) => {
+          setOutgoingItems((items) => items.map((i) => i.bookId === bindingFor ? { ...i, binding } : i));
+          setBindingFor(null);
+        };
+        return line && (
+          <BindingDialog bookTitle={line.bookTitle} bookQuantity={line.quantity} value={line.binding} maxDiscountPct={0} discounts={false}
+            onSave={save} onRemove={() => save(undefined)} onClose={() => setBindingFor(null)} />
+        );
+      })()}
 
       {registering !== null && (
         <QuickRegisterDialog

@@ -41,6 +41,8 @@ export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
     } else if (row.transactionType === 'RETURN') {
       returnsValue = returnsValue.minus(row.netAmount); // positive magnitude
     } else {
+      // A binding on an exchange's outgoing book (#169 PR 4) is service income, settled in the exchange's difference.
+      if (row.kind === 'SERVICE') serviceIncome = serviceIncome.plus(row.netAmount);
       exchangeDifference = exchangeDifference.plus(row.netAmount);
     }
     costAmount = costAmount.plus(row.costAmount);
