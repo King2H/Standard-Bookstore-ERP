@@ -5,8 +5,9 @@ import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../com
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
-import { useExchange, useExchanges, useVoidExchange } from '../queries.js';
-import { canVoidExchange } from '../rules.js';
+import { ServiceJobLine } from '../../services/components/ServiceJobLine.js';
+import { exchangeKeys, useExchange, useExchanges, useVoidExchange } from '../queries.js';
+import { canExchange, canVoidExchange } from '../rules.js';
 import { ExchangeSlip } from './ExchangeSlip.js';
 
 const money = (n: number) => Money.of(n).toFixed();
@@ -132,6 +133,7 @@ export function ExchangeList() {
 
 function ExchangeDetail({ exchangeId }: { exchangeId: string }) {
   const currency = useCurrency();
+  const { data: me } = useMyProfile();
   const { data } = useExchange(exchangeId);
   if (!data) return <p className="text-xs text-gray-400">Loading...</p>;
   return (
@@ -143,7 +145,13 @@ function ExchangeDetail({ exchangeId }: { exchangeId: string }) {
       </div>
       <div>
         <p className="font-semibold text-blue-700 dark:text-blue-400 mb-1">Outgoing Items</p>
-        {(data.outgoingItems ?? []).map((i) => <p key={i.id} className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ {currency} {money(i.unitPrice)}</p>)}
+        {(data.outgoingItems ?? []).map((i) => (
+          <div key={i.id}>
+            <p className="text-gray-700 dark:text-gray-300">{i.bookTitle} × {i.quantity} @ {currency} {money(i.unitPrice)}</p>
+            {/* Its binding's job (#169 PR 4), moved on by whoever sells. */}
+            {i.service && <ServiceJobLine line={i.service} canStep={canExchange(me)} refresh={[exchangeKeys.all]} />}
+          </div>
+        ))}
         {(data.outgoingItems ?? []).length === 0 && <p className="text-gray-400 italic">No outgoing items</p>}
       </div>
       <div className="border-l border-gray-200 dark:border-gray-700 pl-4 space-y-1.5">

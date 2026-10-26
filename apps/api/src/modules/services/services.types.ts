@@ -89,9 +89,10 @@ export interface ServiceJobRecord {
 /** A service line as its sale recorded it, with its job (none on a draft order). */
 export interface SaleServiceLineRecord {
   id: number;
-  /** The book line it belongs to: a counter sale's or an order's. */
+  /** The book line it belongs to: a counter sale's, an order's, or an exchange's outgoing one (#169 PR 4). */
   posLineId: string | null;
   orderLineId: string | null;
+  exchangeLineId: string | null;
   serviceId: number;
   serviceCode: string;
   serviceName: string;
@@ -105,7 +106,7 @@ export interface SaleServiceLineRecord {
 }
 
 /** The sale a set of service lines belongs to. */
-export type SaleRef = { transactionId: string } | { orderId: string };
+export type SaleRef = { transactionId: string } | { orderId: string } | { exchangeId: string };
 
 // ── After the sale (#169 PR 3) ───────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ export interface JobBoardRecord extends ServiceJobRecord {
   bookTitle: string;
   customerName: string;
   customerPhone: string | null;
-  source: 'POS' | 'ORDER';
+  source: 'POS' | 'ORDER' | 'EXCHANGE';
   saleId: string;
   saleNumber: string;
   overdue: boolean;

@@ -731,6 +731,7 @@ export interface Returns {
   branch_id: number;
   created_at: Generated<Timestamp>;
   customer_id: number | null;
+  exchange_id: Int8 | null;
   id: Generated<Int8>;
   order_id: Int8 | null;
   processed_by: number;
@@ -759,6 +760,7 @@ export interface SaleServiceLines {
   created_at: Generated<Timestamp>;
   discount_amount: Generated<Numeric>;
   discount_pct: Generated<Numeric>;
+  exchange_outgoing_item_id: Int8 | null;
   id: Generated<Int8>;
   line_total: Numeric;
   order_line_item_id: Int8 | null;

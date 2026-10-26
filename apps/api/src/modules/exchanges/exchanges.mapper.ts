@@ -1,4 +1,5 @@
 import { Money, type Exchange } from '@bms/shared';
+import { toSaleServiceLineResponse } from '../services/services.mapper.js';
 import type { ExchangeItemRecord, ExchangeRecord, RefundMethod, SettlementType } from './exchanges.types.js';
 
 /** The columns exchanges.repository selects for an exchange. */
@@ -28,6 +29,7 @@ export interface ExchangeRow {
   voided_at: Date | null;
   voided_by: number | null;
   void_reason: string | null;
+  has_returns: boolean;
 }
 
 // The database CHECK constraints limit settlement_type and refund_method to these values.
@@ -58,6 +60,7 @@ export function toExchangeRecord(row: ExchangeRow): ExchangeRecord {
     voidedAt: row.voided_at,
     voidedBy: row.voided_by,
     voidReason: row.void_reason,
+    hasReturns: row.has_returns,
   };
 }
 
@@ -76,7 +79,13 @@ function item(i: ExchangeItemRecord) {
     unitPrice: i.unitPrice.toNumber(),
     totalPrice: i.totalPrice.toNumber(),
     ...(i.condition && { condition: i.condition }),
+    ...(i.service !== undefined && { service: i.service && toSaleServiceLineResponse(i.service) }),
   };
+}
+
+/** Its bindings' work not started, nor any fee given back (#169 PR 4): the void can undo them. */
+function bindingsUndoable(e: ExchangeRecord): boolean {
+  return !e.hasReturns && !(e.outgoingItems ?? []).some((i) => i.service?.job && !['REQUESTED', 'CANCELLED'].includes(i.service.job.status));
 }
 
 export function toExchangeResponse(e: ExchangeRecord): Exchange {
@@ -101,7 +110,7 @@ export function toExchangeResponse(e: ExchangeRecord): Exchange {
     outstandingAmount: e.receivableOutstanding?.toNumber() ?? 0,
     dueDate: e.dueDate,
     settlementStatus: e.receivableStatus ?? (e.status === 'Completed' ? 'Settled' : 'Pending'),
-    voidable: isVoidable(e),
+    voidable: isVoidable(e) && bindingsUndoable(e),
     voidedAt: e.voidedAt?.toISOString() ?? null,
     voidedBy: e.voidedBy,
     voidReason: e.voidReason,

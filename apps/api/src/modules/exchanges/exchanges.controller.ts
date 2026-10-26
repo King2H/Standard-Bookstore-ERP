@@ -46,7 +46,7 @@ function newExchange(req: Request, body: CreateExchangeRequest): NewExchange {
     customerId: body.customerId ?? null,
     notes: body.notes ?? null,
     incoming: body.incomingItems.map((i) => ({ bookId: i.bookId, quantity: i.quantity, unitValue: Money.of(i.unitPrice), condition: i.condition })),
-    outgoing: body.outgoingItems.map((o) => ({ bookId: o.bookId, quantity: o.quantity })),
+    outgoing: body.outgoingItems.map((o) => ({ bookId: o.bookId, quantity: o.quantity, ...(o.service && { service: o.service }) })),
     payments: body.payments.map((p) => ({
       method: p.method,
       amount: Money.of(p.amount),

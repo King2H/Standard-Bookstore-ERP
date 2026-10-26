@@ -44,6 +44,10 @@ export const ReturnSchema = z.object({
   orderId: z.string().nullable(),
   /** The order's ORD- number. */
   orderNumber: z.string().nullable(),
+  /** The exchange whose binding fee came back (#169 PR 4); null otherwise. */
+  exchangeId: z.string().nullable(),
+  /** The exchange's EXC- number. */
+  exchangeReference: z.string().nullable(),
   branchId: z.number().int(),
   customerId: z.number().int().nullable(),
   /** What the returned books were worth: credited and refunded together. */

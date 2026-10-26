@@ -65,6 +65,20 @@ describe('Data consistency check', () => {
       `INSERT INTO sale_service_lines (order_line_item_id, service_id, quantity, unit_fee, line_total, standard_cost) VALUES ($1, $2, 1, 5, 5, 2) RETURNING id`,
       [orderLine, serviceId],
     );
+    // ...and an exchange's binding with no job (#169 PR 4).
+    const exchangeId = await one(
+      `INSERT INTO exchanges (exchange_reference, branch_id, location_id, status, total_outgoing_value, net_balance, settlement_type, currency, created_by)
+       VALUES ($1, $2, $3, 'Completed', 15, 15, 'Customer_Pays', 'ETB', $4) RETURNING id`,
+      [`${MARK}-EXC`, branchId, loc, staffId],
+    );
+    const exchangeLine = await one(
+      `INSERT INTO exchange_outgoing_items (exchange_id, book_id, quantity, selling_unit_price, total_price) VALUES ($1, $2, 1, 10, 10) RETURNING id`,
+      [exchangeId, book1],
+    );
+    await client.query(
+      `INSERT INTO sale_service_lines (exchange_outgoing_item_id, service_id, quantity, unit_fee, line_total, standard_cost) VALUES ($1, $2, 1, 5, 5, 2)`,
+      [exchangeLine, serviceId],
+    );
     // ...and more of its fee given back than it charged.
     const returnId = await one(
       `INSERT INTO returns (return_number, order_id, branch_id, total_refund_amount, refund_method, processed_by) VALUES ($1, $2, $3, 9, 'cash', $4) RETURNING id`,
@@ -155,6 +169,7 @@ describe('Data consistency check', () => {
     ['orders.payment-status', /-9999: paid, payments say unpaid/],
     ['orders.cancelled-money-returned', new RegExp(`^${MARK}-KEPT: holds 10\\.00 \\(paid 10\\.00, refunded 0\\)$`)],
     ['services.sale-has-job', /^service line \d+ on ORD-\d{8}-9999: no job$/],
+    ['services.sale-has-job', new RegExp(`^service line \\d+ on ${MARK}-EXC: no job$`)],
     ['services.returned-within-charged', /^service line \d+: 1 of 1 copies, 9\.00 of 5\.00 given back$/],
     ['procurement.status-matches-lines', /\(ordered\): 2 received/],
     ['procurement.paid-within-total', /paid and credited 60\.00 of 50\.00$/],

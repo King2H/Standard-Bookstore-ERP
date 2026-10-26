@@ -199,10 +199,11 @@ export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<N
          LEFT JOIN order_line_items oli ON oli.id = rli.order_line_item_id
          WHERE ${returnConds.join(' AND ')}
        ) + (
+         -- Not an exchange's (#169 PR 4): net profit counts exchanges by their cash (Q4), never at cost.
          SELECT COALESCE(SUM(rsl.cost_reversed), 0)
          FROM return_service_lines rsl
          JOIN returns r ON r.id = rsl.return_id
-         WHERE ${returnConds.join(' AND ')}
+         WHERE ${returnConds.join(' AND ')} AND r.exchange_id IS NULL
        )::NUMERIC AS returns_cost`,
       returnParams,
     ),

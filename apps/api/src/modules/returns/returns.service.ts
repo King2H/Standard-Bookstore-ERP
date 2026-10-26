@@ -17,7 +17,7 @@ import * as returns from './returns.repository.js';
 import { refundableOnOrder, refundReturnedOrder, settleReturnedOrder } from '../payments/payments.service.js';
 import type { FeeReturn } from '../services/services.types.js';
 import type {
-  Actor, OrderForReturn, Paging, RefundMethod, RefundPart, ReturnFilter, ReturnLineRequest, ReturnRecord, SaleForReturn, SaleLine,
+  Actor, ExchangeForReturn, OrderForReturn, Paging, RefundMethod, RefundPart, ReturnFilter, ReturnLineRequest, ReturnRecord, SaleForReturn, SaleLine,
 } from './returns.types.js';
 
 /**
@@ -130,7 +130,7 @@ async function recordReturn(
   q: Queryable,
   actor: Actor,
   r: {
-    sale: { transactionId: string | null; orderId: string | null; number: string; branchId: number; customerId: number | null };
+    sale: { transactionId: string | null; orderId: string | null; exchangeId?: string; number: string; branchId: number; customerId: number | null };
     lines: ValuedLine[];
     total: Money;
     refundMethod: RefundMethod | 'mixed';
@@ -143,6 +143,7 @@ async function recordReturn(
     returnNumber,
     transactionId: r.sale.transactionId,
     orderId: r.sale.orderId,
+    exchangeId: r.sale.exchangeId ?? null,
     branchId: r.sale.branchId,
     customerId: r.sale.customerId,
     total: r.total,
@@ -374,6 +375,39 @@ async function settleOrder(
 }
 
 /**
+ * A binding cancelled on an exchange (#169 PR 4, owner decision 5a): its fee
+ * goes first against what the exchange left on credit, as a credit note; the
+ * rest to the customer's store credit (a binding always has a customer). An
+ * exchange settles its difference at once, so there is no tender to give back.
+ */
+async function settleExchangeFee(tx: Queryable, actor: Actor, exchange: ExchangeForReturn, fee: FeeReturn, reason: string): Promise<void> {
+  if (exchange.voided) throw new BusinessError('ALREADY_VOIDED', 'Exchange is already voided');
+  const credited = await creditReturn(tx, { sourceType: 'exchange_difference', sourceEntityId: exchange.id, amount: fee.amount });
+  const rest = fee.amount.minus(credited);
+  const parts: RefundPart[] = [
+    ...(credited.greaterThan(0) ? [{ method: 'credit_note' as const, amount: credited }] : []),
+    ...(rest.greaterThan(0) ? [{ method: 'store_credit' as const, amount: rest }] : []),
+  ];
+  const refundMethod = policy.refundMethodOf(parts);
+  const { returnId, returnNumber } = await recordReturn(tx, actor, {
+    sale: { transactionId: null, orderId: null, exchangeId: exchange.id, number: exchange.reference, branchId: exchange.branchId, customerId: exchange.customerId },
+    lines: [],
+    total: fee.amount,
+    refundMethod,
+    reason,
+    approved: true,
+  });
+  await saleServices.recordFeeReturn(tx, actor, returnId, fee, exchange.reference);
+  for (const p of parts) await returns.insertRefund(tx, returnId, p, null);
+  if (rest.greaterThan(0) && exchange.customerId !== null) {
+    await customers.moveStoreCredit(tx, exchange.customerId, rest, { direction: 'credit', refType: 'return', refId: returnId });
+  }
+  await announce(tx, actor, {
+    returnId, returnNumber, sale: { exchangeId: exchange.id }, saleNumber: exchange.reference, total: fee.amount, refundMethod, parts,
+  });
+}
+
+/**
  * The sale is locked, so returns on it run one after another and never take
  * back more than was sold.
  */
@@ -446,11 +480,15 @@ export async function cancelBinding(actor: Actor, jobId: number, reason: string)
       if (!found) throw new NotFoundError('Transaction');
       policy.checkSale(found, actor.branchId);
       await settleSale(tx, actor, found, { lines: [], fees: [fee], reason, approved: true });
-    } else {
+    } else if ('orderId' in sale) {
       const order = await returns.lockOrder(tx, Number(sale.orderId));
       if (!order) throw new NotFoundError('Order');
       if (order.branchId !== actor.branchId) throw new NotFoundError('Order');
       await settleOrder(tx, actor, order, { locationId: null, lines: [], fees: [fee], reason, approved: true });
+    } else {
+      const exchange = await returns.lockExchange(tx, sale.exchangeId);
+      if (!exchange || exchange.branchId !== actor.branchId) throw new NotFoundError('Exchange');
+      await settleExchangeFee(tx, actor, exchange, fee, reason);
     }
   });
 }

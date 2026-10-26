@@ -6,7 +6,8 @@ import type {
 } from './services.types.js';
 
 // The only SQL of services on a sale (#169 PR 2, A6). A service line belongs
-// to one book line, of a counter sale or of an order; its job is the branch's.
+// to one book line, of a counter sale, an order or the books an exchange gives
+// out (PR 4); its job is the branch's.
 
 /** A service as a sale in `branchId` charges it: the branch's own fee, else the shop's. */
 export async function findServiceForSale(q: Queryable, serviceId: number, branchId: number): Promise<ServiceForSale | undefined> {
@@ -31,7 +32,7 @@ export async function findServiceForSale(q: Queryable, serviceId: number, branch
 
 export async function insertServiceLine(
   q: Queryable,
-  bookLine: { posLineId: string } | { orderLineId: string },
+  bookLine: { posLineId: string } | { orderLineId: string } | { exchangeLineId: string },
   line: PricedServiceLine,
 ): Promise<number> {
   const row = await q
@@ -39,6 +40,7 @@ export async function insertServiceLine(
     .values({
       transaction_line_item_id: 'posLineId' in bookLine ? bookLine.posLineId : null,
       order_line_item_id: 'orderLineId' in bookLine ? bookLine.orderLineId : null,
+      exchange_outgoing_item_id: 'exchangeLineId' in bookLine ? bookLine.exchangeLineId : null,
       service_id: line.serviceId,
       quantity: line.quantity,
       unit_fee: line.unitFee.toFixed(2),
@@ -79,7 +81,7 @@ function selectLines(q: Queryable) {
     .innerJoin('services as s', 's.id', 'sl.service_id')
     .leftJoin('service_jobs as j', 'j.service_line_id', 'sl.id')
     .select([
-      'sl.id', 'sl.transaction_line_item_id', 'sl.order_line_item_id', 'sl.service_id', 's.code', 's.name', 's.turnaround_days',
+      'sl.id', 'sl.transaction_line_item_id', 'sl.order_line_item_id', 'sl.exchange_outgoing_item_id', 'sl.service_id', 's.code', 's.name', 's.turnaround_days',
       'sl.quantity', 'sl.unit_fee', 'sl.discount_amount', 'sl.line_total', 'sl.standard_cost',
       'j.id as job_id', 'j.job_number', 'j.status as job_status', 'j.customer_id as job_customer_id', 'j.branch_id as job_branch_id',
       'j.updated_at as job_updated_at', sql<string | null>`TO_CHAR(j.ready_date, 'YYYY-MM-DD')`.as('ready_date'),
@@ -93,6 +95,7 @@ function toLineRecord(r: LineRow): SaleServiceLineRecord {
     id: Number(r.id),
     posLineId: r.transaction_line_item_id === null ? null : String(r.transaction_line_item_id),
     orderLineId: r.order_line_item_id === null ? null : String(r.order_line_item_id),
+    exchangeLineId: r.exchange_outgoing_item_id === null ? null : String(r.exchange_outgoing_item_id),
     serviceId: r.service_id,
     serviceCode: r.code,
     serviceName: r.name,
@@ -115,29 +118,29 @@ function toLineRecord(r: LineRow): SaleServiceLineRecord {
   };
 }
 
-/** The service lines of a counter sale or an order, with their jobs. */
+/** The ids of a sale's service lines, as a subquery. */
+function lineIdsOf(q: Queryable, sale: SaleRef) {
+  if ('transactionId' in sale) {
+    return q.selectFrom('sale_service_lines as sl').innerJoin('transaction_line_items as li', 'li.id', 'sl.transaction_line_item_id')
+      .select('sl.id').where('li.transaction_id', '=', sale.transactionId);
+  }
+  if ('orderId' in sale) {
+    return q.selectFrom('sale_service_lines as sl').innerJoin('order_line_items as oli', 'oli.id', 'sl.order_line_item_id')
+      .select('sl.id').where('oli.order_id', '=', sale.orderId);
+  }
+  return q.selectFrom('sale_service_lines as sl').innerJoin('exchange_outgoing_items as eo', 'eo.id', 'sl.exchange_outgoing_item_id')
+    .select('sl.id').where('eo.exchange_id', '=', sale.exchangeId);
+}
+
+/** The service lines of a counter sale, an order or an exchange, with their jobs. */
 export async function linesOf(q: Queryable, sale: SaleRef): Promise<SaleServiceLineRecord[]> {
-  const rows = 'transactionId' in sale
-    ? await selectLines(q)
-      .innerJoin('transaction_line_items as li', 'li.id', 'sl.transaction_line_item_id')
-      .where('li.transaction_id', '=', sale.transactionId)
-      .orderBy('sl.id')
-      .execute()
-    : await selectLines(q)
-      .innerJoin('order_line_items as oli', 'oli.id', 'sl.order_line_item_id')
-      .where('oli.order_id', '=', sale.orderId)
-      .orderBy('sl.id')
-      .execute();
+  const rows = await selectLines(q).where('sl.id', 'in', lineIdsOf(q, sale)).orderBy('sl.id').execute();
   return rows.map(toLineRecord);
 }
 
 /** The jobs of a sale's service lines, locked until the transaction ends. */
 export async function lockJobsOf(q: Queryable, sale: SaleRef): Promise<Array<{ id: number; status: ServiceJobStatus }>> {
-  const lineIds = 'transactionId' in sale
-    ? q.selectFrom('sale_service_lines as sl').innerJoin('transaction_line_items as li', 'li.id', 'sl.transaction_line_item_id')
-      .select('sl.id').where('li.transaction_id', '=', sale.transactionId)
-    : q.selectFrom('sale_service_lines as sl').innerJoin('order_line_items as oli', 'oli.id', 'sl.order_line_item_id')
-      .select('sl.id').where('oli.order_id', '=', sale.orderId);
+  const lineIds = lineIdsOf(q, sale);
   const rows = await q.selectFrom('service_jobs').select(['id', 'status']).where('service_line_id', 'in', lineIds).orderBy('id').forUpdate().execute();
   return rows.map((r) => ({ id: Number(r.id), status: r.status as ServiceJobStatus }));
 }
@@ -243,13 +246,13 @@ export async function jobForCancel(q: Queryable, jobId: number, branchId: number
   const row = await selectBindings(q)
     .leftJoin('transaction_line_items as li', 'li.id', 'sl.transaction_line_item_id')
     .leftJoin('order_line_items as oli', 'oli.id', 'sl.order_line_item_id')
-    .select(['li.transaction_id', 'oli.order_id'])
+    .leftJoin('exchange_outgoing_items as eo', 'eo.id', 'sl.exchange_outgoing_item_id')
+    .select(['li.transaction_id', 'oli.order_id', 'eo.exchange_id'])
     .where('sl.id', '=', locked.service_line_id)
     .executeTakeFirstOrThrow();
-  return {
-    binding: toBinding(row),
-    sale: row.transaction_id !== null ? { transactionId: String(row.transaction_id) } : { orderId: String(row.order_id) },
-  };
+  const sale: SaleRef = row.transaction_id !== null ? { transactionId: String(row.transaction_id) }
+    : row.order_id !== null ? { orderId: String(row.order_id) } : { exchangeId: String(row.exchange_id) };
+  return { binding: toBinding(row), sale };
 }
 
 export async function insertFeeReturn(q: Queryable, returnId: string, f: FeeReturn): Promise<void> {
@@ -289,7 +292,9 @@ export async function listJobs(q: Queryable, f: JobFilter, page: { limit: number
     .leftJoin('transactions as t', 't.id', 'li.transaction_id')
     .leftJoin('order_line_items as oli', 'oli.id', 'sl.order_line_item_id')
     .leftJoin('orders as o', 'o.id', 'oli.order_id')
-    .innerJoin('books as b', (join) => join.on(sql`b.id`, '=', sql`COALESCE(li.book_id, oli.book_id)`))
+    .leftJoin('exchange_outgoing_items as eo', 'eo.id', 'sl.exchange_outgoing_item_id')
+    .leftJoin('exchanges as e', 'e.id', 'eo.exchange_id')
+    .innerJoin('books as b', (join) => join.on(sql`b.id`, '=', sql`COALESCE(li.book_id, oli.book_id, eo.book_id)`))
     .where('j.branch_id', '=', f.branchId);
   if (f.status) query = query.where('j.status', '=', f.status);
   if (f.overdue) query = query.where('j.status', 'in', ['REQUESTED', 'AT_BINDER']).where(sql<boolean>`j.ready_date < CURRENT_DATE`);
@@ -305,6 +310,7 @@ export async function listJobs(q: Queryable, f: JobFilter, page: { limit: number
         sql<boolean>`j.status IN ('REQUESTED', 'AT_BINDER') AND j.ready_date < CURRENT_DATE`.as('overdue'),
         's.name as service_name', 'sl.quantity', 'b.title as book_title', 'c.full_name as customer_name', 'c.phone_encrypted',
         't.id as transaction_id', 't.transaction_number', 'o.id as order_id', 'o.order_number',
+        'e.id as exchange_id', 'e.exchange_reference',
       ])
       .orderBy('j.ready_date')
       .orderBy('j.id')
@@ -321,6 +327,7 @@ export type JobBoardRow = {
   ready_date: string; overdue: boolean; service_name: string; quantity: number; book_title: string; customer_name: string;
   phone_encrypted: string | null; transaction_id: string | number | bigint | null; transaction_number: string | null;
   order_id: string | number | bigint | null; order_number: string | null;
+  exchange_id: string | number | bigint | null; exchange_reference: string | null;
 };
 
 /** What the ready notice names: the customer to call and the binding. */

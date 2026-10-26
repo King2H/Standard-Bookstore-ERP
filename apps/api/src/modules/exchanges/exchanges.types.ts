@@ -1,4 +1,5 @@
-import type { Money } from '@bms/shared';
+import type { Money, ServiceLineInput } from '@bms/shared';
+import type { SaleServiceLineRecord } from '../services/services.types.js';
 
 /** The signed-in staff member. */
 export interface Actor {
@@ -42,6 +43,8 @@ export interface ExchangeRecord {
   voidedAt: Date | null;
   voidedBy: number | null;
   voidReason: string | null;
+  /** A binding fee on it was given back (#169 PR 4): it can no longer be voided. */
+  hasReturns: boolean;
   incomingItems?: ExchangeItemRecord[];
   outgoingItems?: ExchangeItemRecord[];
   settlementEntries?: SettlementEntryRecord[];
@@ -58,6 +61,8 @@ export interface ExchangeItemRecord {
   condition?: Condition;
   /** Outgoing: the average cost the books left stock at. */
   unitCost?: Money | null;
+  /** Outgoing: the binding on its copies (#169 PR 4), on a single exchange. */
+  service?: SaleServiceLineRecord | null;
 }
 
 export interface SettlementEntryRecord {
@@ -85,7 +90,7 @@ export interface NewExchange {
   customerId: number | null;
   notes: string | null;
   incoming: Array<{ bookId: number; quantity: number; unitValue: Money; condition: Condition }>;
-  outgoing: Array<{ bookId: number; quantity: number }>;
+  outgoing: Array<{ bookId: number; quantity: number; service?: ServiceLineInput }>;
   payments: PaymentLine[];
   allowCredit: boolean;
   dueDate: string | null;

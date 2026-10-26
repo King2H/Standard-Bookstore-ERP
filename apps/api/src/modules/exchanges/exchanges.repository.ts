@@ -48,6 +48,7 @@ function selectExchanges(q: Queryable) {
       'e.voided_at',
       'e.voided_by',
       'e.void_reason',
+      sql<boolean>`EXISTS (SELECT 1 FROM returns ret WHERE ret.exchange_id = e.id AND ret.status = 'completed')`.as('has_returns'),
     ]);
 }
 
@@ -252,8 +253,8 @@ export async function insertOutgoing(
   q: Queryable,
   exchangeId: string,
   o: { bookId: number; quantity: number; price: Money; unitCost: Money },
-): Promise<void> {
-  await q
+): Promise<string> {
+  const row = await q
     .insertInto('exchange_outgoing_items')
     .values({
       exchange_id: exchangeId,
@@ -263,7 +264,9 @@ export async function insertOutgoing(
       total_price: o.price.times(o.quantity).toFixed(2),
       unit_cost: o.unitCost.toFixed(2),
     })
-    .execute();
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
 }
 
 export async function insertEntry(

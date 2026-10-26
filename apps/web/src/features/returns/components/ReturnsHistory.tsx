@@ -26,7 +26,7 @@ export function ReturnsHistory() {
                 <Fragment key={ret.id}>
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === ret.id ? null : ret.id)}>
                     <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{ret.returnNumber}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{ret.transactionNumber ?? ret.orderNumber}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{ret.transactionNumber ?? ret.orderNumber ?? ret.exchangeReference}</td>
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{currency} {Money.of(ret.totalRefundAmount).toFixed()}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">{refundLabel(ret.refundMethod)}</td>
                     <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ret.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>{ret.status}</span></td>

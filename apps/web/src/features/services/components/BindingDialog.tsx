@@ -9,14 +9,17 @@ const LABEL = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1';
 /**
  * Binding for a sale's book line (#169 PR 2): which service, for how many of
  * the line's copies (owner decision 2a), and a discount only where the
- * service allows it, within the seller's line limit (3a).
+ * service allows it, within the seller's line limit (3a). An exchange gives
+ * no discount (PR 4, 2a).
  */
-export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, onSave, onRemove, onClose }: {
+export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, discounts = true, onSave, onRemove, onClose }: {
   bookTitle: string;
   bookQuantity: number;
   value?: BindingChoice;
   /** The seller's line discount limit; null while unknown. */
   maxDiscountPct: number | null;
+  /** False where the sale carries no discount, as an exchange. */
+  discounts?: boolean;
   onSave: (choice: BindingChoice) => void;
   onRemove: () => void;
   onClose: () => void;
@@ -29,6 +32,7 @@ export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, 
   const [discount, setDiscount] = useState(value && value.discountPct > 0 ? String(value.discountPct) : '');
   const [error, setError] = useState('');
   const service = services.find((s) => String(s.id) === serviceId);
+  const discountable = discounts && !!service?.discountable;
 
   function save() {
     if (!service) { setError('Pick the binding'); return; }
@@ -37,11 +41,11 @@ export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, 
     const pct = discount.trim() === '' ? 0 : Number(discount);
     if (Number.isNaN(pct) || pct < 0 || pct > 100) { setError('The discount is a percentage, 0 to 100'); return; }
     if (maxDiscountPct !== null && pct > maxDiscountPct) { setError(`The discount is more than your limit of ${maxDiscountPct}%`); return; }
-    onSave({ ...choiceFor(service, qty), discountPct: service.discountable ? pct : 0 });
+    onSave({ ...choiceFor(service, qty), discountable, discountPct: discountable ? pct : 0 });
   }
 
   const preview = service && /^\d+$/.test(quantity.trim()) && Number(quantity) >= 1
-    ? bindingTotal({ ...choiceFor(service, Number(quantity)), discountPct: Number(discount) || 0 })
+    ? bindingTotal({ ...choiceFor(service, Number(quantity)), discountable, discountPct: discountable ? Number(discount) || 0 : 0 })
     : null;
 
   return (
@@ -64,14 +68,14 @@ export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, 
             <label htmlFor="binding-qty" className={LABEL}>{`Copies (of ${bookQuantity})`}</label>
             <input id="binding-qty" inputMode="numeric" value={quantity} onChange={(e) => { setQuantity(e.target.value); setError(''); }} className={INPUT} />
           </div>
-          {service?.discountable && (
+          {discountable && (
             <div>
               <label htmlFor="binding-discount" className={LABEL}>Discount (%)</label>
               <input id="binding-discount" inputMode="decimal" value={discount} onChange={(e) => { setDiscount(e.target.value); setError(''); }} className={INPUT} />
             </div>
           )}
         </div>
-        {service && !service.discountable && <p className="text-xs text-gray-400">This fee is not discounted.</p>}
+        {service && !discountable && <p className="text-xs text-gray-400">{discounts ? 'This fee is not discounted.' : 'An exchange gives no discount on the fee.'}</p>}
         {preview && <p className="text-sm text-gray-700 dark:text-gray-300">{`Binding total: ${currency} ${preview.toFixed(2)}`}</p>}
         {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
         <div className="flex gap-2 justify-end pt-1">

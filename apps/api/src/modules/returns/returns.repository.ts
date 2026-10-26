@@ -10,7 +10,7 @@ import {
   type ReturnRow,
 } from './returns.mapper.js';
 import type {
-  OrderForReturn,
+  ExchangeForReturn, OrderForReturn,
   RefundMethod,
   RefundPart,
   RefundRecord,
@@ -75,6 +75,23 @@ export async function lockSale(q: Queryable, id: number): Promise<SaleForReturn 
  * The order, locked until the transaction ends, like a sale: returns on one
  * order run one after another, and its payments are refunded under the same lock.
  */
+/** An exchange whose binding fee comes back (#169 PR 4), locked so its void and the fee return run one after the other. */
+export async function lockExchange(q: Queryable, id: string): Promise<ExchangeForReturn | undefined> {
+  const row = await q
+    .selectFrom('exchanges')
+    .select(['id', 'branch_id', 'customer_id', 'exchange_reference', 'voided_at'])
+    .where('id', '=', id)
+    .forUpdate()
+    .executeTakeFirst();
+  return row && {
+    id: String(row.id),
+    branchId: row.branch_id,
+    customerId: row.customer_id,
+    reference: row.exchange_reference,
+    voided: row.voided_at !== null,
+  };
+}
+
 export async function lockOrder(q: Queryable, id: number): Promise<OrderForReturn | undefined> {
   const row = await q
     .selectFrom('orders')
@@ -252,9 +269,10 @@ export async function insertReturn(
   q: Queryable,
   r: {
     returnNumber: string;
-    /** The sale returned: a counter sale or a customer order, never both. */
+    /** The sale returned: a counter sale, a customer order, or an exchange's binding fee; one of them. */
     transactionId: string | null;
     orderId: string | null;
+    exchangeId?: string | null;
     branchId: number;
     customerId: number | null;
     total: Money;
@@ -270,6 +288,7 @@ export async function insertReturn(
       return_number: r.returnNumber,
       transaction_id: r.transactionId,
       order_id: r.orderId,
+      exchange_id: r.exchangeId ?? null,
       branch_id: r.branchId,
       customer_id: r.customerId,
       total_refund_amount: r.total.toFixed(2),
@@ -337,6 +356,7 @@ function selectReturns(q: Queryable) {
     .selectFrom('returns as r')
     .leftJoin('transactions as t', 't.id', 'r.transaction_id')
     .leftJoin('orders as o', 'o.id', 'r.order_id')
+    .leftJoin('exchanges as e', 'e.id', 'r.exchange_id')
     .select([
       'r.id',
       'r.return_number',
@@ -344,6 +364,8 @@ function selectReturns(q: Queryable) {
       't.transaction_number',
       'r.order_id',
       'o.order_number',
+      'r.exchange_id',
+      'e.exchange_reference',
       'r.branch_id',
       'r.customer_id',
       'r.total_refund_amount',

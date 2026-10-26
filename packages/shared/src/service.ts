@@ -154,7 +154,7 @@ export const ServiceJobBoardItemSchema = ServiceJobSchema.extend({
   customerName: z.string(),
   /** To call when the job is ready; null when none was given. */
   customerPhone: z.string().nullable(),
-  source: z.enum(['POS', 'ORDER']),
+  source: z.enum(['POS', 'ORDER', 'EXCHANGE']),
   saleId: z.string(),
   saleNumber: z.string(),
   /** Requested or at the binder past the ready date. */

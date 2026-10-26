@@ -668,9 +668,12 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   binder → Ready → Collected (the selling roles). An order's ready jobs are collected when the order is delivered.
   Moving a job to Ready tells the branch's selling roles (in-app notification, without the customer's phone)
 - GET /api/v1/service-jobs (`?status=&overdue=true|false&q=`) — the branch's binding jobs board: book, service, copies,
-  customer and phone (to call), sale or order number, ready date and whether it is overdue (the selling roles)
+  customer and phone (to call), sale, order or exchange number (`source` POS, ORDER or EXCHANGE), ready date and whether it is overdue
+  (the selling roles)
 - POST /api/v1/service-jobs/:id/cancel — body `{ reason }`: cancels a binding still Requested (Manager, Admin). The fee goes
-  back through Returns the way it was paid (a credit note on what is still owed first); the job is Cancelled
+  back through Returns the way it was paid (a credit note on what is still owed first); the job is Cancelled. On an exchange (#169 PR 4)
+  the fee goes against what the exchange left on credit first, the rest to the customer's store credit, as a return naming the exchange
+  (`exchangeId`, `exchangeReference` on the Return)
 
 ### Inventory
 - GET /api/v1/inventory — paginated stock levels
@@ -740,6 +743,10 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 
 ### Exchanges (Slice 15)
 - POST /api/v1/exchanges — create exchange, "Quick Exchange" (Sales, Manager, Admin); body: { locationId?, customerId?, notes?, incomingItems, outgoingItems }. Incoming items require a positive `evaluatedUnitPrice` (Acquisition Allowance) — see "Non-Destructive Catalog Search & Virtual Receiving" above.
+  An outgoing item may carry a binding, `service: { serviceId, quantity }` (#169 PR 4): for some or all of its copies, at the branch's fee with no
+  discount, for a named customer (`SERVICE_REQUIRES_CUSTOMER`). The fee is part of what goes out, so it moves the difference settled at the counter,
+  and the binding opens a job like a counter sale's. Voiding the exchange cancels its jobs while Requested and is refused once their work started
+  (`SERVICE_JOB_IN_PROGRESS`) or a binding fee was given back (`EXCHANGE_HAS_RETURNS`).
 - GET /api/v1/exchanges — list; filters: branchId, customerId, status, dateFrom, dateTo
 - GET /api/v1/exchanges/:id — detail with incoming/outgoing items
 - POST /api/v1/exchanges/:id/cancel — cancel exchange (Manager, Admin)

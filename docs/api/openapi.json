@@ -14781,6 +14781,25 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
+                        },
+                        "service": {
+                          "type": "object",
+                          "properties": {
+                            "serviceId": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "quantity": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "serviceId",
+                            "quantity"
+                          ]
                         }
                       },
                       "required": [
@@ -15045,6 +15064,121 @@
                               "resellable",
                               "damaged"
                             ]
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -15094,6 +15228,121 @@
                             "enum": [
                               "resellable",
                               "damaged"
+                            ]
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
                             ]
                           }
                         },
@@ -15516,6 +15765,121 @@
                                     "resellable",
                                     "damaged"
                                   ]
+                                },
+                                "service": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "serviceId": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "serviceCode": {
+                                          "type": "string"
+                                        },
+                                        "serviceName": {
+                                          "type": "string"
+                                        },
+                                        "quantity": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "unitFee": {
+                                          "type": "number"
+                                        },
+                                        "discountAmount": {
+                                          "type": "number"
+                                        },
+                                        "lineTotal": {
+                                          "type": "number"
+                                        },
+                                        "standardCost": {
+                                          "type": "number"
+                                        },
+                                        "job": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "id": {
+                                                  "type": "integer",
+                                                  "minimum": -9007199254740991,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "jobNumber": {
+                                                  "type": "string"
+                                                },
+                                                "status": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "REQUESTED",
+                                                    "AT_BINDER",
+                                                    "READY",
+                                                    "COLLECTED",
+                                                    "CANCELLED",
+                                                    "RETURNED"
+                                                  ]
+                                                },
+                                                "readyDate": {
+                                                  "type": "string"
+                                                },
+                                                "customerId": {
+                                                  "type": "integer",
+                                                  "minimum": -9007199254740991,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "branchId": {
+                                                  "type": "integer",
+                                                  "minimum": -9007199254740991,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "updatedAt": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "jobNumber",
+                                                "status",
+                                                "readyDate",
+                                                "customerId",
+                                                "branchId",
+                                                "updatedAt"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "serviceId",
+                                        "serviceCode",
+                                        "serviceName",
+                                        "quantity",
+                                        "unitFee",
+                                        "discountAmount",
+                                        "lineTotal",
+                                        "standardCost",
+                                        "job"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -15565,6 +15929,121 @@
                                   "enum": [
                                     "resellable",
                                     "damaged"
+                                  ]
+                                },
+                                "service": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "serviceId": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "serviceCode": {
+                                          "type": "string"
+                                        },
+                                        "serviceName": {
+                                          "type": "string"
+                                        },
+                                        "quantity": {
+                                          "type": "integer",
+                                          "minimum": -9007199254740991,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "unitFee": {
+                                          "type": "number"
+                                        },
+                                        "discountAmount": {
+                                          "type": "number"
+                                        },
+                                        "lineTotal": {
+                                          "type": "number"
+                                        },
+                                        "standardCost": {
+                                          "type": "number"
+                                        },
+                                        "job": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "id": {
+                                                  "type": "integer",
+                                                  "minimum": -9007199254740991,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "jobNumber": {
+                                                  "type": "string"
+                                                },
+                                                "status": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "REQUESTED",
+                                                    "AT_BINDER",
+                                                    "READY",
+                                                    "COLLECTED",
+                                                    "CANCELLED",
+                                                    "RETURNED"
+                                                  ]
+                                                },
+                                                "readyDate": {
+                                                  "type": "string"
+                                                },
+                                                "customerId": {
+                                                  "type": "integer",
+                                                  "minimum": -9007199254740991,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "branchId": {
+                                                  "type": "integer",
+                                                  "minimum": -9007199254740991,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "updatedAt": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "jobNumber",
+                                                "status",
+                                                "readyDate",
+                                                "customerId",
+                                                "branchId",
+                                                "updatedAt"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "serviceId",
+                                        "serviceCode",
+                                        "serviceName",
+                                        "quantity",
+                                        "unitFee",
+                                        "discountAmount",
+                                        "lineTotal",
+                                        "standardCost",
+                                        "job"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
                                   ]
                                 }
                               },
@@ -15925,6 +16404,121 @@
                               "resellable",
                               "damaged"
                             ]
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -15974,6 +16568,121 @@
                             "enum": [
                               "resellable",
                               "damaged"
+                            ]
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
                             ]
                           }
                         },
@@ -16467,6 +17176,121 @@
                               "resellable",
                               "damaged"
                             ]
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -16516,6 +17340,121 @@
                             "enum": [
                               "resellable",
                               "damaged"
+                            ]
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
                             ]
                           }
                         },
@@ -45714,6 +46653,18 @@
                         "null"
                       ]
                     },
+                    "exchangeId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exchangeReference": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -45890,6 +46841,8 @@
                     "transactionNumber",
                     "orderId",
                     "orderNumber",
+                    "exchangeId",
+                    "exchangeReference",
                     "branchId",
                     "customerId",
                     "totalRefundAmount",
@@ -46110,6 +47063,18 @@
                               "null"
                             ]
                           },
+                          "exchangeId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "exchangeReference": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "branchId": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -46286,6 +47251,8 @@
                           "transactionNumber",
                           "orderId",
                           "orderNumber",
+                          "exchangeId",
+                          "exchangeReference",
                           "branchId",
                           "customerId",
                           "totalRefundAmount",
@@ -46421,6 +47388,18 @@
                       ]
                     },
                     "orderNumber": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exchangeId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exchangeReference": {
                       "type": [
                         "string",
                         "null"
@@ -46602,6 +47581,8 @@
                     "transactionNumber",
                     "orderId",
                     "orderNumber",
+                    "exchangeId",
+                    "exchangeReference",
                     "branchId",
                     "customerId",
                     "totalRefundAmount",
@@ -46852,7 +47833,8 @@
                             "type": "string",
                             "enum": [
                               "POS",
-                              "ORDER"
+                              "ORDER",
+                              "EXCHANGE"
                             ]
                           },
                           "saleId": {

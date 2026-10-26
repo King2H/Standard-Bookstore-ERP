@@ -11,6 +11,7 @@ import { canCancelBinding } from '../rules.js';
 
 const TH = 'px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left';
 const REFRESH = [serviceJobKeys.all];
+const SOURCE_LABEL: Record<ServiceJobBoardItem['source'], string> = { POS: 'Counter sale', ORDER: 'Order', EXCHANGE: 'Exchange' };
 
 function useDebounce<T>(v: T, ms: number): T {
   const [d, setD] = useState(v);
@@ -116,7 +117,7 @@ export default function BindingJobsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-mono text-xs text-gray-600 dark:text-gray-400">{job.saleNumber}</div>
-                    <div className="text-xs text-gray-400">{job.source === 'ORDER' ? 'Order' : 'Counter sale'}</div>
+                    <div className="text-xs text-gray-400">{SOURCE_LABEL[job.source]}</div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-gray-600 dark:text-gray-400">{job.readyDate}</div>

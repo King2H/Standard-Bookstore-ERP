@@ -1,5 +1,6 @@
 import { Money, type ProfileResponse } from '@bms/shared';
 import { isAmount } from '../pos/sale.js';
+import { bindingTotal, type BindingChoice } from '../services/binding.js';
 
 /**
  * Who may do what with exchanges, and the checks made before one is sent:
@@ -30,12 +31,13 @@ export interface IncomingLine {
   condition: 'resellable' | 'damaged';
 }
 
-/** A book the customer takes, at its catalog price. */
+/** A book the customer takes, at its catalog price; a binding on some of its copies at the branch's fee (#169 PR 4). */
 export interface OutgoingLine {
   bookId: number;
   bookTitle: string;
   quantity: number;
   unitPrice: Money;
+  binding?: BindingChoice;
 }
 
 /** An allowance as typed, or zero while it is not a valid amount. */
@@ -44,7 +46,7 @@ export const allowanceOf = (raw: string) => (isAmount(raw) ? Money.of(raw.trim()
 /** What comes in, what goes out, and the difference: above zero the customer owes it, below zero the store does. */
 export function exchangeTotals(incoming: IncomingLine[], outgoing: OutgoingLine[]) {
   const incomingTotal = Money.sum(incoming.map((i) => allowanceOf(i.allowance).times(i.quantity)));
-  const outgoingTotal = Money.sum(outgoing.map((o) => o.unitPrice.times(o.quantity)));
+  const outgoingTotal = Money.sum(outgoing.map((o) => o.unitPrice.times(o.quantity).plus(o.binding ? bindingTotal(o.binding) : Money.ZERO)));
   return { incomingTotal, outgoingTotal, net: outgoingTotal.minus(incomingTotal) };
 }
 

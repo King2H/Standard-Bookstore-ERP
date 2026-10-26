@@ -45,9 +45,9 @@ export interface SalesSummary {
   returnsValue: number;         // positive magnitude
   exchangeDifference: number;   // signed: outgoing − incoming across all exchange lines
   netSalesRevenue: number;      // grossSales − discounts − returnsValue + exchangeDifference
-  /** Order and POS book lines after discount; with serviceIncome, what was sold before returns and exchanges. */
+  /** Order and POS book lines after discount. */
   bookSales: number;
-  /** Order and POS service fees after discount (#169). */
+  /** Service fees after discount (#169): order, POS and, within exchangeDifference, exchange ones (PR 4). */
   serviceIncome: number;
   costAmount: number;
   grossProfit: number;          // netSalesRevenue − costAmount

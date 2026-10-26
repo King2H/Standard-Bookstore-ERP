@@ -10,7 +10,7 @@ import {
 } from '../exchanges.policy.js';
 
 const today = '2026-10-10';
-const completed = { status: 'Completed', lifecycleStatus: null, madeOn: today, today, voidedAt: null };
+const completed = { status: 'Completed', lifecycleStatus: null, madeOn: today, today, voidedAt: null, hasReturns: false };
 
 describe('settlementType', () => {
   it('reads who owes from the difference, a cent either way being even', () => {
@@ -73,6 +73,8 @@ describe('voiding', () => {
       expect.objectContaining({ code: 'ALREADY_VOIDED' }),
     );
     expect(() => checkCanVoid({ ...completed, lifecycleStatus: 'COMPLETED' })).toThrow(expect.objectContaining({ code: 'EXCHANGE_NOT_CANCELLABLE' }));
+    // #169 PR 4: a binding fee given back keeps the exchange.
+    expect(() => checkCanVoid({ ...completed, hasReturns: true })).toThrow(expect.objectContaining({ code: 'EXCHANGE_HAS_RETURNS' }));
   });
 
   it('takes back store credit only while the customer has it', () => {
