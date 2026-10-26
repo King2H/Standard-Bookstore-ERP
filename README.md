@@ -705,13 +705,16 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   while the job is still Requested and is refused once it has started; a bound copy is not taken back through Returns yet
 
 ### Returns
-- POST /api/v1/returns — body: { transactionId | orderId, reason?, lines: [{ transactionLineItemId | orderLineItemId, quantity, disposition?, defective? }] }.
+- POST /api/v1/returns — body: { transactionId | orderId | exchangeId, reason?, lines: [{ transactionLineItemId | orderLineItemId | exchangeLineItemId, quantity, disposition?, defective? }] }.
   A bound copy comes back only defective (`defective: true`, Manager or Admin, with a reason; else 422 `BOUND_COPY_RETURN`), once
   collected (`BOUND_COPY_NOT_COLLECTED`): book and its share of the fee are refunded, the copy goes to damaged stock, and the
   binding's cost stays a loss. A job whose bound copies all came back is Returned.
   A return names a counter sale or a delivered customer order (#166); an order not delivered answers 422 `ORDER_NOT_DELIVERED` (cancel it instead).
   The value goes first against what a credit sale or order still owes (a credit note), the rest back the way it was paid; an order's refunds go through its payments.
   The return window counts from the sale, or from the order's delivery (`fulfilledAt`).
+  An exchange (#203) takes back only its defective bound copies, by the same rules; a plain copy is swapped in a new exchange
+  (422 `EXCHANGE_COPY_RETURN`). The value goes first against what the exchange left on credit, the rest to the customer's store credit.
+  `GET /api/v1/exchanges?exchangeReference=EXC-…` finds an exchange by its number.
 - GET /api/v1/returns — filters: customerId, transactionId, orderId, status, dateFrom, dateTo (the branch is the session's)
 - GET /api/v1/returns/:id
 - POST /api/v1/returns/:id/reject — 410: a return is complete when it is made

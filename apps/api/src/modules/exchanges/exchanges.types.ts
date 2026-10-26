@@ -101,6 +101,7 @@ export interface ExchangeFilter {
   /** The scoped branch: exchanges are branch-owned (#12). */
   branchId: number;
   customerId?: number;
+  exchangeReference?: string;
   status?: string;
   dateFrom?: string;
   dateTo?: string;

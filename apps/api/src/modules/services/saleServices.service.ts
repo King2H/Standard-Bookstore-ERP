@@ -167,7 +167,10 @@ export async function stepJob(actor: Actor, id: number, step: ServiceJobStep): P
 export { checkBoundReturn, checkCancellable, copiesLeft, feeShare } from './saleServices.policy.js';
 
 /** The bindings of book lines a return names, by book line, their jobs locked. */
-export function bindingsOf(q: Queryable, lines: { posLineIds: string[] } | { orderLineIds: string[] }): Promise<Map<string, BindingOnLine>> {
+export function bindingsOf(
+  q: Queryable,
+  lines: { posLineIds: string[] } | { orderLineIds: string[] } | { exchangeLineIds: string[] },
+): Promise<Map<string, BindingOnLine>> {
   return repo.bindingsOf(q, lines);
 }
 

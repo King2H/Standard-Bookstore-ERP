@@ -79,6 +79,7 @@ export interface ReturnLineRequest {
 export interface ExchangeForReturn {
   id: string;
   branchId: number;
+  locationId: number | null;
   customerId: number | null;
   reference: string;
   voided: boolean;
@@ -112,6 +113,7 @@ export interface ReturnLineRecord {
   returnId: string;
   transactionLineItemId: string | null;
   orderLineItemId: string | null;
+  exchangeLineItemId: string | null;
   bookId: number;
   bookTitle: string;
   quantity: number;

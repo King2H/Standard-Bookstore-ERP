@@ -120,6 +120,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `EXCEEDS_ORDER_TOTAL`
 - `EXCEEDS_OUTSTANDING`
 - `EXCEEDS_PAYMENT_AMOUNT`
+- `EXCHANGE_COPY_RETURN`
 - `EXCHANGE_HAS_RETURNS`
 - `EXCHANGE_NOT_CANCELLABLE`
 - `FEE_NOT_DISCOUNTABLE`

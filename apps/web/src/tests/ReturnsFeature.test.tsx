@@ -88,7 +88,7 @@ function stubApi() {
     if (u.pathname === '/returns/5') {
       return json(contract(ReturnSchema, {
         ...ret,
-        lineItems: [{ id: '1', returnId: '5', transactionLineItemId: '7', orderLineItemId: null, bookId: 1, bookTitle: 'Fikir Eske Mekabir', quantity: 3, unitPrice: 10, lineRefundAmount: 29 }],
+        lineItems: [{ id: '1', returnId: '5', transactionLineItemId: '7', orderLineItemId: null, exchangeLineItemId: null, bookId: 1, bookTitle: 'Fikir Eske Mekabir', quantity: 3, unitPrice: 10, lineRefundAmount: 29 }],
         refunds: [
           { id: '1', returnId: '5', method: 'credit_note', amount: 20, createdAt: CREATED },
           { id: '2', returnId: '5', method: 'mobile', amount: 9, createdAt: CREATED },

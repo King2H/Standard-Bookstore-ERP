@@ -87,6 +87,8 @@ const DateOnlySchema = z
 
 export const ExchangeListQuerySchema = ListPagingQuerySchema.extend({
   customerId: IdSchema.optional(),
+  /** EXC-YYYYMMDD-NNNN, exactly: an exchange looked up by its number (#203). */
+  exchangeReference: z.string().trim().max(40).optional(),
   status: z.enum(['Completed', 'Cancelled', 'Initiated', 'Evaluated']).optional(),
   /** From this day on. */
   dateFrom: DateOnlySchema.optional(),

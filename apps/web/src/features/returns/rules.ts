@@ -35,7 +35,11 @@ export function refundLabel(method: string): string {
 /** How many units of a line can still come back; unknown returns (a counter sale's) leave it to the API. */
 export const returnable = (line: { quantity: number; returned: number | null }) => line.quantity - (line.returned ?? 0);
 
-type BoundLine = { quantity: number; returned: number | null; binding: { quantity: number; lineTotal: number; status: string | null } | null };
+type BoundLine = {
+  quantity: number; returned: number | null; binding: { quantity: number; lineTotal: number; status: string | null } | null;
+  /** An exchange's line (#203): no plain copy comes back. */
+  boundOnly?: boolean;
+};
 
 /**
  * How many copies of a line this return may take (#169 PR 3, decision 4a):
@@ -45,6 +49,7 @@ type BoundLine = { quantity: number; returned: number | null; binding: { quantit
 export function returnableCopies(line: BoundLine, defective: boolean): number {
   if (!line.binding) return returnable(line);
   if (defective) return Math.min(returnable(line), line.binding.quantity);
+  if (line.boundOnly) return 0;
   return Math.max(0, Math.min(returnable(line), line.quantity - line.binding.quantity));
 }
 

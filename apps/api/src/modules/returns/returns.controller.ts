@@ -36,9 +36,10 @@ export async function create(req: Request, res: Response): Promise<void> {
   const record = await service.createReturn(actor(req), {
     transactionId: body.transactionId,
     orderId: body.orderId,
+    exchangeId: body.exchangeId,
     reason: body.reason ?? null,
     lines: body.lines.map((l) => ({
-      lineId: (l.orderLineItemId ?? l.transactionLineItemId) as number,
+      lineId: (l.orderLineItemId ?? l.exchangeLineItemId ?? l.transactionLineItemId) as number,
       quantity: l.quantity,
       disposition: l.disposition,
       defective: l.defective,
