@@ -20888,7 +20888,8 @@
                                                     "AT_BINDER",
                                                     "READY",
                                                     "COLLECTED",
-                                                    "CANCELLED"
+                                                    "CANCELLED",
+                                                    "RETURNED"
                                                   ]
                                                 },
                                                 "readyDate": {
@@ -21471,7 +21472,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -21829,7 +21831,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -22280,7 +22283,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -22956,7 +22960,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -23504,7 +23509,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -23945,7 +23951,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -26593,7 +26600,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -27121,7 +27129,8 @@
                                                     "AT_BINDER",
                                                     "READY",
                                                     "COLLECTED",
-                                                    "CANCELLED"
+                                                    "CANCELLED",
+                                                    "RETURNED"
                                                   ]
                                                 },
                                                 "readyDate": {
@@ -27558,7 +27567,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -28042,7 +28052,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -28484,7 +28495,8 @@
                                               "AT_BINDER",
                                               "READY",
                                               "COLLECTED",
-                                              "CANCELLED"
+                                              "CANCELLED",
+                                              "RETURNED"
                                             ]
                                           },
                                           "readyDate": {
@@ -45646,6 +45658,9 @@
                             "SELLABLE",
                             "DAMAGED"
                           ]
+                        },
+                        "defective": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -46697,6 +46712,256 @@
         }
       }
     },
+    "/service-jobs": {
+      "get": {
+        "operationId": "listServiceJobs",
+        "summary": "The session branch's binding jobs, the oldest ready date first, with the customer's phone (selling roles, #169)",
+        "tags": [
+          "Services"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REQUESTED",
+                "AT_BINDER",
+                "READY",
+                "COLLECTED",
+                "CANCELLED",
+                "RETURNED"
+              ]
+            }
+          },
+          {
+            "name": "overdue",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "jobNumber": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "REQUESTED",
+                              "AT_BINDER",
+                              "READY",
+                              "COLLECTED",
+                              "CANCELLED",
+                              "RETURNED"
+                            ]
+                          },
+                          "readyDate": {
+                            "type": "string"
+                          },
+                          "customerId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "branchId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          },
+                          "serviceName": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "customerName": {
+                            "type": "string"
+                          },
+                          "customerPhone": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "POS",
+                              "ORDER"
+                            ]
+                          },
+                          "saleId": {
+                            "type": "string"
+                          },
+                          "saleNumber": {
+                            "type": "string"
+                          },
+                          "overdue": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "jobNumber",
+                          "status",
+                          "readyDate",
+                          "customerId",
+                          "branchId",
+                          "updatedAt",
+                          "serviceName",
+                          "quantity",
+                          "bookTitle",
+                          "customerName",
+                          "customerPhone",
+                          "source",
+                          "saleId",
+                          "saleNumber",
+                          "overdue"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize",
+                    "totalPages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/service-jobs/{id}/{step}": {
       "post": {
         "operationId": "stepServiceJob",
@@ -46752,7 +47017,168 @@
                         "AT_BINDER",
                         "READY",
                         "COLLECTED",
-                        "CANCELLED"
+                        "CANCELLED",
+                        "RETURNED"
+                      ]
+                    },
+                    "readyDate": {
+                      "type": "string"
+                    },
+                    "customerId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "jobNumber",
+                    "status",
+                    "readyDate",
+                    "customerId",
+                    "branchId",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service-jobs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelServiceBinding",
+        "summary": "Cancel a binding still Requested; its fee goes back the way the sale was paid, as a return (Admin, Manager)",
+        "tags": [
+          "Services"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The job, cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "jobNumber": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "REQUESTED",
+                        "AT_BINDER",
+                        "READY",
+                        "COLLECTED",
+                        "CANCELLED",
+                        "RETURNED"
                       ]
                     },
                     "readyDate": {

@@ -1,4 +1,7 @@
-import type { Service, ServiceBranchFeeRequest, ServiceJob, ServiceJobStep, ServiceListResponse, ServiceRequest } from '@bms/shared';
+import type {
+  CancelBindingRequest, Service, ServiceBranchFeeRequest, ServiceJob, ServiceJobListResponse, ServiceJobStatus, ServiceJobStep,
+  ServiceListResponse, ServiceRequest,
+} from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
 /** The services endpoints (#169), typed with their @bms/shared contracts. Fees are the session branch's. */
@@ -28,3 +31,17 @@ export const removeBranchFee = (id: number) => api.delete<Service>(`/services/${
 
 /** Moves a binding job of the session branch one step on (#169 PR 2). */
 export const stepJob = (id: number, step: ServiceJobStep) => api.post<ServiceJob>(`/service-jobs/${id}/${step}`);
+
+/** The jobs board (#169 PR 3, 1a): the session branch's jobs, the oldest ready date first. */
+export type ServiceJobParams = {
+  status?: ServiceJobStatus;
+  overdue?: 'true';
+  q?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export const listServiceJobs = (params: ServiceJobParams) => api.get<ServiceJobListResponse>(`/service-jobs${toQuery(params)}`);
+
+/** Cancels a binding still Requested (3a); its fee goes back through Returns. */
+export const cancelBinding = (id: number, body: CancelBindingRequest) => api.post<ServiceJob>(`/service-jobs/${id}/cancel`, body);

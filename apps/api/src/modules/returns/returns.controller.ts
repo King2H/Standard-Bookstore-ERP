@@ -41,6 +41,7 @@ export async function create(req: Request, res: Response): Promise<void> {
       lineId: (l.orderLineItemId ?? l.transactionLineItemId) as number,
       quantity: l.quantity,
       disposition: l.disposition,
+      defective: l.defective,
     })),
   });
   const response: Return = toReturnResponse(record);

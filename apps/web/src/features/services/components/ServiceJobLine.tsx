@@ -1,15 +1,16 @@
-import { Money, type SaleServiceLine } from '@bms/shared';
+import { Money, type SaleServiceLine, type ServiceJobStatus } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { JOB_STATUS_LABEL, nextStep } from '../binding.js';
 import { useJobStep } from '../queries.js';
 
-const STATUS_CLASS: Record<string, string> = {
+export const STATUS_CLASS: Record<ServiceJobStatus, string> = {
   REQUESTED: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
   AT_BINDER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   READY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   COLLECTED: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
   CANCELLED: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400',
+  RETURNED: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400',
 };
 
 /**
@@ -39,7 +40,7 @@ export function ServiceJobLine({ line, canStep, onOrder = false, refresh }: {
         <>
           <span className="font-mono">{job.jobNumber}</span>
           <span className={`px-1.5 py-0.5 rounded-sm font-medium ${STATUS_CLASS[job.status]}`}>{JOB_STATUS_LABEL[job.status]}</span>
-          {!['COLLECTED', 'CANCELLED'].includes(job.status) && <span>ready {job.readyDate}</span>}
+          {!['COLLECTED', 'CANCELLED', 'RETURNED'].includes(job.status) && <span>ready {job.readyDate}</span>}
           {offer && (
             <button type="button" disabled={move.isPending}
               onClick={() => move.mutate({ id: job.id, step: next.step }, {

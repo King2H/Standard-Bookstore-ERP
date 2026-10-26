@@ -495,6 +495,73 @@ async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesL
   });
 }
 
+// ── RETURN rows of fees (#169 PR 3) ──────────────────────────────────────────
+// A fee a return gave back: a binding cancelled before its work, or a
+// defective bound copy's share. netAmount is the fee given back, negative;
+// costAmount credits back only the standard cost the return reversed (all
+// of it for work never done, none for a defect, whose cost stays a loss).
+
+async function getServiceReturnRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
+  const { conditions, params } = buildDateBranchConditions(filters, 'r');
+  conditions.unshift(`r.status = 'completed'`);
+  const res = await reportRows(q,
+    `SELECT
+       TO_CHAR(r.created_at, 'YYYY-MM-DD') AS transaction_date,
+       r.return_number AS reference_number,
+       br.name AS branch, loc.name AS location_name,
+       COALESCE(c.full_name, 'Walk-in') AS customer_name,
+       sv.name AS service_name, b.title AS book_title, b.isbn AS book_isbn,
+       rsl.quantity, sl.unit_fee, rsl.amount, rsl.cost_reversed,
+       r.refund_method, s.username AS staff_username
+     FROM return_service_lines rsl
+     JOIN returns r ON r.id = rsl.return_id
+     JOIN sale_service_lines sl ON sl.id = rsl.service_line_id
+     JOIN services sv ON sv.id = sl.service_id
+     LEFT JOIN transaction_line_items tli ON tli.id = sl.transaction_line_item_id
+     LEFT JOIN order_line_items oli ON oli.id = sl.order_line_item_id
+     JOIN books b ON b.id = COALESCE(tli.book_id, oli.book_id)
+     JOIN branches br ON br.id = r.branch_id
+     LEFT JOIN transactions t ON t.id = r.transaction_id
+     LEFT JOIN orders o ON o.id = r.order_id
+     LEFT JOIN locations loc ON loc.id = COALESCE(t.location_id, o.location_id)
+     LEFT JOIN customers c ON c.id = r.customer_id
+     LEFT JOIN staff s ON s.id = r.processed_by
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY r.created_at, rsl.id`,
+    params,
+  );
+  return res.map((row): SalesLineRecord => {
+    const quantity = row.quantity as number;
+    const unitPrice = Money.of(row.unit_fee as string);
+    const netAmount = Money.of(row.amount as string).negate();
+    const costAmount = Money.of(row.cost_reversed as string).negate();
+    return {
+      transactionDate: row.transaction_date as string,
+      transactionType: 'RETURN',
+      kind: 'SERVICE',
+      referenceNumber: row.reference_number as string,
+      branch: row.branch as string,
+      locationName: (row.location_name as string | null) ?? '',
+      customerName: row.customer_name as string,
+      bookTitle: `${row.service_name as string} (${row.book_title as string})`,
+      bookIsbn: (row.book_isbn as string | null) ?? '',
+      quantity: -quantity,
+      unitPrice: unitPrice.toNumber(),
+      discountAmount: 0,
+      discountType: null,
+      grossAmount: unitPrice.times(quantity).round(2).toNumber(),
+      netAmount: netAmount.toNumber(),
+      costAmount: costAmount.toNumber(),
+      grossProfit: netAmount.minus(costAmount).toNumber(),
+      paymentStatus: 'PAID',
+      paymentMethod: mapPaymentMethod(row.refund_method as string | null),
+      cashCollected: 0,
+      receivableBalance: 0,
+      staffUsername: (row.staff_username as string | null) ?? '',
+    };
+  });
+}
+
 // ── EXCHANGE rows ────────────────────────────────────────────────────────────
 // Covers both storage shapes exactly like exchanges.service.ts's fetchItems()
 // does — an exchange only ever has rows in ONE of the two, so the legacy
@@ -660,13 +727,14 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
 // ── All lines ─────────────────────────────────────────────────────────────────
 
 export async function salesLines(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
-  const [orderRows, posRows, serviceRows, returnRows, exchangeRows] = await Promise.all([
+  const [orderRows, posRows, serviceRows, returnRows, serviceReturnRows, exchangeRows] = await Promise.all([
     getOrderRows(q, filters),
     getPosRows(q, filters),
     getServiceRows(q, filters),
     getReturnRows(q, filters),
+    getServiceReturnRows(q, filters),
     getExchangeRows(q, filters),
   ]);
-  return [...orderRows, ...posRows, ...serviceRows, ...returnRows, ...exchangeRows]
+  return [...orderRows, ...posRows, ...serviceRows, ...returnRows, ...serviceReturnRows, ...exchangeRows]
     .sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
 }

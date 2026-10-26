@@ -87,6 +87,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `VERSION_CONFLICT`
 
 ## Business rules (422)
+- `BOUND_COPY_NOT_COLLECTED`
 
 - `ALREADY_CANCELLED`
 - `ALREADY_COMPLETED`

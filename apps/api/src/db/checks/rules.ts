@@ -290,6 +290,20 @@ export const CHECKS: readonly Check[] = [
         AND (t.id IS NOT NULL OR o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled'))`,
   },
 
+  {
+    id: 'services.returned-within-charged',
+    area: 'Services',
+    // Returns give back a fee for no more copies and no more money than the sale charged (#169 PR 3).
+    title: 'No fee is given back beyond what the sale charged',
+    severity: 'error',
+    sql: `
+      SELECT sl.tenant_id, 'service line ' || sl.id || ': ' || SUM(r.quantity) || ' of ' || sl.quantity
+             || ' copies, ' || SUM(r.amount) || ' of ' || sl.line_total || ' given back' AS ref
+      FROM sale_service_lines sl JOIN return_service_lines r ON r.service_line_id = sl.id
+      GROUP BY sl.tenant_id, sl.id, sl.quantity, sl.line_total
+      HAVING SUM(r.quantity) > sl.quantity OR SUM(r.amount) > sl.line_total`,
+  },
+
   // ── Currency ───────────────────────────────────────────────────────────────
   {
     id: 'currency.shop',

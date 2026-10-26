@@ -1,16 +1,20 @@
 import type { Request, Response } from 'express';
 import {
+  CancelBindingRequestSchema,
   IdParamsSchema,
   ServiceBranchFeeRequestSchema,
   ServiceListQuerySchema,
+  ServiceJobListQuerySchema,
   ServiceJobStepParamsSchema,
   ServiceRequestSchema,
   type Service,
   type ServiceJob,
+  type ServiceJobListResponse,
   type ServiceListResponse,
 } from '@bms/shared';
 import { valid } from '../../middleware/validate.js';
-import { toJobResponse, toServiceResponse } from './services.mapper.js';
+import * as returnsService from '../returns/returns.service.js';
+import { toBoardItemResponse, toJobResponse, toServiceResponse } from './services.mapper.js';
 import * as policy from './services.policy.js';
 import * as saleServices from './saleServices.service.js';
 import * as service from './services.service.js';
@@ -28,12 +32,20 @@ export const schemas = {
   update: { params: IdParamsSchema, body: ServiceRequestSchema },
   branchFee: { params: IdParamsSchema, body: ServiceBranchFeeRequestSchema },
   jobStep: { params: ServiceJobStepParamsSchema },
+  jobs: { query: ServiceJobListQuerySchema },
+  cancelBinding: { params: IdParamsSchema, body: CancelBindingRequestSchema },
 };
 
 /** The signed-in staff member; authenticate() runs before every controller. */
 function actor(req: Request): Actor {
   const { staffId, role, branchId } = req.staff!;
   return { staffId, role, branchId };
+}
+
+/** Returns looks at every role held (a defect needs a Manager or Admin). */
+function returnsActor(req: Request) {
+  const { staffId, role, roles, branchId } = req.staff!;
+  return { staffId, role, roles: roles ?? [role], branchId };
 }
 
 function reply(res: Response, record: Parameters<typeof toServiceResponse>[0], status = 200): void {
@@ -91,4 +103,29 @@ export async function stepJob(req: Request, res: Response): Promise<void> {
   const { params } = valid(req, schemas.jobStep);
   const body: ServiceJob = toJobResponse(await saleServices.stepJob(actor(req), params.id, params.step));
   res.json(body);
+}
+
+/** The jobs board of the session branch (#169 PR 3, 1a). */
+export async function listJobs(req: Request, res: Response): Promise<void> {
+  const { query } = valid(req, schemas.jobs);
+  const result = await saleServices.listJobs(
+    { branchId: req.staff!.branchId, status: query.status, overdue: query.overdue, q: query.q || undefined },
+    { page: query.page, pageSize: query.pageSize },
+  );
+  const body: ServiceJobListResponse = {
+    items: result.items.map(toBoardItemResponse),
+    total: result.total,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalPages: Math.ceil(result.total / query.pageSize),
+  };
+  res.json(body);
+}
+
+/** Cancels a binding still Requested; its fee goes back through Returns (3a). */
+export async function cancelBinding(req: Request, res: Response): Promise<void> {
+  const { params, body } = valid(req, schemas.cancelBinding);
+  await returnsService.cancelBinding(returnsActor(req), params.id, body.reason);
+  const job: ServiceJob = toJobResponse(await saleServices.getJob(params.id, req.staff!.branchId));
+  res.json(job);
 }

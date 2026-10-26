@@ -61,9 +61,18 @@ describe('Data consistency check', () => {
       `INSERT INTO services (code, name, format_id, fee, standard_cost) VALUES ($1, 'Check binding', $2, 5, 2) RETURNING id`,
       [`${MARK}-SVC`, formatId],
     );
-    await client.query(
-      `INSERT INTO sale_service_lines (order_line_item_id, service_id, quantity, unit_fee, line_total, standard_cost) VALUES ($1, $2, 1, 5, 5, 2)`,
+    const serviceLine = await one(
+      `INSERT INTO sale_service_lines (order_line_item_id, service_id, quantity, unit_fee, line_total, standard_cost) VALUES ($1, $2, 1, 5, 5, 2) RETURNING id`,
       [orderLine, serviceId],
+    );
+    // ...and more of its fee given back than it charged.
+    const returnId = await one(
+      `INSERT INTO returns (return_number, order_id, branch_id, total_refund_amount, refund_method, processed_by) VALUES ($1, $2, $3, 9, 'cash', $4) RETURNING id`,
+      [`${MARK}-RET`, paidOrder, branchId, staffId],
+    );
+    await client.query(
+      `INSERT INTO return_service_lines (return_id, service_line_id, quantity, amount, cost_reversed, kind) VALUES ($1, $2, 1, 9, 0, 'DEFECT')`,
+      [returnId, serviceLine],
     );
 
     // Receivables: owing more than first owed; settled but still owing.
@@ -146,6 +155,7 @@ describe('Data consistency check', () => {
     ['orders.payment-status', /-9999: paid, payments say unpaid/],
     ['orders.cancelled-money-returned', new RegExp(`^${MARK}-KEPT: holds 10\\.00 \\(paid 10\\.00, refunded 0\\)$`)],
     ['services.sale-has-job', /^service line \d+ on ORD-\d{8}-9999: no job$/],
+    ['services.returned-within-charged', /^service line \d+: 1 of 1 copies, 9\.00 of 5\.00 given back$/],
     ['procurement.status-matches-lines', /\(ordered\): 2 received/],
     ['procurement.paid-within-total', /paid and credited 60\.00 of 50\.00$/],
     ['bank.matched-line-cleared', /is uncleared$/],
@@ -171,6 +181,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/19 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/20 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

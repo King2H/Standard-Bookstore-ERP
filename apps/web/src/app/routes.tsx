@@ -19,6 +19,7 @@ import ExchangesPage from '../features/exchanges/pages/ExchangesPage.js';
 import ReceivablesPage from '../features/receivables/pages/ReceivablesPage.js';
 import DashboardPage from '../features/dashboard/pages/DashboardPage.js';
 import ProfilePage from '../features/account/pages/ProfilePage.js';
+import BindingJobsPage from '../features/services/pages/BindingJobsPage.js';
 import { canOpenPage, isPage, landingPage, pagePath, type Page } from './navigation.js';
 import type { Session } from './useSession.js';
 
@@ -49,6 +50,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'pos'          && <PosPage userRole={role} userPermissions={userPermissions} initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'returns'      && <ReturnsPage initialContext={initialContext} />}
         {page === 'orders'       && <OrdersPage initialContext={initialContext} onNavigate={navigateTo} />}
+        {page === 'binding-jobs' && <BindingJobsPage />}
         {page === 'payments'     && <PaymentsPage initialContext={initialContext} />}
         {page === 'exchanges'    && <ExchangesPage />}
         {page === 'receivables'  && <ReceivablesPage initialContext={initialContext} onNavigate={navigateTo} />}

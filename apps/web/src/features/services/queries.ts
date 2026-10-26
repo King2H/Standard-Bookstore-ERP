@@ -1,8 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ServiceJobStep, ServiceRequest } from '@bms/shared';
 import {
-  createService, listServices, removeBranchFee, runServiceAction, setBranchFee, stepJob, updateService,
-  type ServiceAction, type ServiceParams,
+  cancelBinding, createService, listServiceJobs, listServices, removeBranchFee, runServiceAction, setBranchFee, stepJob, updateService,
+  type ServiceAction, type ServiceJobParams, type ServiceParams,
 } from './api.js';
 
 /** Query keys for services. Every key starts with `serviceKeys.all`, so a change refreshes every list. */
@@ -10,6 +10,25 @@ export const serviceKeys = {
   all: ['services'] as const,
   list: (params: ServiceParams) => [...serviceKeys.all, 'list', params] as const,
 };
+
+/** Query keys for the jobs board; a Ready notification refreshes them all. */
+export const serviceJobKeys = {
+  all: ['service-jobs'] as const,
+  list: (params: ServiceJobParams) => [...serviceJobKeys.all, 'list', params] as const,
+};
+
+export function useServiceJobs(params: ServiceJobParams) {
+  return useQuery({ queryKey: serviceJobKeys.list(params), queryFn: () => listServiceJobs(params), placeholderData: keepPreviousData });
+}
+
+/** Cancels a binding still Requested; `refresh` names the queries that carry it. */
+export function useCancelBinding(refresh: ReadonlyArray<readonly unknown[]>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => cancelBinding(id, { reason }),
+    onSuccess: () => Promise.all(refresh.map((queryKey) => qc.invalidateQueries({ queryKey }))),
+  });
+}
 
 export function useServices(params: ServiceParams) {
   return useQuery({ queryKey: serviceKeys.list(params), queryFn: () => listServices(params), placeholderData: keepPreviousData });

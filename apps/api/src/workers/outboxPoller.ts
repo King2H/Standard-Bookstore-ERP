@@ -19,7 +19,7 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
 type EventHandler = (payload: Record<string, unknown>) => Promise<void>;
 
-const HANDLERS: Record<string, EventHandler> = {
+export const HANDLERS: Readonly<Record<string, EventHandler>> = {
   LoyaltyAccrualRequested: handleLoyaltyAccrual,
   // Phase 5 — Notification system: all notification event types route to handleNotification
   'inventory.stock_in': handleNotification,
@@ -61,6 +61,7 @@ const HANDLERS: Record<string, EventHandler> = {
   'auth.failed_login_attempts': handleNotification,
   'auth.staff_deactivated': handleNotification,
   'auth.password_reset': handleNotification,
+  'service_job.ready': handleNotification,
 };
 
 async function pollOnce(): Promise<void> {

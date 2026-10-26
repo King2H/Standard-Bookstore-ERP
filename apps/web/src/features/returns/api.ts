@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type {
   CreateReturnRequestSchema, Order, OrderListResponse, PosTransaction, PosTransactionListResponse, Return, ReturnListResponse,
+  SaleServiceLine, ServiceJobStatus,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
@@ -39,7 +40,23 @@ export interface ReturnableSale {
   returnable: boolean;
   /** When it was sold, or when the order was delivered. */
   date: string;
-  lines: Array<{ id: string; bookTitle: string; unitPrice: number; quantity: number; lineTotal: number; returned: number | null }>;
+  lines: ReturnableLine[];
+}
+
+export interface ReturnableLine {
+  id: string;
+  bookTitle: string;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  returned: number | null;
+  /** The line's binding (#169 PR 3): its copies come back only defective. None once cancelled: they are plain copies again. */
+  binding: { quantity: number; lineTotal: number; status: ServiceJobStatus | null } | null;
+}
+
+function bindingOf(service: SaleServiceLine | null | undefined): ReturnableLine['binding'] {
+  if (!service || service.job?.status === 'CANCELLED') return null;
+  return { quantity: service.quantity, lineTotal: service.lineTotal, status: service.job?.status ?? null };
 }
 
 const DELIVERED = ['FULFILLED', 'COMPLETED', 'Fulfilled'];
@@ -48,7 +65,9 @@ function fromSale(t: PosTransaction): ReturnableSale {
   return {
     kind: 'sale', id: t.id, number: t.transactionNumber, total: t.grandTotal, paid: t.amountPaid, status: t.status,
     returnable: t.status !== 'voided', date: t.createdAt,
-    lines: (t.lineItems ?? []).map((l) => ({ id: l.id, bookTitle: l.bookTitle, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.lineTotal, returned: null })),
+    lines: (t.lineItems ?? []).map((l) => ({
+      id: l.id, bookTitle: l.bookTitle, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.lineTotal, returned: null, binding: bindingOf(l.service),
+    })),
   };
 }
 
@@ -58,6 +77,7 @@ function fromOrder(o: Order): ReturnableSale {
     returnable: DELIVERED.includes(o.status) && o.fulfilledAt !== null, date: o.fulfilledAt ?? o.createdAt,
     lines: (o.lineItems ?? []).map((l) => ({
       id: l.id, bookTitle: l.bookTitle, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.totalPrice, returned: l.qtyReturned,
+      binding: bindingOf(l.service),
     })),
   };
 }

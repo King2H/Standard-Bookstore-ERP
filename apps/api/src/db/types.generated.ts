@@ -743,6 +743,18 @@ export interface Returns {
   transaction_id: Int8 | null;
 }
 
+export interface ReturnServiceLines {
+  amount: Numeric;
+  cost_reversed: Numeric;
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  kind: string;
+  quantity: number;
+  return_id: Int8;
+  service_line_id: Int8;
+  tenant_id: Generated<number>;
+}
+
 export interface SaleServiceLines {
   created_at: Generated<Timestamp>;
   discount_amount: Generated<Numeric>;
@@ -1025,6 +1037,7 @@ export interface DB {
   refresh_tokens: RefreshTokens;
   refunds: Refunds;
   return_line_items: ReturnLineItems;
+  return_service_lines: ReturnServiceLines;
   returns: Returns;
   sale_service_lines: SaleServiceLines;
   service_branch_fees: ServiceBranchFees;

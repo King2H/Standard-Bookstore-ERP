@@ -2,7 +2,7 @@ import { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
-import { NotFoundError } from '../../lib/errors.js';
+import { BusinessError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { recordMovement } from '../bankAccount/bankAccount.service.js';
@@ -15,7 +15,10 @@ import * as saleServices from '../services/saleServices.service.js';
 import * as policy from './returns.policy.js';
 import * as returns from './returns.repository.js';
 import { refundableOnOrder, refundReturnedOrder, settleReturnedOrder } from '../payments/payments.service.js';
-import type { Actor, Paging, RefundMethod, RefundPart, ReturnFilter, ReturnLineRequest, ReturnRecord, SaleForReturn, SaleLine } from './returns.types.js';
+import type { FeeReturn } from '../services/services.types.js';
+import type {
+  Actor, OrderForReturn, Paging, RefundMethod, RefundPart, ReturnFilter, ReturnLineRequest, ReturnRecord, SaleForReturn, SaleLine,
+} from './returns.types.js';
 
 /**
  * Use cases of returns (A4): books brought back from a counter sale or a
@@ -45,6 +48,8 @@ interface ValuedLine {
   line: SaleLine;
   quantity: number;
   disposition: ReturnLineRequest['disposition'];
+  /** Bound copies brought back defective (#169 PR 3). */
+  defective: boolean;
   value: Money;
 }
 
@@ -57,7 +62,7 @@ function valueLines(saleLines: SaleLine[], requested: ReturnLineRequest[], lineN
     const value = policy.lineValue(line, r.quantity);
     line.returnedQuantity += r.quantity;
     line.returnedValue = line.returnedValue.plus(value);
-    return { line, quantity: r.quantity, disposition: r.disposition, value };
+    return { line, quantity: r.quantity, disposition: r.disposition, defective: r.defective ?? false, value };
   });
 }
 
@@ -204,28 +209,62 @@ export async function createReturn(
 }
 
 /**
- * The sale is locked, so returns on it run one after another and never take
- * back more than was sold. The books' value is first set against what the
- * customer still owes on the sale, as a credit note (1a); the rest goes back
- * the way the sale was paid (2a).
+ * Bound copies on the lines a return names (#169 PR 3): plain copies come
+ * back as any book; a bound one only defective, once handed over, with a
+ * reason and a Manager or Admin, kept apart as damaged, taking its share of
+ * the fee with it (4a). Returns the fees given back.
  */
-async function returnSale(
+async function boundCopies(
   tx: Queryable,
   actor: Actor,
-  input: { transactionId: number; reason: string | null; lines: ReturnLineRequest[] },
+  lines: ValuedLine[],
+  sale: { orderId: string | null },
+  reason: string | null,
+): Promise<FeeReturn[]> {
+  const ids = lines.map((l) => l.line.id);
+  const bindings = await saleServices.bindingsOf(tx, sale.orderId !== null ? { orderLineIds: ids } : { posLineIds: ids });
+  // What came back before this return, line by line; valueLines already counted this one in.
+  const requested = new Map<string, number>();
+  for (const l of lines) requested.set(l.line.id, (requested.get(l.line.id) ?? 0) + l.quantity);
+  const soFar = new Map<string, number>();
+  const fees: FeeReturn[] = [];
+  for (const l of lines) {
+    const found = bindings.get(l.line.id);
+    // A cancelled binding left ordinary copies.
+    const binding = found && found.jobStatus !== 'CANCELLED' ? found : undefined;
+    const before = soFar.get(l.line.id) ?? l.line.returnedQuantity - (requested.get(l.line.id) ?? 0);
+    soFar.set(l.line.id, before + l.quantity);
+    if (!binding) continue;
+    const left = saleServices.copiesLeft({ quantity: l.line.quantity, returnedQuantity: before }, binding);
+    saleServices.checkBoundReturn(`line ${l.line.id}`, { quantity: l.quantity, defective: l.defective }, left, binding.jobStatus);
+    if (!l.defective) continue;
+    if (!actor.roles.includes('Manager') && !actor.roles.includes('Admin')) {
+      throw new BusinessError('APPROVAL_REQUIRED', 'A bound copy comes back defective only with a Manager or Admin');
+    }
+    if (!reason?.trim()) throw new ValidationError('Say what is wrong with the bound copy', { field: 'reason' });
+    l.disposition = 'DAMAGED';
+    const amount = saleServices.feeShare(binding, l.quantity);
+    // The binding's cost stays a loss: the work was done (4a).
+    fees.push({ binding: { ...binding }, quantity: l.quantity, amount, costReversed: Money.ZERO, kind: 'DEFECT' });
+    binding.returnedQuantity += l.quantity;
+    binding.returnedAmount = binding.returnedAmount.plus(amount);
+  }
+  return fees;
+}
+
+/**
+ * A return's money on a counter sale: what it takes back is first set
+ * against what the customer still owes on the sale, as a credit note (1a);
+ * the rest goes back the way the sale was paid (2a). The books go back to
+ * stock and the fees given back are recorded on the return.
+ */
+async function settleSale(
+  tx: Queryable,
+  actor: Actor,
+  sale: SaleForReturn,
+  r: { lines: ValuedLine[]; fees: FeeReturn[]; reason: string | null; approved: boolean },
 ): Promise<string> {
-  const sale = await returns.lockSale(tx, input.transactionId);
-  if (!sale) throw new NotFoundError('Transaction');
-  policy.checkSale(sale, actor.branchId);
-  await assertAssignedLocation(sale.locationId, actor);
-
-  const lines = valueLines(await returns.saleLines(tx, sale.id), input.lines, 'Transaction line item');
-  // A bound copy comes back with #169's later rules; refused until then.
-  await saleServices.checkNotBound(tx, { posLineIds: lines.map((l) => l.line.id) });
-  const total = Money.sum(lines.map((l) => l.value));
-  const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
-  policy.checkApproval(total, maxWithoutAuth, actor.roles);
-
+  const total = Money.sum([...r.lines.map((l) => l.value), ...r.fees.map((f) => f.amount)]);
   const credited = sale.amountDue.greaterThan(0)
     ? await creditReturn(tx, { sourceType: 'pos_credit_sale', sourceEntityId: sale.id, amount: total })
     : Money.ZERO;
@@ -247,15 +286,16 @@ async function returnSale(
   const parts: RefundPart[] = credited.greaterThan(0) ? [{ method: 'credit_note', amount: credited }, ...refunded] : refunded;
   const refundMethod = policy.refundMethodOf(parts);
 
-  await restock(tx, actor, lines, { locationId: sale.locationId, referenceType: 'pos_return', referenceId: sale.id });
+  await restock(tx, actor, r.lines, { locationId: sale.locationId, referenceType: 'pos_return', referenceId: sale.id });
   const { returnId, returnNumber } = await recordReturn(tx, actor, {
     sale: { transactionId: sale.id, orderId: null, number: sale.transactionNumber, branchId: sale.branchId, customerId: sale.customerId },
-    lines,
+    lines: r.lines,
     total,
     refundMethod,
-    reason: input.reason,
-    approved: total.greaterThan(maxWithoutAuth),
+    reason: r.reason,
+    approved: r.approved,
   });
+  for (const fee of r.fees) await saleServices.recordFeeReturn(tx, actor, returnId, fee, sale.transactionNumber);
   // A bank refund goes out of the account the sale was paid into (#21).
   const bankAccountId = parts.some((p) => p.method === 'bank') ? await returns.lastBankAccount(tx, sale.id) : null;
   for (const p of parts) {
@@ -267,8 +307,9 @@ async function returnSale(
   }
 
   await payBack(tx, sale, returnId, refunded);
-  // What all returns on the sale took back, this one included.
-  await reversePoints(tx, sale, Money.sum((await returns.saleLines(tx, sale.id)).map((l) => l.returnedValue)));
+  // What all returns on the sale took back, this one included: books and fees.
+  const books = Money.sum((await returns.saleLines(tx, sale.id)).map((l) => l.returnedValue));
+  await reversePoints(tx, sale, books.plus(await saleServices.feesReturnedOnSale(tx, sale.id)));
 
   await announce(tx, actor, {
     returnId, returnNumber, sale: { transactionId: sale.id }, saleNumber: sale.transactionNumber, total, refundMethod, parts,
@@ -277,31 +318,18 @@ async function returnSale(
 }
 
 /**
- * A delivered customer order, by the same rules (#166): only once delivered
- * (2a), the window counted from delivery (3a). A credit order's debt takes
- * the value first, as a credit note; the rest goes back through the order's
- * own payments, newest first, so Payments and the reports count each refund
- * once. Orders earn no points, so none are taken back. The order stays
- * completed; its lines show what came back (4a).
+ * A return's money on a customer order, by the same rules (#166): a credit
+ * order's debt takes the value first, as a credit note; the rest goes back
+ * through the order's own payments, newest first, so Payments and the
+ * reports count each refund once. Orders earn no points.
  */
-async function returnOrder(
+async function settleOrder(
   tx: Queryable,
   actor: Actor,
-  input: { orderId: number; reason: string | null; lines: ReturnLineRequest[] },
+  order: OrderForReturn,
+  r: { locationId: number | null; lines: ValuedLine[]; fees: FeeReturn[]; reason: string | null; approved: boolean },
 ): Promise<string> {
-  const order = await returns.lockOrder(tx, input.orderId);
-  if (!order) throw new NotFoundError('Order');
-  policy.checkOrder(order, actor.branchId);
-  const locationId = order.locationId ?? (await returns.branchLocation(tx, order.branchId));
-  if (locationId === null) throw new NotFoundError('Location');
-  await assertAssignedLocation(locationId, actor);
-
-  const lines = valueLines(await returns.orderLines(tx, order.id), input.lines, 'Order line item');
-  await saleServices.checkNotBound(tx, { orderLineIds: lines.map((l) => l.line.id) });
-  const total = Money.sum(lines.map((l) => l.value));
-  const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
-  policy.checkApproval(total, maxWithoutAuth, actor.roles);
-
+  const total = Money.sum([...r.lines.map((l) => l.value), ...r.fees.map((f) => f.amount)]);
   const credited = order.saleType === 'credit_sale'
     ? await creditReturn(tx, { sourceType: 'order_credit_sale', sourceEntityId: order.id, amount: total })
     : Money.ZERO;
@@ -316,17 +344,18 @@ async function returnOrder(
     storeCreditOnly, hasCustomer: order.customerId !== null, paidLeft: await refundableOnOrder(tx, order.id),
   });
 
-  await restock(tx, actor, lines, { locationId, referenceType: 'order_return', referenceId: order.id });
+  if (r.locationId !== null) await restock(tx, actor, r.lines, { locationId: r.locationId, referenceType: 'order_return', referenceId: order.id });
   // The refund method is known once the payments have been refunded; the
   // return is recorded first so each refund can name it.
   const { returnId, returnNumber } = await recordReturn(tx, actor, {
     sale: { transactionId: null, orderId: order.id, number: order.orderNumber, branchId: order.branchId, customerId: order.customerId },
-    lines,
+    lines: r.lines,
     total,
     refundMethod: 'cash',
-    reason: input.reason,
-    approved: total.greaterThan(maxWithoutAuth),
+    reason: r.reason,
+    approved: r.approved,
   });
+  for (const fee of r.fees) await saleServices.recordFeeReturn(tx, actor, returnId, fee, order.orderNumber);
   if (credited.greaterThan(0)) await returns.insertRefund(tx, returnId, { method: 'credit_note', amount: credited });
   const refunded: RefundPart[] = toRefund.greaterThan(0)
     ? (await refundReturnedOrder(tx, actor, order.id, {
@@ -342,4 +371,86 @@ async function returnOrder(
     returnId, returnNumber, sale: { orderId: order.id }, saleNumber: order.orderNumber, total, refundMethod, parts,
   });
   return returnId;
+}
+
+/**
+ * The sale is locked, so returns on it run one after another and never take
+ * back more than was sold.
+ */
+async function returnSale(
+  tx: Queryable,
+  actor: Actor,
+  input: { transactionId: number; reason: string | null; lines: ReturnLineRequest[] },
+): Promise<string> {
+  const sale = await returns.lockSale(tx, input.transactionId);
+  if (!sale) throw new NotFoundError('Transaction');
+  policy.checkSale(sale, actor.branchId);
+  await assertAssignedLocation(sale.locationId, actor);
+
+  const lines = valueLines(await returns.saleLines(tx, sale.id), input.lines, 'Transaction line item');
+  const fees = await boundCopies(tx, actor, lines, { orderId: null }, input.reason);
+  const total = Money.sum([...lines.map((l) => l.value), ...fees.map((f) => f.amount)]);
+  const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
+  policy.checkApproval(total, maxWithoutAuth, actor.roles);
+  return settleSale(tx, actor, sale, { lines, fees, reason: input.reason, approved: total.greaterThan(maxWithoutAuth) || fees.length > 0 });
+}
+
+/**
+ * A delivered customer order, by the same rules (#166): only once delivered
+ * (2a), the window counted from delivery (3a). The order stays completed;
+ * its lines show what came back (4a).
+ */
+async function returnOrder(
+  tx: Queryable,
+  actor: Actor,
+  input: { orderId: number; reason: string | null; lines: ReturnLineRequest[] },
+): Promise<string> {
+  const order = await returns.lockOrder(tx, input.orderId);
+  if (!order) throw new NotFoundError('Order');
+  policy.checkOrder(order, actor.branchId);
+  const locationId = order.locationId ?? (await returns.branchLocation(tx, order.branchId));
+  if (locationId === null) throw new NotFoundError('Location');
+  await assertAssignedLocation(locationId, actor);
+
+  const lines = valueLines(await returns.orderLines(tx, order.id), input.lines, 'Order line item');
+  const fees = await boundCopies(tx, actor, lines, { orderId: order.id }, input.reason);
+  const total = Money.sum([...lines.map((l) => l.value), ...fees.map((f) => f.amount)]);
+  const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
+  policy.checkApproval(total, maxWithoutAuth, actor.roles);
+  return settleOrder(tx, actor, order, { locationId, lines, fees, reason: input.reason, approved: total.greaterThan(maxWithoutAuth) || fees.length > 0 });
+}
+
+// ── Cancelling a binding ──────────────────────────────────────────────────────
+
+/**
+ * A binding cancelled while its work has not started (#169 PR 3, owner
+ * decision 3a), by a Manager or Admin with a reason: its fee goes back as a
+ * return of the fee, the way the sale was paid, and its standard cost comes
+ * off the sale's cost. The copies stay sold, ordinary ones from then on. An
+ * order's fee goes back through its payments, delivered or not.
+ */
+export async function cancelBinding(actor: Actor, jobId: number, reason: string): Promise<void> {
+  await withTransaction({}, async (tx) => {
+    const { binding, sale } = await saleServices.jobForCancel(tx, jobId, actor.branchId);
+    saleServices.checkCancellable(binding.jobStatus);
+    const quantity = binding.quantity - binding.returnedQuantity;
+    const fee: FeeReturn = {
+      binding,
+      quantity,
+      amount: binding.lineTotal.minus(binding.returnedAmount),
+      costReversed: binding.standardCost.times(quantity),
+      kind: 'CANCELLED',
+    };
+    if ('transactionId' in sale) {
+      const found = await returns.lockSale(tx, Number(sale.transactionId));
+      if (!found) throw new NotFoundError('Transaction');
+      policy.checkSale(found, actor.branchId);
+      await settleSale(tx, actor, found, { lines: [], fees: [fee], reason, approved: true });
+    } else {
+      const order = await returns.lockOrder(tx, Number(sale.orderId));
+      if (!order) throw new NotFoundError('Order');
+      if (order.branchId !== actor.branchId) throw new NotFoundError('Order');
+      await settleOrder(tx, actor, order, { locationId: null, lines: [], fees: [fee], reason, approved: true });
+    }
+  });
 }

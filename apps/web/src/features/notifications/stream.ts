@@ -14,6 +14,7 @@ const ENTITY_QUERY_KEYS: Record<string, string[][]> = {
   payment:        [['payments'], ['orders-list']],
   exchange:       [['exchanges']],
   customer:       [['customers']],
+  service_job:    [['service-jobs']],
 };
 
 /**

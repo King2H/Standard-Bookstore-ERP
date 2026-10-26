@@ -3,9 +3,10 @@ import { Money } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
-import type { ReturnableSale } from '../api.js';
+import type { ReturnableLine, ReturnableSale } from '../api.js';
 import { useCreateReturn, useSaleByNumber } from '../queries.js';
-import { approverRole, canProcessReturn, lineValue, returnable } from '../rules.js';
+import { JOB_STATUS_LABEL } from '../../services/binding.js';
+import { approverRole, canProcessReturn, defectiveReturnable, feeValue, lineValue, returnableCopies } from '../rules.js';
 
 type Disposition = 'SELLABLE' | 'DAMAGED';
 
@@ -13,6 +14,8 @@ type Disposition = 'SELLABLE' | 'DAMAGED';
  * A return at the counter: find the sale or the delivered customer order by
  * its number (#166), pick what comes back and in what state, and process it.
  * The refund goes back the way it was paid, so nothing here chooses a method.
+ * A bound copy comes back only defective, taken by a Manager or Admin with a
+ * reason, with its share of the fee, and is kept apart (#169 PR 3, 4a).
  * `initialNumber` comes from an order's Return action.
  */
 export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
@@ -24,6 +27,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
   const [selectedTx, setSelectedTx] = useState<ReturnableSale | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [damaged, setDamaged] = useState<Record<string, boolean>>({});
+  const [defective, setDefective] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState('');
 
   const { data: txData, isLoading: txLoading, error: txError } = useSaleByNumber(txSearch);
@@ -33,15 +37,25 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
   const tx = selectedTx ?? txData ?? null;
   const lines = tx?.lines ?? [];
   const isOrder = tx?.kind === 'order';
-  const totalRefund = Money.sum(lines.map((li) => lineValue(li, quantities[li.id] ?? 0)));
+  const value = (li: ReturnableLine) => {
+    const qty = quantities[li.id] ?? 0;
+    return defective[li.id] ? lineValue(li, qty).plus(feeValue(li, qty)) : lineValue(li, qty);
+  };
+  const totalRefund = Money.sum(lines.map(value));
+  const anyDefective = lines.some((li) => defective[li.id] && (quantities[li.id] ?? 0) > 0);
 
   function setQty(lineId: string, val: number, max: number) {
     setQuantities((q) => ({ ...q, [lineId]: Math.max(0, Math.min(max, val)) }));
   }
 
+  function markDefective(li: ReturnableLine, on: boolean) {
+    setDefective((d) => ({ ...d, [li.id]: on }));
+    setQty(li.id, quantities[li.id] ?? 0, returnableCopies(li, on));
+  }
+
   function clear() {
     setSelectedTx(null); setTxSearch(''); setTxSearchInput('');
-    setQuantities({}); setDamaged({});
+    setQuantities({}); setDamaged({}); setDefective({});
   }
 
   function handleSearch() {
@@ -58,11 +72,14 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
       .map((li) => ({
         ...(isOrder ? { orderLineItemId: Number(li.id) } : { transactionLineItemId: Number(li.id) }),
         quantity: quantities[li.id],
-        disposition: (damaged[li.id] ? 'DAMAGED' : 'SELLABLE') as Disposition,
+        ...(defective[li.id]
+          ? { disposition: 'DAMAGED' as Disposition, defective: true }
+          : { disposition: (damaged[li.id] ? 'DAMAGED' : 'SELLABLE') as Disposition }),
       }));
     if (selectedLines.length === 0) { showToast('Select at least one item to return', 'error'); return; }
+    if (anyDefective && !reason.trim()) { showToast('Say what is wrong with the bound copy', 'error'); return; }
     createReturn.mutate(
-      { ...(isOrder ? { orderId: Number(tx.id) } : { transactionId: Number(tx.id) }), reason: reason || undefined, lines: selectedLines },
+      { ...(isOrder ? { orderId: Number(tx.id) } : { transactionId: Number(tx.id) }), reason: reason.trim() || undefined, lines: selectedLines },
       {
         onSuccess: (ret) => {
           showToast(`Return ${ret.returnNumber} processed`, 'success');
@@ -136,24 +153,37 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
                     {currency} {Money.of(li.unitPrice).toFixed()} × {li.quantity} {isOrder ? 'delivered' : 'sold'}
                     {li.returned ? ` · ${li.returned} returned` : ''}
                   </p>
+                  {li.binding && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      🧵 {li.binding.quantity} bound ({li.binding.status ? JOB_STATUS_LABEL[li.binding.status] : 'not started'}): they come back only defective
+                      {li.binding.status === 'COLLECTED' && !approver && '. A Manager or Admin takes back a defective bound copy.'}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Return:</span>
-                  <input type="number" min="0" max={returnable(li)} value={quantities[li.id] ?? 0}
+                  <input type="number" min="0" max={returnableCopies(li, !!defective[li.id])} value={quantities[li.id] ?? 0}
                     aria-label={`Quantity of ${li.bookTitle} to return`}
-                    onChange={(e) => setQty(li.id, parseInt(e.target.value) || 0, returnable(li))}
+                    onChange={(e) => setQty(li.id, parseInt(e.target.value) || 0, returnableCopies(li, !!defective[li.id]))}
                     className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-center focus:outline-hidden focus:ring-1 focus:ring-blue-500" />
-                  <span className="text-xs text-gray-400">/ {returnable(li)}</span>
+                  <span className="text-xs text-gray-400">/ {returnableCopies(li, !!defective[li.id])}</span>
                 </div>
+                {defectiveReturnable(li, me) && (
+                  <label className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400" title="Bound copies, with their share of the fee">
+                    <input type="checkbox" checked={!!defective[li.id]} onChange={(e) => markDefective(li, e.target.checked)}
+                      className="rounded-sm border-gray-300 dark:border-gray-600" />
+                    Defective binding
+                  </label>
+                )}
                 {/* Damaged books are kept apart from the stock for sale. */}
                 <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title="Kept apart, not for sale">
-                  <input type="checkbox" checked={!!damaged[li.id]}
+                  <input type="checkbox" checked={!!damaged[li.id] || !!defective[li.id]} disabled={!!defective[li.id]}
                     onChange={(e) => setDamaged((d) => ({ ...d, [li.id]: e.target.checked }))}
                     className="rounded-sm border-gray-300 dark:border-gray-600" />
                   Damaged
                 </label>
                 <div className="text-sm font-medium text-gray-900 dark:text-white w-24 text-right">
-                  {currency} {lineValue(li, quantities[li.id] ?? 0).toFixed()}
+                  {currency} {value(li).toFixed()}
                 </div>
               </div>
             ))}
@@ -171,7 +201,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
             After the return window{isOrder ? ', counted from delivery,' : ''} store policy may allow store credit only.
           </p>
 
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for return (optional)"
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={anyDefective ? 'What is wrong with the bound copy (required)' : 'Reason for return (optional)'}
             className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
 
           {approver ? (
