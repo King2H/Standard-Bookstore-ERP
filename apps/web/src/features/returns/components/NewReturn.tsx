@@ -37,6 +37,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
   const tx = selectedTx ?? txData ?? null;
   const lines = tx?.lines ?? [];
   const isOrder = tx?.kind === 'order';
+  const isExchange = tx?.kind === 'exchange';
   const value = (li: ReturnableLine) => {
     const qty = quantities[li.id] ?? 0;
     return defective[li.id] ? lineValue(li, qty).plus(feeValue(li, qty)) : lineValue(li, qty);
@@ -70,7 +71,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
     const selectedLines = lines
       .filter((li) => (quantities[li.id] ?? 0) > 0)
       .map((li) => ({
-        ...(isOrder ? { orderLineItemId: Number(li.id) } : { transactionLineItemId: Number(li.id) }),
+        ...(isOrder ? { orderLineItemId: Number(li.id) } : isExchange ? { exchangeLineItemId: Number(li.id) } : { transactionLineItemId: Number(li.id) }),
         quantity: quantities[li.id],
         ...(defective[li.id]
           ? { disposition: 'DAMAGED' as Disposition, defective: true }
@@ -79,7 +80,10 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
     if (selectedLines.length === 0) { showToast('Select at least one item to return', 'error'); return; }
     if (anyDefective && !reason.trim()) { showToast('Say what is wrong with the bound copy', 'error'); return; }
     createReturn.mutate(
-      { ...(isOrder ? { orderId: Number(tx.id) } : { transactionId: Number(tx.id) }), reason: reason.trim() || undefined, lines: selectedLines },
+      {
+        ...(isOrder ? { orderId: Number(tx.id) } : isExchange ? { exchangeId: Number(tx.id) } : { transactionId: Number(tx.id) }),
+        reason: reason.trim() || undefined, lines: selectedLines,
+      },
       {
         onSuccess: (ret) => {
           showToast(`Return ${ret.returnNumber} processed`, 'success');
@@ -97,14 +101,14 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
 
       {/* Step 1: Find transaction */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 1 — Find the Sale or Order</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 1 — Find the Sale, Order or Exchange</h3>
         <div className="flex gap-2">
           <input
             aria-label="Transaction or order number"
             value={txSearchInput}
             onChange={(e) => setTxSearchInput(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="Transaction or order number (e.g. POS-20250101-0001, ORD-20250101-0001)"
+            placeholder="Sale, order or exchange number (e.g. POS-20250101-0001, ORD-20250101-0001, EXC-20250101-0001)"
             className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           />
           <button onClick={handleSearch} disabled={txLoading}
@@ -115,7 +119,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
         {txError && <p className="text-xs text-red-500">No sale or order with this number in this branch. Check the number and try again.</p>}
         {txData && !selectedTx && (
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1">
-            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">{txData.kind === 'order' ? 'Order #' : 'Tx #'}</span><span className="font-mono text-gray-900 dark:text-white">{txData.number}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">{txData.kind === 'order' ? 'Order #' : txData.kind === 'exchange' ? 'Exchange #' : 'Tx #'}</span><span className="font-mono text-gray-900 dark:text-white">{txData.number}</span></div>
             <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Total</span><span className="text-gray-900 dark:text-white">{currency} {Money.of(txData.total).toFixed()}</span></div>
             <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Paid</span><span className="text-gray-900 dark:text-white">{currency} {Money.of(txData.paid).toFixed()}</span></div>
             <div className="flex justify-between items-center">
@@ -125,7 +129,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
             <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">{txData.kind === 'order' && txData.returnable ? 'Delivered' : 'Date'}</span><span className="text-gray-900 dark:text-white">{new Date(txData.date).toLocaleString()}</span></div>
             {txData.returnable ? (
               <button onClick={() => setSelectedTx(txData)} className="w-full mt-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors">
-                {txData.kind === 'order' ? 'Use this order →' : 'Use this transaction →'}
+                {txData.kind === 'order' ? 'Use this order →' : txData.kind === 'exchange' ? 'Use this exchange →' : 'Use this transaction →'}
               </button>
             ) : txData.kind === 'order' && (
               <p className="text-xs text-amber-700 dark:text-amber-400 pt-1">This order was not delivered: cancel it in Orders instead of returning it.</p>
@@ -144,13 +148,16 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
       {tx && tx.returnable && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 2 — Select Items to Return</h3>
+          {isExchange && lines.length === 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">This exchange has no bound copy to take back; books from an exchange are swapped in a new exchange.</p>
+          )}
           <div className="space-y-2">
             {lines.map((li) => (
               <div key={li.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{li.bookTitle}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {currency} {Money.of(li.unitPrice).toFixed()} × {li.quantity} {isOrder ? 'delivered' : 'sold'}
+                    {currency} {Money.of(li.unitPrice).toFixed()} × {li.quantity} {isOrder ? 'delivered' : isExchange ? 'given out' : 'sold'}
                     {li.returned ? ` · ${li.returned} returned` : ''}
                   </p>
                   {li.binding && (
@@ -196,10 +203,16 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 3 — Refund Details</h3>
 
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            The refund goes back the way the {isOrder ? 'order' : 'sale'} was paid. On a credit {isOrder ? 'order' : 'sale'} it is first set against what the customer still owes, as a credit note.
-            After the return window{isOrder ? ', counted from delivery,' : ''} store policy may allow store credit only.
-          </p>
+          {isExchange ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              The value goes first against what the exchange left on credit, as a credit note; the rest to the customer's store credit.
+            </p>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              The refund goes back the way the {isOrder ? 'order' : 'sale'} was paid. On a credit {isOrder ? 'order' : 'sale'} it is first set against what the customer still owes, as a credit note.
+              After the return window{isOrder ? ', counted from delivery,' : ''} store policy may allow store credit only.
+            </p>
+          )}
 
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={anyDefective ? 'What is wrong with the bound copy (required)' : 'Reason for return (optional)'}
             className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />

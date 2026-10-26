@@ -716,6 +716,7 @@ export interface ReturnLineItems {
   book_id: number;
   discount_mode: Generated<string>;
   discount_type: Generated<string>;
+  exchange_outgoing_item_id: Int8 | null;
   id: Generated<Int8>;
   line_refund_amount: Numeric;
   order_line_item_id: Int8 | null;

@@ -142,7 +142,8 @@ export function checkBoundReturn(
     }
     return;
   }
-  if (jobStatus !== 'COLLECTED') {
+  // Returned: every bound copy is back already, which the count below says.
+  if (jobStatus !== 'COLLECTED' && jobStatus !== 'RETURNED') {
     throw new BusinessError('BOUND_COPY_NOT_COLLECTED', 'The bound copies have not been handed to the customer yet', { status: jobStatus });
   }
   if (request.quantity > left.bound) {

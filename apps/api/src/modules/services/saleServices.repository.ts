@@ -224,19 +224,22 @@ function toBinding(r: BindingRow): BindingOnLine {
 }
 
 /** The bindings of book lines, by book line, their jobs locked until the transaction ends. */
-export async function bindingsOf(q: Queryable, lines: { posLineIds: string[] } | { orderLineIds: string[] }): Promise<Map<string, BindingOnLine>> {
-  const ids = 'posLineIds' in lines ? lines.posLineIds : lines.orderLineIds;
+export async function bindingsOf(
+  q: Queryable,
+  lines: { posLineIds: string[] } | { orderLineIds: string[] } | { exchangeLineIds: string[] },
+): Promise<Map<string, BindingOnLine>> {
+  const [column, ids] = 'posLineIds' in lines ? ['transaction_line_item_id', lines.posLineIds] as const
+    : 'orderLineIds' in lines ? ['order_line_item_id', lines.orderLineIds] as const
+    : ['exchange_outgoing_item_id', lines.exchangeLineIds] as const;
   if (ids.length === 0) return new Map();
-  const byPos = 'posLineIds' in lines;
   await q
     .selectFrom('service_jobs')
     .select('id')
-    .where('service_line_id', 'in', (eb) => eb.selectFrom('sale_service_lines').select('id')
-      .where(byPos ? 'transaction_line_item_id' : 'order_line_item_id', 'in', ids))
+    .where('service_line_id', 'in', (eb) => eb.selectFrom('sale_service_lines').select('id').where(column, 'in', ids))
     .forUpdate()
     .execute();
-  const rows = await selectBindings(q).where(byPos ? 'sl.transaction_line_item_id' : 'sl.order_line_item_id', 'in', ids).execute();
-  return new Map(rows.map((r) => [String(byPos ? r.transaction_line_item_id : r.order_line_item_id), toBinding(r)]));
+  const rows = await selectBindings(q).select(`sl.${column} as book_line_id`).where(`sl.${column}`, 'in', ids).execute();
+  return new Map(rows.map((r) => [String(r.book_line_id), toBinding(r)]));
 }
 
 /** A job of the branch with its binding and the sale it belongs to, locked; another branch's is not found. */

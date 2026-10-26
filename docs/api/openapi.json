@@ -15550,6 +15550,15 @@
             }
           },
           {
+            "name": "exchangeReference",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            }
+          },
+          {
             "name": "status",
             "in": "query",
             "required": false,
@@ -46565,6 +46574,11 @@
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
                   },
+                  "exchangeId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "reason": {
                     "type": "string",
                     "maxLength": 1000
@@ -46581,6 +46595,11 @@
                           "maximum": 9007199254740991
                         },
                         "orderLineItemId": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "exchangeLineItemId": {
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
@@ -46760,6 +46779,12 @@
                               "null"
                             ]
                           },
+                          "exchangeLineItemId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "bookId": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -46785,6 +46810,7 @@
                           "returnId",
                           "transactionLineItemId",
                           "orderLineItemId",
+                          "exchangeLineItemId",
                           "bookId",
                           "bookTitle",
                           "quantity",
@@ -47170,6 +47196,12 @@
                                     "null"
                                   ]
                                 },
+                                "exchangeLineItemId": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
                                 "bookId": {
                                   "type": "integer",
                                   "minimum": -9007199254740991,
@@ -47195,6 +47227,7 @@
                                 "returnId",
                                 "transactionLineItemId",
                                 "orderLineItemId",
+                                "exchangeLineItemId",
                                 "bookId",
                                 "bookTitle",
                                 "quantity",
@@ -47500,6 +47533,12 @@
                               "null"
                             ]
                           },
+                          "exchangeLineItemId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "bookId": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -47525,6 +47564,7 @@
                           "returnId",
                           "transactionLineItemId",
                           "orderLineItemId",
+                          "exchangeLineItemId",
                           "bookId",
                           "bookTitle",
                           "quantity",

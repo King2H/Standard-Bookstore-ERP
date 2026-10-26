@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type {
-  CreateReturnRequestSchema, Order, OrderListResponse, PosTransaction, PosTransactionListResponse, Return, ReturnListResponse,
+  CreateReturnRequestSchema, Exchange, ExchangeListResponse, Order, OrderListResponse, PosTransaction, PosTransactionListResponse, Return, ReturnListResponse,
   SaleServiceLine, ServiceJobStatus,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
@@ -26,11 +26,12 @@ export type NewReturn = z.input<typeof CreateReturnRequestSchema>;
 export const createReturn = (body: NewReturn) => api.post<Return>('/returns', body);
 
 /**
- * What a return is made against: a counter sale or a delivered customer
- * order (#166), with its lines and what earlier returns took back of each.
+ * What a return is made against: a counter sale, a delivered customer order
+ * (#166) or an exchange's bound copies (#203), with its lines and what
+ * earlier returns took back of each.
  */
 export interface ReturnableSale {
-  kind: 'sale' | 'order';
+  kind: 'sale' | 'order' | 'exchange';
   id: string;
   number: string;
   total: number;
@@ -52,6 +53,8 @@ export interface ReturnableLine {
   returned: number | null;
   /** The line's binding (#169 PR 3): its copies come back only defective. None once cancelled: they are plain copies again. */
   binding: { quantity: number; lineTotal: number; status: ServiceJobStatus | null } | null;
+  /** An exchange's line (#203): only its bound copies come back, defective; plain ones are swapped in a new exchange. */
+  boundOnly?: boolean;
 }
 
 function bindingOf(service: SaleServiceLine | null | undefined): ReturnableLine['binding'] {
@@ -82,12 +85,30 @@ function fromOrder(o: Order): ReturnableSale {
   };
 }
 
+function fromExchange(e: Exchange): ReturnableSale {
+  return {
+    kind: 'exchange', id: e.id, number: e.exchangeReference, total: e.netBalance, paid: e.netBalance - e.outstandingAmount, status: e.status,
+    returnable: e.status === 'Completed', date: e.createdAt,
+    lines: (e.outgoingItems ?? [])
+      .map((l) => ({
+        id: l.id, bookTitle: l.bookTitle, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.totalPrice, returned: null,
+        binding: bindingOf(l.service), boundOnly: true,
+      }))
+      .filter((l) => l.binding !== null),
+  };
+}
+
 /**
  * The branch's sale or order with this number, with its lines, or an error
  * when there is none: the list finds it by number, the detail brings the
- * lines. An ORD- number is a customer order.
+ * lines. An ORD- number is a customer order, an EXC- number an exchange.
  */
 export async function findSale(number: string): Promise<ReturnableSale> {
+  if (number.startsWith('EXC')) {
+    const found = await api.get<ExchangeListResponse>(`/exchanges${toQuery({ exchangeReference: number, pageSize: 1 })}`);
+    if (found.items.length === 0) throw new Error('Exchange not found');
+    return fromExchange(await api.get<Exchange>(`/exchanges/${found.items[0].id}`));
+  }
   if (number.startsWith('ORD')) {
     const found = await api.get<OrderListResponse>(`/orders${toQuery({ orderNumber: number, pageSize: 1 })}`);
     if (found.items.length === 0) throw new Error('Order not found');

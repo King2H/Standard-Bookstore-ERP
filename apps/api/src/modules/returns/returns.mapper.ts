@@ -27,6 +27,7 @@ export interface ReturnLineRow {
   return_id: string | number | bigint;
   transaction_line_item_id: string | number | bigint | null;
   order_line_item_id: string | number | bigint | null;
+  exchange_outgoing_item_id: string | number | bigint | null;
   book_id: number;
   book_title: string | null;
   quantity: number;
@@ -71,6 +72,7 @@ export function toLineRecord(row: ReturnLineRow): ReturnLineRecord {
     returnId: String(row.return_id),
     transactionLineItemId: row.transaction_line_item_id === null ? null : String(row.transaction_line_item_id),
     orderLineItemId: row.order_line_item_id === null ? null : String(row.order_line_item_id),
+    exchangeLineItemId: row.exchange_outgoing_item_id === null ? null : String(row.exchange_outgoing_item_id),
     bookId: row.book_id,
     bookTitle: row.book_title ?? '',
     quantity: row.quantity,

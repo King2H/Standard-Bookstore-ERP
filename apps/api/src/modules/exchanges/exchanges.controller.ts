@@ -80,7 +80,10 @@ export async function create(req: Request, res: Response): Promise<void> {
 export async function list(req: Request, res: Response): Promise<void> {
   const { query } = valid(req, schemas.list);
   const result = await service.list(
-    { branchId: scopedBranch(req), customerId: query.customerId, status: query.status, dateFrom: query.dateFrom, dateTo: query.dateTo },
+    {
+      branchId: scopedBranch(req), customerId: query.customerId, exchangeReference: query.exchangeReference,
+      status: query.status, dateFrom: query.dateFrom, dateTo: query.dateTo,
+    },
     { page: query.page, pageSize: query.pageSize },
   );
   const body: ExchangeListResponse = {

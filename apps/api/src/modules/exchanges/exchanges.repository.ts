@@ -67,6 +67,7 @@ export async function findExchange(q: Queryable, id: string, opts: { forUpdate?:
 export async function list(q: Queryable, filter: ExchangeFilter, page: Page): Promise<{ items: ExchangeRecord[]; total: number }> {
   let query = selectExchanges(q).where('e.branch_id', '=', filter.branchId);
   if (filter.customerId !== undefined) query = query.where('e.customer_id', '=', filter.customerId);
+  if (filter.exchangeReference) query = query.where('e.exchange_reference', '=', filter.exchangeReference.toUpperCase());
   if (filter.status) query = query.where('e.status', '=', filter.status);
   if (filter.dateFrom) query = query.where('e.created_at', '>=', sql<Date>`${filter.dateFrom}::date`);
   // Through the end of that day.

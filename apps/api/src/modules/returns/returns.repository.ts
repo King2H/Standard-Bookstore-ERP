@@ -79,13 +79,14 @@ export async function lockSale(q: Queryable, id: number): Promise<SaleForReturn 
 export async function lockExchange(q: Queryable, id: string): Promise<ExchangeForReturn | undefined> {
   const row = await q
     .selectFrom('exchanges')
-    .select(['id', 'branch_id', 'customer_id', 'exchange_reference', 'voided_at'])
+    .select(['id', 'branch_id', 'location_id', 'customer_id', 'exchange_reference', 'voided_at'])
     .where('id', '=', id)
     .forUpdate()
     .executeTakeFirst();
   return row && {
     id: String(row.id),
     branchId: row.branch_id,
+    locationId: row.location_id,
     customerId: row.customer_id,
     reference: row.exchange_reference,
     voided: row.voided_at !== null,
@@ -165,6 +166,39 @@ export async function orderLines(q: Queryable, orderId: string): Promise<SaleLin
     bookId: r.book_id,
     quantity: r.quantity,
     unitPrice: Money.of(r.unit_price),
+    lineTotal: Money.of(r.total_price),
+    unitCost: r.unit_cost === null ? null : Money.of(r.unit_cost),
+    returnedQuantity: Number(r.returned_quantity),
+    returnedValue: Money.of(r.returned_value),
+  }));
+}
+
+/** The books an exchange gave out (#203), with what completed returns already took back from each. */
+export async function exchangeLines(q: Queryable, exchangeId: string): Promise<SaleLine[]> {
+  const rows = await q
+    .selectFrom('exchange_outgoing_items as li')
+    .select([
+      'li.id',
+      'li.book_id',
+      'li.quantity',
+      'li.selling_unit_price',
+      'li.total_price',
+      'li.unit_cost',
+      sql<string>`COALESCE((
+        SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+        WHERE rli.exchange_outgoing_item_id = li.id AND r.status = 'completed'), 0)`.as('returned_quantity'),
+      sql<string>`COALESCE((
+        SELECT SUM(rli.line_refund_amount) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+        WHERE rli.exchange_outgoing_item_id = li.id AND r.status = 'completed'), 0)`.as('returned_value'),
+    ])
+    .where('li.exchange_id', '=', exchangeId)
+    .orderBy('li.id')
+    .execute();
+  return rows.map((r) => ({
+    id: String(r.id),
+    bookId: r.book_id,
+    quantity: r.quantity,
+    unitPrice: Money.of(r.selling_unit_price),
     lineTotal: Money.of(r.total_price),
     unitCost: r.unit_cost === null ? null : Money.of(r.unit_cost),
     returnedQuantity: Number(r.returned_quantity),
@@ -306,7 +340,10 @@ export async function insertReturn(
 export async function insertLine(
   q: Queryable,
   returnId: string,
-  line: { transactionLineItemId: string | null; orderLineItemId: string | null; bookId: number; quantity: number; unitPrice: Money; value: Money },
+  line: {
+    transactionLineItemId: string | null; orderLineItemId: string | null; exchangeLineItemId?: string | null;
+    bookId: number; quantity: number; unitPrice: Money; value: Money;
+  },
 ): Promise<void> {
   await q
     .insertInto('return_line_items')
@@ -314,6 +351,7 @@ export async function insertLine(
       return_id: returnId,
       transaction_line_item_id: line.transactionLineItemId,
       order_line_item_id: line.orderLineItemId,
+      exchange_outgoing_item_id: line.exchangeLineItemId ?? null,
       book_id: line.bookId,
       quantity: line.quantity,
       unit_price: line.unitPrice.toFixed(2),
@@ -392,6 +430,7 @@ export async function returnLines(q: Queryable, returnId: string): Promise<Retur
       'rli.return_id',
       'rli.transaction_line_item_id',
       'rli.order_line_item_id',
+      'rli.exchange_outgoing_item_id',
       'rli.book_id',
       'b.title as book_title',
       'rli.quantity',

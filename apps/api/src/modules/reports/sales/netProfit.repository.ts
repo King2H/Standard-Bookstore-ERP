@@ -195,7 +195,8 @@ export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<N
          FROM return_line_items rli
          JOIN returns r ON r.id = rli.return_id
          LEFT JOIN transaction_line_items tli ON tli.id = rli.transaction_line_item_id
-         -- An order's line (#166): charged at its own cost in Q2.
+         -- An order's line (#166): charged at its own cost in Q2. An exchange's (#203) is not
+         -- joined: net profit counts exchanges by their cash (Q4), never at cost.
          LEFT JOIN order_line_items oli ON oli.id = rli.order_line_item_id
          WHERE ${returnConds.join(' AND ')}
        ) + (

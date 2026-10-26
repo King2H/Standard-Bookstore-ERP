@@ -155,9 +155,11 @@ async function recordReturn(
   });
   for (const l of r.lines) {
     const byOrder = r.sale.orderId !== null;
+    const byExchange = r.sale.exchangeId !== undefined;
     await returns.insertLine(q, returnId, {
-      transactionLineItemId: byOrder ? null : l.line.id,
+      transactionLineItemId: byOrder || byExchange ? null : l.line.id,
       orderLineItemId: byOrder ? l.line.id : null,
+      exchangeLineItemId: byExchange ? l.line.id : null,
       bookId: l.line.bookId,
       quantity: l.quantity,
       unitPrice: l.line.unitPrice,
@@ -199,11 +201,11 @@ async function announce(
  */
 export async function createReturn(
   actor: Actor,
-  input: { transactionId?: number; orderId?: number; reason: string | null; lines: ReturnLineRequest[] },
+  input: { transactionId?: number; orderId?: number; exchangeId?: number; reason: string | null; lines: ReturnLineRequest[] },
 ): Promise<ReturnRecord> {
   const id = await withTransaction({}, (tx) =>
-    input.orderId !== undefined
-      ? returnOrder(tx, actor, { ...input, orderId: input.orderId })
+    input.orderId !== undefined ? returnOrder(tx, actor, { ...input, orderId: input.orderId })
+      : input.exchangeId !== undefined ? returnExchange(tx, actor, { ...input, exchangeId: input.exchangeId })
       : returnSale(tx, actor, { ...input, transactionId: input.transactionId as number }),
   );
   return getById(id);
@@ -219,11 +221,12 @@ async function boundCopies(
   tx: Queryable,
   actor: Actor,
   lines: ValuedLine[],
-  sale: { orderId: string | null },
+  sale: 'pos' | 'order' | 'exchange',
   reason: string | null,
 ): Promise<FeeReturn[]> {
   const ids = lines.map((l) => l.line.id);
-  const bindings = await saleServices.bindingsOf(tx, sale.orderId !== null ? { orderLineIds: ids } : { posLineIds: ids });
+  const bindings = await saleServices.bindingsOf(tx,
+    sale === 'order' ? { orderLineIds: ids } : sale === 'exchange' ? { exchangeLineIds: ids } : { posLineIds: ids });
   // What came back before this return, line by line; valueLines already counted this one in.
   const requested = new Map<string, number>();
   for (const l of lines) requested.set(l.line.id, (requested.get(l.line.id) ?? 0) + l.quantity);
@@ -375,15 +378,22 @@ async function settleOrder(
 }
 
 /**
- * A binding cancelled on an exchange (#169 PR 4, owner decision 5a): its fee
- * goes first against what the exchange left on credit, as a credit note; the
- * rest to the customer's store credit (a binding always has a customer). An
- * exchange settles its difference at once, so there is no tender to give back.
+ * A return's money on an exchange (#169 PR 4, 5a; #203, 2a): what it takes
+ * back goes first against what the exchange left on credit, as a credit note;
+ * the rest to the customer's store credit (a binding always has a customer).
+ * An exchange settles its difference at once, so there is no tender to give
+ * back. A defective copy is kept apart as damaged at the cost it left at.
  */
-async function settleExchangeFee(tx: Queryable, actor: Actor, exchange: ExchangeForReturn, fee: FeeReturn, reason: string): Promise<void> {
+async function settleExchange(
+  tx: Queryable,
+  actor: Actor,
+  exchange: ExchangeForReturn,
+  r: { lines: ValuedLine[]; fees: FeeReturn[]; reason: string },
+): Promise<string> {
   if (exchange.voided) throw new BusinessError('ALREADY_VOIDED', 'Exchange is already voided');
-  const credited = await creditReturn(tx, { sourceType: 'exchange_difference', sourceEntityId: exchange.id, amount: fee.amount });
-  const rest = fee.amount.minus(credited);
+  const total = Money.sum([...r.lines.map((l) => l.value), ...r.fees.map((f) => f.amount)]);
+  const credited = await creditReturn(tx, { sourceType: 'exchange_difference', sourceEntityId: exchange.id, amount: total });
+  const rest = total.minus(credited);
   const parts: RefundPart[] = [
     ...(credited.greaterThan(0) ? [{ method: 'credit_note' as const, amount: credited }] : []),
     ...(rest.greaterThan(0) ? [{ method: 'store_credit' as const, amount: rest }] : []),
@@ -391,20 +401,51 @@ async function settleExchangeFee(tx: Queryable, actor: Actor, exchange: Exchange
   const refundMethod = policy.refundMethodOf(parts);
   const { returnId, returnNumber } = await recordReturn(tx, actor, {
     sale: { transactionId: null, orderId: null, exchangeId: exchange.id, number: exchange.reference, branchId: exchange.branchId, customerId: exchange.customerId },
-    lines: [],
-    total: fee.amount,
+    lines: r.lines,
+    total,
     refundMethod,
-    reason,
+    reason: r.reason,
     approved: true,
   });
-  await saleServices.recordFeeReturn(tx, actor, returnId, fee, exchange.reference);
+  if (r.lines.length > 0) {
+    if (exchange.locationId === null) throw new NotFoundError('Location');
+    await restock(tx, actor, r.lines, { locationId: exchange.locationId, referenceType: 'return', referenceId: returnId });
+  }
+  for (const fee of r.fees) await saleServices.recordFeeReturn(tx, actor, returnId, fee, exchange.reference);
   for (const p of parts) await returns.insertRefund(tx, returnId, p, null);
   if (rest.greaterThan(0) && exchange.customerId !== null) {
     await customers.moveStoreCredit(tx, exchange.customerId, rest, { direction: 'credit', refType: 'return', refId: returnId });
   }
   await announce(tx, actor, {
-    returnId, returnNumber, sale: { exchangeId: exchange.id }, saleNumber: exchange.reference, total: fee.amount, refundMethod, parts,
+    returnId, returnNumber, sale: { exchangeId: exchange.id }, saleNumber: exchange.reference, total, refundMethod, parts,
   });
+  return returnId;
+}
+
+/**
+ * A defective bound copy an exchange gave out (#203, owner decision 1a):
+ * only bound copies come back this way, by the rules of a sale's (#169 PR 3,
+ * 4a); a plain copy is swapped in a new exchange. The exchange is locked, so
+ * its void and its returns run one after the other.
+ */
+async function returnExchange(
+  tx: Queryable,
+  actor: Actor,
+  input: { exchangeId: number; reason: string | null; lines: ReturnLineRequest[] },
+): Promise<string> {
+  const exchange = await returns.lockExchange(tx, String(input.exchangeId));
+  if (!exchange || exchange.branchId !== actor.branchId) throw new NotFoundError('Exchange');
+  if (exchange.locationId !== null) await assertAssignedLocation(exchange.locationId, actor);
+  const lines = valueLines(await returns.exchangeLines(tx, exchange.id), input.lines, 'Exchange line item');
+  const bindings = await saleServices.bindingsOf(tx, { exchangeLineIds: lines.map((l) => l.line.id) });
+  for (const l of lines) {
+    const binding = bindings.get(l.line.id);
+    if (!l.defective || !binding || binding.jobStatus === 'CANCELLED') {
+      throw new BusinessError('EXCHANGE_COPY_RETURN', 'A book from an exchange is swapped in a new exchange; only a defective bound copy comes back here');
+    }
+  }
+  const fees = await boundCopies(tx, actor, lines, 'exchange', input.reason);
+  return settleExchange(tx, actor, exchange, { lines, fees, reason: input.reason as string });
 }
 
 /**
@@ -422,7 +463,7 @@ async function returnSale(
   await assertAssignedLocation(sale.locationId, actor);
 
   const lines = valueLines(await returns.saleLines(tx, sale.id), input.lines, 'Transaction line item');
-  const fees = await boundCopies(tx, actor, lines, { orderId: null }, input.reason);
+  const fees = await boundCopies(tx, actor, lines, 'pos', input.reason);
   const total = Money.sum([...lines.map((l) => l.value), ...fees.map((f) => f.amount)]);
   const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
   policy.checkApproval(total, maxWithoutAuth, actor.roles);
@@ -447,7 +488,7 @@ async function returnOrder(
   await assertAssignedLocation(locationId, actor);
 
   const lines = valueLines(await returns.orderLines(tx, order.id), input.lines, 'Order line item');
-  const fees = await boundCopies(tx, actor, lines, { orderId: order.id }, input.reason);
+  const fees = await boundCopies(tx, actor, lines, 'order', input.reason);
   const total = Money.sum([...lines.map((l) => l.value), ...fees.map((f) => f.amount)]);
   const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
   policy.checkApproval(total, maxWithoutAuth, actor.roles);
@@ -488,7 +529,7 @@ export async function cancelBinding(actor: Actor, jobId: number, reason: string)
     } else {
       const exchange = await returns.lockExchange(tx, sale.exchangeId);
       if (!exchange || exchange.branchId !== actor.branchId) throw new NotFoundError('Exchange');
-      await settleExchangeFee(tx, actor, exchange, fee, reason);
+      await settleExchange(tx, actor, exchange, { lines: [], fees: [fee], reason });
     }
   });
 }

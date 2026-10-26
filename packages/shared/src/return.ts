@@ -14,9 +14,10 @@ export type RefundMethod = z.infer<typeof RefundMethodSchema>;
 export const ReturnLineSchema = z.object({
   id: z.string(),
   returnId: z.string(),
-  /** The line of the sale returned: a counter sale's or an order's, never both. */
+  /** The line of the sale returned: a counter sale's, an order's or an exchange's outgoing one (#203); one of them. */
   transactionLineItemId: z.string().nullable(),
   orderLineItemId: z.string().nullable(),
+  exchangeLineItemId: z.string().nullable(),
   bookId: z.number().int(),
   bookTitle: z.string(),
   quantity: z.number().int(),
@@ -88,10 +89,15 @@ export const ReturnListResponseSchema = z.object({
 });
 export type ReturnListResponse = z.infer<typeof ReturnListResponseSchema>;
 
-/** A line of the sale the return names: transactionLineItemId for a counter sale, orderLineItemId for an order. */
+/**
+ * A line of the sale the return names: transactionLineItemId for a counter
+ * sale, orderLineItemId for an order, exchangeLineItemId for a book an
+ * exchange gave out (#203: only a defective bound copy).
+ */
 export const ReturnLineInputSchema = z.object({
   transactionLineItemId: IdSchema.optional(),
   orderLineItemId: IdSchema.optional(),
+  exchangeLineItemId: IdSchema.optional(),
   quantity: z.number().int().positive(),
   /** SELLABLE (default) goes back on the shelf; DAMAGED is kept apart, not for sale. */
   disposition: z.enum(['SELLABLE', 'DAMAGED']).default('SELLABLE'),
@@ -107,31 +113,35 @@ export type ReturnLineInput = z.infer<typeof ReturnLineInputSchema>;
 /**
  * The refund goes back the way the sale was paid, so the request names no
  * method; returns above the approval limit are for a Manager or Admin. A
- * return names one sale: a counter sale (transactionId) or a delivered
- * order (orderId), and its lines name lines of that sale.
+ * return names one sale: a counter sale (transactionId), a delivered order
+ * (orderId) or an exchange (exchangeId, #203), and its lines name lines of
+ * that sale.
  */
+const SALE_LINE = {
+  transactionId: { line: 'transactionLineItemId', message: 'A line of a counter sale names its transactionLineItemId' },
+  orderId: { line: 'orderLineItemId', message: 'A line of an order names its orderLineItemId' },
+  exchangeId: { line: 'exchangeLineItemId', message: 'A line of an exchange names its exchangeLineItemId' },
+} as const;
+
 export const CreateReturnRequestSchema = z
   .object({
     transactionId: IdSchema.optional(),
     orderId: IdSchema.optional(),
+    exchangeId: IdSchema.optional(),
     reason: z.string().max(1000).optional(),
     lines: z.array(ReturnLineInputSchema).min(1, 'At least one line item is required'),
   })
   .superRefine((body, ctx) => {
-    const byOrder = body.orderId !== undefined;
-    if (byOrder === (body.transactionId !== undefined)) {
-      ctx.addIssue({ code: 'custom', path: ['transactionId'], message: 'Name either transactionId or orderId' });
+    const named = (Object.keys(SALE_LINE) as Array<keyof typeof SALE_LINE>).filter((k) => body[k] !== undefined);
+    if (named.length !== 1) {
+      ctx.addIssue({ code: 'custom', path: ['transactionId'], message: 'Name one of transactionId, orderId or exchangeId' });
       return;
     }
+    const { line: field, message } = SALE_LINE[named[0]];
     body.lines.forEach((line, i) => {
-      const named = byOrder ? line.orderLineItemId : line.transactionLineItemId;
-      const other = byOrder ? line.transactionLineItemId : line.orderLineItemId;
-      if (named === undefined || other !== undefined) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['lines', i, byOrder ? 'orderLineItemId' : 'transactionLineItemId'],
-          message: byOrder ? 'A line of an order names its orderLineItemId' : 'A line of a counter sale names its transactionLineItemId',
-        });
+      const others = Object.values(SALE_LINE).map((s) => s.line).filter((f) => f !== field);
+      if (line[field] === undefined || others.some((f) => line[f] !== undefined)) {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, field], message });
       }
     });
   });
