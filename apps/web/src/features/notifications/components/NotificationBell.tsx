@@ -10,7 +10,8 @@
  * Navigation map (entityType → page):
  *   order → orders, pos_transaction → pos, inventory → inventory,
  *   purchase_order → procurement, return → returns, payment → payments,
- *   exchange → exchanges, customer → customers; anything else stays put.
+ *   exchange → exchanges, customer → customers, service_job → binding-jobs;
+ *   anything else stays put.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Notification } from '@bms/shared';
@@ -35,6 +36,7 @@ const ENTITY_PAGE: Record<string, string> = {
   payment:        'payments',
   exchange:       'exchanges',
   customer:       'customers',
+  service_job:    'binding-jobs',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

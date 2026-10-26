@@ -25,6 +25,10 @@ router.post('/services/:id/restore', authenticate, canManage, validate(schemas.b
 router.put('/services/:id/branch-fee', authenticate, canManage, validate(schemas.branchFee), services.setBranchFee);
 router.delete('/services/:id/branch-fee', authenticate, canManage, validate(schemas.byId), services.removeBranchFee);
 
+// The jobs board of the branch, for whoever sells (#169 PR 3).
+router.get('/service-jobs', authenticate, requirePermission('CREATE_SALE'), validate(schemas.jobs), services.listJobs);
+// A binding still Requested is cancelled, its fee given back, by a Manager or Admin (3a).
+router.post('/service-jobs/:id/cancel', authenticate, canManage, validate(schemas.cancelBinding), services.cancelBinding);
 // A sale's binding job moves on by whoever sells, in the job's branch (#169 PR 2).
 router.post('/service-jobs/:id/:step', authenticate, requirePermission('CREATE_SALE'), validate(schemas.jobStep), services.stepJob);
 

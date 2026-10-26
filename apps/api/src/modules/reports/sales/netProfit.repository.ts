@@ -165,14 +165,14 @@ export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<N
     //     credit note: Q5 already leaves that out of the credit collected,
     //     so taking it off here too would count it twice.
     reportRows(q, 
+      // With the fees a return gave back (#169 PR 3), which may be all it gave.
       `SELECT COALESCE(SUM(v.value - v.credited), 0)::NUMERIC AS returns_value
        FROM (
-         SELECT SUM(rli.unit_price * rli.quantity) AS value,
+         SELECT COALESCE((SELECT SUM(rli.unit_price * rli.quantity) FROM return_line_items rli WHERE rli.return_id = r.id), 0)
+                + COALESCE((SELECT SUM(rsl.amount) FROM return_service_lines rsl WHERE rsl.return_id = r.id), 0) AS value,
                 COALESCE((SELECT SUM(f.amount) FROM refunds f WHERE f.return_id = r.id AND f.method = 'credit_note'), 0) AS credited
-         FROM return_line_items rli
-         JOIN returns r ON r.id = rli.return_id
+         FROM returns r
          WHERE ${returnConds.join(' AND ')}
-         GROUP BY r.id
        ) v`,
       returnParams,
     ),
@@ -189,13 +189,21 @@ export async function netProfitParts(q: Queryable, opts: ReportScope): Promise<N
     // itself couldn't have used one either, so crediting one back now that
     // Q2b never charged in the first place would be a phantom credit).
     reportRows(q, 
-      `SELECT COALESCE(SUM(COALESCE(tli.unit_cost, oli.unit_cost, 0) * rli.quantity), 0)::NUMERIC AS returns_cost
-       FROM return_line_items rli
-       JOIN returns r ON r.id = rli.return_id
-       LEFT JOIN transaction_line_items tli ON tli.id = rli.transaction_line_item_id
-       -- An order's line (#166): charged at its own cost in Q2.
-       LEFT JOIN order_line_items oli ON oli.id = rli.order_line_item_id
-       WHERE ${returnConds.join(' AND ')}`,
+      // With the standard cost of bindings cancelled before their work (#169 PR 3).
+      `SELECT (
+         SELECT COALESCE(SUM(COALESCE(tli.unit_cost, oli.unit_cost, 0) * rli.quantity), 0)
+         FROM return_line_items rli
+         JOIN returns r ON r.id = rli.return_id
+         LEFT JOIN transaction_line_items tli ON tli.id = rli.transaction_line_item_id
+         -- An order's line (#166): charged at its own cost in Q2.
+         LEFT JOIN order_line_items oli ON oli.id = rli.order_line_item_id
+         WHERE ${returnConds.join(' AND ')}
+       ) + (
+         SELECT COALESCE(SUM(rsl.cost_reversed), 0)
+         FROM return_service_lines rsl
+         JOIN returns r ON r.id = rsl.return_id
+         WHERE ${returnConds.join(' AND ')}
+       )::NUMERIC AS returns_cost`,
       returnParams,
     ),
     // Q4: Exchange cash adjustment

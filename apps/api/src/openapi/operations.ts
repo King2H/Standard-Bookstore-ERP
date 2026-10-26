@@ -1,7 +1,10 @@
 import type { z } from 'zod';
 import {
   ServiceBranchFeeRequestSchema,
+  ServiceJobListQuerySchema,
+  ServiceJobListResponseSchema,
   ServiceJobSchema,
+  CancelBindingRequestSchema,
   ServiceJobStepParamsSchema,
   ServiceListQuerySchema,
   ServiceListResponseSchema,
@@ -1410,6 +1413,26 @@ function serviceOperations(): ApiOperation[] {
       responses: { 200: { description: 'The service after the change', schema: ServiceSchema } },
       errors: [400, 401, 403, 404, 500],
     },    {
+      operationId: 'listServiceJobs',
+      method: 'get',
+      path: '/service-jobs',
+      summary: "The session branch's binding jobs, the oldest ready date first, with the customer's phone (selling roles, #169)",
+      tag,
+      request: { query: ServiceJobListQuerySchema },
+      responses: { 200: { description: 'One page of jobs', schema: ServiceJobListResponseSchema } },
+      errors: [400, 401, 403, 500],
+    },
+    {
+      operationId: 'cancelServiceBinding',
+      method: 'post',
+      path: '/service-jobs/{id}/cancel',
+      summary: `Cancel a binding still Requested; its fee goes back the way the sale was paid, as a return (${manage})`,
+      tag,
+      request: { params: IdParamsSchema, body: CancelBindingRequestSchema },
+      responses: { 200: { description: 'The job, cancelled', schema: ServiceJobSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
       operationId: 'stepServiceJob',
       method: 'post',
       path: '/service-jobs/{id}/{step}',

@@ -91,6 +91,12 @@ export const ReturnLineInputSchema = z.object({
   quantity: z.number().int().positive(),
   /** SELLABLE (default) goes back on the shelf; DAMAGED is kept apart, not for sale. */
   disposition: z.enum(['SELLABLE', 'DAMAGED']).default('SELLABLE'),
+  /**
+   * Bound copies brought back defective (#169): a bound copy comes back no
+   * other way, once handed over, with a reason and a Manager or Admin. It
+   * takes its share of the fee and is kept apart as damaged.
+   */
+  defective: z.boolean().optional(),
 });
 export type ReturnLineInput = z.infer<typeof ReturnLineInputSchema>;
 

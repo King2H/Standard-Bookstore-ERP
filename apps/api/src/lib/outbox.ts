@@ -69,6 +69,8 @@ export type OutboxEventType =
   | 'exchange.reviewed'
   | 'exchange.approved'
   | 'exchange.settled'
+  // Services (#169)
+  | 'service_job.ready'
   // Customers
   | 'customer.store_credit_added'
   | 'customer.deactivated'

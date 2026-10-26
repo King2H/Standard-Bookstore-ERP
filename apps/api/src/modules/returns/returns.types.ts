@@ -71,6 +71,8 @@ export interface ReturnLineRequest {
   lineId: number;
   quantity: number;
   disposition: 'SELLABLE' | 'DAMAGED';
+  /** Bound copies brought back defective (#169 PR 3); a bound copy comes back no other way. */
+  defective?: boolean;
 }
 
 export interface ReturnRecord {

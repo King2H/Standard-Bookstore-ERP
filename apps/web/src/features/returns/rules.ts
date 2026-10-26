@@ -34,3 +34,25 @@ export function refundLabel(method: string): string {
 
 /** How many units of a line can still come back; unknown returns (a counter sale's) leave it to the API. */
 export const returnable = (line: { quantity: number; returned: number | null }) => line.quantity - (line.returned ?? 0);
+
+type BoundLine = { quantity: number; returned: number | null; binding: { quantity: number; lineTotal: number; status: string | null } | null };
+
+/**
+ * How many copies of a line this return may take (#169 PR 3, decision 4a):
+ * a bound copy comes back only defective, once collected; the others as any
+ * book. What earlier returns took of each is the API's to check.
+ */
+export function returnableCopies(line: BoundLine, defective: boolean): number {
+  if (!line.binding) return returnable(line);
+  if (defective) return Math.min(returnable(line), line.binding.quantity);
+  return Math.max(0, Math.min(returnable(line), line.quantity - line.binding.quantity));
+}
+
+/** A defective bound copy is taken back by a Manager or Admin, once the customer has it. */
+export const defectiveReturnable = (line: BoundLine, me: Account | undefined) =>
+  line.binding?.status === 'COLLECTED' && approverRole(me) !== undefined;
+
+/** The share of the binding's fee that `quantity` defective copies give back, as the API values it. */
+export function feeValue(line: BoundLine, quantity: number): Money {
+  return line.binding ? lineValue({ quantity: line.binding.quantity, lineTotal: line.binding.lineTotal }, quantity) : Money.ZERO;
+}

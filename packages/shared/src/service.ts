@@ -89,7 +89,7 @@ export const ServiceLineInputSchema = z.object({
 });
 export type ServiceLineInput = z.infer<typeof ServiceLineInputSchema>;
 
-export const ServiceJobStatusSchema = z.enum(['REQUESTED', 'AT_BINDER', 'READY', 'COLLECTED', 'CANCELLED']);
+export const ServiceJobStatusSchema = z.enum(['REQUESTED', 'AT_BINDER', 'READY', 'COLLECTED', 'CANCELLED', 'RETURNED']);
 export type ServiceJobStatus = z.infer<typeof ServiceJobStatusSchema>;
 
 /** The work a service line asks for (4a), opened at the sale, or at an order's confirmation (5a). */
@@ -133,3 +133,40 @@ export const ServiceJobStepParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
   step: ServiceJobStepSchema,
 });
+
+// ── After the sale (#169 PR 3) ───────────────────────────────────────────────
+
+/** The jobs board (owner decision 1a): the branch's jobs, the oldest ready date first. */
+export const ServiceJobListQuerySchema = ListPagingQuerySchema.extend({
+  status: ServiceJobStatusSchema.optional(),
+  /** Requested or at the binder past their ready date. */
+  overdue: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  /** Job number or customer name. */
+  q: z.string().trim().max(100).optional(),
+});
+export type ServiceJobListQuery = z.infer<typeof ServiceJobListQuerySchema>;
+
+export const ServiceJobBoardItemSchema = ServiceJobSchema.extend({
+  serviceName: z.string(),
+  /** Bound copies. */
+  quantity: z.number().int(),
+  bookTitle: z.string(),
+  customerName: z.string(),
+  /** To call when the job is ready; null when none was given. */
+  customerPhone: z.string().nullable(),
+  source: z.enum(['POS', 'ORDER']),
+  saleId: z.string(),
+  saleNumber: z.string(),
+  /** Requested or at the binder past the ready date. */
+  overdue: z.boolean(),
+});
+export type ServiceJobBoardItem = z.infer<typeof ServiceJobBoardItemSchema>;
+
+export const ServiceJobListResponseSchema = PaginatedSchema(ServiceJobBoardItemSchema);
+export type ServiceJobListResponse = z.infer<typeof ServiceJobListResponseSchema>;
+
+/** Cancelling a binding still Requested (3a): Manager or Admin, with a reason; the fee goes back. */
+export const CancelBindingRequestSchema = z.object({
+  reason: z.string().trim().min(1, 'Say why the binding is cancelled').max(500),
+});
+export type CancelBindingRequest = z.infer<typeof CancelBindingRequestSchema>;

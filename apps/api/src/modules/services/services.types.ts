@@ -106,3 +106,56 @@ export interface SaleServiceLineRecord {
 
 /** The sale a set of service lines belongs to. */
 export type SaleRef = { transactionId: string } | { orderId: string };
+
+// ── After the sale (#169 PR 3) ───────────────────────────────────────────────
+
+/** A book line's binding as Returns sees it, its job locked: what was charged, and what came back already. */
+export interface BindingOnLine {
+  serviceLineId: number;
+  /** Bound copies on the line. */
+  quantity: number;
+  lineTotal: Money;
+  standardCost: Money;
+  jobId: number | null;
+  jobStatus: ServiceJobStatus | null;
+  jobNumber: string | null;
+  /** Bound copies already brought back, and the fee they took. */
+  returnedQuantity: number;
+  returnedAmount: Money;
+}
+
+/** A fee given back on a return: a binding cancelled before its work (3a), or a defective bound copy (4a). */
+export interface FeeReturn {
+  binding: BindingOnLine;
+  quantity: number;
+  amount: Money;
+  /** The standard cost taken back off the sale's cost: all of it for work never done, none for a defect. */
+  costReversed: Money;
+  kind: 'CANCELLED' | 'DEFECT';
+}
+
+/** A job and the sale it belongs to, for cancelling its binding. */
+export interface JobForCancel {
+  binding: BindingOnLine;
+  sale: SaleRef;
+}
+
+/** A row of the jobs board (1a). */
+export interface JobBoardRecord extends ServiceJobRecord {
+  serviceName: string;
+  quantity: number;
+  bookTitle: string;
+  customerName: string;
+  customerPhone: string | null;
+  source: 'POS' | 'ORDER';
+  saleId: string;
+  saleNumber: string;
+  overdue: boolean;
+}
+
+export interface JobFilter {
+  branchId: number;
+  status?: ServiceJobStatus;
+  overdue?: boolean;
+  q?: string;
+}

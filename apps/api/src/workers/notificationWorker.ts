@@ -99,6 +99,16 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'pos_transaction',
     entityId: String(p.txId ?? ''),
   }),
+  // ── Services (#169) ────────────────────────────────────────────────────────
+  // The customer is called by phone; the phone stays encrypted, so it is on the board, not here.
+  'service_job.ready': (p) => ({
+    title: '🧵 Binding Ready',
+    body: `${p.jobNumber} — ${p.serviceName} is ready: call ${p.customerName}`,
+    targetRoles: ['Sales', 'Manager', 'Admin'],
+    severity: 'success',
+    entityType: 'service_job',
+    entityId: String(p.jobId ?? ''),
+  }),
   'pos.transaction_voided': (p) => ({
     title: '❌ Transaction Voided',
     body: `${p.txNumber} voided${p.staffName ? ` by ${p.staffName}` : ''}`,
@@ -372,6 +382,9 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
 };
 
 // ── Handler ───────────────────────────────────────────────────────────────────
+
+/** The events that make a notification; the outbox poller routes each one here. */
+export const NOTIFICATION_EVENTS: readonly string[] = Object.keys(EVENT_CATALOG);
 
 export async function handleNotification(payload: Record<string, unknown>): Promise<void> {
   // The outbox poller injects _eventType into the payload before calling this handler

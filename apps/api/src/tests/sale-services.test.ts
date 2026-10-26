@@ -210,16 +210,19 @@ describe('Services on a sale', () => {
       expect(refused.body.error).toBe('SERVICE_JOB_IN_PROGRESS');
     });
 
-    it('does not take back a bound copy through Returns yet; an unbound line still returns', async () => {
+    // #169 PR 3: the unbound copies of a bound line come back as any book; a bound one only defective.
+    it('does not take back a bound copy as an ordinary return; an unbound copy or line still returns', async () => {
       const sale = await sell([posItem(2, { serviceId: cloth, quantity: 1 }), posItem(1)], { amount: price * 3 + 100 });
       const [bound, plain] = sale.body.lineItems;
       const refused = await as(api().post('/api/v1/returns')).send({
-        transactionId: Number(sale.body.id), lines: [{ transactionLineItemId: Number(bound.id), quantity: 1 }], reason: 'Not wanted',
+        transactionId: Number(sale.body.id), lines: [{ transactionLineItemId: Number(bound.id), quantity: 2 }], reason: 'Not wanted',
       });
       expect(refused.status).toBe(422);
       expect(refused.body.error).toBe('BOUND_COPY_RETURN');
       const ok = await as(api().post('/api/v1/returns')).send({
-        transactionId: Number(sale.body.id), lines: [{ transactionLineItemId: Number(plain.id), quantity: 1 }], reason: 'Not wanted',
+        transactionId: Number(sale.body.id),
+        lines: [{ transactionLineItemId: Number(plain.id), quantity: 1 }, { transactionLineItemId: Number(bound.id), quantity: 1 }],
+        reason: 'Not wanted',
       });
       expect(ok.status, JSON.stringify(ok.body)).toBe(201);
     });

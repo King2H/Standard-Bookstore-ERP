@@ -50,9 +50,10 @@ export const JOB_STATUS_LABEL: Record<ServiceJobStatus, string> = {
   READY: 'Ready',
   COLLECTED: 'Collected',
   CANCELLED: 'Cancelled',
+  RETURNED: 'Returned',
 };
 
-/** The one step a job can take next, with its button's label; none once collected or cancelled. */
+/** The one step a job can take next, with its button's label; none once collected, cancelled or returned. */
 export function nextStep(status: ServiceJobStatus): { step: ServiceJobStep; label: string } | null {
   if (status === 'REQUESTED') return { step: 'send', label: 'Sent to binder' };
   if (status === 'AT_BINDER') return { step: 'ready', label: 'Back and ready' };

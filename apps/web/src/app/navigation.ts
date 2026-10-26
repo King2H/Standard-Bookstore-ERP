@@ -7,7 +7,7 @@
  *
  * Sidebar structure:
  *   Dashboard (standalone)
- *   Sales      → POS, Orders, Returns, Exchanges, Customers
+ *   Sales      → POS, Orders, Binding Jobs, Returns, Exchanges, Customers
  *   Stock      → Inventory, Procurement, Suppliers, Catalog
  *   Finance    → Payments, Receivables
  *     (Bank Accounts is not an active module for this version: hidden
@@ -20,12 +20,12 @@ export type Page =
   | 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings'
   | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers'
   | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments'
-  | 'exchanges' | 'profile' | 'receivables';
+  | 'exchanges' | 'profile' | 'receivables' | 'binding-jobs';
 
 export const PAGES: readonly Page[] = [
   'dashboard', 'branches', 'staff', 'audit-log', 'settings', 'bank-accounts', 'locations', 'catalog',
   'inventory', 'suppliers', 'procurement', 'customers', 'pos', 'returns', 'orders', 'payments',
-  'exchanges', 'profile', 'receivables',
+  'exchanges', 'profile', 'receivables', 'binding-jobs',
 ];
 
 export const isPage = (value: string): value is Page => (PAGES as readonly string[]).includes(value);
@@ -68,6 +68,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'pos',       label: 'POS',       icon: '🛒', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE'] },
       { id: 'orders',    label: 'Orders',    icon: '📦', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_PAYMENT'] },
+      { id: 'binding-jobs', label: 'Binding Jobs', icon: '🧵', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE'] },
       { id: 'returns',   label: 'Returns',   icon: '↩',  roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_REFUND'] },
       { id: 'exchanges', label: 'Exchanges', icon: '🔁', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE', 'APPROVE_EXCHANGE'] },
       { id: 'customers', label: 'Customers', icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer', 'Stock_Clerk', 'Purchasor'], permissions: ['CREATE_SALE', 'PROCESS_PAYMENT', 'MANAGE_INVENTORY', 'VIEW_REPORTS'] },

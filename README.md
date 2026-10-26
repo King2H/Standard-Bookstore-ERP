@@ -665,7 +665,12 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   are unique ignoring case and stored uppercase (`DUPLICATE_SERVICE`)
 - PUT/DELETE /api/v1/services/:id/branch-fee — body `{ fee }`: the session branch's own fee, or back to the shop's (Admin, Manager)
 - POST /api/v1/service-jobs/:id/send|ready|collect — moves a binding job of the session branch one step on: Requested → At
-  binder → Ready → Collected (the selling roles). An order's ready jobs are collected when the order is delivered
+  binder → Ready → Collected (the selling roles). An order's ready jobs are collected when the order is delivered.
+  Moving a job to Ready tells the branch's selling roles (in-app notification, without the customer's phone)
+- GET /api/v1/service-jobs (`?status=&overdue=true|false&q=`) — the branch's binding jobs board: book, service, copies,
+  customer and phone (to call), sale or order number, ready date and whether it is overdue (the selling roles)
+- POST /api/v1/service-jobs/:id/cancel — body `{ reason }`: cancels a binding still Requested (Manager, Admin). The fee goes
+  back through Returns the way it was paid (a credit note on what is still owed first); the job is Cancelled
 
 ### Inventory
 - GET /api/v1/inventory — paginated stock levels
@@ -697,7 +702,10 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   while the job is still Requested and is refused once it has started; a bound copy is not taken back through Returns yet
 
 ### Returns
-- POST /api/v1/returns — body: { transactionId | orderId, reason?, lines: [{ transactionLineItemId | orderLineItemId, quantity, disposition? }] }.
+- POST /api/v1/returns — body: { transactionId | orderId, reason?, lines: [{ transactionLineItemId | orderLineItemId, quantity, disposition?, defective? }] }.
+  A bound copy comes back only defective (`defective: true`, Manager or Admin, with a reason; else 422 `BOUND_COPY_RETURN`), once
+  collected (`BOUND_COPY_NOT_COLLECTED`): book and its share of the fee are refunded, the copy goes to damaged stock, and the
+  binding's cost stays a loss. A job whose bound copies all came back is Returned.
   A return names a counter sale or a delivered customer order (#166); an order not delivered answers 422 `ORDER_NOT_DELIVERED` (cancel it instead).
   The value goes first against what a credit sale or order still owes (a credit note), the rest back the way it was paid; an order's refunds go through its payments.
   The return window counts from the sale, or from the order's delivery (`fulfilledAt`).

@@ -1,7 +1,9 @@
 import { sql } from 'kysely';
 import { Money, type LifecycleStatus, type ServiceJobStatus } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
-import type { PricedServiceLine, SaleRef, SaleServiceLineRecord, ServiceForSale, ServiceJobRecord } from './services.types.js';
+import type {
+  BindingOnLine, FeeReturn, JobFilter, JobForCancel, PricedServiceLine, SaleRef, SaleServiceLineRecord, ServiceForSale, ServiceJobRecord,
+} from './services.types.js';
 
 // The only SQL of services on a sale (#169 PR 2, A6). A service line belongs
 // to one book line, of a counter sale or of an order; its job is the branch's.
@@ -141,13 +143,18 @@ export async function lockJobsOf(q: Queryable, sale: SaleRef): Promise<Array<{ i
 }
 
 /** A job of the branch, locked; another branch's is not found. */
-export async function lockJob(q: Queryable, id: number, branchId: number): Promise<ServiceJobRecord | undefined> {
+export function lockJob(q: Queryable, id: number, branchId: number): Promise<ServiceJobRecord | undefined> {
+  return findJob(q, id, branchId, { forUpdate: true });
+}
+
+/** A job of the branch; another branch's is not found. */
+export async function findJob(q: Queryable, id: number, branchId: number, opts: { forUpdate?: boolean } = {}): Promise<ServiceJobRecord | undefined> {
   const row = await q
     .selectFrom('service_jobs')
     .select(['id', 'job_number', 'status', 'customer_id', 'branch_id', 'updated_at', sql<string>`TO_CHAR(ready_date, 'YYYY-MM-DD')`.as('ready_date')])
     .where('id', '=', String(id))
     .where('branch_id', '=', branchId)
-    .forUpdate()
+    .$if(opts.forUpdate === true, (qb) => qb.forUpdate())
     .executeTakeFirst();
   return row && {
     id: Number(row.id),
@@ -168,21 +175,6 @@ export async function setJobStatus(q: Queryable, id: number, status: ServiceJobS
     .execute();
 }
 
-/** Book lines among `lineIds` that carry a service whose job was not cancelled. */
-export async function boundLines(q: Queryable, lines: { posLineIds: string[] } | { orderLineIds: string[] }): Promise<string[]> {
-  const ids = 'posLineIds' in lines ? lines.posLineIds : lines.orderLineIds;
-  if (ids.length === 0) return [];
-  const column = 'posLineIds' in lines ? 'sl.transaction_line_item_id' : 'sl.order_line_item_id';
-  const rows = await q
-    .selectFrom('sale_service_lines as sl')
-    .leftJoin('service_jobs as j', 'j.service_line_id', 'sl.id')
-    .select(column)
-    .where(column, 'in', ids)
-    .where((eb) => eb.or([eb('j.id', 'is', null), eb('j.status', '!=', 'CANCELLED')]))
-    .execute();
-  return rows.map((r) => String(Object.values(r)[0]));
-}
-
 /** Of `orderIds`, those with a job not yet ready (Requested or At binder). */
 export async function ordersWithOpenJobs(q: Queryable, orderIds: string[]): Promise<Set<string>> {
   if (orderIds.length === 0) return new Set();
@@ -196,4 +188,150 @@ export async function ordersWithOpenJobs(q: Queryable, orderIds: string[]): Prom
     .where('j.status', 'in', ['REQUESTED', 'AT_BINDER'])
     .execute();
   return new Set(rows.map((r) => String(r.order_id)));
+}
+
+// ── After the sale (#169 PR 3) ───────────────────────────────────────────────
+
+function selectBindings(q: Queryable) {
+  return q
+    .selectFrom('sale_service_lines as sl')
+    .leftJoin('service_jobs as j', 'j.service_line_id', 'sl.id')
+    .select([
+      'sl.id', 'sl.transaction_line_item_id', 'sl.order_line_item_id', 'sl.quantity', 'sl.line_total', 'sl.standard_cost',
+      'j.id as job_id', 'j.status as job_status', 'j.job_number',
+      sql<number>`COALESCE((SELECT SUM(r.quantity) FROM return_service_lines r WHERE r.service_line_id = sl.id), 0)::int`.as('returned_quantity'),
+      sql<string>`COALESCE((SELECT SUM(r.amount) FROM return_service_lines r WHERE r.service_line_id = sl.id), 0)`.as('returned_amount'),
+    ]);
+}
+
+type BindingRow = Awaited<ReturnType<ReturnType<typeof selectBindings>['execute']>>[number];
+
+function toBinding(r: BindingRow): BindingOnLine {
+  return {
+    serviceLineId: Number(r.id),
+    quantity: r.quantity,
+    lineTotal: Money.of(r.line_total),
+    standardCost: Money.of(r.standard_cost),
+    jobId: r.job_id === null ? null : Number(r.job_id),
+    jobStatus: r.job_status as ServiceJobStatus | null,
+    jobNumber: r.job_number,
+    returnedQuantity: Number(r.returned_quantity),
+    returnedAmount: Money.of(r.returned_amount),
+  };
+}
+
+/** The bindings of book lines, by book line, their jobs locked until the transaction ends. */
+export async function bindingsOf(q: Queryable, lines: { posLineIds: string[] } | { orderLineIds: string[] }): Promise<Map<string, BindingOnLine>> {
+  const ids = 'posLineIds' in lines ? lines.posLineIds : lines.orderLineIds;
+  if (ids.length === 0) return new Map();
+  const byPos = 'posLineIds' in lines;
+  await q
+    .selectFrom('service_jobs')
+    .select('id')
+    .where('service_line_id', 'in', (eb) => eb.selectFrom('sale_service_lines').select('id')
+      .where(byPos ? 'transaction_line_item_id' : 'order_line_item_id', 'in', ids))
+    .forUpdate()
+    .execute();
+  const rows = await selectBindings(q).where(byPos ? 'sl.transaction_line_item_id' : 'sl.order_line_item_id', 'in', ids).execute();
+  return new Map(rows.map((r) => [String(byPos ? r.transaction_line_item_id : r.order_line_item_id), toBinding(r)]));
+}
+
+/** A job of the branch with its binding and the sale it belongs to, locked; another branch's is not found. */
+export async function jobForCancel(q: Queryable, jobId: number, branchId: number): Promise<JobForCancel | undefined> {
+  const locked = await q.selectFrom('service_jobs').select('service_line_id').where('id', '=', String(jobId)).where('branch_id', '=', branchId).forUpdate().executeTakeFirst();
+  if (!locked) return undefined;
+  const row = await selectBindings(q)
+    .leftJoin('transaction_line_items as li', 'li.id', 'sl.transaction_line_item_id')
+    .leftJoin('order_line_items as oli', 'oli.id', 'sl.order_line_item_id')
+    .select(['li.transaction_id', 'oli.order_id'])
+    .where('sl.id', '=', locked.service_line_id)
+    .executeTakeFirstOrThrow();
+  return {
+    binding: toBinding(row),
+    sale: row.transaction_id !== null ? { transactionId: String(row.transaction_id) } : { orderId: String(row.order_id) },
+  };
+}
+
+export async function insertFeeReturn(q: Queryable, returnId: string, f: FeeReturn): Promise<void> {
+  await q
+    .insertInto('return_service_lines')
+    .values({
+      return_id: returnId,
+      service_line_id: f.binding.serviceLineId,
+      quantity: f.quantity,
+      amount: f.amount.toFixed(2),
+      cost_reversed: f.costReversed.toFixed(2),
+      kind: f.kind,
+    })
+    .execute();
+}
+
+/** Fees given back on a counter sale so far, for the points its returns take back. */
+export async function feesReturnedOnSale(q: Queryable, transactionId: string): Promise<Money> {
+  const row = await q
+    .selectFrom('return_service_lines as r')
+    .innerJoin('sale_service_lines as sl', 'sl.id', 'r.service_line_id')
+    .innerJoin('transaction_line_items as li', 'li.id', 'sl.transaction_line_item_id')
+    .select(sql<string>`COALESCE(SUM(r.amount), 0)`.as('total'))
+    .where('li.transaction_id', '=', transactionId)
+    .executeTakeFirstOrThrow();
+  return Money.of(row.total);
+}
+
+/** The jobs board (1a): the branch's jobs, the oldest ready date first. */
+export async function listJobs(q: Queryable, f: JobFilter, page: { limit: number; offset: number }): Promise<{ rows: JobBoardRow[]; total: number }> {
+  let query = q
+    .selectFrom('service_jobs as j')
+    .innerJoin('sale_service_lines as sl', 'sl.id', 'j.service_line_id')
+    .innerJoin('services as s', 's.id', 'sl.service_id')
+    .innerJoin('customers as c', 'c.id', 'j.customer_id')
+    .leftJoin('transaction_line_items as li', 'li.id', 'sl.transaction_line_item_id')
+    .leftJoin('transactions as t', 't.id', 'li.transaction_id')
+    .leftJoin('order_line_items as oli', 'oli.id', 'sl.order_line_item_id')
+    .leftJoin('orders as o', 'o.id', 'oli.order_id')
+    .innerJoin('books as b', (join) => join.on(sql`b.id`, '=', sql`COALESCE(li.book_id, oli.book_id)`))
+    .where('j.branch_id', '=', f.branchId);
+  if (f.status) query = query.where('j.status', '=', f.status);
+  if (f.overdue) query = query.where('j.status', 'in', ['REQUESTED', 'AT_BINDER']).where(sql<boolean>`j.ready_date < CURRENT_DATE`);
+  if (f.q) {
+    const pattern = `%${f.q.toLowerCase()}%`;
+    query = query.where((eb) => eb.or([eb(sql`lower(j.job_number)`, 'like', pattern), eb(sql`lower(c.full_name)`, 'like', pattern)]));
+  }
+  const [rows, count] = await Promise.all([
+    query
+      .select([
+        'j.id', 'j.job_number', 'j.status', 'j.customer_id', 'j.branch_id', 'j.updated_at',
+        sql<string>`TO_CHAR(j.ready_date, 'YYYY-MM-DD')`.as('ready_date'),
+        sql<boolean>`j.status IN ('REQUESTED', 'AT_BINDER') AND j.ready_date < CURRENT_DATE`.as('overdue'),
+        's.name as service_name', 'sl.quantity', 'b.title as book_title', 'c.full_name as customer_name', 'c.phone_encrypted',
+        't.id as transaction_id', 't.transaction_number', 'o.id as order_id', 'o.order_number',
+      ])
+      .orderBy('j.ready_date')
+      .orderBy('j.id')
+      .limit(page.limit)
+      .offset(page.offset)
+      .execute(),
+    query.select((eb) => eb.fn.countAll<string>().as('count')).executeTakeFirstOrThrow(),
+  ]);
+  return { rows, total: Number(count.count) };
+}
+
+export type JobBoardRow = {
+  id: string | number | bigint; job_number: string; status: string; customer_id: number; branch_id: number; updated_at: Date;
+  ready_date: string; overdue: boolean; service_name: string; quantity: number; book_title: string; customer_name: string;
+  phone_encrypted: string | null; transaction_id: string | number | bigint | null; transaction_number: string | null;
+  order_id: string | number | bigint | null; order_number: string | null;
+};
+
+/** What the ready notice names: the customer to call and the binding. */
+export async function jobNotice(q: Queryable, jobId: number): Promise<{ customerName: string; serviceName: string }> {
+  const row = await q
+    .selectFrom('service_jobs as j')
+    .innerJoin('customers as c', 'c.id', 'j.customer_id')
+    .innerJoin('sale_service_lines as sl', 'sl.id', 'j.service_line_id')
+    .innerJoin('services as s', 's.id', 'sl.service_id')
+    .select(['c.full_name', 's.name'])
+    .where('j.id', '=', String(jobId))
+    .executeTakeFirstOrThrow();
+  return { customerName: row.full_name, serviceName: row.name };
 }

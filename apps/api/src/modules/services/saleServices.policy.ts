@@ -92,3 +92,62 @@ export function checkJobsDeliverable(statuses: ServiceJobStatus[]): void {
 export function jobsDeliverable(statuses: ServiceJobStatus[]): boolean {
   return !statuses.some((s) => s === 'REQUESTED' || s === 'AT_BINDER');
 }
+
+// ── After the sale (#169 PR 3) ───────────────────────────────────────────────
+
+/**
+ * The fee `quantity` bound copies take back: their share of what the binding
+ * cost after its discount; the last copies take what is left, so the fee
+ * never gives back more than it took.
+ */
+export function feeShare(b: { quantity: number; lineTotal: Money; returnedQuantity: number; returnedAmount: Money }, quantity: number): Money {
+  if (b.returnedQuantity + quantity >= b.quantity) return b.lineTotal.minus(b.returnedAmount);
+  return b.lineTotal.times(quantity).dividedBy(b.quantity).round(2);
+}
+
+/** A binding is cancelled, its fee given back, only while its work has not started (3a). */
+export function checkCancellable(status: ServiceJobStatus | null): void {
+  if (status === 'REQUESTED') return;
+  if (status === 'AT_BINDER' || status === 'READY' || status === 'COLLECTED') {
+    throw new BusinessError('SERVICE_JOB_IN_PROGRESS', 'The binding has started; its fee is no longer given back by cancelling it');
+  }
+  throw new BusinessError('INVALID_JOB_STEP', `A job that is ${status ?? 'not opened'} cannot be cancelled`, { status });
+}
+
+/** Copies of a line still sold bound, and still sold unbound, once returns took theirs. */
+export function copiesLeft(
+  line: { quantity: number; returnedQuantity: number },
+  binding: { quantity: number; returnedQuantity: number } | undefined,
+): { bound: number; plain: number } {
+  if (!binding) return { bound: 0, plain: line.quantity - line.returnedQuantity };
+  const plainReturned = line.returnedQuantity - binding.returnedQuantity;
+  return { bound: binding.quantity - binding.returnedQuantity, plain: line.quantity - binding.quantity - plainReturned };
+}
+
+/**
+ * Which copies a return takes from a bound line (decision 6 of #169): plain
+ * copies as any book; bound ones only defective, once handed over.
+ */
+export function checkBoundReturn(
+  lineName: string,
+  request: { quantity: number; defective: boolean },
+  left: { bound: number; plain: number },
+  jobStatus: ServiceJobStatus | null,
+): void {
+  if (!request.defective) {
+    if (request.quantity > left.plain) {
+      throw new BusinessError('BOUND_COPY_RETURN', `Only ${left.plain} unbound ${left.plain === 1 ? 'copy' : 'copies'} of ${lineName} can come back; a bound copy comes back only defective`, {
+        plainLeft: left.plain,
+      });
+    }
+    return;
+  }
+  if (jobStatus !== 'COLLECTED') {
+    throw new BusinessError('BOUND_COPY_NOT_COLLECTED', 'The bound copies have not been handed to the customer yet', { status: jobStatus });
+  }
+  if (request.quantity > left.bound) {
+    throw new BusinessError('BOUND_COPY_RETURN', `Only ${left.bound} bound ${left.bound === 1 ? 'copy' : 'copies'} of ${lineName} can come back`, {
+      boundLeft: left.bound,
+    });
+  }
+}
