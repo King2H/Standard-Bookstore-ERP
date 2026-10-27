@@ -135,7 +135,8 @@ function SidebarSection({
 
 interface LayoutProps {
   currentPage: Page;
-  onNavigate: (page: Page) => void;
+  /** `context` becomes the page's query string, e.g. the note a notification is about. */
+  onNavigate: (page: Page, context?: Record<string, string>) => void;
   onLogout: () => void;
   userRole: Role | null;
   userRoles?: string[];           // all roles for the active branch: badges and what the menu offers
@@ -392,7 +393,7 @@ export default function Layout({
           </div>
 
           {/* Notification bell */}
-          <NotificationBell onNavigate={(page) => onNavigate(page as Page)} />
+          <NotificationBell onNavigate={(page, context) => onNavigate(page as Page, context)} />
 
           {/* Theme toggle */}
           <button

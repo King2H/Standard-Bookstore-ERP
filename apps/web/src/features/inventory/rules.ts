@@ -61,7 +61,7 @@ export const ADJUSTMENT_DIRECTION: Record<AdjustmentReason, 'add' | 'remove' | n
 export const REASON_LABELS: Record<string, string> = {
   correction: 'Correction', damage: 'Damage', damage_repaired: 'Repaired', damage_write_off: 'Written Off', initial: 'Initial', loss: 'Loss',
   return: 'Return', revaluation: 'Revalued', sale: 'Sale',
-  stock_in: 'Stock In', transfer_in: 'Transfer In', transfer_out: 'Transfer Out',
+  stock_in: 'Stock In', transfer_in: 'Transfer In', transfer_out: 'Transfer Out', transfer_returned: 'Transfer Returned',
 };
 
 export const MOVEMENT_LABELS: Record<string, string> = {

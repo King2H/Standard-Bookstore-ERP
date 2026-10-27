@@ -95,7 +95,7 @@ function stubApi() {
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
-async function openTab(name: 'Adjust' | 'Transfer') {
+async function openTab(name: 'Adjust' | 'Move') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage /></ToastProvider></QueryClientProvider>);
   await screen.findByText('Animal Farm');
@@ -190,13 +190,13 @@ describe('Inventory: Adjust', () => {
 describe('Inventory: Transfer', () => {
   it('lets staff limited to some locations send to any location of the branch (was: only their own)', async () => {
     me = profile(['Stock_Clerk'], [SHOP]);
-    const user = await openTab('Transfer');
+    const user = await openTab('Move');
     await choose(user, 'Animal Farm');
     await waitFor(() => expect([...(screen.getByRole('combobox') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['', '2', '3']));
   });
 
   it('moves stock and says where it went', async () => {
-    const user = await openTab('Transfer');
+    const user = await openTab('Move');
     await choose(user, 'Animal Farm');
     await waitFor(() => expect((screen.getByRole('combobox') as HTMLSelectElement).options.length).toBe(3));
     await user.selectOptions(screen.getByRole('combobox'), '2');
@@ -208,7 +208,7 @@ describe('Inventory: Transfer', () => {
   });
 
   it('does not ask for more than the source holds (was: sent, then refused)', async () => {
-    const user = await openTab('Transfer');
+    const user = await openTab('Move');
     await choose(user, 'Animal Farm');
     await waitFor(() => expect((screen.getByRole('combobox') as HTMLSelectElement).options.length).toBe(3));
     await user.selectOptions(screen.getByRole('combobox'), '2');

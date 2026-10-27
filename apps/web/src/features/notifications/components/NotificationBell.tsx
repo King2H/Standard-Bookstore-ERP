@@ -10,7 +10,8 @@
  * Navigation map (entityType → page):
  *   order → orders, pos_transaction → pos, inventory → inventory,
  *   purchase_order → procurement, return → returns, payment → payments,
- *   exchange → exchanges, customer → customers, service_job → binding-jobs;
+ *   exchange → exchanges, customer → customers, service_job → binding-jobs,
+ *   branch_transfer → inventory, on Incoming with the note open (#170);
  *   anything else stays put.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -21,7 +22,7 @@ import { useMarkAllRead, useMarkRead, useNotifications, useUnreadCount } from '.
 import { useNotificationStream } from '../stream.js';
 
 interface NotificationBellProps {
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ const ENTITY_PAGE: Record<string, string> = {
   exchange:       'exchanges',
   customer:       'customers',
   service_job:    'binding-jobs',
+  branch_transfer:'inventory',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,7 +107,9 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
   const handleClick = useCallback((notif: Notification) => {
     if (!notif.isRead) markReadMutation.mutate(notif.id);
     const page = notif.entityType ? ENTITY_PAGE[notif.entityType] : null;
-    if (page && onNavigate) onNavigate(page);
+    // A transfer on its way is told to the branch receiving it.
+    if (notif.entityType === 'branch_transfer' && onNavigate) onNavigate('inventory', { tab: 'incoming', transferId: notif.entityId ?? '' });
+    else if (page && onNavigate) onNavigate(page);
     setOpen(false);
   }, [markReadMutation, onNavigate]);
 
