@@ -165,6 +165,8 @@ export const KpiReportSchema = z.object({
   grossProfitUnified: z.number(),
   overdueReceivablesAmount: z.number(),
   inventoryValue: z.number(),
+  /** Stock on its way between branches, at the cost it left at; for a branch, what it sends and receives (#170). */
+  inventoryInTransit: z.number(),
 });
 export type KpiReport = z.infer<typeof KpiReportSchema>;
 

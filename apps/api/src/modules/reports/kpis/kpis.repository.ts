@@ -56,7 +56,7 @@ function exchangeSales(q: Queryable, branchId: number | undefined, when: string)
 export interface KpiFigures {
   dailyOrderSales: string; dailyPosSales: string; dailyExchangeSales: string;
   monthlyOrderSales: string; monthlyPosSales: string; monthlyExchangeSales: string;
-  outstanding: string; overdue: string; averageOrderValue: string; inventoryValue: string;
+  outstanding: string; overdue: string; averageOrderValue: string; inventoryValue: string; inventoryInTransit: string;
   activeCustomers: number; lowStockAlerts: number; pendingOrders: number; exchangesToday: number;
 }
 
@@ -67,7 +67,7 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
   const [
     dailyOrderSales, dailyPosSales, dailyExchangeSales,
     monthlyOrderSales, monthlyPosSales, monthlyExchangeSales,
-    outstanding, overdue, averageOrderValue, inventoryValue,
+    outstanding, overdue, averageOrderValue, inventoryValue, inventoryInTransit,
     activeCustomers, lowStockAlerts, pendingOrders, exchangesToday,
   ] = await Promise.all([
     orderSales(q, branchId, today('created_at')),
@@ -82,6 +82,14 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
     value(q, `SELECT COALESCE(AVG(total), 0)::NUMERIC AS val FROM orders WHERE status NOT IN ${NOT_SALE_ORDER_STATUS_LIST} ${b.cond}`, b.params),
     // Quantity × average cost now, not a period flow.
     value(q, `SELECT COALESCE(SUM(i.inventory_value), 0)::NUMERIC AS val FROM inventory i JOIN locations l ON l.id = i.location_id WHERE true ${l.cond}`, l.params),
+    // On its way between branches, in neither branch's stock: a branch sees what it sends and what it receives (#170, 3a).
+    value(
+      q,
+      `SELECT ROUND(COALESCE(SUM((tl.quantity - tl.received_quantity - tl.lost_quantity - tl.damaged_quantity - tl.returned_quantity) * tl.unit_cost), 0), 2) AS val
+       FROM branch_transfer_lines tl JOIN branch_transfers t ON t.id = tl.transfer_id
+       WHERE t.status IN ('in_transit', 'partially_received') ${branchId ? 'AND (t.from_branch_id = $1 OR t.to_branch_id = $1)' : ''}`,
+      branchId ? [branchId] : [],
+    ),
     count(`SELECT COUNT(*)::INTEGER AS val FROM customers WHERE is_active = true ${b.cond}`, b.params),
     count(`SELECT COUNT(*)::INTEGER AS val FROM inventory i JOIN locations l ON l.id = i.location_id WHERE i.quantity <= i.reorder_point ${l.cond}`, l.params),
     count(`SELECT COUNT(*)::INTEGER AS val FROM orders WHERE status IN ${OPEN_ORDER_STATUSES} ${b.cond}`, b.params),
@@ -90,7 +98,7 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
   return {
     dailyOrderSales, dailyPosSales, dailyExchangeSales,
     monthlyOrderSales, monthlyPosSales, monthlyExchangeSales,
-    outstanding, overdue, averageOrderValue, inventoryValue,
+    outstanding, overdue, averageOrderValue, inventoryValue, inventoryInTransit,
     activeCustomers, lowStockAlerts, pendingOrders, exchangesToday,
   };
 }

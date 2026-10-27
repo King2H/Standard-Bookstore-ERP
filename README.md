@@ -684,6 +684,23 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   counted apart with their own value (`damaged`, `damagedValue` on a stock level); a write-off takes that value out as a loss,
   a repair puts the copies back for sale at it (#168). Admin, Manager, Stock_Clerk.
 
+### Transfers between branches (#170)
+- GET /api/v1/transfers (`?direction=outgoing|incoming&status=`) / GET /api/v1/transfers/:id — the session branch's
+  transfer notes, sent or received, numbered TRF-YYYYMMDD-NNNN (Admin, Manager, Stock_Clerk)
+- POST /api/v1/transfers / PUT /api/v1/transfers/:id / POST .../cancel — body `{ fromLocationId, toBranchId, lines: [{ bookId,
+  quantity }], notes? }`: a draft from a location of the session branch to another branch, edited or cancelled while a draft
+  (SEND_TRANSFER)
+- POST /api/v1/transfers/:id/dispatch — the copies leave the source at its average cost, never below zero, and are in
+  transit, valued apart (`inventoryInTransit` on the dashboard KPIs, rows "In transit" in the valuation export); the
+  receiving branch is told (SEND_TRANSFER)
+- POST /api/v1/transfers/:id/receive — body `{ locationId, items: [{ lineId, quantity }] }`: the receiving branch takes
+  copies into one of its locations at the cost they left at, weighed into its average (RECEIVE_TRANSFER)
+- POST /api/v1/transfers/:id/resolve — body `{ lineId, outcome, quantity, reason, locationId? }`: copies that did not
+  arrive, with a reason: `lost` (a loss) or `damaged` (into the location's damaged stock) by the receiving branch,
+  `returned` (back on a shelf of the sending branch) by the sending branch (RESOLVE_TRANSFER: Admin, Manager). The note
+  ends Received when everything arrived, Closed when the rest was resolved.
+  SEND_TRANSFER and RECEIVE_TRANSFER: Admin, Manager, Stock_Clerk.
+
 ### Suppliers
 - GET/POST /api/v1/suppliers / GET/PUT /api/v1/suppliers/:id
 - POST /api/v1/suppliers/:id/deactivate|blacklist / DELETE /api/v1/suppliers/:id

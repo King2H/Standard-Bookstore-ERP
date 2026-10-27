@@ -65,6 +65,15 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'inventory',
     entityId: String(p.bookId ?? ''),
   }),
+  // The receiving branch is told books are on their way (#170, decision 5a).
+  'transfer.dispatched': (p) => ({
+    title: '🚚 Transfer on its way',
+    body: `${p.transferNumber}: ${p.quantity} copies from ${p.fromBranchName} to receive`,
+    targetRoles: ['Stock_Clerk', 'Manager', 'Admin'],
+    severity: 'info',
+    entityType: 'branch_transfer',
+    entityId: String(p.transferId ?? ''),
+  }),
   'inventory.low_stock': (p) => ({
     title: '⚠️ Low Stock Alert',
     body: `"${p.bookTitle}" at ${p.locationName} — ${p.quantity} remaining (reorder at ${p.reorderPoint})`,

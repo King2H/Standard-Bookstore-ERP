@@ -119,6 +119,7 @@ export async function stockRows(q: Queryable, branchId: number | undefined): Pro
           WHERE bc2.book_id = b.id),
          ''
        ) AS category,
+       l.name AS location_name,
        i.quantity AS quantity_on_hand,
        -- Confirming an order already takes the stock out: reserved is for
        -- information, available is the quantity.
@@ -151,10 +152,36 @@ export async function stockRows(q: Queryable, branchId: number | undefined): Pro
        GROUP BY book_id, location_id
      ) res ON res.book_id = i.book_id AND res.location_id = i.location_id
      ${where(b.cond ? [b.cond] : [])}
-     GROUP BY b.id, i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id,
+     GROUP BY b.id, i.book_id, b.sku, b.isbn, b.title, b.publisher, i.location_id, l.name,
               i.quantity, i.average_cost, i.inventory_value, res.reserved,
               bbp.price, b.default_price
      ORDER BY b.title ASC`,
     b.params,
+  );
+}
+
+/**
+ * Copies on their way between branches (#170, decision 3a), one row per note
+ * line still out, at the cost they left at; for a branch, what it sends and
+ * what it receives.
+ */
+export async function inTransitRows(q: Queryable, branchId: number | undefined): Promise<Record<string, unknown>[]> {
+  return reportRows(
+    q,
+    `SELECT t.transfer_number, fb.name AS from_branch, tb.name AS to_branch,
+            COALESCE(b.sku, b.isbn) AS book_code, b.isbn, b.title,
+            tl.quantity - tl.received_quantity - tl.lost_quantity - tl.damaged_quantity - tl.returned_quantity AS quantity,
+            tl.unit_cost,
+            TO_CHAR(t.dispatched_at, 'YYYY-MM-DD') AS dispatched_on
+     FROM branch_transfer_lines tl
+     JOIN branch_transfers t ON t.id = tl.transfer_id
+     JOIN branches fb ON fb.id = t.from_branch_id
+     JOIN branches tb ON tb.id = t.to_branch_id
+     JOIN books b ON b.id = tl.book_id
+     WHERE t.status IN ('in_transit', 'partially_received')
+       AND tl.quantity > tl.received_quantity + tl.lost_quantity + tl.damaged_quantity + tl.returned_quantity
+       ${branchId ? 'AND (t.from_branch_id = $1 OR t.to_branch_id = $1)' : ''}
+     ORDER BY t.transfer_number, b.title`,
+    branchId ? [branchId] : [],
   );
 }

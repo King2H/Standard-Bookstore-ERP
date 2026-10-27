@@ -17,6 +17,8 @@ export interface StockExportRow {
   author: string;
   category: string;
   publisher: string;
+  /** The location, or the transfer note the copies are on their way on (#170). */
+  location: string;
   quantity_on_hand: number;
   quantity_reserved: number;
   quantity_available: number;
@@ -66,6 +68,7 @@ export async function getStockExportRows(branchId: number | undefined): Promise<
     author: (row.author as string | null) ?? '',
     category: (row.category as string | null) ?? '',
     publisher: (row.publisher as string | null) ?? '',
+    location: row.location_name as string,
     quantity_on_hand: row.quantity_on_hand as number,
     quantity_reserved: row.quantity_reserved as number,
     quantity_available: row.quantity_available as number,
@@ -79,3 +82,38 @@ export async function getStockExportRows(branchId: number | undefined): Promise<
     last_selling_price: num(row.last_selling_price),
   }));
 }
+
+/**
+ * The valuation export: stock on hand by location, then what is on its way
+ * between branches at the cost it left at, valued apart from either branch
+ * (#170, decision 3a).
+ */
+export async function getValuationRows(branchId: number | undefined): Promise<StockExportRow[]> {
+  const [onHand, inTransit] = await Promise.all([getStockExportRows(branchId), stock.inTransitRows(reportDb, branchId)]);
+  return [
+    ...onHand,
+    ...inTransit.map((row) => {
+      const quantity = Number(row.quantity);
+      const unitCost = Money.of(row.unit_cost as string);
+      return {
+        book_code: (row.book_code as string | null) ?? '',
+        isbn: (row.isbn as string | null) ?? '',
+        title: row.title as string,
+        author: '',
+        category: '',
+        publisher: '',
+        location: `In transit ${row.transfer_number as string}: ${row.from_branch as string} to ${row.to_branch as string}`,
+        quantity_on_hand: quantity,
+        quantity_reserved: 0,
+        quantity_available: 0,
+        unit_cost: unitCost.toNumber(4),
+        last_movement_date: (row.dispatched_on as string | null) ?? '',
+        average_cost: unitCost.toNumber(4),
+        inventory_value: unitCost.times(quantity).round(2).toNumber(),
+        last_purchase_cost: 0,
+        last_selling_price: 0,
+      };
+    }),
+  ];
+}
+

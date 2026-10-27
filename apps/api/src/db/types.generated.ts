@@ -210,6 +210,51 @@ export interface Branches {
   tenant_id: Generated<number>;
 }
 
+export interface BranchTransferEvents {
+  created_at: Generated<Timestamp>;
+  id: Generated<number>;
+  kind: string;
+  line_id: number;
+  location_id: number | null;
+  quantity: number;
+  reason: string | null;
+  staff_id: number;
+  tenant_id: Generated<number>;
+  transfer_id: number;
+}
+
+export interface BranchTransferLines {
+  book_id: number;
+  damaged_quantity: Generated<number>;
+  id: Generated<number>;
+  lost_quantity: Generated<number>;
+  quantity: number;
+  received_quantity: Generated<number>;
+  returned_quantity: Generated<number>;
+  tenant_id: Generated<number>;
+  transfer_id: number;
+  unit_cost: Numeric | null;
+}
+
+export interface BranchTransfers {
+  cancelled_at: Timestamp | null;
+  cancelled_by: number | null;
+  completed_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  created_by: number;
+  dispatched_at: Timestamp | null;
+  dispatched_by: number | null;
+  from_branch_id: number;
+  from_location_id: number;
+  id: Generated<number>;
+  notes: string | null;
+  status: Generated<string>;
+  tenant_id: Generated<number>;
+  to_branch_id: number;
+  transfer_number: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface Categories {
   archived_at: Timestamp | null;
   archived_by: number | null;
@@ -1002,6 +1047,9 @@ export interface DB {
   book_tags: BookTags;
   books: Books;
   branch_config: BranchConfig;
+  branch_transfer_events: BranchTransferEvents;
+  branch_transfer_lines: BranchTransferLines;
+  branch_transfers: BranchTransfers;
   branches: Branches;
   categories: Categories;
   customer_group_membership: CustomerGroupMembership;

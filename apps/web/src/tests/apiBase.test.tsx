@@ -30,7 +30,7 @@ const EMPTY_KPIS = {
   totalDiscounts: 0, grossProfit: 0, dailyNetProfit: 0, monthlyNetProfit: 0,
   dailyNetSalesRevenue: 0, monthlyNetSalesRevenue: 0, dailyNetProfitUnified: 0,
   monthlyNetProfitUnified: 0, dailyGrossMarginPct: 0, monthlyGrossMarginPct: 0,
-  grossProfitUnified: 0, overdueReceivablesAmount: 0, inventoryValue: 0,
+  grossProfitUnified: 0, overdueReceivablesAmount: 0, inventoryValue: 0, inventoryInTransit: 0,
 };
 
 const EMPTY_INVENTORY = {

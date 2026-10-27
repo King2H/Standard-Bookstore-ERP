@@ -71,6 +71,8 @@ export type OutboxEventType =
   | 'exchange.settled'
   // Services (#169)
   | 'service_job.ready'
+  // Transfers between branches (#170)
+  | 'transfer.dispatched'
   // Customers
   | 'customer.store_credit_added'
   | 'customer.deactivated'

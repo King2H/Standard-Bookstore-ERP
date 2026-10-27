@@ -66,6 +66,7 @@ const KPIS = {
   overdueReceivablesAmount: 1200,
   // Prompt 2
   inventoryValue: 55000,
+  inventoryInTransit: 0,
 };
 
 const PERIOD_KPIS = {

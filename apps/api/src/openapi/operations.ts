@@ -1,5 +1,11 @@
 import type { z } from 'zod';
 import {
+  ReceiveTransferRequestSchema,
+  ResolveTransferRequestSchema,
+  TransferListQuerySchema,
+  TransferListResponseSchema,
+  TransferRequestSchema,
+  TransferSchema,
   ServiceBranchFeeRequestSchema,
   ServiceJobListQuerySchema,
   ServiceJobListResponseSchema,
@@ -280,6 +286,7 @@ export const operations: ApiOperation[] = [
   ...catalogOperations(),
   ...catalogReferenceOperations(),
   ...serviceOperations(),
+  ...transferOperations(),
   ...configOperations(),
   ...locationOperations(),
   ...customerOperations(),
@@ -1440,6 +1447,97 @@ function serviceOperations(): ApiOperation[] {
       tag,
       request: { params: ServiceJobStepParamsSchema },
       responses: { 200: { description: 'The job after the step', schema: ServiceJobSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+  ];
+}
+
+function transferOperations(): ApiOperation[] {
+  const tag = 'Transfers';
+  const send = 'SEND_TRANSFER: Admin, Manager, Stock_Clerk; the sending branch';
+  const byId = { params: IdParamsSchema };
+  const one = (description: string) => ({ 200: { description, schema: TransferSchema } });
+  return [
+    {
+      operationId: 'listTransfers',
+      method: 'get',
+      path: '/transfers',
+      summary: "Transfer notes the session's branch sends or receives, newest first (Admin, Manager, Stock_Clerk, #170)",
+      tag,
+      request: { query: TransferListQuerySchema },
+      responses: { 200: { description: 'One page of notes', schema: TransferListResponseSchema } },
+      errors: [400, 401, 403, 500],
+    },
+    {
+      operationId: 'createTransfer',
+      method: 'post',
+      path: '/transfers',
+      summary: `Draft a transfer from a location of the session's branch to another branch, numbered TRF- (${send})`,
+      tag,
+      request: { body: TransferRequestSchema },
+      responses: { 201: { description: 'The draft', schema: TransferSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'getTransfer',
+      method: 'get',
+      path: '/transfers/{id}',
+      summary: 'A transfer note with its lines, receipts and resolutions; for the sending and the receiving branch',
+      tag,
+      request: byId,
+      responses: one('The note'),
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'updateTransfer',
+      method: 'put',
+      path: '/transfers/{id}',
+      summary: `Replace a draft: its source, destination, books and notes (${send})`,
+      tag,
+      request: { params: IdParamsSchema, body: TransferRequestSchema },
+      responses: one('The draft'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'cancelTransfer',
+      method: 'post',
+      path: '/transfers/{id}/cancel',
+      summary: `Cancel a draft (${send})`,
+      tag,
+      request: byId,
+      responses: one('The note, cancelled'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'dispatchTransfer',
+      method: 'post',
+      path: '/transfers/{id}/dispatch',
+      summary: `Send a draft: the copies leave the source at its average cost, never below zero, and are in transit; the receiving branch is told (${send})`,
+      tag,
+      request: byId,
+      responses: one('The note, in transit'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'receiveTransfer',
+      method: 'post',
+      path: '/transfers/{id}/receive',
+      summary:
+        'Receive copies, line by line, into a location of the receiving branch at the cost they left at (RECEIVE_TRANSFER: Admin, Manager, Stock_Clerk; the receiving branch)',
+      tag,
+      request: { params: IdParamsSchema, body: ReceiveTransferRequestSchema },
+      responses: one('The note after the receipt'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'resolveTransfer',
+      method: 'post',
+      path: '/transfers/{id}/resolve',
+      summary:
+        'Resolve copies that did not arrive, with a reason: lost or damaged (the receiving branch), returned to sender (the sending branch) (RESOLVE_TRANSFER: Admin, Manager)',
+      tag,
+      request: { params: IdParamsSchema, body: ResolveTransferRequestSchema },
+      responses: one('The note after the resolution'),
       errors: [400, 401, 403, 404, 422, 500],
     },
   ];

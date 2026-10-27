@@ -19,6 +19,11 @@ const BRANCH_OF = {
     sql: 'SELECT branch_id, receiving_branch_id AS other_branch_id FROM purchase_orders WHERE id = $1',
   },
   receivable: { entity: 'Receivable', sql: 'SELECT branch_id FROM receivables WHERE id = $1' },
+  // Both the sending and the receiving branch work on a transfer note (#170).
+  transfer: {
+    entity: 'Transfer',
+    sql: 'SELECT from_branch_id AS branch_id, to_branch_id AS other_branch_id FROM branch_transfers WHERE id = $1',
+  },
 } as const;
 
 export type BranchOwnedRecord = keyof typeof BRANCH_OF;

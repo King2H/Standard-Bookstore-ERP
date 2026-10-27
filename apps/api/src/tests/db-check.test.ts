@@ -121,6 +121,23 @@ describe('Data consistency check', () => {
       [poId, branchId, supplierId, staffId],
     );
 
+    // Transfers between branches (#170): a line counting 2 received with no
+    // receipt behind it, on a transfer still "in transit", whose dispatch left
+    // no stock history.
+    const branch2 = await one(
+      `INSERT INTO branches (name, address, contact_info, operating_hours) VALUES ($1, '123 Test Street', '{}', '{}') RETURNING id`,
+      [`${MARK} Branch 2`],
+    );
+    const transferId = await one(
+      `INSERT INTO branch_transfers (transfer_number, from_branch_id, from_location_id, to_branch_id, status, created_by, dispatched_by, dispatched_at)
+       VALUES ($1, $2, $3, $4, 'in_transit', $5, $5, now()) RETURNING id`,
+      [`${MARK}-TRF`, branchId, loc, branch2, staffId],
+    );
+    await client.query(
+      `INSERT INTO branch_transfer_lines (transfer_id, book_id, quantity, unit_cost, received_quantity) VALUES ($1, $2, 3, 4, 2)`,
+      [transferId, book1],
+    );
+
     // Bank: a line matched to an uncleared movement; a cleared movement nobody matched.
     const account = await one(
       `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, currency, account_number_hash)
@@ -173,6 +190,9 @@ describe('Data consistency check', () => {
     ['services.returned-within-charged', /^service line \d+: 1 of 1 copies, 9\.00 of 5\.00 given back$/],
     ['procurement.status-matches-lines', /\(ordered\): 2 received/],
     ['procurement.paid-within-total', /paid and credited 60\.00 of 50\.00$/],
+    ['transfers.lines-match-events', new RegExp(`^${MARK}-TRF: book \\d+ counts 2 received, its events 0$`)],
+    ['transfers.status-matches-lines', new RegExp(`^${MARK}-TRF \\(in_transit\\): 2 of 3 accounted for$`)],
+    ['transfers.stock-history', new RegExp(`^${MARK}-TRF: book \\d+ sent 3 \\(history 0\\), received 2 \\(history 0\\)$`)],
     ['bank.matched-line-cleared', /is uncleared$/],
     ['bank.cleared-one-line', /: 0 matched lines$/],
     ['numbers.daily-counters-ahead', /^ORD-\d{8}: highest used 9999/],
@@ -196,6 +216,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/20 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/23 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

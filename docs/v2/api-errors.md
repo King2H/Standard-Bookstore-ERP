@@ -179,4 +179,6 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `TRADE_IN_ABOVE_PRICE`
 - `TRANSACTION_HAS_RETURNS`
 - `TRANSACTION_VOIDED`
+- `TRANSFER_INVALID_STATUS`
+- `TRANSFER_OVER_OUTSTANDING`
 - `VOID_WINDOW_CLOSED`

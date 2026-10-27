@@ -46,5 +46,6 @@ export * from './receivable.js';
 export * from './report.js';
 export * from './staff.js';
 export * from './supplier.js';
+export * from './transfer.js';
 export { Money } from './money.js';
 export type { MoneyInput } from './money.js';

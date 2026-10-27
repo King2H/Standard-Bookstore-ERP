@@ -83,7 +83,7 @@ describe('getPermissionsForRoles — multi-role aggregation', () => {
 
   it('mix of known and unknown roles returns only known role permissions', () => {
     const perms = getPermissionsForRoles(['Stock_Clerk', 'NonExistentRole']);
-    expect(perms).toContain('MANAGE_INVENTORY');
-    expect(perms).toHaveLength(1);
+    // Stock_Clerk's own: stock, and sending and receiving transfers (#170, decision 2a).
+    expect(perms.sort()).toEqual(['MANAGE_INVENTORY', 'RECEIVE_TRANSFER', 'SEND_TRANSFER']);
   });
 });
