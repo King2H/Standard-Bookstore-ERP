@@ -13,7 +13,9 @@ export function shortMoney(n: number, currency: string): string {
   return `${currency} ${sign}${a.toFixed(0)}`;
 }
 
-export function KpiCard({ label, value, sub, icon, color, onClick }: { label: string; value: string; sub?: string; icon: ReactNode; color: string; onClick?: () => void }) {
+export function KpiCard({ label, value, sub, extra, icon, color, onClick }: {
+  label: string; value: string; sub?: string; extra?: string; icon: ReactNode; color: string; onClick?: () => void;
+}) {
   return (
     <div
       onClick={onClick}
@@ -25,6 +27,7 @@ export function KpiCard({ label, value, sub, icon, color, onClick }: { label: st
       </div>
       <p className="text-xl font-bold text-gray-900 dark:text-white leading-none pl-1">{value}</p>
       {sub && <p className="text-xs text-gray-400 dark:text-gray-500 pl-1">{sub}</p>}
+      {extra && <p className="text-xs font-medium text-blue-600 dark:text-blue-400 pl-1">{extra}</p>}
     </div>
   );
 }

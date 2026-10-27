@@ -151,6 +151,8 @@ export function Overview({ params, onNavigate }: {
                   label="Inventory Value"
                   value={short(kpis.inventoryValue)}
                   sub="Qty on hand × average cost"
+                  // Valued apart, in neither branch's stock (#170, decision 5a).
+                  extra={kpis.inventoryInTransit > 0 ? `In transit ${short(kpis.inventoryInTransit)}` : undefined}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>}
                   color={kpiToneClass('informational')}
                   onClick={() => onNavigate?.('inventory')}

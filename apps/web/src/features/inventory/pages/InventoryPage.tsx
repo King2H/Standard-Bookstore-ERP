@@ -9,13 +9,19 @@ import { AdjustTab } from '../components/AdjustTab.js';
 import { TransferTab } from '../components/TransferTab.js';
 import { HistoryTab } from '../components/HistoryTab.js';
 import { LowStockBadge, LowStockTab } from '../components/LowStockTab.js';
+import { TransfersTab } from '../../transfers/components/TransfersTab.js';
+import { canTransfer } from '../../transfers/rules.js';
 
-type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'transfer' | 'history' | 'alerts';
+type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'move' | 'outgoing' | 'incoming' | 'history' | 'alerts';
+
+// Transfer notes open on their tab from a link or a notification (#170, decision 5a).
+const opensOn = (tab: string | undefined): Tab => (tab === 'outgoing' || tab === 'incoming' ? tab : 'stock');
 
 /** Stock per book and location, its changes and its history (#23). */
 export default function InventoryPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
   const { data: me } = useMyProfile();
-  const [tab, setTab] = useState<Tab>('stock');
+  const [tab, setTab] = useState<Tab>(opensOn(initialContext.tab));
+  const transferId = Number(initialContext.transferId) || null;
   // The row a quick "+ In" or "− Out" was pressed on, chosen on that tab.
   const [chosen, setChosen] = useState<StockLevel | null>(null);
   // Stock changes are offered only to the roles the API lets move stock.
@@ -25,7 +31,10 @@ export default function InventoryPage({ initialContext = {} }: { initialContext?
     { id: 'stock-in' as Tab, label: 'Stock In', icon: '⬇️', show: moves },
     { id: 'stock-out' as Tab, label: 'Stock Out', icon: '⬆️', show: moves },
     { id: 'adjust' as Tab, label: 'Adjust', icon: '✏️', show: moves },
-    { id: 'transfer' as Tab, label: 'Transfer', icon: '↔️', show: moves },
+    // Within the branch; notes between branches are Outgoing and Incoming (#170, decision 1a).
+    { id: 'move' as Tab, label: 'Move', icon: '↔️', show: moves },
+    { id: 'outgoing' as Tab, label: 'Outgoing', icon: '🚚', show: canTransfer(me) },
+    { id: 'incoming' as Tab, label: 'Incoming', icon: '📥', show: canTransfer(me) },
     { id: 'history' as Tab, label: 'History', icon: '📋', show: true },
     { id: 'alerts' as Tab, label: 'Low Stock', icon: '⚠️', show: true },
   ].filter(t => t.show);
@@ -47,7 +56,9 @@ export default function InventoryPage({ initialContext = {} }: { initialContext?
         {tab === 'stock-in'  && moves && <StockInTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} />}
         {tab === 'stock-out' && moves && <StockOutTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} />}
         {tab === 'adjust'    && moves && <AdjustTab />}
-        {tab === 'transfer'  && moves && <TransferTab />}
+        {tab === 'move'      && moves && <TransferTab />}
+        {tab === 'outgoing'  && canTransfer(me) && <TransfersTab key="outgoing" direction="outgoing" initialTransferId={opensOn(initialContext.tab) === 'outgoing' ? transferId : null} />}
+        {tab === 'incoming'  && canTransfer(me) && <TransfersTab key="incoming" direction="incoming" initialTransferId={opensOn(initialContext.tab) === 'incoming' ? transferId : null} />}
         {tab === 'history'   && <HistoryTab />}
         {tab === 'alerts'    && <LowStockTab />}
       </div>

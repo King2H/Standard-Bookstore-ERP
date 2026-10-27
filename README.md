@@ -700,6 +700,9 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   `returned` (back on a shelf of the sending branch) by the sending branch (RESOLVE_TRANSFER: Admin, Manager). The note
   ends Received when everything arrived, Closed when the rest was resolved.
   SEND_TRANSFER and RECEIVE_TRANSFER: Admin, Manager, Stock_Clerk.
+- Screens (#170 PR 2): Inventory → Outgoing and Incoming list the notes; a note is drafted with books found at the
+  source, dispatched after a confirmation, received and resolved on its page, and printed as a slip to go with the books.
+  The within-branch transfer is Inventory → Move. The dashboard's Inventory Value card shows the value in transit.
 
 ### Suppliers
 - GET/POST /api/v1/suppliers / GET/PUT /api/v1/suppliers/:id
