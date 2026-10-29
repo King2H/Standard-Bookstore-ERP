@@ -68,6 +68,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `ALREADY_CLEARED`
 - `AUTHOR_IN_USE`
 - `BOOK_IN_USE`
+- `CASH_SESSION_ALREADY_OPEN`
 - `CATEGORY_IN_USE`
 - `DEPENDENCY_CONFLICT`
 - `DUPLICATE_ACCOUNT_NUMBER`
@@ -108,6 +109,9 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `CANNOT_MANAGE_SELF`
 - `CANNOT_REMOVE_LAST_SUPER_ADMIN`
 - `CASH_ORDER_ALREADY_PAID`
+- `CASH_SESSION_INSUFFICIENT_CASH`
+- `CASH_SESSION_INVALID_STATUS`
+- `CASH_SESSION_REQUIRED`
 - `CATEGORY_NOT_SELECTABLE`
 - `CREDIT_REQUIRES_CUSTOMER`
 - `CURRENCY_IN_USE`

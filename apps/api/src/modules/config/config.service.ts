@@ -242,3 +242,27 @@ export async function isNegativeStockAllowed(branchId: number): Promise<boolean>
 export async function isExchangeCashAdjustmentAllowed(): Promise<boolean> {
   return (await systemValue('exchange_cash_adjustment_allowed')) === true;
 }
+
+/**
+ * Whether cash at the counter needs the staff member's open cash session in
+ * the branch (#171, decision 6a). Read uncached, so turning it on applies to
+ * the next sale.
+ */
+export async function isCashSessionRequired(branchId: number): Promise<boolean> {
+  try {
+    return (await getEffectiveConfigWithSource(branchId, 'require_cash_session')).value === true;
+  } catch (err) {
+    if (err instanceof NotFoundError) return false;
+    throw err;
+  }
+}
+
+/** How far a cash count may be over or short before a Manager or Admin accepts it (#171, decision 4a); 50 when not set. */
+export async function getCashVarianceLimit(branchId: number): Promise<number> {
+  try {
+    return Number((await getEffectiveConfigWithSource(branchId, 'cash_variance_limit')).value);
+  } catch (err) {
+    if (err instanceof NotFoundError) return 50;
+    throw err;
+  }
+}

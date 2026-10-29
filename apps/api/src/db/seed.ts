@@ -135,6 +135,8 @@ async function seedDefaultTenant(): Promise<void> {
       ['loyalty_redemption_rate',          '1.0'],
       ['loyalty_min_transaction_amount',   '0.00'],
       ['exchange_cash_adjustment_allowed', 'true'],
+      ['require_cash_session',             'false'],
+      ['cash_variance_limit',              '50'],
       ['notification_prefs',               '{}'],
     ];
 

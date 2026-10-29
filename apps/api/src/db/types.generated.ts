@@ -255,6 +255,42 @@ export interface BranchTransfers {
   updated_at: Generated<Timestamp>;
 }
 
+export interface CashSessionMovements {
+  amount: Numeric;
+  category: string | null;
+  created_at: Generated<Timestamp>;
+  direction: string;
+  id: Generated<Int8>;
+  kind: string;
+  method: string;
+  reason: string | null;
+  session_id: number;
+  source_id: string | null;
+  staff_id: number;
+  tenant_id: Generated<number>;
+}
+
+export interface CashSessions {
+  branch_id: number;
+  close_note: string | null;
+  closed_at: Timestamp | null;
+  closed_by: number | null;
+  counted_cash: Numeric | null;
+  currency: string;
+  expected_cash: Numeric | null;
+  id: Generated<number>;
+  opened_at: Generated<Timestamp>;
+  opening_float: Numeric;
+  review_reason: string | null;
+  reviewed_at: Timestamp | null;
+  reviewed_by: number | null;
+  staff_id: number;
+  status: Generated<string>;
+  tenant_id: Generated<number>;
+  variance: Numeric | null;
+  z_number: string | null;
+}
+
 export interface Categories {
   archived_at: Timestamp | null;
   archived_by: number | null;
@@ -1051,6 +1087,8 @@ export interface DB {
   branch_transfer_lines: BranchTransferLines;
   branch_transfers: BranchTransfers;
   branches: Branches;
+  cash_session_movements: CashSessionMovements;
+  cash_sessions: CashSessions;
   categories: Categories;
   customer_group_membership: CustomerGroupMembership;
   customer_groups: CustomerGroups;

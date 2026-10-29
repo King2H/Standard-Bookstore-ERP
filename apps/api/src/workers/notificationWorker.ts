@@ -74,6 +74,15 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'branch_transfer',
     entityId: String(p.transferId ?? ''),
   }),
+  // A count over or short beyond the branch's limit waits for a Manager or Admin (#171, decision 4a).
+  'cash_session.review_needed': (p) => ({
+    title: '💵 Cash count to review',
+    body: `${p.zNumber}: ${p.staffName} counted ${Number(p.variance) > 0 ? 'over' : 'short'} by ${Math.abs(Number(p.variance)).toFixed(2)}`,
+    targetRoles: ['Manager', 'Admin'],
+    severity: 'warning',
+    entityType: 'cash_session',
+    entityId: String(p.sessionId ?? ''),
+  }),
   'inventory.low_stock': (p) => ({
     title: '⚠️ Low Stock Alert',
     body: `"${p.bookTitle}" at ${p.locationName} — ${p.quantity} remaining (reorder at ${p.reorderPoint})`,

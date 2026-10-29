@@ -24,6 +24,7 @@ const BRANCH_OF = {
     entity: 'Transfer',
     sql: 'SELECT from_branch_id AS branch_id, to_branch_id AS other_branch_id FROM branch_transfers WHERE id = $1',
   },
+  cashSession: { entity: 'Cash session', sql: 'SELECT branch_id FROM cash_sessions WHERE id = $1' },
 } as const;
 
 export type BranchOwnedRecord = keyof typeof BRANCH_OF;

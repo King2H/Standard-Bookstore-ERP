@@ -7,6 +7,7 @@ import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxReturnValueWithoutAuth, getRefundMethodAfterWindow, getReturnWindowDays } from '../config/config.service.js';
+import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { assertAssignedLocation } from '../location/location.service.js';
@@ -305,6 +306,7 @@ async function settleSale(
   for (const p of parts) {
     const account = p.method === 'bank' ? bankAccountId : null;
     const refundId = await returns.insertRefund(tx, returnId, p, account);
+    await recordCounterMoney(tx, actor, { kind: 'return_refund', sourceId: refundId, method: p.method, direction: 'out', amount: p.amount });
     if (account !== null) {
       await recordMovement(tx, { bankAccountId: account, direction: 'out', amount: p.amount, sourceType: 'return_refund', sourceId: refundId, notes: `Return ${returnNumber}` });
     }

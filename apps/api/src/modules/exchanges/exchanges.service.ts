@@ -7,6 +7,7 @@ import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxReturnValueWithoutAuth } from '../config/config.service.js';
+import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { checkTender } from '../pos/pos.policy.js';
@@ -189,6 +190,7 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       const entryId = await exchanges.insertEntry(tx, {
         exchangeId: id, entryType: 'cash_payment', amount: p.amount, method: p.method, reference: p.reference, payerBank: p.payerBank, by: actor.staffId, bankAccountId,
       });
+      await recordCounterMoney(tx, actor, { kind: 'exchange_payment', sourceId: String(entryId), method: p.method, direction: 'in', amount: p.amount });
       if (bankAccountId !== null) {
         await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'exchange_payment', sourceId: entryId,
           notes: movementNote(`Exchange ${reference}`, { payerBank: p.payerBank, reference: p.reference }) });
@@ -211,7 +213,8 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       if (input.refundMethod === 'store_credit' && input.customerId !== null) {
         await customers.moveStoreCredit(tx, input.customerId, refund, { direction: 'credit', refType: 'exchange_refund', refId: reference });
       } else {
-        await exchanges.insertEntry(tx, { exchangeId: id, entryType: 'cash_refund', amount: refund, method: 'cash', by: actor.staffId });
+        const entryId = await exchanges.insertEntry(tx, { exchangeId: id, entryType: 'cash_refund', amount: refund, method: 'cash', by: actor.staffId });
+        await recordCounterMoney(tx, actor, { kind: 'exchange_refund', sourceId: String(entryId), method: 'cash', direction: 'out', amount: refund });
       }
     }
 
@@ -296,6 +299,10 @@ export async function voidExchange(actor: Actor, id: string, reason: string): Pr
       } else {
         const method = p.method ?? 'cash';
         handedBack[method] = Money.of(handedBack[method] ?? 0).plus(p.amount).toNumber();
+        // From the drawer that took it, while that session is open (#171).
+        await recordCounterMoney(tx, actor, {
+          kind: 'exchange_void', sourceId: String(p.id), method, direction: 'out', amount: p.amount, reverses: { kind: 'exchange_payment', sourceId: String(p.id) },
+        });
         // A bank payment goes back from the account it came in to.
         if (method === 'bank' && p.bankAccountId !== null) {
           await recordMovement(tx, {
@@ -306,6 +313,11 @@ export async function voidExchange(actor: Actor, id: string, reason: string): Pr
     }
     const cashRefund = entries.filter((x) => x.entryType === 'cash_refund');
     const takenBack = Money.sum(cashRefund.map((x) => x.amount));
+    for (const x of cashRefund) {
+      await recordCounterMoney(tx, actor, {
+        kind: 'exchange_void', sourceId: String(x.id), method: 'cash', direction: 'in', amount: x.amount, reverses: { kind: 'exchange_refund', sourceId: String(x.id) },
+      });
+    }
 
     await exchanges.setVoided(tx, id, actor.staffId, reason);
     await audit(tx, actor, 'UPDATE', id, {

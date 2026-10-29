@@ -6,6 +6,7 @@ import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, bankAccountsEnabled, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
+import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
 import { checkNotWrittenOff, reopenOnRefund, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as policy from './payments.policy.js';
@@ -125,6 +126,7 @@ export async function createPayment(actor: Actor, p: NewPayment): Promise<Paymen
     if (p.paymentMethod === 'loyalty_points') await spendPoints(tx, order, p.amount, reference);
 
     const id = await payments.insertPayment(tx, { ...p, bankAccountId, reference, processedBy: actor.staffId });
+    await recordCounterMoney(tx, actor, { kind: 'order_payment', sourceId: String(id), method: p.paymentMethod, direction: 'in', amount: p.amount });
     if (p.paymentMethod === 'store_credit') {
       await customers.moveStoreCredit(tx, order.customerId as number, p.amount, { direction: 'debit', refType: 'order_payment', refId: id });
     }
@@ -261,6 +263,7 @@ async function refundOrderPayments(
     const refund = await payments.insertRefund(q, {
       payment, amount, reason: opts.reason, bankAccountId, processedBy: actor.staffId, returnId: opts.returnId, ...(toCredit && { method }),
     });
+    await recordCounterMoney(q, actor, { kind: 'order_refund', sourceId: String(refund.id), method, direction: 'out', amount });
     if (bankAccountId !== null) {
       await recordMovement(q, { bankAccountId, direction: 'out', amount, sourceType: 'order_refund', sourceId: refund.id, notes: `Refund of ${payment.paymentReference}` });
     }
@@ -306,6 +309,7 @@ export async function refund(actor: Actor, paymentId: string, r: NewRefund): Pro
       bankAccountId,
       processedBy: actor.staffId,
     });
+    await recordCounterMoney(tx, actor, { kind: 'order_refund', sourceId: String(refund.id), method: payment.paymentMethod, direction: 'out', amount: r.refundAmount });
     if (bankAccountId !== null) {
       await recordMovement(tx, { bankAccountId, direction: 'out', amount: r.refundAmount, sourceType: 'order_refund', sourceId: refund.id, notes: `Refund of ${payment.paymentReference}` });
     }

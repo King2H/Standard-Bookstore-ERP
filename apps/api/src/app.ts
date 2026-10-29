@@ -16,6 +16,7 @@ import catalogRouter from './modules/catalog/catalog.routes.js';
 import catalogReferenceRouter from './modules/catalogReference/catalogReference.routes.js';
 import servicesRouter from './modules/services/services.routes.js';
 import transfersRouter from './modules/transfers/transfers.routes.js';
+import cashSessionsRouter from './modules/cashSessions/cashSessions.routes.js';
 import inventoryRouter from './modules/inventory/inventory.routes.js';
 import supplierRouter from './modules/supplier/supplier.routes.js';
 import procurementRouter from './modules/procurement/procurement.routes.js';
@@ -86,6 +87,7 @@ export function createApp() {
   api.use(catalogReferenceRouter);
   api.use(servicesRouter);
   api.use(transfersRouter);
+  api.use(cashSessionsRouter);
   api.use(inventoryRouter);
   api.use(supplierRouter);
   api.use(procurementRouter);

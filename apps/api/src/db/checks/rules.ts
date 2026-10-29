@@ -31,6 +31,7 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['SCN', 'supplier_credit_notes', 'credit_note_number'],
   ['SVC', 'service_jobs', 'job_number'],
   ['TRF', 'branch_transfers', 'transfer_number'],
+  ['Z', 'cash_sessions', 'z_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -42,7 +43,7 @@ const dailyNumbers = DAILY_SERIES.map(
 // The tables that store a currency (#181).
 const CURRENCY_TABLES = [
   'transactions', 'orders', 'order_payments', 'receivables', 'financial_transactions',
-  'exchanges', 'exchange_settlement_entries', 'installment_plans', 'purchase_orders', 'bank_accounts',
+  'exchanges', 'exchange_settlement_entries', 'installment_plans', 'purchase_orders', 'bank_accounts', 'cash_sessions',
 ];
 
 const inOtherCurrency = CURRENCY_TABLES.map(
@@ -289,6 +290,22 @@ export const CHECKS: readonly Check[] = [
   },
 
   // ── Bank ───────────────────────────────────────────────────────────────────
+  {
+    id: 'cash.session-adds-up',
+    area: 'Cash sessions',
+    title: 'A closed cash session expected its float plus the cash that moved, and its variance is counted less expected',
+    severity: 'error',
+    sql: `
+      WITH m AS (
+        SELECT session_id, SUM(CASE direction WHEN 'in' THEN amount ELSE -amount END) AS net
+        FROM cash_session_movements WHERE method = 'cash' GROUP BY session_id
+      )
+      SELECT s.tenant_id, s.z_number || ': expected ' || s.expected_cash || ', float and movements say ' || (s.opening_float + COALESCE(m.net, 0))
+        || '; variance ' || s.variance || ', counted less expected ' || (s.counted_cash - s.expected_cash) AS ref
+      FROM cash_sessions s LEFT JOIN m ON m.session_id = s.id
+      WHERE s.status <> 'open'
+        AND (s.expected_cash <> s.opening_float + COALESCE(m.net, 0) OR s.variance <> s.counted_cash - s.expected_cash)`,
+  },
   {
     id: 'bank.matched-line-cleared',
     area: 'Bank',
