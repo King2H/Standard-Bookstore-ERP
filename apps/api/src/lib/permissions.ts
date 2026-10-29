@@ -14,7 +14,9 @@ export type Permission =
   // sending and receiving stock, and resolving what did not arrive.
   | 'SEND_TRANSFER'
   | 'RECEIVE_TRANSFER'
-  | 'RESOLVE_TRANSFER';
+  | 'RESOLVE_TRANSFER'
+  // Accepting a cash count over or short beyond the branch's limit (#171, decision 4a).
+  | 'REVIEW_CASH_SESSION';
 
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // Super_Admin: governance-only role — manages staff, branches, and system config.
@@ -39,6 +41,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'SEND_TRANSFER',
     'RECEIVE_TRANSFER',
     'RESOLVE_TRANSFER',
+    'REVIEW_CASH_SESSION',
   ],
   Manager: [
     'CREATE_SALE',
@@ -53,6 +56,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'SEND_TRANSFER',
     'RECEIVE_TRANSFER',
     'RESOLVE_TRANSFER',
+    'REVIEW_CASH_SESSION',
   ],
   Finance_Officer: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'],
   Stock_Clerk: ['MANAGE_INVENTORY', 'SEND_TRANSFER', 'RECEIVE_TRANSFER'],

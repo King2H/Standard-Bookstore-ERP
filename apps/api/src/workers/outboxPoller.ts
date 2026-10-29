@@ -63,6 +63,7 @@ export const HANDLERS: Readonly<Record<string, EventHandler>> = {
   'auth.password_reset': handleNotification,
   'service_job.ready': handleNotification,
   'transfer.dispatched': handleNotification,
+  'cash_session.review_needed': handleNotification,
 };
 
 async function pollOnce(): Promise<void> {

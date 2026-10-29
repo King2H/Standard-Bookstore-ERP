@@ -5,6 +5,7 @@ import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
+import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as policy from './receivables.policy.js';
 import * as receivables from './receivables.repository.js';
@@ -229,6 +230,7 @@ export async function collectPayment(actor: Actor, id: string, payment: PaymentC
         payerBank: payment.payerBank,
       },
     });
+    await recordCounterMoney(tx, actor, { kind: 'receivable_payment', sourceId: entryId, method: payment.paymentMethod, direction: 'in', amount: payment.amount });
     if (bankAccountId !== null) {
       await recordMovement(tx, {
         bankAccountId,

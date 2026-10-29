@@ -109,6 +109,7 @@ export async function findCurrencyHolders(q: Queryable): Promise<string[]> {
       ('payments', EXISTS (SELECT 1 FROM financial_transactions)),
       ('receivables', EXISTS (SELECT 1 FROM receivables)),
       ('bank accounts', EXISTS (SELECT 1 FROM bank_accounts)),
+      ('cash sessions', EXISTS (SELECT 1 FROM cash_sessions)),
       ('stock at a cost', EXISTS (SELECT 1 FROM inventory_history WHERE unit_cost > 0))
     ) AS h (holder, held)
     WHERE held

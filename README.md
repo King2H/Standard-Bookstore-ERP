@@ -704,6 +704,27 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   source, dispatched after a confirmation, received and resolved on its page, and printed as a slip to go with the books.
   The within-branch transfer is Inventory → Move. The dashboard's Inventory Value card shows the value in transit.
 
+### Cash sessions (#171)
+- One person's cash at the counter in one branch: no tills. A shop with one salesperson opens one session a day.
+- GET /api/v1/cash-sessions/current — `{ required, session }`: the signed-in staff member's open session in the session
+  branch, and whether the branch takes cash only with one (`require_cash_session`, off by default)
+- POST /api/v1/cash-sessions — body `{ openingFloat }` (0 when the drawer starts empty); one open session per person per
+  branch (PROCESS_PAYMENT: Admin, Manager, Finance_Officer, Sales)
+- Every counter flow records its money on the open session: POS sales, collections and voids, order payments and
+  refunds, receivable collections, return refunds, and exchange payments, refunds and voids. A void goes back from the
+  session that took the money while it is open. Store credit, loyalty points and credit notes never touch the drawer.
+  With `require_cash_session` on, cash with no open session is refused (`CASH_SESSION_REQUIRED`).
+- POST /api/v1/cash-sessions/:id/movements — body `{ direction, category, amount, reason }`: cash put in (`float_top_up`,
+  `other`) or taken out (`bank_drop`, `petty_cash`, `other`) of one's own open session; never more out than the drawer holds
+- POST /api/v1/cash-sessions/:id/close — body `{ countedCash, note? }`: the count is blind; expected (float plus cash in
+  less cash out), counted and variance are kept, numbered Z-YYYYMMDD-NNNN. Beyond the branch's `cash_variance_limit`
+  (50 by default) it waits for review and Managers are told. Its own staff member, or a Manager or Admin for a session
+  left open
+- POST /api/v1/cash-sessions/:id/review — body `{ reason }`: accepts the count (REVIEW_CASH_SESSION: Admin, Manager)
+- GET /api/v1/cash-sessions (`?status=&staffId=&dateFrom=&dateTo=`) / GET /api/v1/cash-sessions/:id — the X report
+  while open, the Z report once closed: totals by kind and method, and every movement. Admin, Manager and
+  Finance_Officer see the branch's sessions; anyone else their own, without what is expected while it is open.
+
 ### Suppliers
 - GET/POST /api/v1/suppliers / GET/PUT /api/v1/suppliers/:id
 - POST /api/v1/suppliers/:id/deactivate|blacklist / DELETE /api/v1/suppliers/:id

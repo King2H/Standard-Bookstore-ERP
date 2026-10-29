@@ -6,6 +6,7 @@ import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { insertOutbox, insertOutboxEvent, type OutboxEventType } from '../../lib/outbox.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
+import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
 import { cancelReceivable, createReceivable } from '../receivables/receivables.service.js';
 import { returnOrderPayments } from '../payments/payments.service.js';
@@ -251,6 +252,7 @@ export async function confirm(
         notes: 'Recorded at order confirmation',
         processedBy: staffCtx.staffId,
       });
+      await recordCounterMoney(tx, staffCtx, { kind: 'order_payment', sourceId: String(paymentId), method, direction: 'in', amount: Money.of(amount) });
       if (bankAccountId !== null) {
         await recordMovement(tx, {
           bankAccountId, direction: 'in', amount: Money.of(amount), sourceType: 'order_payment', sourceId: paymentId,

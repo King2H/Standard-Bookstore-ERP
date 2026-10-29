@@ -7,6 +7,7 @@ import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxLineDiscountPct } from '../config/config.service.js';
+import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import * as saleServices from '../services/saleServices.service.js';
@@ -45,12 +46,19 @@ function found(t: PosTransactionRecord | undefined): PosTransactionRecord {
 
 /**
  * Records the payments. With bank accounts on (#21), a bank payment names an
- * active account of the branch and is queued for reconciliation.
+ * active account of the branch and is queued for reconciliation; the money
+ * taken at the counter goes on the cashier's open cash session (#171).
  */
-async function insertPayments(tx: Queryable, t: { id: string; number: string; branchId: number }, payments: PaymentLine[]): Promise<void> {
+async function insertPayments(
+  tx: Queryable,
+  actor: Actor,
+  t: { id: string; number: string; branchId: number },
+  payments: PaymentLine[],
+): Promise<void> {
   for (const p of payments) {
     const bankAccountId = p.method === 'bank' ? await accountForPayment(tx, p.bankAccountId ?? null, t.branchId) : null;
     const id = await pos.insertPayment(tx, t.id, { ...p, bankAccountId });
+    await recordCounterMoney(tx, actor, { kind: 'pos_payment', sourceId: String(id), method: p.method, direction: 'in', amount: p.amount });
     if (bankAccountId !== null) {
       await recordMovement(tx, { bankAccountId, direction: 'in', amount: p.amount, sourceType: 'pos_payment', sourceId: id,
         notes: movementNote(`Sale ${t.number}`, { payerBank: p.payerBank, reference: p.reference }) });
@@ -183,7 +191,7 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
       }
     }
     await spendFromAccounts(tx, sale.customerId, sale.payments, { id, number: transactionNumber, refType: 'transaction' });
-    await insertPayments(tx, { id, number: transactionNumber, branchId: sale.branchId }, sale.payments);
+    await insertPayments(tx, actor, { id, number: transactionNumber, branchId: sale.branchId }, sale.payments);
 
     if (sale.customerId !== null && status !== 'credit' && sale.payments.length > 0) {
       await insertOutboxEvent(tx, 'LoyaltyAccrualRequested', {
@@ -249,7 +257,7 @@ export async function recordPayment(actor: Actor, txId: string, payments: Paymen
     await checkNotWrittenOff(tx, 'pos_credit_sale', t.id);
 
     await spendFromAccounts(tx, t.customerId, payments, { id: t.id, number: t.transactionNumber, refType: 'payment' });
-    await insertPayments(tx, { id: t.id, number: t.transactionNumber, branchId: t.branchId }, payments);
+    await insertPayments(tx, actor, { id: t.id, number: t.transactionNumber, branchId: t.branchId }, payments);
     const paid = t.amountPaid.plus(incoming);
     const { due, status } = policy.afterCollect(t.amountDue, incoming);
     await pos.setPaid(tx, t.id, paid, due, status);
@@ -335,6 +343,12 @@ export async function voidTransaction(actor: Actor, txId: string): Promise<PosTr
       }
     }
 
+    // Money taken at the counter goes back from the drawer that took it, while that session is open (#171).
+    for (const p of payments) {
+      await recordCounterMoney(tx, actor, {
+        kind: 'pos_void', sourceId: p.id, method: p.method, direction: 'out', amount: p.amount, reverses: { kind: 'pos_payment', sourceId: p.id },
+      });
+    }
     // A bank payment goes back to the customer from the account it came in to.
     for (const p of payments.filter((x) => x.method === 'bank' && x.bankAccountId !== null)) {
       await recordMovement(tx, {

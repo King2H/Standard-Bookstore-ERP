@@ -138,6 +138,18 @@ describe('Data consistency check', () => {
       [transferId, book1],
     );
 
+    // Cash sessions (#171): a closed session whose expected cash is not its
+    // float plus the cash that moved, and whose variance is not counted less expected.
+    const cashSession = await one(
+      `INSERT INTO cash_sessions (branch_id, staff_id, status, currency, opening_float, expected_cash, counted_cash, variance, closed_by, closed_at, z_number)
+       VALUES ($1, $2, 'closed', 'ETB', 100, 120, 125, 0, $2, now(), $3) RETURNING id`,
+      [branchId, staffId, `${MARK}-Z`],
+    );
+    await client.query(
+      `INSERT INTO cash_session_movements (session_id, kind, source_id, method, direction, amount, staff_id) VALUES ($1, 'pos_payment', 'x', 'cash', 'in', 50, $2)`,
+      [cashSession, staffId],
+    );
+
     // Bank: a line matched to an uncleared movement; a cleared movement nobody matched.
     const account = await one(
       `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, currency, account_number_hash)
@@ -193,6 +205,7 @@ describe('Data consistency check', () => {
     ['transfers.lines-match-events', new RegExp(`^${MARK}-TRF: book \\d+ counts 2 received, its events 0$`)],
     ['transfers.status-matches-lines', new RegExp(`^${MARK}-TRF \\(in_transit\\): 2 of 3 accounted for$`)],
     ['transfers.stock-history', new RegExp(`^${MARK}-TRF: book \\d+ sent 3 \\(history 0\\), received 2 \\(history 0\\)$`)],
+    ['cash.session-adds-up', new RegExp(`^${MARK}-Z: expected 120\\.00, float and movements say 150\\.00; variance 0\\.00, counted less expected 5\\.00$`)],
     ['bank.matched-line-cleared', /is uncleared$/],
     ['bank.cleared-one-line', /: 0 matched lines$/],
     ['numbers.daily-counters-ahead', /^ORD-\d{8}: highest used 9999/],
@@ -216,6 +229,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/23 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/24 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

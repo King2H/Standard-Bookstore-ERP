@@ -1,5 +1,13 @@
 import type { z } from 'zod';
 import {
+  CashMovementRequestSchema,
+  CashSessionDetailSchema,
+  CashSessionListQuerySchema,
+  CashSessionListResponseSchema,
+  CloseCashSessionRequestSchema,
+  CurrentCashSessionResponseSchema,
+  OpenCashSessionRequestSchema,
+  ReviewCashSessionRequestSchema,
   ReceiveTransferRequestSchema,
   ResolveTransferRequestSchema,
   TransferListQuerySchema,
@@ -287,6 +295,7 @@ export const operations: ApiOperation[] = [
   ...catalogReferenceOperations(),
   ...serviceOperations(),
   ...transferOperations(),
+  ...cashSessionOperations(),
   ...configOperations(),
   ...locationOperations(),
   ...customerOperations(),
@@ -1538,6 +1547,86 @@ function transferOperations(): ApiOperation[] {
       tag,
       request: { params: IdParamsSchema, body: ResolveTransferRequestSchema },
       responses: one('The note after the resolution'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+  ];
+}
+
+function cashSessionOperations(): ApiOperation[] {
+  const tag = 'Cash sessions';
+  const cashier = 'PROCESS_PAYMENT: Admin, Manager, Finance_Officer, Sales';
+  const byId = { params: IdParamsSchema };
+  const one = (description: string) => ({ 200: { description, schema: CashSessionDetailSchema } });
+  return [
+    {
+      operationId: 'getCurrentCashSession',
+      method: 'get',
+      path: '/cash-sessions/current',
+      summary: `The signed-in staff member's open cash session in the session's branch, and whether the branch takes cash only with one (${cashier}, #171)`,
+      tag,
+      responses: { 200: { description: 'The open session, or null', schema: CurrentCashSessionResponseSchema } },
+      errors: [401, 403, 500],
+    },
+    {
+      operationId: 'listCashSessions',
+      method: 'get',
+      path: '/cash-sessions',
+      summary: "The session branch's cash sessions, newest first: every one for Admin, Manager and Finance_Officer, one's own for anyone else",
+      tag,
+      request: { query: CashSessionListQuerySchema },
+      responses: { 200: { description: 'One page of sessions', schema: CashSessionListResponseSchema } },
+      errors: [400, 401, 403, 500],
+    },
+    {
+      operationId: 'openCashSession',
+      method: 'post',
+      path: '/cash-sessions',
+      summary: `Open one's cash session in the session's branch with an opening float, 0 when the drawer starts empty; one open at a time (${cashier})`,
+      tag,
+      request: { body: OpenCashSessionRequestSchema },
+      responses: { 201: { description: 'The session', schema: CashSessionDetailSchema } },
+      errors: [400, 401, 403, 409, 500],
+    },
+    {
+      operationId: 'getCashSession',
+      method: 'get',
+      path: '/cash-sessions/{id}',
+      summary:
+        'A cash session with its X report (open) or Z report (closed): totals by kind and method, and every movement. While open, its own staff member sees no expected cash or totals',
+      tag,
+      request: byId,
+      responses: one('The session'),
+      errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'addCashMovement',
+      method: 'post',
+      path: '/cash-sessions/{id}/movements',
+      summary: "Put cash in (float top-up, other) or take it out (bank drop, petty cash, other) of one's own open session, with a reason; never more out than the drawer holds",
+      tag,
+      request: { params: IdParamsSchema, body: CashMovementRequestSchema },
+      responses: { 201: { description: 'The session', schema: CashSessionDetailSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'closeCashSession',
+      method: 'post',
+      path: '/cash-sessions/{id}/close',
+      summary:
+        "Close with the cash counted, blind: expected, counted and variance are kept, numbered Z-; beyond the branch's limit it waits for review. Its own staff member, or a Manager or Admin",
+      tag,
+      request: { params: IdParamsSchema, body: CloseCashSessionRequestSchema },
+      responses: one('The session, closed or waiting for review'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
+      operationId: 'reviewCashSession',
+      method: 'post',
+      path: '/cash-sessions/{id}/review',
+      summary: 'Accept a count over or short beyond the limit, with a reason (REVIEW_CASH_SESSION: Admin, Manager)',
+      tag,
+      request: { params: IdParamsSchema, body: ReviewCashSessionRequestSchema },
+      responses: one('The session, closed'),
       errors: [400, 401, 403, 404, 422, 500],
     },
   ];

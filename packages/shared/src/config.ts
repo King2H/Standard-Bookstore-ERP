@@ -127,6 +127,10 @@ export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   loyalty_redemption_rate: number,
   loyalty_min_transaction_amount: number,
   exchange_cash_adjustment_allowed: flag,
+  /** Cash at the counter only with the staff member's open cash session (#171). */
+  require_cash_session: flag,
+  /** Over or short at a cash session's close beyond this waits for a Manager or Admin (#171). */
+  cash_variance_limit: number.min(0, 'must not be negative'),
   notification_prefs: z.record(z.string(), z.unknown(), { error: 'must be an object' }),
   allowed_payment_methods: z.array(z.enum(OrderPaymentMethodSchema.options, { error: paymentMethods }), { error: paymentMethods }),
   max_failed_login_attempts: number,
