@@ -20,12 +20,12 @@ export type Page =
   | 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings'
   | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers'
   | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments'
-  | 'exchanges' | 'profile' | 'receivables' | 'binding-jobs';
+  | 'exchanges' | 'profile' | 'receivables' | 'binding-jobs' | 'cash-sessions';
 
 export const PAGES: readonly Page[] = [
   'dashboard', 'branches', 'staff', 'audit-log', 'settings', 'bank-accounts', 'locations', 'catalog',
   'inventory', 'suppliers', 'procurement', 'customers', 'pos', 'returns', 'orders', 'payments',
-  'exchanges', 'profile', 'receivables', 'binding-jobs',
+  'exchanges', 'profile', 'receivables', 'binding-jobs', 'cash-sessions',
 ];
 
 export const isPage = (value: string): value is Page => (PAGES as readonly string[]).includes(value);
@@ -92,6 +92,8 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'payments',      label: 'Payments',      icon: '💳', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],  permissions: ['PROCESS_PAYMENT', 'PROCESS_REFUND'] },
       { id: 'receivables',   label: 'Receivables',   icon: '🧾', roles: ['Admin', 'Manager', 'Finance_Officer'],             permissions: ['PROCESS_PAYMENT'] },
+      // By role (#171, decision 2a): a cashier works with their own session on the POS page.
+      { id: 'cash-sessions', label: 'Cash Sessions', icon: '💵', roles: ['Admin', 'Manager', 'Finance_Officer'] },
       // 'bank-accounts' intentionally omitted — not an active module for
       // this version. The page/route still exists; only the nav entry is
       // hidden. (Installments were retired.)

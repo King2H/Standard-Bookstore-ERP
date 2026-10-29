@@ -80,8 +80,12 @@ const RECEIPT_PRINT_CSS = `@media print {
 interface PosTerminalProps {
   userRole?: Role; userPermissions?: string[];
   tabBar: ReactNode;
-  view: 'pos' | 'history';
+  view: 'pos' | 'history' | 'cash';
   history: ReactNode;
+  /** The cashier's cash session (#171). */
+  cash?: ReactNode;
+  /** A sale refused for the lack of an open cash session (#171, decision 5a). */
+  onCashSessionRequired?: () => void;
 }
 
 // ── Permissions ───────────────────────────────────────────────────────────────
@@ -98,7 +102,7 @@ const PAYMENT_TABS: PaymentMethod[] = ['cash', 'bank', 'mobile', 'store_credit',
 //  Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function Terminal({ userRole, userPermissions, tabBar, view, history }: PosTerminalProps) {
+export function Terminal({ userRole, userPermissions, tabBar, view, history, cash, onCashSessionRequired }: PosTerminalProps) {
   const { showToast } = useToast();
   const currency    = useCurrency();
   const { data: me } = useMyProfile();
@@ -385,7 +389,10 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
       ...body,
     }, {
       onSuccess: (tx) => { setReceipt({ ...tx, change }); showToast(`Sale ${tx.transactionNumber} completed`, 'success'); },
-      onError:   (e: Error) => showToast(e.message, 'error'),
+      onError:   (e: Error) => {
+        showToast(e.message, 'error');
+        if ((e as Error & { code?: string }).code === 'CASH_SESSION_REQUIRED') onCashSessionRequired?.();
+      },
     });
   }
 
@@ -541,6 +548,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history }: P
       {tabBar}
 
       {view === 'history' && history}
+      {view === 'cash' && cash}
 
       {/* ── POS Terminal tab ─────────────────────────────────────────────────── */}
       {view === 'pos' && (

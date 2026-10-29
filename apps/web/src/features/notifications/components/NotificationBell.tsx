@@ -12,6 +12,7 @@
  *   purchase_order → procurement, return → returns, payment → payments,
  *   exchange → exchanges, customer → customers, service_job → binding-jobs,
  *   branch_transfer → inventory, on Incoming with the note open (#170);
+ *   cash_session → cash-sessions, on the session (#171);
  *   anything else stays put.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -39,6 +40,7 @@ const ENTITY_PAGE: Record<string, string> = {
   customer:       'customers',
   service_job:    'binding-jobs',
   branch_transfer:'inventory',
+  cash_session:   'cash-sessions',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -109,6 +111,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     const page = notif.entityType ? ENTITY_PAGE[notif.entityType] : null;
     // A transfer on its way is told to the branch receiving it.
     if (notif.entityType === 'branch_transfer' && onNavigate) onNavigate('inventory', { tab: 'incoming', transferId: notif.entityId ?? '' });
+    else if (notif.entityType === 'cash_session' && onNavigate) onNavigate('cash-sessions', { sessionId: notif.entityId ?? '' });
     else if (page && onNavigate) onNavigate(page);
     setOpen(false);
   }, [markReadMutation, onNavigate]);

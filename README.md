@@ -706,6 +706,9 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 
 ### Cash sessions (#171)
 - One person's cash at the counter in one branch: no tills. A shop with one salesperson opens one session a day.
+- Screens: the cashier opens, puts cash in or takes it out, and closes (blind count, Z report printed) on POS → Cash Drawer;
+  Admin, Manager and Finance_Officer see every session with its X or Z report under Finance → Cash Sessions, where an
+  Admin or Manager accepts a count beyond the limit or closes a session left open. The settings are under Settings → Cash.
 - GET /api/v1/cash-sessions/current — `{ required, session }`: the signed-in staff member's open session in the session
   branch, and whether the branch takes cash only with one (`require_cash_session`, off by default)
 - POST /api/v1/cash-sessions — body `{ openingFloat }` (0 when the drawer starts empty); one open session per person per

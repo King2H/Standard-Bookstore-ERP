@@ -38,13 +38,15 @@ const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType;
   loyalty_redemption_rate:          { label: 'Loyalty Redemption Rate',      tab: 'Loyalty',      type: 'number',  description: 'Currency value per point (e.g. 1.0)' },
   loyalty_min_transaction_amount:   { label: 'Loyalty Min Transaction',      tab: 'Loyalty',      type: 'number',  description: 'Min transaction amount to earn points' },
   exchange_cash_adjustment_allowed: { label: 'Exchange Cash Adjustment',     tab: 'Exchange',     type: 'boolean', description: 'Allow cash settlement on exchange orders' },
+  require_cash_session:             { label: 'Require Cash Session',         tab: 'Cash',         type: 'boolean', description: 'Take cash at the counter only with an open cash session' },
+  cash_variance_limit:              { label: 'Cash Variance Limit',          tab: 'Cash',         type: 'number',  description: 'Over or short at close beyond this waits for a Manager or Admin' },
   notification_prefs:               { label: 'Notification Preferences',     tab: 'Notifications',type: 'json',    description: 'Per-event notification toggles (JSONB)' },
   max_failed_login_attempts:        { label: 'Max Failed Login Attempts',     tab: 'Security',     type: 'number',  description: 'Lock account after this many consecutive failures (default: 5)' },
   account_lockout_minutes:          { label: 'Account Lockout Duration (min)',tab: 'Security',     type: 'number',  description: 'Minutes an account stays locked after too many failures (default: 30)' },
   password_expiry_days:             { label: 'Password Expiry (days)',        tab: 'Security',     type: 'number',  description: 'Days before password must be changed; 0 = never expires (default: 0)' },
 };
 
-const TABS = ['General', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Notifications', 'Security'];
+const TABS = ['General', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Cash', 'Notifications', 'Security'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
