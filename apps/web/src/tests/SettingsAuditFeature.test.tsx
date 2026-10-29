@@ -36,6 +36,7 @@ const entry = (key: string, value: unknown) => ({ key, value, updatedBy: 1, upda
 const SYSTEM = [
   entry('base_currency', 'ETB'), entry('max_line_discount_pct', { Sales: 10, Manager: 25 }),
   entry('default_discount_type', 'Normal'), entry('return_window_days', 7),
+  entry('require_cash_session', false), entry('cash_variance_limit', 50),
 ];
 
 type Call = { method: string; path: string; body: unknown };
@@ -95,6 +96,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Settings', () => {
+  it('lists the cash session settings on a Cash tab (#171, 4a; was: not offered)', async () => {
+    me = profile(['Admin']);
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Cash' }));
+    expect(await settingRow('Require Cash Session')).toBeInTheDocument();
+    expect(await settingRow('Cash Variance Limit')).toBeInTheDocument();
+  });
+
   it('counts any role held: a Manager also made Super_Admin edits system defaults (was: read-only)', async () => {
     me = profile(['Manager', 'Super_Admin']);
     renderPage(<SettingsPage />);

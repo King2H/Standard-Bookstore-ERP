@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   BookAvailabilityListResponseSchema, BookSchema, CurrencyResponseSchema, CustomerListResponseSchema, CustomerSchema, EffectiveConfigResponseSchema,
-  LocationListResponseSchema, PosTransactionSchema, ProfileResponseSchema,
+  CurrentCashSessionResponseSchema, LocationListResponseSchema, PosTransactionSchema, ProfileResponseSchema,
   type Book, type Customer, type PosTransaction, type ProfileResponse,
 } from '@bms/shared';
 import PosPage from '../features/pos/pages/PosPage.js';
@@ -59,6 +59,7 @@ let me: ProfileResponse;
 let allowNegative: boolean;
 let saleAnswer: PosTransaction;
 let shopCurrency: string;
+let cashRequired: boolean;
 
 function stubApi() {
   calls = [];
@@ -92,6 +93,11 @@ function stubApi() {
     }
     if (u.pathname === '/customers') {
       return json(contract(CustomerListResponseSchema, { items: [customer()], total: 1, page: 1, totalPages: 1 }));
+    }
+    if (u.pathname === '/cash-sessions/current') return json(contract(CurrentCashSessionResponseSchema, { required: cashRequired, session: null }));
+    if (method === 'POST' && u.pathname === '/pos/transactions' && cashRequired) {
+      return new Response(JSON.stringify({ error: 'CASH_SESSION_REQUIRED', message: 'This branch takes cash only with an open cash session; open one first' }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } });
     }
     if (method === 'POST' && u.pathname === '/pos/transactions') return json(contract(PosTransactionSchema, saleAnswer));
     // Bank Accounts off.
@@ -127,6 +133,7 @@ beforeEach(() => {
   allowNegative = false;
   saleAnswer = sale();
   shopCurrency = 'ETB';
+  cashRequired = false;
   stubApi();
 });
 
@@ -181,6 +188,27 @@ describe('POS terminal: the cart', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
     await waitFor(() => expect(posted()).toHaveLength(1));
+  });
+});
+
+describe('POS terminal: cash sessions (#171, 1a, 5a)', () => {
+  it('has a Cash tab, and says when the branch takes cash only with an open session (was: no session at all)', async () => {
+    cashRequired = true;
+    const user = await openTerminal();
+    expect(await screen.findByText('No cash session')).toBeInTheDocument();
+    expect(screen.getByText(/takes cash only with an open cash session/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Cash Drawer/ }));
+    expect(await screen.findByLabelText('Opening float')).toBeInTheDocument();
+  });
+
+  it('offers to open a session when a cash sale is refused for the lack of one', async () => {
+    cashRequired = true;
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
+    await user.click(await screen.findByRole('button', { name: 'Open cash session' }));
+    expect(await screen.findByLabelText('Opening float')).toBeInTheDocument();
   });
 });
 
