@@ -7,6 +7,10 @@ import { approvalNote, canReadLedger, stepsFor } from '../rules.js';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import { PaymentForms } from './PaymentForms.js';
 import { PaymentLists } from './PaymentLists.js';
+import { RefundForm } from './RefundForm.js';
+import { useSupplierReturns } from '../../supplierReturns/queries.js';
+import { canReturnOrder } from '../../supplierReturns/rules.js';
+import { StatusBadge as ReturnStatusBadge } from '../../supplierReturns/components/StatusBadge.js';
 import { ProgressBar, StatusBadge, amount, safePct } from './shared.js';
 
 type Asking = 'cancel' | 'closeShort' | null;
@@ -14,18 +18,22 @@ type Asking = 'cancel' | 'closeShort' | null;
 const BTN = 'px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 transition-colors';
 
 /** One purchase order: its figures, the steps this staff member may take, its lines and receipts. */
-export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger }: {
+export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger, onReturn, onOpenReturn }: {
   poId: string;
   onBack: () => void;
   onEdit: (po: PurchaseOrder) => void;
   onReceive: (po: PurchaseOrder) => void;
   onLedger: (supplierId: number, supplierName: string) => void;
+  /** Starts a return of the order's books to the supplier (#173). */
+  onReturn: (po: PurchaseOrder) => void;
+  onOpenReturn: (id: number) => void;
 }) {
   const { showToast } = useToast();
   const { data: me } = useMyProfile();
   const { data: po, isLoading } = usePurchaseOrder(poId);
   const step = usePurchaseOrderStep(poId);
   const [asking, setAsking] = useState<Asking>(null);
+  const { data: returns } = useSupplierReturns({ poId: Number(poId), pageSize: 100 });
 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
   if (!po) return <div className="p-8 text-center text-gray-400">PO not found.</div>;
@@ -88,12 +96,16 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
           <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Received Value</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {amount(po.receivedValue)}</div></div>
           <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Amount Paid</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {amount(po.amountPaid)}</div></div>
           <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Credit Notes</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {amount(po.creditNotesTotal)}</div></div>
+          {po.refundsTotal > 0 && <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Refunds Received</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {amount(po.refundsTotal)}</div></div>}
+          {po.refundDue > 0 && <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Refund Due</div><div className="font-semibold text-teal-700 dark:text-teal-400">{po.currency} {amount(po.refundDue)}</div></div>}
           <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Outstanding</div><div className={`font-semibold ${po.outstandingAmount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>{po.currency} {amount(po.outstandingAmount)}</div></div>
         </div>
       </div>
 
       {/* Once the order is a commitment and something is still owed. */}
       {steps.pay && po.financialStatus !== 'paid' && !['draft', 'pending_approval', 'cancelled'].includes(po.status) && <PaymentForms po={po} />}
+      {/* Returns credited beyond what the order owed: the supplier pays back (#173, decision 4a). */}
+      {steps.pay && po.refundDue > 0 && <RefundForm po={po} />}
 
       <div className="flex flex-wrap gap-2">
         {steps.edit && <button onClick={() => onEdit(po)} className={`${BTN} bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700`}>Edit</button>}
@@ -103,6 +115,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
         {steps.receive && <button onClick={() => onReceive(po)} className={`${BTN} bg-green-600 text-white hover:bg-green-700`}>{po.status === 'partially_received' ? 'Receive More Goods' : 'Receive Goods'}</button>}
         {steps.closeShort && <button onClick={() => setAsking('closeShort')} disabled={step.isPending} className={`${BTN} bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-800`}>Close Short</button>}
         {steps.close && <button onClick={() => run({ action: 'close' }, 'PO closed')} disabled={step.isPending} className={`${BTN} bg-teal-600 text-white hover:bg-teal-700`}>Close PO</button>}
+        {canReturnOrder(po, me) && <button onClick={() => onReturn(po)} className={`${BTN} bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800`}>Return to Supplier</button>}
         {steps.cancel && <button onClick={() => setAsking('cancel')} disabled={step.isPending} className={`${BTN} bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800`}>Cancel</button>}
       </div>
 
@@ -112,7 +125,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
         </div>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>{['Book', 'ISBN', 'Ordered', 'Received', 'Remaining', 'Unit Cost', 'Line Total'].map(h => (
+            <tr>{['Book', 'ISBN', 'Ordered', 'Received', 'Returned', 'Remaining', 'Unit Cost', 'Line Total'].map(h => (
               <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
             ))}</tr>
           </thead>
@@ -123,6 +136,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{li.bookIsbn}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.quantity}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.receivedQuantity}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.returnedQuantity}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.remaining}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{amount(li.unitCost)}</td>
                 <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">{amount(Money.of(li.unitCost).times(li.quantity))}</td>
@@ -153,6 +167,24 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger 
                     </div>
                   ))}
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(returns?.items ?? []).length > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Returns to Supplier</h3>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {returns!.items.map(r => (
+              <div key={r.id} className="p-4 flex items-center gap-4 text-sm">
+                <button type="button" onClick={() => onOpenReturn(r.id)} className="font-mono text-xs text-blue-600 dark:text-blue-400 hover:underline">{r.returnNumber}</button>
+                <span className="text-gray-600 dark:text-gray-300">{r.totalQuantity} copies · credit {po.currency} {amount(r.creditValue)}</span>
+                <ReturnStatusBadge status={r.status} />
+                <span className="text-gray-500 dark:text-gray-400 ml-auto">{new Date(r.createdAt).toLocaleDateString()}</span>
               </div>
             ))}
           </div>

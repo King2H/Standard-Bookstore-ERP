@@ -6,13 +6,14 @@ import { useSupplierPayables } from '../queries.js';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import { amount } from './shared.js';
 
-/** An order's supplier payments, with their reversal, and its credit notes. */
+/** An order's supplier payments, with their reversal, its credit notes and the supplier's refunds. */
 export function PaymentLists({ po, canPay }: { po: PurchaseOrder; canPay: boolean }) {
   const { showToast } = useToast();
   const { reverse } = useSupplierPayables(po.id);
   const [reversing, setReversing] = useState<{ id: string; number: string } | null>(null);
   const payments = po.payments ?? [];
   const creditNotes = po.creditNotes ?? [];
+  const refunds = po.supplierRefunds ?? [];
 
   return (
     <>
@@ -57,6 +58,25 @@ export function PaymentLists({ po, canPay }: { po: PurchaseOrder; canPay: boolea
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">credit note</span>
                 <span className="text-gray-500 dark:text-gray-400 italic">{cn.reason}</span>
                 <span className="text-gray-500 dark:text-gray-400 ml-auto">{new Date(cn.createdAt).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {refunds.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Supplier Refunds</h3>
+          </div>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {refunds.map(r => (
+              <div key={r.id} className="p-4 flex items-center gap-4 text-sm">
+                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{r.refundNumber}</span>
+                <span className="font-medium text-gray-900 dark:text-white">{po.currency} {amount(r.amount)}</span>
+                <span className="text-gray-500 dark:text-gray-400">{paymentMethodPlainLabel(r.method)}{r.reference ? ` · ${r.reference}` : ''}</span>
+                {r.notes && <span className="text-gray-500 dark:text-gray-400 italic">{r.notes}</span>}
+                <span className="text-gray-500 dark:text-gray-400 ml-auto">{new Date(r.createdAt).toLocaleString()}</span>
               </div>
             ))}
           </div>

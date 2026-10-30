@@ -23,7 +23,7 @@ vi.mock('../lib/api.js', async (importOriginal) => ({
 const PO = {
   id: '42', branchId: 1, supplierId: 7, supplierName: 'Acme Distributors', status: 'partially_received',
   totalAmount: 200, currency: 'ETB', expectedDeliveryDate: null, createdAt: new Date().toISOString(),
-  receivedValue: 100, amountPaid: 0, creditNotesTotal: 0, outstandingAmount: 100,
+  receivedValue: 100, amountPaid: 0, creditNotesTotal: 0, refundsTotal: 0, refundDue: 0, outstandingAmount: 100,
   orderedQuantityTotal: 10, receivedQuantityTotal: 5,
 };
 

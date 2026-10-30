@@ -1,7 +1,6 @@
 import type {
-  BooksToOrderResponse, CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest,
-  CreateSupplierPaymentRequest, PurchaseOrder, PurchaseOrderListResponse, PurchaseOrderStatus, ReceivePurchaseOrderRequest,
-  SupplierLedgerResponse, UpdatePurchaseOrderRequest,
+  BooksToOrderResponse, CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest, CreateSupplierPaymentRequest, CreateSupplierRefundRequest,
+  PurchaseOrder, PurchaseOrderListResponse, PurchaseOrderStatus, ReceivePurchaseOrderRequest, SupplierLedgerResponse, UpdatePurchaseOrderRequest,
 } from '@bms/shared';
 import { api, downloadFile, toQuery } from '../../lib/api.js';
 import { listSuppliers } from '../suppliers/api.js';
@@ -76,6 +75,10 @@ export const reverseSupplierPayment = (id: string, paymentId: string, reason: st
 /** The supplier's credit against an order: damaged goods, an overcharge, a negotiated price. */
 export const recordSupplierCreditNote = (id: string, body: CreateSupplierCreditNoteRequest) =>
   api.post<PurchaseOrder>(`/purchase-orders/${id}/credit-notes`, body);
+
+/** Money the supplier paid back after a return (#173), at most the refund due. */
+export const recordSupplierRefund = (id: string, body: CreateSupplierRefundRequest) =>
+  api.post<PurchaseOrder>(`/purchase-orders/${id}/supplier-refunds`, body);
 
 export type SupplierLedgerParams = { dateFrom?: string; dateTo?: string };
 

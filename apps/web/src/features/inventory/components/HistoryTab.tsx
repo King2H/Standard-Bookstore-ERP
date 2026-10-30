@@ -6,8 +6,8 @@ import { MovementBadge, SkeletonRow, fmtDate } from './shared.js';
 
 const FILTER = 'px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
-/** Every stock movement in the session's branch, filtered by type, reason and dates. */
-export function HistoryTab() {
+/** Every stock movement in the session's branch, filtered by type, reason and dates; a return to supplier opens from its row (#173). */
+export function HistoryTab({ onOpenReturn }: { onOpenReturn?: (returnId: string) => void } = {}) {
   const [movementType, setMovementType] = useState('');
   const [reasonCode, setReasonCode] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -72,7 +72,9 @@ export function HistoryTab() {
                   <div className="flex flex-col gap-1">
                     <MovementBadge type={h.movementType} />
                     <span className="text-xs text-gray-600 dark:text-gray-300">{REASON_LABELS[h.reasonCode] ?? h.reasonCode}</span>
-                    {h.referenceType && <span className="text-xs text-gray-400">{h.referenceType}{h.referenceId ? ` #${h.referenceId}` : ''}</span>}
+                    {h.referenceType === 'supplier_return' && h.referenceId && onOpenReturn
+                      ? <button type="button" onClick={() => onOpenReturn(h.referenceId!)} className="text-xs text-left text-blue-600 dark:text-blue-400 hover:underline">Open return #{h.referenceId}</button>
+                      : h.referenceType && <span className="text-xs text-gray-400">{h.referenceType}{h.referenceId ? ` #${h.referenceId}` : ''}</span>}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{h.staffUsername}</td>
