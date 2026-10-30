@@ -75,6 +75,8 @@ export type OutboxEventType =
   | 'transfer.dispatched'
   // Cash sessions (#171)
   | 'cash_session.review_needed'
+  // Stock counts (#172)
+  | 'stock_count.submitted'
   // Customers
   | 'customer.store_credit_added'
   | 'customer.deactivated'

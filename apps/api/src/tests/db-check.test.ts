@@ -150,6 +150,18 @@ describe('Data consistency check', () => {
       [cashSession, staffId],
     );
 
+    // Stock counts (#172): a posted count whose line says 2 found, with no stock history behind it.
+    const countId = await one(
+      `INSERT INTO stock_counts (count_number, branch_id, location_id, scope, status, created_by, posted_by, posted_at)
+       VALUES ($1, $2, $3, 'selected', 'posted', $4, $4, now()) RETURNING id`,
+      [`${MARK}-CNT`, branchId, loc, staffId],
+    );
+    await client.query(
+      `INSERT INTO stock_count_lines (count_id, book_id, frozen_quantity, counted_quantity, expected_quantity, posted_delta, posted_unit_cost)
+       VALUES ($1, $2, 3, 5, 3, 2, 4)`,
+      [countId, book1],
+    );
+
     // Bank: a line matched to an uncleared movement; a cleared movement nobody matched.
     const account = await one(
       `INSERT INTO bank_accounts (branch_id, account_name, bank_name, account_number, currency, account_number_hash)
@@ -206,6 +218,7 @@ describe('Data consistency check', () => {
     ['transfers.status-matches-lines', new RegExp(`^${MARK}-TRF \\(in_transit\\): 2 of 3 accounted for$`)],
     ['transfers.stock-history', new RegExp(`^${MARK}-TRF: book \\d+ sent 3 \\(history 0\\), received 2 \\(history 0\\)$`)],
     ['cash.session-adds-up', new RegExp(`^${MARK}-Z: expected 120\\.00, float and movements say 150\\.00; variance 0\\.00, counted less expected 5\\.00$`)],
+    ['stock-counts.posted-in-history', new RegExp(`^${MARK}-CNT: book \\d+ posted 2, history 0$`)],
     ['bank.matched-line-cleared', /is uncleared$/],
     ['bank.cleared-one-line', /: 0 matched lines$/],
     ['numbers.daily-counters-ahead', /^ORD-\d{8}: highest used 9999/],
@@ -229,6 +242,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/24 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/25 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

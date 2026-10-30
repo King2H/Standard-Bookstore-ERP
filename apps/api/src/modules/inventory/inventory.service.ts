@@ -365,6 +365,41 @@ async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment):
   return { before: before.quantity, after };
 }
 
+/** On hand at a location now, 0 when the book has no stock record there; read for a count (#172). */
+export async function onHand(q: Queryable, bookId: number, locationId: number): Promise<number> {
+  return (await stock.lockLevel(q, bookId, locationId))?.quantity ?? 0;
+}
+
+/**
+ * A difference a posted stock count found (#172, decision 6a): an adjustment
+ * at the average cost, reason "count", naming the count. Returns the cost.
+ */
+export async function postCountDifference(
+  tx: Queryable,
+  difference: { bookId: number; locationId: number; delta: number; countId: number; countNumber: string; staffCtx: Actor },
+): Promise<{ unitCost: Money }> {
+  const { bookId, locationId, delta } = difference;
+  await stock.ensureLevel(tx, bookId, locationId);
+  const before = await lockOrThrow(tx, bookId, locationId);
+  const after = policy.quantityAfterAdjustment(before.quantity, delta, await negativeStockAllowedAt(tx, locationId));
+  await stock.updateLevel(tx, bookId, locationId, { quantity: after });
+  await stock.insertMovement(tx, {
+    bookId,
+    locationId,
+    qtyBefore: before.quantity,
+    qtyAfter: after,
+    movementType: 'adjustment',
+    reasonCode: 'count',
+    referenceType: 'stock_count',
+    referenceId: difference.countId,
+    notes: `Count ${difference.countNumber}`,
+    staffId: difference.staffCtx.staffId,
+    unitCost: before.averageCost,
+  });
+  await alertOnThreshold(tx, bookId, locationId, before.quantity);
+  return { unitCost: before.averageCost };
+}
+
 /**
  * Stock moving between two locations of one branch. The units carry the
  * source's average cost into the destination's average, so the value moves

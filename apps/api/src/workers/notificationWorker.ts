@@ -83,6 +83,15 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'cash_session',
     entityId: String(p.sessionId ?? ''),
   }),
+  // A count's counters are done; it waits for a Manager or Admin (#172, decision 4a).
+  'stock_count.submitted': (p) => ({
+    title: '📋 Stock count to review',
+    body: `${p.countNumber}: ${p.locationName} counted, waiting for review`,
+    targetRoles: ['Manager', 'Admin'],
+    severity: 'info',
+    entityType: 'stock_count',
+    entityId: String(p.countId ?? ''),
+  }),
   'inventory.low_stock': (p) => ({
     title: '⚠️ Low Stock Alert',
     body: `"${p.bookTitle}" at ${p.locationName} — ${p.quantity} remaining (reorder at ${p.reorderPoint})`,

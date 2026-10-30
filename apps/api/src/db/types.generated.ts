@@ -937,6 +937,50 @@ export interface StaffSessions {
   tenant_id: Generated<number>;
 }
 
+export interface StockCountEntries {
+  created_at: Generated<Timestamp>;
+  expected_quantity: number;
+  id: Generated<number>;
+  line_id: number;
+  quantity: number;
+  staff_id: number;
+  tenant_id: Generated<number>;
+}
+
+export interface StockCountLines {
+  book_id: number;
+  count_id: number;
+  counted_at: Timestamp | null;
+  counted_by: number | null;
+  counted_quantity: number | null;
+  expected_quantity: number | null;
+  frozen_quantity: number;
+  id: Generated<number>;
+  posted_delta: number | null;
+  posted_unit_cost: Numeric | null;
+  recount_requested: Generated<boolean>;
+  tenant_id: Generated<number>;
+}
+
+export interface StockCounts {
+  branch_id: number;
+  cancel_reason: string | null;
+  cancelled_at: Timestamp | null;
+  cancelled_by: number | null;
+  count_number: string;
+  created_at: Generated<Timestamp>;
+  created_by: number;
+  id: Generated<number>;
+  location_id: number;
+  notes: string | null;
+  posted_at: Timestamp | null;
+  posted_by: number | null;
+  scope: string;
+  status: Generated<string>;
+  submitted_at: Timestamp | null;
+  tenant_id: Generated<number>;
+}
+
 export interface StoreCreditAccounts {
   balance: Generated<Numeric>;
   customer_id: number;
@@ -1136,6 +1180,9 @@ export interface DB {
   staff_branch_roles: StaffBranchRoles;
   staff_locations: StaffLocations;
   staff_sessions: StaffSessions;
+  stock_count_entries: StockCountEntries;
+  stock_count_lines: StockCountLines;
+  stock_counts: StockCounts;
   store_credit_accounts: StoreCreditAccounts;
   store_credit_history: StoreCreditHistory;
   supplier_credit_notes: SupplierCreditNotes;

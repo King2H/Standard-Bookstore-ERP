@@ -117,7 +117,7 @@ npm run db:types
 
 **Check the data for consistency** (#165). Read-only: it changes nothing. It lists, per rule and
 tenant, the rows that break it: stock against its movement history, receivable and order payment
-balances, cancelled orders still holding money (refund them in Payments), purchase orders against their lines, transfer notes against their lines and the stock history, closed cash sessions against their movements, bank matches, document counters, and data left by the
+balances, cancelled orders still holding money (refund them in Payments), purchase orders against their lines, transfer notes against their lines and the stock history, closed cash sessions against their movements, posted stock counts against the stock history, bank matches, document counters, and data left by the
 test suite. It exits with an error when money or stock is wrong; warnings alone pass. Run it after
 pulling a migration and before an upgrade.
 

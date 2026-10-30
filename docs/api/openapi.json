@@ -54944,6 +54944,3304 @@
         }
       }
     },
+    "/stock-counts": {
+      "get": {
+        "operationId": "listStockCounts",
+        "summary": "The session branch's stock counts, newest first (Admin, Manager, Stock_Clerk, #172)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "counting",
+                "submitted",
+                "posted",
+                "cancelled"
+              ]
+            }
+          },
+          {
+            "name": "locationId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "countNumber": {
+                            "type": "string"
+                          },
+                          "branchId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationName": {
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "selected"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "counting",
+                              "submitted",
+                              "posted",
+                              "cancelled"
+                            ]
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdByName": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "submittedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "postedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "postedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cancelledAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cancelReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lineCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "countedLines": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "countNumber",
+                          "branchId",
+                          "locationId",
+                          "locationName",
+                          "scope",
+                          "status",
+                          "notes",
+                          "createdBy",
+                          "createdByName",
+                          "createdAt",
+                          "submittedAt",
+                          "postedBy",
+                          "postedByName",
+                          "postedAt",
+                          "cancelledAt",
+                          "cancelReason",
+                          "lineCount",
+                          "countedLines"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize",
+                    "totalPages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "openStockCount",
+        "summary": "Open a count of a location one may use, every book it holds or the books named, numbered CNT-; expected quantities frozen; one open count per location (Admin, Manager, Stock_Clerk)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "locationId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "full",
+                      "selected"
+                    ]
+                  },
+                  "bookIds": {
+                    "minItems": 1,
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "notes": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "locationId",
+                  "scope"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "selected"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "counting",
+                        "submitted",
+                        "posted",
+                        "cancelled"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdByName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "postedByName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lineCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countedLines": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frozenQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expectedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "difference": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "differenceValue": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "countedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "countedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "previousCounts": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "recountRequested": {
+                            "type": "boolean"
+                          },
+                          "postedDelta": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedUnitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "frozenQuantity",
+                          "expectedQuantity",
+                          "countedQuantity",
+                          "difference",
+                          "differenceValue",
+                          "countedBy",
+                          "countedByName",
+                          "countedAt",
+                          "previousCounts",
+                          "recountRequested",
+                          "postedDelta",
+                          "postedUnitCost"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "shortQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "overValue": {
+                              "type": "number"
+                            },
+                            "shortValue": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "overQuantity",
+                            "shortQuantity",
+                            "overValue",
+                            "shortValue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "countNumber",
+                    "branchId",
+                    "locationId",
+                    "locationName",
+                    "scope",
+                    "status",
+                    "notes",
+                    "createdBy",
+                    "createdByName",
+                    "createdAt",
+                    "submittedAt",
+                    "postedBy",
+                    "postedByName",
+                    "postedAt",
+                    "cancelledAt",
+                    "cancelReason",
+                    "lineCount",
+                    "countedLines",
+                    "lines",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stock-counts/{id}": {
+      "get": {
+        "operationId": "getStockCount",
+        "summary": "A count with its lines; blind for a counter until posted (no frozen or expected quantity, no difference)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "selected"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "counting",
+                        "submitted",
+                        "posted",
+                        "cancelled"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdByName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "postedByName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lineCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countedLines": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frozenQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expectedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "difference": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "differenceValue": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "countedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "countedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "previousCounts": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "recountRequested": {
+                            "type": "boolean"
+                          },
+                          "postedDelta": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedUnitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "frozenQuantity",
+                          "expectedQuantity",
+                          "countedQuantity",
+                          "difference",
+                          "differenceValue",
+                          "countedBy",
+                          "countedByName",
+                          "countedAt",
+                          "previousCounts",
+                          "recountRequested",
+                          "postedDelta",
+                          "postedUnitCost"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "shortQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "overValue": {
+                              "type": "number"
+                            },
+                            "shortValue": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "overQuantity",
+                            "shortQuantity",
+                            "overValue",
+                            "shortValue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "countNumber",
+                    "branchId",
+                    "locationId",
+                    "locationName",
+                    "scope",
+                    "status",
+                    "notes",
+                    "createdBy",
+                    "createdByName",
+                    "createdAt",
+                    "submittedAt",
+                    "postedBy",
+                    "postedByName",
+                    "postedAt",
+                    "cancelledAt",
+                    "cancelReason",
+                    "lineCount",
+                    "countedLines",
+                    "lines",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stock-counts/{id}/cancel": {
+      "post": {
+        "operationId": "cancelStockCount",
+        "summary": "Cancel a count not yet posted, with a reason; nothing changes (APPROVE_STOCK_COUNT: Admin, Manager)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The count, cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "selected"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "counting",
+                        "submitted",
+                        "posted",
+                        "cancelled"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdByName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "postedByName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lineCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countedLines": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frozenQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expectedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "difference": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "differenceValue": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "countedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "countedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "previousCounts": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "recountRequested": {
+                            "type": "boolean"
+                          },
+                          "postedDelta": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedUnitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "frozenQuantity",
+                          "expectedQuantity",
+                          "countedQuantity",
+                          "difference",
+                          "differenceValue",
+                          "countedBy",
+                          "countedByName",
+                          "countedAt",
+                          "previousCounts",
+                          "recountRequested",
+                          "postedDelta",
+                          "postedUnitCost"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "shortQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "overValue": {
+                              "type": "number"
+                            },
+                            "shortValue": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "overQuantity",
+                            "shortQuantity",
+                            "overValue",
+                            "shortValue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "countNumber",
+                    "branchId",
+                    "locationId",
+                    "locationName",
+                    "scope",
+                    "status",
+                    "notes",
+                    "createdBy",
+                    "createdByName",
+                    "createdAt",
+                    "submittedAt",
+                    "postedBy",
+                    "postedByName",
+                    "postedAt",
+                    "cancelledAt",
+                    "cancelReason",
+                    "lineCount",
+                    "countedLines",
+                    "lines",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stock-counts/{id}/counts": {
+      "post": {
+        "operationId": "enterStockCounts",
+        "summary": "Counted quantities, each set against what the location holds at that moment; a book counted again replaces its count; a book found is added (Admin, Manager, Stock_Clerk)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "bookId": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "bookId",
+                        "quantity"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "items"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "selected"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "counting",
+                        "submitted",
+                        "posted",
+                        "cancelled"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdByName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "postedByName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lineCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countedLines": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frozenQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expectedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "difference": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "differenceValue": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "countedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "countedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "previousCounts": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "recountRequested": {
+                            "type": "boolean"
+                          },
+                          "postedDelta": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedUnitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "frozenQuantity",
+                          "expectedQuantity",
+                          "countedQuantity",
+                          "difference",
+                          "differenceValue",
+                          "countedBy",
+                          "countedByName",
+                          "countedAt",
+                          "previousCounts",
+                          "recountRequested",
+                          "postedDelta",
+                          "postedUnitCost"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "shortQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "overValue": {
+                              "type": "number"
+                            },
+                            "shortValue": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "overQuantity",
+                            "shortQuantity",
+                            "overValue",
+                            "shortValue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "countNumber",
+                    "branchId",
+                    "locationId",
+                    "locationName",
+                    "scope",
+                    "status",
+                    "notes",
+                    "createdBy",
+                    "createdByName",
+                    "createdAt",
+                    "submittedAt",
+                    "postedBy",
+                    "postedByName",
+                    "postedAt",
+                    "cancelledAt",
+                    "cancelReason",
+                    "lineCount",
+                    "countedLines",
+                    "lines",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stock-counts/{id}/post": {
+      "post": {
+        "operationId": "postStockCount",
+        "summary": "Post one adjustment per difference at the average cost, reason \"count\", linked to the count; books never counted unchanged unless counted as 0 (APPROVE_STOCK_COUNT: Admin, Manager)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "zeroBookIds": {
+                    "default": [],
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The count, posted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "selected"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "counting",
+                        "submitted",
+                        "posted",
+                        "cancelled"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdByName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "postedByName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lineCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countedLines": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frozenQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expectedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "difference": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "differenceValue": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "countedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "countedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "previousCounts": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "recountRequested": {
+                            "type": "boolean"
+                          },
+                          "postedDelta": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedUnitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "frozenQuantity",
+                          "expectedQuantity",
+                          "countedQuantity",
+                          "difference",
+                          "differenceValue",
+                          "countedBy",
+                          "countedByName",
+                          "countedAt",
+                          "previousCounts",
+                          "recountRequested",
+                          "postedDelta",
+                          "postedUnitCost"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "shortQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "overValue": {
+                              "type": "number"
+                            },
+                            "shortValue": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "overQuantity",
+                            "shortQuantity",
+                            "overValue",
+                            "shortValue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "countNumber",
+                    "branchId",
+                    "locationId",
+                    "locationName",
+                    "scope",
+                    "status",
+                    "notes",
+                    "createdBy",
+                    "createdByName",
+                    "createdAt",
+                    "submittedAt",
+                    "postedBy",
+                    "postedByName",
+                    "postedAt",
+                    "cancelledAt",
+                    "cancelReason",
+                    "lineCount",
+                    "countedLines",
+                    "lines",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stock-counts/{id}/recount": {
+      "post": {
+        "operationId": "recountStockCount",
+        "summary": "Send books back to be counted again (APPROVE_STOCK_COUNT: Admin, Manager)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bookIds": {
+                    "minItems": 1,
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                },
+                "required": [
+                  "bookIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The count, counting again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "selected"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "counting",
+                        "submitted",
+                        "posted",
+                        "cancelled"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdByName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "postedByName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lineCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countedLines": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frozenQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expectedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "difference": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "differenceValue": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "countedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "countedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "previousCounts": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "recountRequested": {
+                            "type": "boolean"
+                          },
+                          "postedDelta": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedUnitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "frozenQuantity",
+                          "expectedQuantity",
+                          "countedQuantity",
+                          "difference",
+                          "differenceValue",
+                          "countedBy",
+                          "countedByName",
+                          "countedAt",
+                          "previousCounts",
+                          "recountRequested",
+                          "postedDelta",
+                          "postedUnitCost"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "shortQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "overValue": {
+                              "type": "number"
+                            },
+                            "shortValue": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "overQuantity",
+                            "shortQuantity",
+                            "overValue",
+                            "shortValue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "countNumber",
+                    "branchId",
+                    "locationId",
+                    "locationName",
+                    "scope",
+                    "status",
+                    "notes",
+                    "createdBy",
+                    "createdByName",
+                    "createdAt",
+                    "submittedAt",
+                    "postedBy",
+                    "postedByName",
+                    "postedAt",
+                    "cancelledAt",
+                    "cancelReason",
+                    "lineCount",
+                    "countedLines",
+                    "lines",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stock-counts/{id}/submit": {
+      "post": {
+        "operationId": "submitStockCount",
+        "summary": "Hand the count to review; the reviewers are told (Admin, Manager, Stock_Clerk)",
+        "tags": [
+          "Stock counts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The count, submitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationName": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "selected"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "counting",
+                        "submitted",
+                        "posted",
+                        "cancelled"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdByName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "postedByName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "postedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lineCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "countedLines": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frozenQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expectedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedQuantity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "difference": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "differenceValue": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "countedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "countedByName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "countedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "previousCounts": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "recountRequested": {
+                            "type": "boolean"
+                          },
+                          "postedDelta": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "postedUnitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "frozenQuantity",
+                          "expectedQuantity",
+                          "countedQuantity",
+                          "difference",
+                          "differenceValue",
+                          "countedBy",
+                          "countedByName",
+                          "countedAt",
+                          "previousCounts",
+                          "recountRequested",
+                          "postedDelta",
+                          "postedUnitCost"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "totals": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "shortQuantity": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "overValue": {
+                              "type": "number"
+                            },
+                            "shortValue": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "overQuantity",
+                            "shortQuantity",
+                            "overValue",
+                            "shortValue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "countNumber",
+                    "branchId",
+                    "locationId",
+                    "locationName",
+                    "scope",
+                    "status",
+                    "notes",
+                    "createdBy",
+                    "createdByName",
+                    "createdAt",
+                    "submittedAt",
+                    "postedBy",
+                    "postedByName",
+                    "postedAt",
+                    "cancelledAt",
+                    "cancelReason",
+                    "lineCount",
+                    "countedLines",
+                    "lines",
+                    "totals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/suppliers": {
       "get": {
         "operationId": "listSuppliers",
