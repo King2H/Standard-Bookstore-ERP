@@ -11,11 +11,13 @@ import { HistoryTab } from '../components/HistoryTab.js';
 import { LowStockBadge, LowStockTab } from '../components/LowStockTab.js';
 import { TransfersTab } from '../../transfers/components/TransfersTab.js';
 import { canTransfer } from '../../transfers/rules.js';
+import { CountsTab } from '../../stockCounts/components/CountsTab.js';
+import { canCount } from '../../stockCounts/rules.js';
 
-type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'move' | 'outgoing' | 'incoming' | 'history' | 'alerts';
+type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'move' | 'outgoing' | 'incoming' | 'counts' | 'history' | 'alerts';
 
-// Transfer notes open on their tab from a link or a notification (#170, decision 5a).
-const opensOn = (tab: string | undefined): Tab => (tab === 'outgoing' || tab === 'incoming' ? tab : 'stock');
+// Transfer notes (#170, decision 5a) and counts (#172) open on their tab from a link or a notification.
+const opensOn = (tab: string | undefined): Tab => (tab === 'outgoing' || tab === 'incoming' || tab === 'counts' ? tab : 'stock');
 
 /** Stock per book and location, its changes and its history (#23). */
 export default function InventoryPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
@@ -35,6 +37,7 @@ export default function InventoryPage({ initialContext = {} }: { initialContext?
     { id: 'move' as Tab, label: 'Move', icon: '↔️', show: moves },
     { id: 'outgoing' as Tab, label: 'Outgoing', icon: '🚚', show: canTransfer(me) },
     { id: 'incoming' as Tab, label: 'Incoming', icon: '📥', show: canTransfer(me) },
+    { id: 'counts' as Tab, label: 'Counts', icon: '🔢', show: canCount(me) },
     { id: 'history' as Tab, label: 'History', icon: '📋', show: true },
     { id: 'alerts' as Tab, label: 'Low Stock', icon: '⚠️', show: true },
   ].filter(t => t.show);
@@ -59,6 +62,7 @@ export default function InventoryPage({ initialContext = {} }: { initialContext?
         {tab === 'move'      && moves && <TransferTab />}
         {tab === 'outgoing'  && canTransfer(me) && <TransfersTab key="outgoing" direction="outgoing" initialTransferId={opensOn(initialContext.tab) === 'outgoing' ? transferId : null} />}
         {tab === 'incoming'  && canTransfer(me) && <TransfersTab key="incoming" direction="incoming" initialTransferId={opensOn(initialContext.tab) === 'incoming' ? transferId : null} />}
+        {tab === 'counts'    && canCount(me) && <CountsTab initialCountId={opensOn(initialContext.tab) === 'counts' ? Number(initialContext.countId) || null : null} onOpenHistory={() => open('history')} />}
         {tab === 'history'   && <HistoryTab />}
         {tab === 'alerts'    && <LowStockTab />}
       </div>
