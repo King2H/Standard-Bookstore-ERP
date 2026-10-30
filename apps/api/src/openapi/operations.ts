@@ -1,5 +1,13 @@
 import type { z } from 'zod';
 import {
+  CancelStockCountRequestSchema,
+  EnterStockCountsRequestSchema,
+  OpenStockCountRequestSchema,
+  PostStockCountRequestSchema,
+  RecountRequestSchema,
+  StockCountDetailSchema,
+  StockCountListQuerySchema,
+  StockCountListResponseSchema,
   CashMovementRequestSchema,
   CashSessionDetailSchema,
   CashSessionListQuerySchema,
@@ -296,6 +304,7 @@ export const operations: ApiOperation[] = [
   ...serviceOperations(),
   ...transferOperations(),
   ...cashSessionOperations(),
+  ...stockCountOperations(),
   ...configOperations(),
   ...locationOperations(),
   ...customerOperations(),
@@ -1628,6 +1637,58 @@ function cashSessionOperations(): ApiOperation[] {
       request: { params: IdParamsSchema, body: ReviewCashSessionRequestSchema },
       responses: one('The session, closed'),
       errors: [400, 401, 403, 404, 422, 500],
+    },
+  ];
+}
+
+function stockCountOperations(): ApiOperation[] {
+  const tag = 'Stock counts';
+  const counter = 'Admin, Manager, Stock_Clerk';
+  const reviewer = 'APPROVE_STOCK_COUNT: Admin, Manager';
+  const one = (description: string) => ({ 200: { description, schema: StockCountDetailSchema } });
+  const errors = [400, 401, 403, 404, 422, 500];
+  return [
+    {
+      operationId: 'listStockCounts', method: 'get', path: '/stock-counts',
+      summary: `The session branch's stock counts, newest first (${counter}, #172)`, tag,
+      request: { query: StockCountListQuerySchema },
+      responses: { 200: { description: 'One page of counts', schema: StockCountListResponseSchema } }, errors: [400, 401, 403, 500],
+    },
+    {
+      operationId: 'openStockCount', method: 'post', path: '/stock-counts',
+      summary: `Open a count of a location one may use, every book it holds or the books named, numbered CNT-; expected quantities frozen; one open count per location (${counter})`, tag,
+      request: { body: OpenStockCountRequestSchema },
+      responses: { 201: { description: 'The count', schema: StockCountDetailSchema } }, errors: [400, 401, 403, 404, 409, 500],
+    },
+    {
+      operationId: 'getStockCount', method: 'get', path: '/stock-counts/{id}',
+      summary: 'A count with its lines; blind for a counter until posted (no frozen or expected quantity, no difference)', tag,
+      request: { params: IdParamsSchema }, responses: one('The count'), errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'enterStockCounts', method: 'post', path: '/stock-counts/{id}/counts',
+      summary: `Counted quantities, each set against what the location holds at that moment; a book counted again replaces its count; a book found is added (${counter})`, tag,
+      request: { params: IdParamsSchema, body: EnterStockCountsRequestSchema }, responses: one('The count'), errors,
+    },
+    {
+      operationId: 'submitStockCount', method: 'post', path: '/stock-counts/{id}/submit',
+      summary: `Hand the count to review; the reviewers are told (${counter})`, tag,
+      request: { params: IdParamsSchema }, responses: one('The count, submitted'), errors,
+    },
+    {
+      operationId: 'recountStockCount', method: 'post', path: '/stock-counts/{id}/recount',
+      summary: `Send books back to be counted again (${reviewer})`, tag,
+      request: { params: IdParamsSchema, body: RecountRequestSchema }, responses: one('The count, counting again'), errors,
+    },
+    {
+      operationId: 'postStockCount', method: 'post', path: '/stock-counts/{id}/post',
+      summary: `Post one adjustment per difference at the average cost, reason "count", linked to the count; books never counted unchanged unless counted as 0 (${reviewer})`, tag,
+      request: { params: IdParamsSchema, body: PostStockCountRequestSchema }, responses: one('The count, posted'), errors,
+    },
+    {
+      operationId: 'cancelStockCount', method: 'post', path: '/stock-counts/{id}/cancel',
+      summary: `Cancel a count not yet posted, with a reason; nothing changes (${reviewer})`, tag,
+      request: { params: IdParamsSchema, body: CancelStockCountRequestSchema }, responses: one('The count, cancelled'), errors,
     },
   ];
 }

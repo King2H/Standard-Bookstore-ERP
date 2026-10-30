@@ -32,6 +32,7 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['SVC', 'service_jobs', 'job_number'],
   ['TRF', 'branch_transfers', 'transfer_number'],
   ['Z', 'cash_sessions', 'z_number'],
+  ['CNT', 'stock_counts', 'count_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -305,6 +306,20 @@ export const CHECKS: readonly Check[] = [
       FROM cash_sessions s LEFT JOIN m ON m.session_id = s.id
       WHERE s.status <> 'open'
         AND (s.expected_cash <> s.opening_float + COALESCE(m.net, 0) OR s.variance <> s.counted_cash - s.expected_cash)`,
+  },
+  {
+    id: 'stock-counts.posted-in-history',
+    area: 'Stock counts',
+    title: 'What a posted count changed is in the stock history',
+    severity: 'error',
+    sql: `
+      SELECT c.tenant_id, c.count_number || ': book ' || l.book_id || ' posted ' || l.posted_delta || ', history ' || COALESCE(h.delta, 0) AS ref
+      FROM stock_counts c
+      JOIN stock_count_lines l ON l.count_id = c.id
+      LEFT JOIN (
+        SELECT reference_id, book_id, SUM(delta) AS delta FROM inventory_history WHERE reference_type = 'stock_count' GROUP BY reference_id, book_id
+      ) h ON h.reference_id = c.id AND h.book_id = l.book_id
+      WHERE c.status = 'posted' AND COALESCE(l.posted_delta, 0) <> COALESCE(h.delta, 0)`,
   },
   {
     id: 'bank.matched-line-cleared',

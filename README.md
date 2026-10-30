@@ -728,6 +728,18 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   while open, the Z report once closed: totals by kind and method, and every movement. Admin, Manager and
   Finance_Officer see the branch's sessions; anyone else their own, without what is expected while it is open.
 
+### Stock counts (#172)
+- POST /api/v1/stock-counts — body `{ locationId, scope: 'full' | 'selected', bookIds?, notes? }`: a count of a location one
+  may use, every book it holds or the books named, numbered CNT-YYYYMMDD-NNNN; expected quantities frozen; one open count
+  per location (Admin, Manager, Stock_Clerk)
+- POST /api/v1/stock-counts/:id/counts — body `{ items: [{ bookId, quantity }] }`: each count is set against what the
+  location holds at that moment, so selling goes on and a sale during the count is no shortage; counting again replaces
+  the count (the earlier kept); a book found is added. Blind: a counter sees no expected quantity until it is posted
+- POST /api/v1/stock-counts/:id/submit, then for an Admin or Manager (APPROVE_STOCK_COUNT): `/recount` `{ bookIds }`,
+  `/post` `{ zeroBookIds? }` (one adjustment per difference at the average cost, reason "count", linked to the count;
+  books never counted unchanged unless counted as 0), `/cancel` `{ reason }`
+- GET /api/v1/stock-counts (`?status=&locationId=`) / GET /api/v1/stock-counts/:id — the differences and their value
+
 ### Suppliers
 - GET/POST /api/v1/suppliers / GET/PUT /api/v1/suppliers/:id
 - POST /api/v1/suppliers/:id/deactivate|blacklist / DELETE /api/v1/suppliers/:id

@@ -72,6 +72,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `CATEGORY_IN_USE`
 - `DEPENDENCY_CONFLICT`
 - `DUPLICATE_ACCOUNT_NUMBER`
+- `STOCK_COUNT_OPEN`
 - `DUPLICATE_AUTHOR`
 - `DUPLICATE_BRANCH_NAME`
 - `DUPLICATE_CATEGORY`
@@ -176,6 +177,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `SERVICE_REQUIRES_CUSTOMER`
 - `SETTLEMENT_UNBALANCED`
 - `STAFF_NOT_FOUND`
+- `STOCK_COUNT_INVALID_STATUS`
 - `STORE_CREDIT_REQUIRES_CUSTOMER`
 - `STORE_CREDIT_SPENT`
 - `SUPPLIER_BLACKLISTED`
