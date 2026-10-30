@@ -1,6 +1,13 @@
 import type { z } from 'zod';
 import {
   CancelStockCountRequestSchema,
+  CancelSupplierReturnRequestSchema,
+  CreateSupplierRefundRequestSchema,
+  CreateSupplierReturnRequestSchema,
+  SupplierReturnDetailSchema,
+  SupplierReturnListQuerySchema,
+  SupplierReturnListResponseSchema,
+  UpdateSupplierReturnRequestSchema,
   EnterStockCountsRequestSchema,
   OpenStockCountRequestSchema,
   PostStockCountRequestSchema,
@@ -305,6 +312,7 @@ export const operations: ApiOperation[] = [
   ...transferOperations(),
   ...cashSessionOperations(),
   ...stockCountOperations(),
+  ...supplierReturnOperations(),
   ...configOperations(),
   ...locationOperations(),
   ...customerOperations(),
@@ -1693,6 +1701,47 @@ function stockCountOperations(): ApiOperation[] {
   ];
 }
 
+function supplierReturnOperations(): ApiOperation[] {
+  const tag = 'Returns to supplier';
+  const buyers = 'Admin, Manager, Purchasor of the receiving branch';
+  const one = (description: string) => ({ 200: { description, schema: SupplierReturnDetailSchema } });
+  const errors = [400, 401, 403, 404, 422, 500];
+  return [
+    {
+      operationId: 'listSupplierReturns', method: 'get', path: '/supplier-returns',
+      summary: 'Returns of the session branch, sent from it or of its orders, newest first (#173)', tag,
+      request: { query: SupplierReturnListQuerySchema },
+      responses: { 200: { description: 'One page of returns', schema: SupplierReturnListResponseSchema } }, errors: [400, 401, 403, 500],
+    },
+    {
+      operationId: 'createSupplierReturn', method: 'post', path: '/supplier-returns',
+      summary: `Draft a return of an order's lines, numbered RTS-, at the order's price; each line from a location one may use, from stock or damaged copies, at most what arrived less what went back (${buyers})`, tag,
+      request: { body: CreateSupplierReturnRequestSchema },
+      responses: { 201: { description: 'The return, a draft', schema: SupplierReturnDetailSchema } }, errors,
+    },
+    {
+      operationId: 'getSupplierReturn', method: 'get', path: '/supplier-returns/{id}',
+      summary: 'A return with its lines; the ordering branch reads it too', tag,
+      request: { params: IdParamsSchema }, responses: one('The return'), errors: [400, 401, 403, 404, 500],
+    },
+    {
+      operationId: 'updateSupplierReturn', method: 'put', path: '/supplier-returns/{id}',
+      summary: `Replace a draft's lines, and its notes when given (${buyers})`, tag,
+      request: { params: IdParamsSchema, body: UpdateSupplierReturnRequestSchema }, responses: one('The return'), errors,
+    },
+    {
+      operationId: 'sendSupplierReturn', method: 'post', path: '/supplier-returns/{id}/send',
+      summary: 'Send a draft: the copies leave at their cost, linked to the return; a credit note at the order\'s price, beyond what the order owes a refund due (SEND_SUPPLIER_RETURN: Admin, Manager)', tag,
+      request: { params: IdParamsSchema }, responses: one('The return, sent'), errors,
+    },
+    {
+      operationId: 'cancelSupplierReturn', method: 'post', path: '/supplier-returns/{id}/cancel',
+      summary: `Cancel a draft, with a reason; nothing changes (${buyers})`, tag,
+      request: { params: IdParamsSchema, body: CancelSupplierReturnRequestSchema }, responses: one('The return, cancelled'), errors,
+    },
+  ];
+}
+
 function financialTransactionOperations(): ApiOperation[] {
   const tag = 'Financial transactions';
   return [
@@ -2533,6 +2582,16 @@ function supplierPayableOperations(): ApiOperation[] {
       tag,
       request: { params: IdParamsSchema, body: CreateSupplierCreditNoteRequestSchema },
       responses: { 201: { description: 'The order with the credit note', schema: PurchaseOrderSchema } },
+      errors: change,
+    },
+    {
+      operationId: 'recordSupplierRefund',
+      method: 'post',
+      path: '/purchase-orders/{id}/supplier-refunds',
+      summary: `Money the supplier paid back after a return, at most the refund due, numbered SREF-; a bank, mobile or cheque refund names its reference (${finance}, #173)`,
+      tag,
+      request: { params: IdParamsSchema, body: CreateSupplierRefundRequestSchema },
+      responses: { 201: { description: 'The order with the refund', schema: PurchaseOrderSchema } },
       errors: change,
     },
     {

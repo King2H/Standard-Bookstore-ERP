@@ -33,6 +33,8 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['TRF', 'branch_transfers', 'transfer_number'],
   ['Z', 'cash_sessions', 'z_number'],
   ['CNT', 'stock_counts', 'count_number'],
+  ['RTS', 'supplier_returns', 'return_number'],
+  ['SREF', 'supplier_refunds', 'refund_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -206,17 +208,74 @@ export const CHECKS: readonly Check[] = [
   {
     id: 'procurement.paid-within-total',
     area: 'Purchase orders',
+    // A return's credit note is outside the cap: the copies came back (#173).
     title: 'Payments and credit notes together are at most the ordered total',
     severity: 'error',
     sql: `
       WITH m AS (
         SELECT po.id, po.tenant_id, po.total_amount,
           COALESCE((SELECT SUM(amount) FROM supplier_payments p WHERE p.po_id = po.id AND p.reversed_at IS NULL), 0)
-          + COALESCE((SELECT SUM(amount) FROM supplier_credit_notes c WHERE c.po_id = po.id), 0) AS settled
+          + COALESCE((SELECT SUM(amount) FROM supplier_credit_notes c WHERE c.po_id = po.id
+              AND NOT EXISTS (SELECT 1 FROM supplier_returns r WHERE r.credit_note_id = c.id)), 0)
+          - COALESCE((SELECT SUM(amount) FROM supplier_refunds f WHERE f.po_id = po.id), 0) AS settled
         FROM purchase_orders po
       )
       SELECT tenant_id, 'purchase order ' || id || ': paid and credited ' || settled || ' of ' || total_amount AS ref
       FROM m WHERE settled > total_amount`,
+  },
+  {
+    id: 'procurement.refunds-within-due',
+    area: 'Purchase orders',
+    title: 'A supplier paid back at most what the order was paid and credited beyond its value',
+    severity: 'error',
+    // The value: the whole order while goods are still due, what arrived once nothing more is coming (#173).
+    sql: `
+      WITH m AS (
+        SELECT po.id, po.tenant_id,
+          COALESCE((SELECT SUM(amount) FROM supplier_refunds f WHERE f.po_id = po.id), 0) AS refunded,
+          COALESCE((SELECT SUM(amount) FROM supplier_payments p WHERE p.po_id = po.id AND p.reversed_at IS NULL), 0)
+          + COALESCE((SELECT SUM(amount) FROM supplier_credit_notes c WHERE c.po_id = po.id), 0)
+          - CASE WHEN po.status IN ('received', 'closed', 'cancelled')
+              THEN COALESCE((SELECT SUM(received_quantity * unit_cost) FROM po_line_items li WHERE li.po_id = po.id), 0)
+              ELSE po.total_amount END AS due
+        FROM purchase_orders po
+      )
+      SELECT tenant_id, 'purchase order ' || id || ': refunded ' || TO_CHAR(refunded, 'FM999999999990.00')
+        || ', due ' || TO_CHAR(GREATEST(due, 0), 'FM999999999990.00') AS ref
+      FROM m WHERE refunded > GREATEST(due, 0)`,
+  },
+
+  // ── Returns to supplier (#173) ───────────────────────────────────────────
+  {
+    id: 'supplier-returns.sent-in-history',
+    area: 'Returns to supplier',
+    title: 'What a sent return took from stock is in the stock history, and its credit note matches it',
+    severity: 'error',
+    sql: `
+      WITH m AS (
+        SELECT r.id, r.tenant_id, r.return_number,
+          (SELECT COALESCE(SUM(quantity), 0) FROM supplier_return_lines l WHERE l.return_id = r.id AND l.source = 'stock') AS from_stock,
+          (SELECT COALESCE(-SUM(h.delta), 0) FROM inventory_history h WHERE h.reference_type = 'supplier_return' AND h.reference_id = r.id) AS history,
+          (SELECT COALESCE(ROUND(SUM(quantity * unit_credit), 2), 0) FROM supplier_return_lines l WHERE l.return_id = r.id) AS credit,
+          COALESCE((SELECT amount FROM supplier_credit_notes c WHERE c.id = r.credit_note_id), 0) AS noted
+        FROM supplier_returns r WHERE r.status = 'sent'
+      )
+      SELECT tenant_id, return_number || ': ' || from_stock || ' sent from stock, history ' || history
+        || '; credit ' || TO_CHAR(credit, 'FM999999999990.00') || ', credit note ' || TO_CHAR(noted, 'FM999999999990.00') AS ref
+      FROM m WHERE from_stock <> history OR credit <> noted`,
+  },
+  {
+    id: 'supplier-returns.within-received',
+    area: 'Returns to supplier',
+    title: 'Copies sent back are at most what arrived',
+    severity: 'error',
+    sql: `
+      SELECT li.tenant_id, 'purchase order line ' || li.id || ': ' || SUM(l.quantity) || ' sent back of ' || li.received_quantity || ' received' AS ref
+      FROM po_line_items li
+      JOIN supplier_return_lines l ON l.po_line_item_id = li.id
+      JOIN supplier_returns r ON r.id = l.return_id AND r.status = 'sent'
+      GROUP BY li.tenant_id, li.id, li.received_quantity
+      HAVING SUM(l.quantity) > li.received_quantity`,
   },
 
   // ── Transfers between branches (#170) ─────────────────────────────────────

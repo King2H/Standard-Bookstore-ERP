@@ -37,6 +37,15 @@ export function checkWithinOrderTotal(orderTotal: Money, settled: Money, amount:
   }
 }
 
+/** A supplier pays back at most what it owes back (#173, decision 4a). */
+export function checkWithinRefundDue(due: Money, amount: Money): void {
+  if (amount.greaterThan(due)) {
+    throw new BusinessError('REFUND_EXCEEDS_DUE', `The supplier owes back ETB ${due.toFixed()}, less than ETB ${amount.toFixed()}`, {
+      refundDue: due.toNumber(), requested: amount.toNumber(),
+    });
+  }
+}
+
 /** A payment is reversed once (owner decision 1a). */
 export function checkCanReverse(payment: { reversedAt: Date | null }): void {
   if (payment.reversedAt !== null) throw new BusinessError('ALREADY_REVERSED', 'This payment was already reversed');
@@ -45,7 +54,7 @@ export function checkCanReverse(payment: { reversedAt: Date | null }): void {
 export interface LedgerEvent {
   /** YYYY-MM-DD in the database's calendar. */
   day: string;
-  type: 'PO' | 'GOODS_RECEIPT' | 'PAYMENT' | 'PAYMENT_REVERSAL' | 'CREDIT_NOTE';
+  type: 'PO' | 'GOODS_RECEIPT' | 'PAYMENT' | 'PAYMENT_REVERSAL' | 'CREDIT_NOTE' | 'SUPPLIER_REFUND';
   reference: string;
   description: string;
   /** + adds to what is owed; − settles it. */

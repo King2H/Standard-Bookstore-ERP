@@ -26,6 +26,8 @@ router.post(
   payables.reversePayment,
 );
 router.post('/purchase-orders/:id/credit-notes', authenticate, inBranch, finance, validate(schemas.creditNote), payables.recordCreditNote);
+// Money a supplier pays back after a return (#173, decision 4a).
+router.post('/purchase-orders/:id/supplier-refunds', authenticate, inBranch, finance, validate(schemas.refund), payables.recordRefund);
 router.get('/suppliers/:id/ledger', authenticate, ledgerReaders, validate(schemas.ledger), payables.ledger);
 router.get('/suppliers/:id/ledger/export', authenticate, ledgerReaders, validate(schemas.ledger), payables.exportLedger);
 

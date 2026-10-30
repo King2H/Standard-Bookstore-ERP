@@ -42,12 +42,15 @@ export interface PurchaseOrderRecord {
   receivedValue: Money;
   amountPaid: Money;
   creditNotesTotal: Money;
+  /** Money the supplier paid back (#173). */
+  refundsTotal: Money;
   orderedQuantityTotal: number;
   receivedQuantityTotal: number;
   lineItems?: LineRecord[];
   receipts?: ReceiptRecord[];
   payments?: SupplierPaymentRecord[];
   creditNotes?: CreditNoteRecord[];
+  supplierRefunds?: SupplierRefundRecord[];
 }
 
 /** An order as the API answers it: with the approval threshold now in force. */
@@ -64,6 +67,8 @@ export interface LineRecord {
   quantity: number;
   unitCost: Money;
   receivedQuantity: number;
+  /** Sent back to the supplier (#173). */
+  returnedQuantity: number;
 }
 
 export interface ReceiptRecord {
@@ -176,4 +181,18 @@ export interface BookToOrder {
   title: string;
   isbn: string | null;
   stock: LocationStock[];
+}
+
+/** Money a supplier paid back (#173, decision 4a). */
+export interface SupplierRefundRecord {
+  id: number;
+  refundNumber: string;
+  poId: string;
+  amount: Money;
+  method: 'cash' | 'bank' | 'mobile' | 'cheque';
+  reference: string | null;
+  bankAccountId: number | null;
+  notes: string | null;
+  createdBy: number;
+  createdAt: Date;
 }

@@ -36,7 +36,7 @@ function order(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     receivingLocationName: null, financialStatus: 'partial', paymentTerms: 'credit', createdBy: 3, approvedBy: 4,
     approvedAt: CREATED, approvalKind: 'approver', approvalReason: null, approvalThreshold: 1000,
     closedReason: null, closedBy: null, closedAt: null, createdAt: CREATED, updatedAt: CREATED,
-    receivedValue: 200, amountPaid: 150, creditNotesTotal: 0, outstandingAmount: 50, orderedQuantityTotal: 10, receivedQuantityTotal: 10,
+    receivedValue: 200, amountPaid: 150, creditNotesTotal: 0, refundsTotal: 0, refundDue: 0, outstandingAmount: 50, orderedQuantityTotal: 10, receivedQuantityTotal: 10,
     lineItems: [], receipts: [], creditNotes: [],
     payments: [{ id: '9', paymentNumber: 'SPAY-20261010-0003', poId: '42', amount: 150, paymentMethod: 'cash', bankAccountId: null,
       source: 'manual', notes: null, createdBy: 3, createdAt: CREATED, reversedAt: null, reversedBy: null, reversalReason: null }],

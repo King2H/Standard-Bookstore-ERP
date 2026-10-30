@@ -34,7 +34,9 @@ export type BankSourceType =
   | 'return_refund'
   | 'exchange_payment'
   | 'exchange_void'
-  | 'supplier_payment';
+  | 'supplier_payment'
+  // Money a supplier pays back after a return (#173).
+  | 'supplier_refund';
 
 /** A bank movement the system recorded (bank_reconciliation). */
 export interface BankEntryRecord {

@@ -740,6 +740,19 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   books never counted unchanged unless counted as 0), `/cancel` `{ reason }`
 - GET /api/v1/stock-counts (`?status=&locationId=`) / GET /api/v1/stock-counts/:id — the differences and their value
 
+### Returns to supplier (#173)
+- POST /api/v1/supplier-returns — body `{ poId, notes?, lines: [{ poLineItemId, locationId, source: 'stock' | 'damaged',
+  quantity }] }`: a draft numbered RTS-YYYYMMDD-NNNN, at the order's price, each line at most what arrived less what
+  already went back, from a location one may use (Admin, Manager, Purchasor of the receiving branch); PUT /:id replaces
+  a draft's lines, POST /:id/cancel `{ reason }` cancels it
+- POST /api/v1/supplier-returns/:id/send (SEND_SUPPLIER_RETURN: Admin, Manager): the copies leave at their cost (stock
+  at the average cost, damaged copies with their share of the damaged value), linked to the return; a credit note at
+  the order's price; the difference is the return's gain or loss
+- POST /api/v1/purchase-orders/:id/supplier-refunds — body `{ amount, method, reference?, notes?, bankAccountId? }`:
+  money the supplier paid back, at most the order's refund due, numbered SREF- (Admin, Manager, Finance_Officer of
+  the ordering branch)
+- GET /api/v1/supplier-returns (`?status=&poId=`) / GET /api/v1/supplier-returns/:id
+
 ### Suppliers
 - GET/POST /api/v1/suppliers / GET/PUT /api/v1/suppliers/:id
 - POST /api/v1/suppliers/:id/deactivate|blacklist / DELETE /api/v1/suppliers/:id

@@ -48,9 +48,9 @@ function order(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     receivingLocationName: null, financialStatus: 'unpaid', paymentTerms: 'credit', createdBy: 3, approvedBy: null,
     approvedAt: null, approvalKind: null, approvalReason: null, approvalThreshold: 1000,
     closedReason: null, closedBy: null, closedAt: null, createdAt: CREATED, updatedAt: CREATED,
-    receivedValue: 0, amountPaid: 0, creditNotesTotal: 0, outstandingAmount: 0, orderedQuantityTotal: 10, receivedQuantityTotal: 0,
+    receivedValue: 0, amountPaid: 0, creditNotesTotal: 0, refundsTotal: 0, refundDue: 0, outstandingAmount: 0, orderedQuantityTotal: 10, receivedQuantityTotal: 0,
     lineItems: [{ id: '501', poId: '42', bookId: 1, bookTitle: 'Animal Farm', bookIsbn: '9780306406101', formatId: null, editionId: null,
-      quantity: 10, unitCost: 12, receivedQuantity: 0, remaining: 10 }],
+      quantity: 10, unitCost: 12, receivedQuantity: 0, returnedQuantity: 0, remaining: 10 }],
     receipts: [], payments: [], creditNotes: [],
     ...over,
   });

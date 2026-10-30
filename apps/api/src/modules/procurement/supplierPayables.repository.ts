@@ -51,6 +51,32 @@ export async function insertCreditNote(
   return String(row.id);
 }
 
+export async function insertRefund(
+  q: Queryable,
+  r: {
+    refundNumber: string; poId: string; branchId: number; supplierId: number; amount: Money; method: string;
+    reference: string | null; bankAccountId: number | null; notes: string | null; createdBy: number;
+  },
+): Promise<number> {
+  const row = await q
+    .insertInto('supplier_refunds')
+    .values({
+      refund_number: r.refundNumber,
+      po_id: r.poId,
+      branch_id: r.branchId,
+      supplier_id: r.supplierId,
+      amount: r.amount.toFixed(2),
+      refund_method: r.method,
+      reference: r.reference,
+      bank_account_id: r.bankAccountId,
+      notes: r.notes,
+      created_by: r.createdBy,
+    })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return row.id;
+}
+
 export async function supplierExists(q: Queryable, supplierId: number): Promise<boolean> {
   const row = await q.selectFrom('suppliers').select('id').where('id', '=', supplierId).executeTakeFirst();
   return row !== undefined;
@@ -97,6 +123,10 @@ export async function ledgerEvents(q: Queryable, supplierId: number, branchId: n
       SELECT cn.created_at, 5, cn.id, 'CREDIT_NOTE', o.po_number || ' / ' || COALESCE(cn.credit_note_number, 'SCN-' || cn.id),
              cn.reason, -cn.amount
       FROM supplier_credit_notes cn JOIN orders o ON o.id = cn.po_id
+      UNION ALL
+      SELECT sr.created_at, 6, sr.id, 'SUPPLIER_REFUND', o.po_number || ' / ' || sr.refund_number,
+             'Refund from the supplier (' || sr.refund_method || ')', sr.amount
+      FROM supplier_refunds sr JOIN orders o ON o.id = sr.po_id
     )
     SELECT TO_CHAR(at, 'YYYY-MM-DD') AS day, type, reference, description, amount::text AS amount
     FROM events

@@ -71,14 +71,15 @@ async function approvalThreshold(): Promise<Money> {
 
 export async function getById(id: string): Promise<PurchaseOrderView> {
   const po = found(await orders.findOrder(kysely, id));
-  const [lineItems, receipts, payments, creditNotes, threshold] = await Promise.all([
+  const [lineItems, receipts, payments, creditNotes, supplierRefunds, threshold] = await Promise.all([
     orders.lineItems(kysely, id),
     orders.receipts(kysely, id),
     orders.payments(kysely, id),
     orders.creditNotes(kysely, id),
+    orders.supplierRefunds(kysely, id),
     approvalThreshold(),
   ]);
-  return { ...po, lineItems, receipts, payments, creditNotes, approvalThreshold: threshold };
+  return { ...po, lineItems, receipts, payments, creditNotes, supplierRefunds, approvalThreshold: threshold };
 }
 
 export async function list(filter: PurchaseOrderFilter, paging: Paging): Promise<{ items: PurchaseOrderView[]; total: number }> {

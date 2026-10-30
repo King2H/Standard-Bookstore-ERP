@@ -26,6 +26,8 @@ export const PurchaseOrderLineSchema = z.object({
   quantity: z.number().int(),
   unitCost: z.number(),
   receivedQuantity: z.number().int(),
+  /** Sent back to the supplier (#173). */
+  returnedQuantity: z.number().int(),
   /** Still expected: nothing once the order is closed or cancelled. */
   remaining: z.number().int(),
 });
@@ -85,6 +87,21 @@ export const SupplierCreditNoteSchema = z.object({
   createdAt: z.string(),
 });
 
+export const SupplierRefundSchema = z.object({
+  id: z.number().int(),
+  /** SREF-YYYYMMDD-NNNN. */
+  refundNumber: z.string(),
+  poId: z.string(),
+  amount: z.number(),
+  method: SupplierPaymentMethodSchema,
+  reference: z.string().nullable(),
+  bankAccountId: z.number().int().nullable(),
+  notes: z.string().nullable(),
+  createdBy: z.number().int(),
+  createdAt: z.string(),
+});
+export type SupplierRefund = z.infer<typeof SupplierRefundSchema>;
+
 export const PurchaseOrderApprovalKindSchema = z.enum(['automatic', 'approver', 'creator', 'sole_approver']);
 export type PurchaseOrderApprovalKind = z.infer<typeof PurchaseOrderApprovalKindSchema>;
 
@@ -135,8 +152,12 @@ export const PurchaseOrderSchema = z.object({
   receivedValue: z.number(),
   amountPaid: z.number(),
   creditNotesTotal: z.number(),
-  /** receivedValue − amountPaid − creditNotesTotal; below zero is an advance. */
+  /** Money the supplier paid back (#173). */
+  refundsTotal: z.number(),
+  /** receivedValue − amountPaid − creditNotesTotal + refundsTotal; below zero is an advance or a refund due. */
   outstandingAmount: z.number(),
+  /** What the supplier owes back once paid and credited beyond what arrived (#173, decision 4a). */
+  refundDue: z.number(),
   orderedQuantityTotal: z.number().int(),
   receivedQuantityTotal: z.number().int(),
   /** On a single order only. */
@@ -144,6 +165,7 @@ export const PurchaseOrderSchema = z.object({
   receipts: z.array(PurchaseOrderReceiptSchema).optional(),
   payments: z.array(SupplierPaymentSchema).optional(),
   creditNotes: z.array(SupplierCreditNoteSchema).optional(),
+  supplierRefunds: z.array(SupplierRefundSchema).optional(),
 });
 export type PurchaseOrder = z.infer<typeof PurchaseOrderSchema>;
 
@@ -311,6 +333,28 @@ export const CreateSupplierCreditNoteRequestSchema = z.object({
 });
 export type CreateSupplierCreditNoteRequest = z.infer<typeof CreateSupplierCreditNoteRequestSchema>;
 
+/**
+ * Money a supplier pays back (decision 4a), at most the refund due. A bank,
+ * mobile or cheque refund names its reference.
+ */
+export const CreateSupplierRefundRequestSchema = z
+  .object({
+    amount: MoneyInputSchema.refine((v) => Number(v) > 0, 'Must be more than zero').refine(
+      (v) => /^\d+(\.\d{1,2})?$/.test(String(v)),
+      'At most two decimals',
+    ),
+    method: SupplierPaymentMethodSchema,
+    reference: z.string().trim().min(1).max(100).nullable().optional(),
+    notes: z.string().trim().max(1000).nullable().optional(),
+    /** A bank refund's account; required while bank accounts are on (#21). */
+    bankAccountId: z.number().int().positive().nullable().optional(),
+  })
+  .refine((r) => r.method === 'cash' || !!r.reference, {
+    message: 'A bank, mobile or cheque refund names its reference',
+    path: ['reference'],
+  });
+export type CreateSupplierRefundRequest = z.infer<typeof CreateSupplierRefundRequestSchema>;
+
 export const SupplierLedgerQuerySchema = z.object({
   /** From this day on, in the database's calendar. */
   dateFrom: DateOnlySchema.optional(),
@@ -324,10 +368,10 @@ export type SupplierLedgerQuery = z.infer<typeof SupplierLedgerQuerySchema>;
 export const SupplierLedgerEntrySchema = z.object({
   /** YYYY-MM-DD, in the database's calendar. */
   date: z.string(),
-  type: z.enum(['PO', 'GOODS_RECEIPT', 'PAYMENT', 'PAYMENT_REVERSAL', 'CREDIT_NOTE']),
+  type: z.enum(['PO', 'GOODS_RECEIPT', 'PAYMENT', 'PAYMENT_REVERSAL', 'CREDIT_NOTE', 'SUPPLIER_REFUND']),
   reference: z.string(),
   description: z.string(),
-  /** + adds to what is owed (goods received, a reversed payment); − settles it. */
+  /** + adds to what is owed (goods received, a reversed payment, a supplier's refund); − settles it. */
   amount: z.number(),
   /** What is owed after this entry; below zero is an advance. */
   balance: z.number(),
