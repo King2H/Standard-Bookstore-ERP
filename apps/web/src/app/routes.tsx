@@ -44,7 +44,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'bank-accounts'&& <BankAccountsPage />}
         {page === 'locations'    && <LocationsPage />}
         {page === 'catalog'      && <CatalogPage />}
-        {page === 'inventory'    && <InventoryPage initialContext={initialContext} />}
+        {page === 'inventory'    && <InventoryPage initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'suppliers'    && <SuppliersPage userRole={role} userPermissions={userPermissions} />}
         {page === 'procurement'  && <ProcurementPage initialContext={initialContext} />}
         {page === 'customers'    && <CustomersPage />}

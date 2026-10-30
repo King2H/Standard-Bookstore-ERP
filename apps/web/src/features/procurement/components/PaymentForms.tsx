@@ -26,8 +26,8 @@ function amountSchema(room: Money) {
 export function PaymentForms({ po }: { po: PurchaseOrder }) {
   const { showToast } = useToast();
   const { pay, credit } = useSupplierPayables(po.id);
-  // Payments and credit notes together stay within what was ordered.
-  const room = Money.max(0, Money.of(po.totalAmount).minus(po.amountPaid).minus(po.creditNotesTotal));
+  // Payments and credit notes together stay within what was ordered; what the supplier paid back counts no more (#173).
+  const room = Money.max(0, Money.of(po.totalAmount).minus(po.amountPaid).minus(po.creditNotesTotal).plus(po.refundsTotal));
   const [method, setMethod] = useState<'cash' | 'bank' | 'mobile' | 'cheque'>('cash');
   const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   // The ordering branch pays; with Bank Accounts on, a bank payment names its account (#21).

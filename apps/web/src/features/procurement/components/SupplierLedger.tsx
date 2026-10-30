@@ -11,6 +11,7 @@ const TYPE_COLORS: Record<string, string> = {
   PAYMENT: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
   PAYMENT_REVERSAL: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
   CREDIT_NOTE: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+  SUPPLIER_REFUND: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
 };
 
 const DATE = 'border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';

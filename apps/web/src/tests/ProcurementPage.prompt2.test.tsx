@@ -33,6 +33,8 @@ const LISTED_PO = {
   receivedValue: 100,
   amountPaid: 60,
   creditNotesTotal: 0,
+  refundsTotal: 0,
+  refundDue: 0,
   outstandingAmount: 40,
   orderedQuantityTotal: 10,
   receivedQuantityTotal: 5,

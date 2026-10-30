@@ -20,7 +20,10 @@ type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'move' | 'outgoing' |
 const opensOn = (tab: string | undefined): Tab => (tab === 'outgoing' || tab === 'incoming' || tab === 'counts' ? tab : 'stock');
 
 /** Stock per book and location, its changes and its history (#23). */
-export default function InventoryPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
+export default function InventoryPage({ initialContext = {}, onNavigate }: {
+  initialContext?: Record<string, string>;
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}) {
   const { data: me } = useMyProfile();
   const [tab, setTab] = useState<Tab>(opensOn(initialContext.tab));
   const transferId = Number(initialContext.transferId) || null;
@@ -63,7 +66,7 @@ export default function InventoryPage({ initialContext = {} }: { initialContext?
         {tab === 'outgoing'  && canTransfer(me) && <TransfersTab key="outgoing" direction="outgoing" initialTransferId={opensOn(initialContext.tab) === 'outgoing' ? transferId : null} />}
         {tab === 'incoming'  && canTransfer(me) && <TransfersTab key="incoming" direction="incoming" initialTransferId={opensOn(initialContext.tab) === 'incoming' ? transferId : null} />}
         {tab === 'counts'    && canCount(me) && <CountsTab initialCountId={opensOn(initialContext.tab) === 'counts' ? Number(initialContext.countId) || null : null} onOpenHistory={() => open('history')} />}
-        {tab === 'history'   && <HistoryTab />}
+        {tab === 'history'   && <HistoryTab onOpenReturn={onNavigate && ((id) => onNavigate('procurement', { returnId: id }))} />}
         {tab === 'alerts'    && <LowStockTab />}
       </div>
     </div>

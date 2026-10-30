@@ -1,9 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest, CreateSupplierPaymentRequest, ReceivePurchaseOrderRequest } from '@bms/shared';
+import type {
+  CreatePurchaseOrderRequest, CreateSupplierCreditNoteRequest, CreateSupplierPaymentRequest, CreateSupplierRefundRequest, ReceivePurchaseOrderRequest,
+} from '@bms/shared';
 import { inventoryKeys } from '../inventory/queries.js';
 import {
   approvePurchaseOrder, closePurchaseOrder, createPurchaseOrder, getPurchaseOrder, getSupplierLedger, listPurchaseOrders, receivePurchaseOrder,
-  recordSupplierCreditNote, recordSupplierPayment, reverseSupplierPayment, runPurchaseOrderAction, updatePurchaseOrder,
+  recordSupplierCreditNote, recordSupplierPayment, recordSupplierRefund, reverseSupplierPayment, runPurchaseOrderAction, updatePurchaseOrder,
   type PurchaseOrderAction, type PurchaseOrderListParams, type SupplierLedgerParams,
 } from './api.js';
 
@@ -83,7 +85,7 @@ export function useSupplierLedger(supplierId: number, params: SupplierLedgerPara
   });
 }
 
-/** Payments, their reversal and credit notes on one order. */
+/** Payments, their reversal, credit notes and the supplier's refunds on one order. */
 export function useSupplierPayables(id: string) {
   const refresh = useRefreshPurchaseOrders();
   return {
@@ -93,5 +95,6 @@ export function useSupplierPayables(id: string) {
       onSuccess: refresh,
     }),
     credit: useMutation({ mutationFn: (body: CreateSupplierCreditNoteRequest) => recordSupplierCreditNote(id, body), onSuccess: refresh }),
+    refund: useMutation({ mutationFn: (body: CreateSupplierRefundRequest) => recordSupplierRefund(id, body), onSuccess: refresh }),
   };
 }
