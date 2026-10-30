@@ -10,6 +10,7 @@ import type {
   PurchaseOrderView,
   ReceiptRecord,
   SupplierPaymentRecord,
+  SupplierRefundRecord,
 } from './procurement.types.js';
 
 /** The columns procurement.repository selects for an order. */
@@ -41,6 +42,7 @@ export interface PurchaseOrderRow {
   received_value: string;
   amount_paid: string;
   credit_notes_total: string;
+  refunds_total: string;
   ordered_quantity_total: string | number;
   received_quantity_total: string | number;
 }
@@ -75,9 +77,30 @@ export function toPurchaseOrderRecord(row: PurchaseOrderRow): PurchaseOrderRecor
     receivedValue: Money.of(row.received_value),
     amountPaid: Money.of(row.amount_paid),
     creditNotesTotal: Money.of(row.credit_notes_total),
+    refundsTotal: Money.of(row.refunds_total),
     orderedQuantityTotal: Number(row.ordered_quantity_total),
     receivedQuantityTotal: Number(row.received_quantity_total),
   };
+}
+
+/**
+ * What the order owes the supplier: what arrived, less paid and credited,
+ * plus what the supplier paid back. Below zero the supplier holds our money:
+ * an advance while goods are still due, or a refund due (#173, decision 4a).
+ */
+export function outstandingOf(po: Pick<PurchaseOrderRecord, 'receivedValue' | 'amountPaid' | 'creditNotesTotal' | 'refundsTotal'>): Money {
+  return po.receivedValue.minus(po.amountPaid).minus(po.creditNotesTotal).plus(po.refundsTotal);
+}
+
+/**
+ * The supplier owes money back once paid and credited beyond the whole
+ * order, or beyond what arrived when nothing more is coming.
+ */
+export function refundDueOf(po: PurchaseOrderRecord): Money {
+  const settled = po.amountPaid.plus(po.creditNotesTotal).minus(po.refundsTotal);
+  const ceiling = po.status === 'closed' || po.status === 'cancelled' || po.status === 'received' ? po.receivedValue : po.totalAmount;
+  const due = settled.minus(ceiling);
+  return due.isNegative() ? Money.ZERO : due;
 }
 
 /** PO-000123: the number staff and suppliers see. */
@@ -92,7 +115,7 @@ export function remainingOf(status: PurchaseOrderStatus, line: Pick<LineRecord, 
 }
 
 export function toPurchaseOrderResponse(po: PurchaseOrderView): PurchaseOrder {
-  const { lineItems, receipts, payments, creditNotes, ...head } = po;
+  const { lineItems, receipts, payments, creditNotes, supplierRefunds, ...head } = po;
   return {
     ...head,
     poNumber: poNumber(po.id),
@@ -105,7 +128,9 @@ export function toPurchaseOrderResponse(po: PurchaseOrderView): PurchaseOrder {
     receivedValue: po.receivedValue.toNumber(),
     amountPaid: po.amountPaid.toNumber(),
     creditNotesTotal: po.creditNotesTotal.toNumber(),
-    outstandingAmount: po.receivedValue.minus(po.amountPaid).minus(po.creditNotesTotal).toNumber(),
+    refundsTotal: po.refundsTotal.toNumber(),
+    outstandingAmount: outstandingOf(po).toNumber(),
+    refundDue: refundDueOf(po).toNumber(),
     ...(lineItems && {
       lineItems: lineItems.map((l) => ({ ...l, unitCost: l.unitCost.toNumber(), remaining: remainingOf(po.status, l) })),
     }),
@@ -120,6 +145,9 @@ export function toPurchaseOrderResponse(po: PurchaseOrderView): PurchaseOrder {
     }),
     ...(creditNotes && {
       creditNotes: creditNotes.map((c: CreditNoteRecord) => ({ ...c, amount: c.amount.toNumber(), createdAt: c.createdAt.toISOString() })),
+    }),
+    ...(supplierRefunds && {
+      supplierRefunds: supplierRefunds.map((r: SupplierRefundRecord) => ({ ...r, amount: r.amount.toNumber(), createdAt: r.createdAt.toISOString() })),
     }),
   };
 }

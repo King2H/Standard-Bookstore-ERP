@@ -16,6 +16,7 @@ import type {
   PurchaseOrderStatus,
   ReceiptRecord,
   SupplierPaymentRecord,
+  SupplierRefundRecord,
 } from './procurement.types.js';
 
 // Purchase orders belong to their ordering and their receiving branch (#12):
@@ -57,6 +58,7 @@ function selectOrders(q: Queryable) {
       sql<string>`COALESCE((SELECT SUM(li.received_quantity * li.unit_cost) FROM po_line_items li WHERE li.po_id = po.id), 0)`.as('received_value'),
       sql<string>`COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id AND sp.reversed_at IS NULL), 0)`.as('amount_paid'),
       sql<string>`COALESCE((SELECT SUM(cn.amount) FROM supplier_credit_notes cn WHERE cn.po_id = po.id), 0)`.as('credit_notes_total'),
+      sql<string>`COALESCE((SELECT SUM(sr.amount) FROM supplier_refunds sr WHERE sr.po_id = po.id), 0)`.as('refunds_total'),
       sql<string>`COALESCE((SELECT SUM(li.quantity) FROM po_line_items li WHERE li.po_id = po.id), 0)`.as('ordered_quantity_total'),
       sql<string>`COALESCE((SELECT SUM(li.received_quantity) FROM po_line_items li WHERE li.po_id = po.id), 0)`.as('received_quantity_total'),
     ]);
@@ -109,6 +111,8 @@ export async function lineItems(q: Queryable, poId: string): Promise<LineRecord[
       'li.quantity',
       'li.unit_cost',
       'li.received_quantity',
+      sql<string>`COALESCE((SELECT SUM(rl.quantity) FROM supplier_return_lines rl JOIN supplier_returns r ON r.id = rl.return_id
+        WHERE rl.po_line_item_id = li.id AND r.status = 'sent'), 0)`.as('returned_quantity'),
     ])
     .where('li.po_id', '=', poId)
     .orderBy('li.id')
@@ -124,6 +128,7 @@ export async function lineItems(q: Queryable, poId: string): Promise<LineRecord[
     quantity: r.quantity,
     unitCost: Money.of(r.unit_cost),
     receivedQuantity: r.received_quantity,
+    returnedQuantity: Number(r.returned_quantity),
   }));
 }
 
@@ -221,6 +226,28 @@ export async function creditNotes(q: Queryable, poId: string): Promise<CreditNot
     supplierId: r.supplier_id,
     amount: Money.of(r.amount),
     reason: r.reason,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function supplierRefunds(q: Queryable, poId: string): Promise<SupplierRefundRecord[]> {
+  const rows = await q
+    .selectFrom('supplier_refunds')
+    .select(['id', 'refund_number', 'po_id', 'amount', 'refund_method', 'reference', 'bank_account_id', 'notes', 'created_by', 'created_at'])
+    .where('po_id', '=', poId)
+    .orderBy('created_at')
+    .orderBy('id')
+    .execute();
+  return rows.map((r) => ({
+    id: r.id,
+    refundNumber: r.refund_number,
+    poId: String(r.po_id),
+    amount: Money.of(r.amount),
+    method: r.refund_method as SupplierRefundRecord['method'],
+    reference: r.reference,
+    bankAccountId: r.bank_account_id,
+    notes: r.notes,
     createdBy: r.created_by,
     createdAt: r.created_at,
   }));
@@ -461,7 +488,8 @@ export async function settlement(q: Queryable, poId: string): Promise<{ received
     SELECT
       COALESCE((SELECT SUM(received_quantity * unit_cost) FROM po_line_items WHERE po_id = ${poId}), 0) AS received,
       COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE po_id = ${poId} AND reversed_at IS NULL), 0)
-        + COALESCE((SELECT SUM(amount) FROM supplier_credit_notes WHERE po_id = ${poId}), 0) AS settled`.execute(q);
+        + COALESCE((SELECT SUM(amount) FROM supplier_credit_notes WHERE po_id = ${poId}), 0)
+        - COALESCE((SELECT SUM(amount) FROM supplier_refunds WHERE po_id = ${poId}), 0) AS settled`.execute(q);
   return { received: Money.of(rows[0].received), settled: Money.of(rows[0].settled) };
 }
 

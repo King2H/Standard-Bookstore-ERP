@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   CreateSupplierCreditNoteRequestSchema,
   CreateSupplierPaymentRequestSchema,
+  CreateSupplierRefundRequestSchema,
   IdParamsSchema,
   Money,
   ReverseSupplierPaymentRequestSchema,
@@ -26,6 +27,7 @@ export const schemas = {
   payment: { params: IdParamsSchema, body: CreateSupplierPaymentRequestSchema },
   reverse: { params: SupplierPaymentParamsSchema, body: ReverseSupplierPaymentRequestSchema },
   creditNote: { params: IdParamsSchema, body: CreateSupplierCreditNoteRequestSchema },
+  refund: { params: IdParamsSchema, body: CreateSupplierRefundRequestSchema },
   ledger: { params: IdParamsSchema, query: SupplierLedgerQuerySchema },
 };
 
@@ -54,6 +56,18 @@ export async function recordPayment(req: Request, res: Response): Promise<void> 
 export async function reversePayment(req: Request, res: Response): Promise<void> {
   const { params, body } = valid(req, schemas.reverse);
   send(res, await service.reversePayment(actor(req), String(params.id), params.paymentId, body.reason));
+}
+
+export async function recordRefund(req: Request, res: Response): Promise<void> {
+  const { params, body } = valid(req, schemas.refund);
+  const record = await service.recordRefund(actor(req), String(params.id), {
+    amount: Money.of(body.amount),
+    method: body.method,
+    reference: body.reference ?? null,
+    notes: body.notes ?? null,
+    bankAccountId: body.bankAccountId ?? null,
+  });
+  send(res, record, 201);
 }
 
 export async function recordCreditNote(req: Request, res: Response): Promise<void> {

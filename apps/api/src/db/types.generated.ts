@@ -1030,6 +1030,54 @@ export interface SupplierPayments {
   tenant_id: Generated<number>;
 }
 
+export interface SupplierRefunds {
+  amount: Numeric;
+  bank_account_id: number | null;
+  branch_id: number;
+  created_at: Generated<Timestamp>;
+  created_by: number;
+  id: Generated<number>;
+  notes: string | null;
+  po_id: Int8;
+  reference: string | null;
+  refund_method: string;
+  refund_number: string;
+  supplier_id: number;
+  tenant_id: Generated<number>;
+}
+
+export interface SupplierReturnLines {
+  book_id: number;
+  id: Generated<number>;
+  location_id: number;
+  po_line_item_id: Int8;
+  quantity: number;
+  return_id: number;
+  source: string;
+  tenant_id: Generated<number>;
+  unit_cost: Numeric | null;
+  unit_credit: Numeric;
+}
+
+export interface SupplierReturns {
+  branch_id: number;
+  cancel_reason: string | null;
+  cancelled_at: Timestamp | null;
+  cancelled_by: number | null;
+  created_at: Generated<Timestamp>;
+  created_by: number;
+  credit_note_id: number | null;
+  id: Generated<number>;
+  notes: string | null;
+  po_id: Int8;
+  return_number: string;
+  sent_at: Timestamp | null;
+  sent_by: number | null;
+  status: Generated<string>;
+  supplier_id: number;
+  tenant_id: Generated<number>;
+}
+
 export interface Suppliers {
   archived_at: Timestamp | null;
   archived_by: number | null;
@@ -1187,6 +1235,9 @@ export interface DB {
   store_credit_history: StoreCreditHistory;
   supplier_credit_notes: SupplierCreditNotes;
   supplier_payments: SupplierPayments;
+  supplier_refunds: SupplierRefunds;
+  supplier_return_lines: SupplierReturnLines;
+  supplier_returns: SupplierReturns;
   suppliers: Suppliers;
   system_config: SystemConfig;
   tenants: Tenants;

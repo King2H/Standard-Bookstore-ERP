@@ -472,7 +472,49 @@ export async function moveStock(
  * zero, whatever the branch allows for sales. The average there stays.
  */
 export async function sendStock(tx: Queryable, sending: StockSending): Promise<{ unitCost: Money }> {
-  const { bookId, locationId, quantity } = sending;
+  return takeOutAtCost(tx, sending, {
+    movementType: 'transfer_out', reasonCode: 'transfer_out', referenceType: 'branch_transfer', referenceId: sending.transferId,
+    notes: sending.notes ?? null, staffId: sending.staffCtx.staffId,
+  });
+}
+
+/**
+ * Copies going back to a supplier (#173, decision 3a): from stock for sale at
+ * the average cost, never below zero, or from damaged copies with their share
+ * of the damaged value. Returns what each copy cost.
+ */
+export async function returnToSupplier(
+  tx: Queryable,
+  copies: { bookId: number; locationId: number; quantity: number; source: 'stock' | 'damaged'; returnId: number; returnNumber: string; staffCtx: Actor },
+): Promise<{ unitCost: Money }> {
+  const movement = {
+    reasonCode: 'supplier_return', referenceType: 'supplier_return', referenceId: copies.returnId,
+    notes: `Return ${copies.returnNumber}`, staffId: copies.staffCtx.staffId,
+  };
+  if (copies.source === 'stock') return takeOutAtCost(tx, copies, { ...movement, movementType: 'stock_out' });
+  await stock.ensureLevel(tx, copies.bookId, copies.locationId);
+  const level = await lockOrThrow(tx, copies.bookId, copies.locationId);
+  if (level.damaged < copies.quantity) {
+    const named = await levelOrThrow(tx, copies.bookId, copies.locationId);
+    throw new BusinessError(
+      'INSUFFICIENT_STOCK',
+      `Insufficient damaged copies of "${named.bookTitle}" at ${named.locationName}. Damaged: ${level.damaged}, Requested: ${copies.quantity}`,
+    );
+  }
+  const { unitCost } = await takeDamaged(tx, level, copies);
+  await stock.insertMovement(tx, {
+    bookId: copies.bookId, locationId: copies.locationId, qtyBefore: level.quantity, qtyAfter: level.quantity, movementType: 'stock_out', ...movement, unitCost,
+  });
+  return { unitCost };
+}
+
+/** Copies leaving at the average cost, which stays; never below zero, whatever the branch allows for sales. */
+async function takeOutAtCost(
+  tx: Queryable,
+  copies: { bookId: number; locationId: number; quantity: number },
+  movement: { movementType: 'stock_out' | 'transfer_out'; reasonCode: string; referenceType: string; referenceId: number; notes: string | null; staffId: number },
+): Promise<{ unitCost: Money }> {
+  const { bookId, locationId, quantity } = copies;
   checkQuantity(quantity);
   // A location holding none of the book is refused like one holding too few.
   await stock.ensureLevel(tx, bookId, locationId);
@@ -487,19 +529,7 @@ export async function sendStock(tx: Queryable, sending: StockSending): Promise<{
   }
   const after = before.quantity - quantity;
   await stock.updateLevel(tx, bookId, locationId, { quantity: after });
-  await stock.insertMovement(tx, {
-    bookId,
-    locationId,
-    qtyBefore: before.quantity,
-    qtyAfter: after,
-    movementType: 'transfer_out',
-    reasonCode: 'transfer_out',
-    referenceType: 'branch_transfer',
-    referenceId: sending.transferId,
-    notes: sending.notes ?? null,
-    staffId: sending.staffCtx.staffId,
-    unitCost: before.averageCost,
-  });
+  await stock.insertMovement(tx, { bookId, locationId, qtyBefore: before.quantity, qtyAfter: after, ...movement, unitCost: before.averageCost });
   await alertOnThreshold(tx, bookId, locationId, before.quantity);
   return { unitCost: before.averageCost };
 }
