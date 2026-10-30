@@ -41,6 +41,7 @@ const ENTITY_PAGE: Record<string, string> = {
   service_job:    'binding-jobs',
   branch_transfer:'inventory',
   cash_session:   'cash-sessions',
+  stock_count:    'inventory',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     const page = notif.entityType ? ENTITY_PAGE[notif.entityType] : null;
     // A transfer on its way is told to the branch receiving it.
     if (notif.entityType === 'branch_transfer' && onNavigate) onNavigate('inventory', { tab: 'incoming', transferId: notif.entityId ?? '' });
+    else if (notif.entityType === 'stock_count' && onNavigate) onNavigate('inventory', { tab: 'counts', countId: notif.entityId ?? '' });
     else if (notif.entityType === 'cash_session' && onNavigate) onNavigate('cash-sessions', { sessionId: notif.entityId ?? '' });
     else if (page && onNavigate) onNavigate(page);
     setOpen(false);

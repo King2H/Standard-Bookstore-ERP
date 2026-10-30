@@ -241,7 +241,7 @@ describe('Inventory: history and search', () => {
     await user.click(screen.getByRole('button', { name: /History/ }));
     const reasons = screen.getAllByRole('combobox').find((c) => within(c).queryByRole('option', { name: 'All Reasons' }))!;
     expect(within(reasons).getAllByRole('option').map((o) => (o as HTMLOptionElement).value).filter(Boolean))
-      .toEqual(['correction', 'damage', 'damage_repaired', 'damage_write_off', 'initial', 'loss', 'return', 'revaluation', 'sale', 'stock_in', 'transfer_in', 'transfer_out', 'transfer_returned']);
+      .toEqual(['correction', 'count', 'damage', 'damage_repaired', 'damage_write_off', 'initial', 'loss', 'return', 'revaluation', 'sale', 'stock_in', 'transfer_in', 'transfer_out', 'transfer_returned']);
   });
 
   it('asks once typing pauses (was: a request for every key)', async () => {
