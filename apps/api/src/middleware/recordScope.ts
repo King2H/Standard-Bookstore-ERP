@@ -26,6 +26,7 @@ const BRANCH_OF = {
   },
   cashSession: { entity: 'Cash session', sql: 'SELECT branch_id FROM cash_sessions WHERE id = $1' },
   stockCount: { entity: 'Stock count', sql: 'SELECT branch_id FROM stock_counts WHERE id = $1' },
+  businessDay: { entity: 'Business day', sql: 'SELECT branch_id FROM business_days WHERE id = $1' },
   // The receiving branch sends a return; the ordering branch reads it (#173).
   supplierReturn: {
     entity: 'Supplier return',

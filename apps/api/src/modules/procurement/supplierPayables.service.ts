@@ -4,6 +4,7 @@ import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
+import { assertChangeable } from '../businessDays/businessDays.service.js';
 import { accountForPayment, cancelMovement, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { poNumber, refundDueOf } from './procurement.mapper.js';
 import * as orderPolicy from './procurement.policy.js';
@@ -81,6 +82,7 @@ export async function reversePayment(actor: Actor, poId: string, paymentId: numb
     const payment = await payables.lockPayment(tx, poId, paymentId);
     if (!payment) throw new NotFoundError('Supplier payment');
     policy.checkCanReverse(payment);
+    await assertChangeable(tx, payment.branchId, payment.createdAt, 'This payment');
     // Money that never left takes its bank movement with it; refused once matched to the statement.
     await cancelMovement(tx, 'supplier_payment', String(payment.id));
     await payables.reversePayment(tx, payment.id, actor.staffId, reason);

@@ -51,6 +51,10 @@ export default async function setup(): Promise<void> {
   await owner.connect();
   try {
     await loadDemoData(owner, 1, { missingOnly: true });
+    // The shop's days are local days (#175). Tests date their fixtures in
+    // UTC, so the test shop keeps UTC days, whatever hour the suite runs;
+    // business-days.test.ts sets a zone of its own.
+    await owner.query(`UPDATE system_config SET value = '"UTC"' WHERE tenant_id = 1 AND key = 'business_timezone'`);
   } finally {
     await owner.end();
   }

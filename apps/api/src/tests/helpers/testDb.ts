@@ -51,6 +51,8 @@ export async function cleanTestStaff(usernamePrefix: string): Promise<void> {
  * NEVER truncates — the seeded "Main Branch" is preserved.
  */
 export async function cleanTestBranches(namePrefix: string): Promise<void> {
+  // Closed days first: a closed day takes no more changes in its branch (#175).
+  await db.query(`DELETE FROM business_days WHERE branch_id IN (SELECT id FROM branches WHERE name LIKE $1)`, [`${namePrefix}%`]);
   // Remove staff_locations referencing locations in these branches first
   await db.query(
     `DELETE FROM staff_locations WHERE location_id IN (

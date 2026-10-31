@@ -92,6 +92,23 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'stock_count',
     entityId: String(p.countId ?? ''),
   }),
+  // A closed day or month was reopened: its figures may change (#175, decision 5a).
+  'business_day.reopened': (p) => ({
+    title: '🔓 Day reopened',
+    body: `${p.branchName} ${p.day} (${p.dayNumber}) reopened: ${p.reason}`,
+    targetRoles: ['Super_Admin', 'Finance_Officer'],
+    severity: 'warning',
+    entityType: 'business_day',
+    entityId: String(p.businessDayId ?? ''),
+  }),
+  'business_month.reopened': (p) => ({
+    title: '🔓 Month reopened',
+    body: `${p.month} reopened: ${p.reason}`,
+    targetRoles: ['Super_Admin', 'Finance_Officer'],
+    severity: 'warning',
+    entityType: 'business_month',
+    entityId: String(p.businessMonthId ?? ''),
+  }),
   'inventory.low_stock': (p) => ({
     title: '⚠️ Low Stock Alert',
     body: `"${p.bookTitle}" at ${p.locationName} — ${p.quantity} remaining (reorder at ${p.reorderPoint})`,

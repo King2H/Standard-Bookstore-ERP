@@ -8,7 +8,7 @@ import { scopeConditions, where, type ReportFilters, type ReportScope } from '..
 // money moved. A voided sale or exchange
 // handed its money back, so it is left out altogether.
 
-const CUSTOMER_MONEY = `
+export const CUSTOMER_MONEY = `
   WITH money AS (
     SELECT op.payment_method AS method, op.amount, 'in' AS direction, op.processed_at AS at, o.branch_id
     FROM order_payments op JOIN orders o ON o.id = op.order_id

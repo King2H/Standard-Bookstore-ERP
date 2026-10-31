@@ -70,6 +70,9 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `BOOK_IN_USE`
 - `CASH_SESSION_ALREADY_OPEN`
 - `CATEGORY_IN_USE`
+- `DAY_ALREADY_CLOSED`
+- `DAY_CLOSED`
+- `DAY_NOT_CLOSED`
 - `DEPENDENCY_CONFLICT`
 - `DUPLICATE_ACCOUNT_NUMBER`
 - `STOCK_COUNT_OPEN`
@@ -84,9 +87,16 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `DUPLICATE_SUPPLIER_NAME`
 - `DUPLICATE_USERNAME`
 - `IDEMPOTENCY_CONFLICT`
+- `MONTH_ALREADY_CLOSED`
+- `MONTH_CLOSED`
+- `MONTH_NOT_CLOSED`
 - `NOT_MATCHED`
 - `PUBLISHER_IN_USE`
 - `VERSION_CONFLICT`
+
+`DAY_CLOSED` and `MONTH_CLOSED` (#175) answer anything that would be recorded in a branch whose
+day is closed, or that would change a record of a closed day or month in place (reversing a
+supplier payment); `details.day` names the day. A correction is a new document on an open day.
 
 ## Business rules (422)
 - `BOUND_COPY_NOT_COLLECTED`
@@ -113,11 +123,13 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `CASH_SESSION_INSUFFICIENT_CASH`
 - `CASH_SESSION_INVALID_STATUS`
 - `CASH_SESSION_REQUIRED`
+- `CASH_SESSIONS_OPEN`
 - `CATEGORY_NOT_SELECTABLE`
 - `CREDIT_REQUIRES_CUSTOMER`
 - `CURRENCY_IN_USE`
 - `CUSTOMER_INACTIVE`
 - `CUSTOMER_REQUIRED_FOR_SETTLEMENT`
+- `DAY_IN_FUTURE`
 - `DELIVERY_EXCEEDS_REMAINING`
 - `DEPOSIT_TOO_LOW`
 - `DISCOUNT_EXCEEDS_LIMIT`
@@ -142,6 +154,8 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `LOYALTY_REQUIRES_CUSTOMER`
 - `MATCH_MISMATCH`
 - `MISSING_TRANSACTION_REFERENCE`
+- `MONTH_HAS_OPEN_DAYS`
+- `MONTH_NOT_ENDED`
 - `ORDER_ALREADY_FULFILLED`
 - `ORDER_ALREADY_PAID`
 - `ORDER_CANCELLED`

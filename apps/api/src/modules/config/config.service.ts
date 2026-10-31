@@ -85,6 +85,9 @@ export async function setSystemConfig(actor: Actor, key: string, value: unknown)
   // Cached branch values pick up a new system default when they expire.
   return withTransaction({}, async (tx) => {
     const previous = await config.findSystemValue(tx, key);
+    if (key === 'business_timezone') {
+      policy.checkTimeZone(value, await config.isKnownTimeZone(tx, String(value)));
+    }
     if (key === 'base_currency') {
       policy.checkCurrencyChange(previous?.value, value, await config.findCurrencyHolders(tx));
     }
