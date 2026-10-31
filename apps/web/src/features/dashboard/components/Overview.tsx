@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { KpiPeriod } from '@bms/shared';
 import { useCurrency } from '../../../lib/useCurrency.js';
+import { PENDING_FULFILLMENT } from '../../orders/rules.js';
 import { useInventoryReport, useKpis, usePeriodKpis, type ReportParams } from '../queries.js';
 import { HighlightKpiCard, KpiCard, kpiToneClass, PERIOD_LABELS, PeriodSelector, shortMoney, TrendBadge, warningCountTone } from './cards.js';
 
@@ -163,7 +164,7 @@ export function Overview({ params, onNavigate }: {
                   sub={kpis.pendingOrders > 0 ? 'Awaiting fulfillment' : 'All clear'}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
                   color={kpiToneClass(warningCountTone(kpis.pendingOrders))}
-                  onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID' })}
+                  onClick={() => onNavigate?.('orders', { status: PENDING_FULFILLMENT })}
                 />
               </div>
             </div>
@@ -207,7 +208,7 @@ export function Overview({ params, onNavigate }: {
           {(kpis?.pendingOrders ?? 0) > 0 && (
             <div
               className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 cursor-pointer hover:border-orange-400 dark:hover:border-orange-600 transition-colors"
-              onClick={() => onNavigate?.('orders', { status: 'Confirmed,In_Progress,CONFIRMED,PAID' })}
+              onClick={() => onNavigate?.('orders', { status: PENDING_FULFILLMENT })}
             >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-orange-600 dark:text-orange-400 shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></span>

@@ -51,6 +51,8 @@ export interface ReturnableLine {
   quantity: number;
   lineTotal: number;
   returned: number | null;
+  /** An order's copies not delivered (#174): still waiting, or cancelled with the rest. */
+  undelivered?: number;
   /** The line's binding (#169 PR 3): its copies come back only defective. None once cancelled: they are plain copies again. */
   binding: { quantity: number; lineTotal: number; status: ServiceJobStatus | null } | null;
   /** An exchange's line (#203): only its bound copies come back, defective; plain ones are swapped in a new exchange. */
@@ -62,7 +64,8 @@ function bindingOf(service: SaleServiceLine | null | undefined): ReturnableLine[
   return { quantity: service.quantity, lineTotal: service.lineTotal, status: service.job?.status ?? null };
 }
 
-const DELIVERED = ['FULFILLED', 'COMPLETED', 'Fulfilled'];
+// A part-delivered order returns what it handed over (#174).
+const DELIVERED = ['FULFILLED', 'COMPLETED', 'Fulfilled', 'PART_DELIVERED'];
 
 function fromSale(t: PosTransaction): ReturnableSale {
   return {
@@ -80,6 +83,7 @@ function fromOrder(o: Order): ReturnableSale {
     returnable: DELIVERED.includes(o.status) && o.fulfilledAt !== null, date: o.fulfilledAt ?? o.createdAt,
     lines: (o.lineItems ?? []).map((l) => ({
       id: l.id, bookTitle: l.bookTitle, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.totalPrice, returned: l.qtyReturned,
+      undelivered: l.qtyCancelled + (o.status === 'PART_DELIVERED' ? l.qtyReserved : 0),
       binding: bindingOf(l.service),
     })),
   };

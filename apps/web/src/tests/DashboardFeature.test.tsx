@@ -249,6 +249,13 @@ describe('drill-downs', () => {
     ]);
   });
 
+  it('Pending Customer Orders opens the orders still to deliver, part-delivered ones included (#174; was: left out)', async () => {
+    const { user, onNavigate } = await openDashboard();
+    await user.click(await screen.findByText('Pending Customer Orders'));
+    expect(onNavigate.mock.calls[0][0]).toBe('orders');
+    expect(onNavigate.mock.calls[0][1].status.split(',')).toEqual(['Confirmed', 'In_Progress', 'CONFIRMED', 'PAID', 'PART_DELIVERED']);
+  });
+
   it('Money In & Out lists every customer payment and refund of the period, and adds up to the card (supplier payments left out)', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(

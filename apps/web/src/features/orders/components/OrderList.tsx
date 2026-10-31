@@ -11,11 +11,16 @@ import { EMPTY_PROOF, type PaymentProof } from '../../../lib/paymentProof.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useBranchBankAccounts } from '../../bankAccounts/queries.js';
-import { useCancelOrder, useConfirmOrder, useDeleteOrder, useFulfillOrder, useOrders } from '../queries.js';
 import {
-  canDeleteOrder, cashConfirmBody, cashPaymentProblem, isDeletable, PENDING_FULFILLMENT, STATUS_FILTERS,
+  useCancelOrder, useCancelOrderRest, useConfirmOrder, useDeleteOrder, useDeliverOrder, useFulfillOrder, useOrders,
+} from '../queries.js';
+import {
+  canDeleteOrder, cashConfirmBody, cashPaymentProblem, isDeletable, PENDING_FULFILLMENT, STATUS_FILTERS, statusLabel,
 } from '../rules.js';
 import { CancelOrderDialog } from './CancelOrderDialog.js';
+import { CancelRestDialog } from './CancelRestDialog.js';
+import { DeliverDialog } from './DeliverDialog.js';
+import { DeliveryNote } from './DeliveryNote.js';
 import { OrderDetail } from './OrderDetail.js';
 import { OrderSlip } from './OrderSlip.js';
 
@@ -29,6 +34,7 @@ const STATUS_COLORS: Record<string, string> = {
   DRAFT:       'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
   CONFIRMED:   'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
   PAID:        'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+  PART_DELIVERED: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
   FULFILLED:   'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
   COMPLETED:   'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
   CANCELLED:   'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
@@ -56,7 +62,7 @@ const SELECT = 'px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 
 const FILTER = 'px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 const INLINE = 'text-xs px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white';
 
-type Asking = { kind: 'cancel' | 'delete'; order: Order } | null;
+type Asking = { kind: 'cancel' | 'delete' | 'deliver' | 'cancel_rest'; order: Order } | null;
 
 /**
  * The branch's orders, newest first, with the steps each is open to (as the
@@ -81,6 +87,7 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [asking, setAsking] = useState<Asking>(null);
   const [printing, setPrinting] = useState<string | null>(null);
+  const [note, setNote] = useState<{ orderId: string; deliveryId: number } | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [confirmDueDate, setConfirmDueDate] = useState('');
   const [confirmMethod, setConfirmMethod] = useState('');
@@ -94,7 +101,9 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
   const fulfill = useFulfillOrder();
   const cancel = useCancelOrder();
   const remove = useDeleteOrder();
-  const busy = confirm.isPending || fulfill.isPending || cancel.isPending;
+  const deliver = useDeliverOrder();
+  const cancelRest = useCancelOrderRest();
+  const busy = confirm.isPending || fulfill.isPending || cancel.isPending || deliver.isPending || cancelRest.isPending;
 
   const filtered = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
   const onError = (e: Error) => showToast(e.message, 'error');
@@ -123,6 +132,28 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
     if (asking?.kind !== 'cancel') return;
     cancel.mutate({ id: asking.order.id, body }, {
       onSuccess: () => { setAsking(null); updated(); if (body.refundTo) showToast('The money the order took went back', 'success'); },
+      onError,
+    });
+  }
+
+  // Each delivery opens its note, to print for the customer (#174, decision 2a).
+  function deliverAsked(body: { lines: Array<{ lineId: number; quantity: number }>; notes?: string }) {
+    if (asking?.kind !== 'deliver') return;
+    deliver.mutate({ id: asking.order.id, body }, {
+      onSuccess: (o) => {
+        setAsking(null);
+        showToast(o.status === 'PART_DELIVERED' ? 'Delivered; the rest waits' : 'Delivered; the order is complete', 'success');
+        const last = o.deliveries?.[o.deliveries.length - 1];
+        if (last) setNote({ orderId: o.id, deliveryId: last.id });
+      },
+      onError,
+    });
+  }
+
+  function cancelRestAsked(body: CancelOrderRequest) {
+    if (asking?.kind !== 'cancel_rest') return;
+    cancelRest.mutate({ id: asking.order.id, body }, {
+      onSuccess: () => { setAsking(null); showToast('The rest was cancelled; the order is complete', 'success'); },
       onError,
     });
   }
@@ -195,6 +226,23 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
           </button>
         );
       }
+      // Some of the copies (#174); Fulfill above still hands over everything.
+      if (action === 'deliver') {
+        return (
+          <button key="deliver" disabled={busy} onClick={(e) => { stop(e); setAsking({ kind: 'deliver', order }); }}
+            className={`text-xs px-2 py-0.5 rounded-sm transition-colors ${ACTION.fulfill}`}>
+            Deliver…
+          </button>
+        );
+      }
+      if (action === 'cancel_rest') {
+        return (
+          <button key="cancel_rest" disabled={busy} onClick={(e) => { stop(e); setAsking({ kind: 'cancel_rest', order }); }}
+            className={`text-xs px-2 py-0.5 rounded-sm transition-colors ${ACTION.cancel}`}>
+            Cancel the rest…
+          </button>
+        );
+      }
       if (action === 'print') {
         return (
           <button key="print" onClick={(e) => { stop(e); setPrinting(order.id); }}
@@ -222,8 +270,8 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
       <div className="flex gap-2 items-center flex-wrap">
         <select aria-label="Status" value={status} onChange={(e) => filtered(setStatus)(e.target.value)} className={SELECT}>
           <option value="">All statuses</option>
-          <option value={PENDING_FULFILLMENT}>Pending Fulfillment (Confirmed/Paid)</option>
-          {STATUS_FILTERS.map((s) => <option key={s} value={s}>{s}</option>)}
+          <option value={PENDING_FULFILLMENT}>Pending Fulfillment (Confirmed/Paid/Part delivered)</option>
+          {STATUS_FILTERS.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </select>
         <input type="date" aria-label="From date" value={dateFrom} onChange={(e) => filtered(setDateFrom)(e.target.value)} className={FILTER} />
         <span className="text-xs text-gray-400">to</span>
@@ -247,7 +295,7 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
                     <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{order.orderNumber}</td>
                     <td className="px-4 py-3 text-xs capitalize text-gray-600 dark:text-gray-400">{order.channel.replace('_', ' ')}</td>
-                    <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? ''}`}>{order.status}</span></td>
+                    <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? ''}`}>{statusLabel(order.status)}</span></td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 flex-wrap">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PAY_COLORS[order.paymentStatus] ?? ''}`}>{order.paymentStatus}</span>
@@ -301,6 +349,13 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
       </div>
 
       {printing && <OrderSlip orderId={printing} onClose={() => setPrinting(null)} />}
+      {note && <DeliveryNote orderId={note.orderId} deliveryId={note.deliveryId} onClose={() => setNote(null)} />}
+      {asking?.kind === 'deliver' && (
+        <DeliverDialog order={asking.order} busy={deliver.isPending} onConfirm={deliverAsked} onCancel={() => setAsking(null)} />
+      )}
+      {asking?.kind === 'cancel_rest' && (
+        <CancelRestDialog order={asking.order} currency={currency} busy={cancelRest.isPending} onConfirm={cancelRestAsked} onCancel={() => setAsking(null)} />
+      )}
 
       {asking?.kind === 'cancel' && (
         <CancelOrderDialog order={asking.order} currency={currency} busy={cancel.isPending} onConfirm={cancelAsked} onCancel={() => setAsking(null)} />

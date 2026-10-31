@@ -141,17 +141,17 @@ describe('the list', () => {
     await rowOf();
     const select = screen.getByLabelText('Status');
     const options = within(select).getAllByRole('option').map((o) => (o as HTMLOptionElement).value);
-    expect(options).toEqual(['', 'Confirmed,In_Progress,CONFIRMED,PAID', 'DRAFT', 'CONFIRMED', 'COMPLETED', 'CANCELLED']);
+    expect(options).toEqual(['', 'Confirmed,In_Progress,CONFIRMED,PAID,PART_DELIVERED', 'DRAFT', 'CONFIRMED', 'PART_DELIVERED', 'COMPLETED', 'CANCELLED']);
 
     await user.selectOptions(select, 'CANCELLED');
     await waitFor(() => expect(listCalls().some((p) => p.includes('status=CANCELLED') && p.includes('page=1'))).toBe(true));
   });
 
   it("opens the Dashboard's Pending Orders on its status", async () => {
-    await openPage(vi.fn(), { status: 'Confirmed,In_Progress,CONFIRMED,PAID' });
+    await openPage(vi.fn(), { status: 'Confirmed,In_Progress,CONFIRMED,PAID,PART_DELIVERED' });
     await rowOf();
-    expect(screen.getByLabelText('Status')).toHaveValue('Confirmed,In_Progress,CONFIRMED,PAID');
-    expect(listCalls()[0]).toContain('status=Confirmed%2CIn_Progress%2CCONFIRMED%2CPAID');
+    expect(screen.getByLabelText('Status')).toHaveValue('Confirmed,In_Progress,CONFIRMED,PAID,PART_DELIVERED');
+    expect(listCalls()[0]).toContain('status=Confirmed%2CIn_Progress%2CCONFIRMED%2CPAID%2CPART_DELIVERED');
   });
 
   it("shows an order's payment method and due date when opened", async () => {

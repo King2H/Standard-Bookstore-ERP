@@ -58,12 +58,14 @@ export const HISTORY_STATUSES = ['success', 'refunded', 'partially_refunded'] as
 /**
  * Only an order payment is refunded here: a POS sale's goes back through a
  * return, an exchange's through the exchange. A fulfilled order's books were
- * handed over, so its money comes back through a return too.
+ * handed over, so its money comes back through a return too; so does a
+ * part-delivered one's, or by cancelling its rest (#174).
  */
 export function isRefundable(p: Pick<Payment, 'sourceType' | 'status' | 'orderStatus'>): boolean {
   if ((p.sourceType ?? 'order') !== 'order') return false;
   if (p.status === 'failed' || p.status === 'refunded') return false;
-  return !['FULFILLED', 'COMPLETED'].includes((p.orderStatus ?? '').toUpperCase());
+  // Part delivered (#174): through a return, or by cancelling the rest.
+  return !['FULFILLED', 'COMPLETED', 'PART_DELIVERED'].includes((p.orderStatus ?? '').toUpperCase());
 }
 
 /** What is left of a payment to refund: its amount less earlier refunds. */

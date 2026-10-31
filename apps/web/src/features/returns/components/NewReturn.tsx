@@ -157,7 +157,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{li.bookTitle}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {currency} {Money.of(li.unitPrice).toFixed()} × {li.quantity} {isOrder ? 'delivered' : isExchange ? 'given out' : 'sold'}
+                    {currency} {Money.of(li.unitPrice).toFixed()} × {li.quantity} {isOrder ? (li.undelivered ? `ordered, ${li.quantity - li.undelivered} delivered` : 'delivered') : isExchange ? 'given out' : 'sold'}
                     {li.returned ? ` · ${li.returned} returned` : ''}
                   </p>
                   {li.binding && (

@@ -277,6 +277,8 @@ describe('payment history', () => {
     history = [
       payment(),
       payment({ id: '12', paymentReference: 'PAY-FULFILLED', orderStatus: 'FULFILLED' }),
+      // A part-delivered order's money comes back through a return or by cancelling its rest (#174).
+      payment({ id: '14', paymentReference: 'PAY-PART', orderStatus: 'PART_DELIVERED' }),
       payment({ id: '13', paymentReference: 'PAY-POS-13', sourceType: 'pos', orderStatus: null }),
     ];
     await openHistory();
