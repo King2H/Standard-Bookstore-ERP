@@ -22,6 +22,8 @@ router.put('/orders/:id', authenticate, inBranch, requirePermission('CREATE_SALE
 router.delete('/orders/:id', authenticate, inBranch, requireRole('Admin'), validate(schemas.byId), orders.remove);
 
 router.post('/orders/:id/confirm', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.confirm), orders.confirm);
+// Delivered in parts, each numbered DLV-, by whoever fulfils (#174, decision 2a).
+router.post('/orders/:id/deliveries', authenticate, inBranch, requirePermission('PROCESS_PAYMENT'), validate(schemas.deliver), orders.deliver);
 router.post('/orders/:id/fulfill', authenticate, inBranch, requirePermission('PROCESS_PAYMENT'), validate(schemas.byId), orders.fulfill);
 // One that took payments also needs PROCESS_REFUND: the money goes back in the same step (#167, orders.policy.ts).
 router.post('/orders/:id/cancel', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.cancel), orders.cancel);

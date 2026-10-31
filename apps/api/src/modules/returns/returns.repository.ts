@@ -141,7 +141,7 @@ export async function branchLocation(q: Queryable, branchId: number): Promise<nu
 }
 
 /** The order's lines, with what completed returns already took back from each. */
-export async function orderLines(q: Queryable, orderId: string): Promise<SaleLine[]> {
+export async function orderLines(q: Queryable, orderId: string, opts: { partDelivered?: boolean } = {}): Promise<SaleLine[]> {
   const rows = await q
     .selectFrom('order_line_items as li')
     .select([
@@ -151,6 +151,7 @@ export async function orderLines(q: Queryable, orderId: string): Promise<SaleLin
       'li.unit_price',
       'li.total_price',
       'li.unit_cost',
+      'li.qty_fulfilled',
       sql<string>`COALESCE((
         SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
         WHERE rli.order_line_item_id = li.id AND r.status = 'completed'), 0)`.as('returned_quantity'),
@@ -170,6 +171,7 @@ export async function orderLines(q: Queryable, orderId: string): Promise<SaleLin
     unitCost: r.unit_cost === null ? null : Money.of(r.unit_cost),
     returnedQuantity: Number(r.returned_quantity),
     returnedValue: Money.of(r.returned_value),
+    ...(opts.partDelivered && { deliveredQuantity: r.qty_fulfilled }),
   }));
 }
 

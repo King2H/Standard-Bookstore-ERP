@@ -1,5 +1,5 @@
 import { Money } from '@bms/shared';
-import { BusinessError, ForbiddenError, ValidationError } from '../../lib/errors.js';
+import { BusinessError, ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { resolveDiscountFields, enforceDiscountCap, type DiscountMode, type DiscountType } from '../../lib/discount.js';
 import type { Permission } from '../../lib/permissions.js';
 import type { OrderLineInput, OrderTotals, PricedLine, SaleType } from './orders.types.js';
@@ -52,6 +52,40 @@ export function checkCanFulfill(status: string): void {
 }
 
 /**
+ * A confirmed order is delivered in one or more parts (#174, decision 2a);
+ * a part-delivered one until nothing is left waiting.
+ */
+export function checkCanDeliver(status: string): void {
+  if (status === 'PART_DELIVERED') return;
+  checkCanFulfill(status);
+}
+
+/**
+ * What a delivery hands over, per line: the copies named, each at most what
+ * is still waiting, or with none named everything still waiting.
+ */
+export function deliveryLines(
+  lines: Array<{ id: string; bookTitle: string; qtyReserved: number }>,
+  requested: Array<{ lineId: number; quantity: number }> | undefined,
+): Array<{ lineId: string; quantity: number }> {
+  if (!requested) {
+    const rest = lines.filter((l) => l.qtyReserved > 0).map((l) => ({ lineId: l.id, quantity: l.qtyReserved }));
+    if (rest.length === 0) throw new BusinessError('INVALID_STATE', 'Nothing of this order is waiting to be delivered');
+    return rest;
+  }
+  return requested.map((r) => {
+    const line = lines.find((l) => l.id === String(r.lineId));
+    if (!line) throw new NotFoundError(`Order line ${r.lineId}`);
+    if (r.quantity > line.qtyReserved) {
+      throw new BusinessError('DELIVERY_EXCEEDS_REMAINING', `"${line.bookTitle}": ${line.qtyReserved} left to deliver, ${r.quantity} asked`, {
+        lineId: line.id, remaining: line.qtyReserved, requested: r.quantity,
+      });
+    }
+    return { lineId: line.id, quantity: r.quantity };
+  });
+}
+
+/**
  * Cancelling is refused after fulfilment (that is a return). Returns whether
  * confirm() already took the stock out, so the cancellation must put it back.
  */
@@ -61,6 +95,9 @@ export function checkCanCancel(status: string): { restoresStock: boolean } {
     throw new BusinessError('ORDER_ALREADY_FULFILLED', 'Cannot cancel a fulfilled or completed order. Use the Return module for post-fulfillment reversals.');
   }
   if (ns === 'CANCELLED') throw new BusinessError('ALREADY_CANCELLED', 'Order is already cancelled');
+  if (ns === 'PART_DELIVERED') {
+    throw new BusinessError('ORDER_PART_DELIVERED', 'Some of this order was delivered: deliver the rest, or return what was delivered.');
+  }
   return { restoresStock: ['CONFIRMED', 'PARTIALLY_PAID', 'PAID'].includes(ns) };
 }
 
@@ -128,7 +165,10 @@ export function computeOrderAllowedActions(
   // An order that took payments is cancelled by whoever refunds, giving the money back (#167).
   const cancel = can('CREATE_SALE') && (amountPaid <= 0 || can('PROCESS_REFUND')) ? ['cancel'] : [];
   // It is delivered with its bound copies, once their jobs are ready (#169).
-  const cancelOrFulfill = [...cancel, ...(can('PROCESS_PAYMENT') && jobsReady ? ['fulfill'] : [])];
+  // Delivered in parts by whoever fulfils (#174); a line whose job is not ready waits.
+  const deliver = can('PROCESS_PAYMENT') ? ['deliver'] : [];
+  const fulfill = can('PROCESS_PAYMENT') && jobsReady ? ['fulfill'] : [];
+  const cancelOrFulfill = [...cancel, ...deliver, ...fulfill];
 
   switch (status) {
     case 'DRAFT':
@@ -141,6 +181,9 @@ export function computeOrderAllowedActions(
       return cancelOrFulfill;
     case 'PAID':
       return cancelOrFulfill;
+    // What it handed over is returned through Returns.
+    case 'PART_DELIVERED':
+      return [...deliver, ...fulfill, ...(can('CREATE_SALE') ? ['return'] : [])];
     // A delivered order is returned through Returns, by whoever sells (#166); a
     // legacy fulfilled order is printed like a completed one.
     case 'FULFILLED':

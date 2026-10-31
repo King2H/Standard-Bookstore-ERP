@@ -58,6 +58,7 @@ async function loadOrder(q: Queryable, id: string | number, opts: { forUpdate?: 
     return { ...l, service: service ? toSaleServiceLineResponse(service) : null };
   });
   order.jobsReady = await saleServices.orderDeliverable(q, order.id);
+  order.deliveries = await orders.listDeliveries(q, order.id);
   order.allowedActions = [];
   return order;
 }
@@ -339,22 +340,73 @@ export async function confirm(
 }
 
 /**
- * Hands the goods over: the reserved stock (already taken out at confirm) is
- * recorded as delivered, and the order is FULFILLED, then COMPLETED. A
- * credit order's receivable stays open until it is paid.
+ * Hands copies over (#174, decision 2a): per line, at most what is still
+ * waiting, or everything still waiting when no line is named. The copies left
+ * stock at confirmation; their reservation is given up, the delivery is
+ * numbered DLV- and the return window counts from it. The order is
+ * PART_DELIVERED until nothing is left, then FULFILLED and COMPLETED as
+ * before. A line with a binding job goes once the job is ready (#169).
+ */
+export async function deliver(
+  orderId: string | number,
+  input: { lines?: Array<{ lineId: number; quantity: number }>; notes?: string | null },
+  staffCtx: StaffCtx,
+  opts: { verb?: 'deliver' | 'fulfill' } = {},
+): Promise<OrderRow> {
+  await withTransaction({ isolationLevel: 'repeatable read' }, async (tx, client) => {
+    const order = await loadOrder(tx, orderId, { forUpdate: true });
+    policy.checkCanDeliver(order.status);
+    const items = order.lineItems ?? [];
+    const lines = policy.deliveryLines(items, input.lines);
+    await saleServices.collectOnDelivery(tx, staffCtx, { id: order.id, number: order.orderNumber }, { lineIds: lines.map((l) => l.lineId) });
+
+    const locationId = await stockLocation(tx, order, staffCtx);
+    await assertAssignedLocation(locationId, staffCtx);
+    for (const line of lines) {
+      const item = items.find((i) => i.id === line.lineId)!;
+      await orders.deductReserved(tx, order.id, item.bookId, line.quantity);
+      await orders.deliverLine(tx, line.lineId, line.quantity);
+    }
+    const deliveryNumber = await nextDailyNumber(tx, 'DLV');
+    await orders.insertDelivery(tx, { deliveryNumber, orderId: order.id, deliveredBy: staffCtx.staffId, notes: input.notes ?? null, lines });
+    await orders.setFulfilled(tx, order.id);
+
+    const waiting = items.reduce((n, i) => n + i.qtyReserved, 0) - lines.reduce((n, l) => n + l.quantity, 0);
+    const toStatus = waiting > 0 ? 'PART_DELIVERED' : 'FULFILLED';
+    await orders.setStatus(tx, order.id, toStatus);
+    await audit(tx, staffCtx, 'UPDATE', order.id, {
+      action: opts.verb ?? 'deliver', fromStatus: order.status, toStatus, deliveryNumber, saleType: order.saleType,
+      lines: lines.map((l) => ({ lineId: l.lineId, quantity: l.quantity })),
+    });
+    if (toStatus === 'FULFILLED') {
+      const ref = { ...order, id: String(orderId) };
+      await publish(client, 'order.fulfilled', ref, staffCtx);
+      await orders.setStatus(tx, order.id, 'COMPLETED');
+      await publish(client, 'order.completed', ref, staffCtx);
+    }
+  });
+  return getById(orderId);
+}
+
+/**
+ * Hands the goods over: what is still waiting is delivered (#174), and the
+ * order is FULFILLED, then COMPLETED. A credit order's receivable stays open
+ * until it is paid. An order with nothing reserved (confirmed before
+ * reservations) is completed as it always was.
  */
 export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
+  const current = await loadOrder(kysely, orderId);
+  if ((current.lineItems ?? []).some((item) => item.qtyReserved > 0)) {
+    policy.checkCanDeliver(current.status);
+    return deliver(orderId, {}, staffCtx, { verb: 'fulfill' });
+  }
   await withTransaction({ isolationLevel: 'repeatable read' }, async (tx, client) => {
     const order = await loadOrder(tx, orderId, { forUpdate: true });
     policy.checkCanFulfill(order.status);
     // The bound copies go with the order, once their jobs are ready (#169).
     await saleServices.collectOnDelivery(tx, staffCtx, { id: order.id, number: order.orderNumber });
-
     const locationId = await stockLocation(tx, order, staffCtx);
     await assertAssignedLocation(locationId, staffCtx);
-    const reserved = (order.lineItems ?? []).filter((item) => item.qtyReserved > 0);
-    if (reserved.length > 0) await inventoryService.fulfillReservations(tx, orderId);
-    for (const item of reserved) await orders.fulfillLine(tx, item.id, item.qtyReserved);
 
     const ref = { ...order, id: String(orderId) };
     await orders.setStatus(tx, order.id, 'FULFILLED');

@@ -20,7 +20,8 @@ export function checkSale(sale: SaleForReturn, branchId: number): void {
  */
 export function checkOrder(order: OrderForReturn, branchId: number): void {
   if (order.branchId !== branchId) throw new NotFoundError('Order');
-  if (!['FULFILLED', 'COMPLETED'].includes(order.status.toUpperCase()) || order.daysSinceDelivery === null) {
+  // A part-delivered order returns the copies it handed over (#174).
+  if (!['FULFILLED', 'COMPLETED', 'PART_DELIVERED'].includes(order.status.toUpperCase()) || order.daysSinceDelivery === null) {
     throw new BusinessError('ORDER_NOT_DELIVERED', `Order ${order.orderNumber} was not delivered: cancel it instead of returning it.`, {
       status: order.status,
     });
@@ -33,7 +34,7 @@ export function checkOrder(order: OrderForReturn, branchId: number): void {
  * of a line take what is left of it, so the line never refunds more than it cost.
  */
 export function lineValue(line: SaleLine, quantity: number): Money {
-  const remaining = line.quantity - line.returnedQuantity;
+  const remaining = (line.deliveredQuantity ?? line.quantity) - line.returnedQuantity;
   if (quantity > remaining) {
     throw new BusinessError('OVER_RETURN', `Cannot return ${quantity} units. Max returnable: ${remaining}`, {
       soldQty: line.quantity,
@@ -42,7 +43,7 @@ export function lineValue(line: SaleLine, quantity: number): Money {
       maxReturnable: remaining,
     });
   }
-  if (quantity === remaining) return line.lineTotal.minus(line.returnedValue);
+  if (quantity === line.quantity - line.returnedQuantity) return line.lineTotal.minus(line.returnedValue);
   return line.lineTotal.times(quantity).dividedBy(line.quantity).round(2);
 }
 

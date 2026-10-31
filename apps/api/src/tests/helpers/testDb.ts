@@ -41,6 +41,7 @@ export async function cleanTestStaff(usernamePrefix: string): Promise<void> {
     await db.query(`DELETE FROM financial_transactions WHERE receivable_id IN (SELECT id FROM receivables WHERE written_off_by = ANY($1))`, [staffIds]);
     await db.query(`DELETE FROM receivables WHERE written_off_by = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM exchange_settlement_entries WHERE authorised_by = ANY($1)`, [staffIds]);
+    await db.query(`DELETE FROM order_deliveries WHERE delivered_by = ANY($1)`, [staffIds]);
     await db.query(`DELETE FROM staff WHERE id = ANY($1)`, [staffIds]);
   }
 }

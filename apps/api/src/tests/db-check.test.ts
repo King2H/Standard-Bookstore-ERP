@@ -56,6 +56,11 @@ describe('Data consistency check', () => {
 
     // Services: a confirmed order's service line with no job (#169).
     const orderLine = await one(`INSERT INTO order_line_items (order_id, book_id, quantity, unit_price, total_price) VALUES ($1, $2, 1, 10, 10) RETURNING id`, [paidOrder, book1]);
+    // ...delivered in a part its line does not record (#174).
+    const deliveryId = await one(
+      `INSERT INTO order_deliveries (delivery_number, order_id, delivered_by) VALUES ($1, $2, $3) RETURNING id`, [`${MARK}-DLV`, paidOrder, staffId],
+    );
+    await client.query(`INSERT INTO order_delivery_lines (delivery_id, order_line_item_id, quantity) VALUES ($1, $2, 2)`, [deliveryId, orderLine]);
     const formatId = await one(`SELECT id FROM book_formats ORDER BY id LIMIT 1`);
     const serviceId = await one(
       `INSERT INTO services (code, name, format_id, fee, standard_cost) VALUES ($1, 'Check binding', $2, 5, 2) RETURNING id`,
@@ -244,6 +249,7 @@ describe('Data consistency check', () => {
     ['transfers.status-matches-lines', new RegExp(`^${MARK}-TRF \\(in_transit\\): 2 of 3 accounted for$`)],
     ['transfers.stock-history', new RegExp(`^${MARK}-TRF: book \\d+ sent 3 \\(history 0\\), received 2 \\(history 0\\)$`)],
     ['cash.session-adds-up', new RegExp(`^${MARK}-Z: expected 120\\.00, float and movements say 150\\.00; variance 0\\.00, counted less expected 5\\.00$`)],
+    ['orders.deliveries-add-up', /^ORD-\d{8}-9999 line \d+: delivered 0, deliveries say 2, waiting 0 of 1$/],
     ['stock-counts.posted-in-history', new RegExp(`^${MARK}-CNT: book \\d+ posted 2, history 0$`)],
     ['bank.matched-line-cleared', /is uncleared$/],
     ['bank.cleared-one-line', /: 0 matched lines$/],
@@ -268,6 +274,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/28 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/29 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

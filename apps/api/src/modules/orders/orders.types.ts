@@ -1,4 +1,4 @@
-import type { SaleServiceLine, ServiceLineInput } from '@bms/shared';
+import type { OrderDelivery, SaleServiceLine, ServiceLineInput } from '@bms/shared';
 import type { DiscountMode, DiscountType } from '../../lib/discount.js';
 
 export interface StaffCtx { staffId: number; role: string; roles?: string[]; branchId: number; }
@@ -48,6 +48,8 @@ export interface OrderRow {
   fulfilledAt: string | null;
   /** False while a binding job is not ready: the order waits for it (#169). */
   jobsReady?: boolean;
+  /** Its deliveries (#174), on a single order. */
+  deliveries?: OrderDelivery[];
 }
 
 export interface OrderLineItemRow {

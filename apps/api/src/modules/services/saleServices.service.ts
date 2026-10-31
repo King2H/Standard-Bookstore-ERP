@@ -124,8 +124,11 @@ export async function cancelJobs(q: Queryable, actor: Actor, sale: SaleRef, numb
  * An order is delivered once its jobs are ready; the bound copies go with
  * it, so its ready jobs are Collected in the same step.
  */
-export async function collectOnDelivery(q: Queryable, actor: Actor, order: { id: string; number: string }): Promise<void> {
-  const jobs = await repo.lockJobsOf(q, { orderId: order.id });
+export async function collectOnDelivery(
+  q: Queryable, actor: Actor, order: { id: string; number: string }, opts: { lineIds?: string[] } = {},
+): Promise<void> {
+  // A part-delivery collects the jobs of the lines it hands over (#174).
+  const jobs = await repo.lockJobsOf(q, { orderId: order.id }, opts.lineIds);
   policy.checkJobsDeliverable(jobs.map((j) => j.status));
   for (const job of jobs.filter((j) => j.status === 'READY')) {
     await repo.setJobStatus(q, job.id, 'COLLECTED', actor.staffId);

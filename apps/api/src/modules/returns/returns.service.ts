@@ -489,7 +489,7 @@ async function returnOrder(
   if (locationId === null) throw new NotFoundError('Location');
   await assertAssignedLocation(locationId, actor);
 
-  const lines = valueLines(await returns.orderLines(tx, order.id), input.lines, 'Order line item');
+  const lines = valueLines(await returns.orderLines(tx, order.id, { partDelivered: order.status === 'PART_DELIVERED' }), input.lines, 'Order line item');
   const fees = await boundCopies(tx, actor, lines, 'order', input.reason);
   const total = Money.sum([...lines.map((l) => l.value), ...fees.map((f) => f.amount)]);
   const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
