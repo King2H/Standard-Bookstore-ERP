@@ -795,7 +795,10 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - PUT /api/v1/orders/:id — a draft's new contents (same body as POST), checked as a new order is; the selling roles of its branch (#174)
 - POST /api/v1/orders/:id/confirm — reserve stock (Manager, Admin)
 - POST /api/v1/orders/:id/progress — mark in progress (Manager, Admin, Stock_Clerk)
-- POST /api/v1/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk)
+- POST /api/v1/orders/:id/deliveries — body: { lines?: [{lineId, quantity}], notes? }; hands over some copies, per line at most
+  what is waiting (no lines: all of it), numbered DLV-. The order is PART_DELIVERED until nothing is left, then COMPLETED;
+  a part-delivered order is not cancelled, and returns only what it handed over (#174)
+- POST /api/v1/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk); delivers what is still waiting
 - POST /api/v1/orders/:id/cancel — body: { reason } (Manager, Admin)
 - An order's line may carry a service as at the counter (#169); its job opens when the order is confirmed. The order is
   delivered once its jobs are ready, and cancelled with the fee back while they are still Requested

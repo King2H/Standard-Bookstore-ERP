@@ -51,6 +51,8 @@ export interface SaleLine {
   unitCost: Money | null;
   returnedQuantity: number;
   returnedValue: Money;
+  /** Copies handed over so far, where fewer than sold may come back: a part-delivered order (#174). */
+  deliveredQuantity?: number;
 }
 
 /** What one payment method of the sale can still give back. */

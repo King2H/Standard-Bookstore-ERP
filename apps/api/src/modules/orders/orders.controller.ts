@@ -3,6 +3,7 @@ import {
   CancelOrderRequestSchema,
   ConfirmOrderRequestSchema,
   CreateOrderRequestSchema,
+  DeliverOrderRequestSchema,
   IdParamsSchema,
   OrderListQuerySchema,
   UpdateOrderRequestSchema,
@@ -30,6 +31,7 @@ export const schemas = {
   update: { params: IdParamsSchema, body: UpdateOrderRequestSchema },
   confirm: { params: IdParamsSchema, body: ConfirmOrderRequestSchema },
   cancel: { params: IdParamsSchema, body: CancelOrderRequestSchema },
+  deliver: { params: IdParamsSchema, body: DeliverOrderRequestSchema },
 };
 
 /** The order as the API returns it, with the actions this staff member may take. */
@@ -111,6 +113,11 @@ export async function confirm(req: Request, res: Response): Promise<void> {
 
 export async function fulfill(req: Request, res: Response): Promise<void> {
   res.json(toResponse(req, await service.fulfill(valid(req, schemas.byId).params.id, req.staff!)));
+}
+
+export async function deliver(req: Request, res: Response): Promise<void> {
+  const { params, body } = valid(req, schemas.deliver);
+  res.status(201).json(toResponse(req, await service.deliver(params.id, body, req.staff!)));
 }
 
 export async function cancel(req: Request, res: Response): Promise<void> {

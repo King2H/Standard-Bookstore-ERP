@@ -6,8 +6,8 @@ import { NOT_SALE_ORDER_STATUS_LIST } from '../sales/sales.policy.js';
 // database's calendar (CURRENT_DATE), never a JS Date, so the boundary is
 // the same as every other date the system writes.
 
-/** Confirmed orders not yet fulfilled: committed stock still to hand over. */
-const OPEN_ORDER_STATUSES = `('Confirmed','In_Progress','CONFIRMED','PAID')`;
+/** Confirmed orders not yet fulfilled, or not in full (#174): committed stock still to hand over. */
+const OPEN_ORDER_STATUSES = `('Confirmed','In_Progress','CONFIRMED','PAID','PART_DELIVERED')`;
 
 const today = (column: string) => `DATE(${column}) = CURRENT_DATE`;
 const thisMonth = (column: string) => `date_trunc('month', ${column}) = date_trunc('month', now())`;

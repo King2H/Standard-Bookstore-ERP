@@ -139,8 +139,13 @@ export async function linesOf(q: Queryable, sale: SaleRef): Promise<SaleServiceL
 }
 
 /** The jobs of a sale's service lines, locked until the transaction ends. */
-export async function lockJobsOf(q: Queryable, sale: SaleRef): Promise<Array<{ id: number; status: ServiceJobStatus }>> {
-  const lineIds = lineIdsOf(q, sale);
+export async function lockJobsOf(
+  q: Queryable, sale: SaleRef, orderLineIds?: string[],
+): Promise<Array<{ id: number; status: ServiceJobStatus }>> {
+  // Of some of an order's lines only, for a part-delivery (#174).
+  const lineIds = orderLineIds
+    ? q.selectFrom('sale_service_lines').select('id').where('order_line_item_id', 'in', orderLineIds.length ? orderLineIds : ['0'])
+    : lineIdsOf(q, sale);
   const rows = await q.selectFrom('service_jobs').select(['id', 'status']).where('service_line_id', 'in', lineIds).orderBy('id').forUpdate().execute();
   return rows.map((r) => ({ id: Number(r.id), status: r.status as ServiceJobStatus }));
 }

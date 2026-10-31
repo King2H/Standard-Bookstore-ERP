@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import type { OrderDelivery } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
 import { SHOP_CURRENCY } from '../config/config.repository.js';
 import { toLineItemRow, toOrderRow, type OrderDbRow } from './orders.mapper.js';
@@ -259,13 +260,59 @@ export async function setLineUnitCost(q: Queryable, lineId: string, unitCost: st
   await q.updateTable('order_line_items').set({ unit_cost: unitCost }).where('id', '=', lineId).execute();
 }
 
-/** Moves a line's reserved quantity to fulfilled. */
-export async function fulfillLine(q: Queryable, lineId: string, quantity: number): Promise<void> {
+/** Hands `quantity` reserved copies of a line over (#174). */
+export async function deliverLine(q: Queryable, lineId: string, quantity: number): Promise<void> {
   await q
     .updateTable('order_line_items')
-    .set((eb) => ({ qty_fulfilled: eb('qty_fulfilled', '+', quantity), qty_reserved: 0 }))
+    .set((eb) => ({ qty_fulfilled: eb('qty_fulfilled', '+', quantity), qty_reserved: eb('qty_reserved', '-', quantity) }))
     .where('id', '=', lineId)
     .execute();
+}
+
+export async function insertDelivery(
+  q: Queryable,
+  d: { deliveryNumber: string; orderId: string; deliveredBy: number; notes: string | null; lines: Array<{ lineId: string; quantity: number }> },
+): Promise<void> {
+  const { id } = await q
+    .insertInto('order_deliveries')
+    .values({ delivery_number: d.deliveryNumber, order_id: d.orderId, delivered_by: d.deliveredBy, notes: d.notes })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  await q
+    .insertInto('order_delivery_lines')
+    .values(d.lines.map((l) => ({ delivery_id: id, order_line_item_id: l.lineId, quantity: l.quantity })))
+    .execute();
+}
+
+/** An order's deliveries, oldest first, with their lines in the order's line order. */
+export async function listDeliveries(q: Queryable, orderId: string): Promise<OrderDelivery[]> {
+  const rows = await q
+    .selectFrom('order_deliveries as d')
+    .innerJoin('staff as s', 's.id', 'd.delivered_by')
+    .innerJoin('order_delivery_lines as dl', 'dl.delivery_id', 'd.id')
+    .innerJoin('order_line_items as oli', 'oli.id', 'dl.order_line_item_id')
+    .innerJoin('books as b', 'b.id', 'oli.book_id')
+    .select([
+      'd.id', 'd.delivery_number', 'd.delivered_by', 's.full_name', 'd.delivered_at', 'd.notes',
+      'dl.order_line_item_id', 'oli.book_id', 'b.title', 'dl.quantity',
+    ])
+    .where('d.order_id', '=', orderId)
+    .orderBy('d.id')
+    .orderBy('oli.id')
+    .execute();
+  const byId = new Map<number, OrderDelivery>();
+  for (const r of rows) {
+    let delivery = byId.get(r.id);
+    if (!delivery) {
+      delivery = {
+        id: r.id, deliveryNumber: r.delivery_number, deliveredBy: r.delivered_by, deliveredByName: r.full_name,
+        deliveredAt: r.delivered_at.toISOString(), notes: r.notes, lines: [],
+      };
+      byId.set(r.id, delivery);
+    }
+    delivery.lines.push({ orderLineItemId: String(r.order_line_item_id), bookId: r.book_id, bookTitle: r.title, quantity: r.quantity });
+  }
+  return [...byId.values()];
 }
 
 export async function deleteOrder(q: Queryable, orderId: string): Promise<void> {
@@ -287,6 +334,38 @@ export async function insertReservation(
     .insertInto('inventory_reservations')
     .values({ order_id: r.orderId, book_id: r.bookId, location_id: r.locationId, quantity: r.quantity, status: 'reserved' })
     .execute();
+}
+
+/**
+ * Takes `quantity` copies of a book off an order's reservations, oldest
+ * first (#174): a row given up whole is deducted; one given up in part keeps
+ * the rest reserved, the part delivered recorded as its own deducted row.
+ */
+export async function deductReserved(q: Queryable, orderId: string, bookId: number, quantity: number): Promise<void> {
+  const rows = await q
+    .selectFrom('inventory_reservations')
+    .select(['id', 'location_id', 'quantity'])
+    .where('order_id', '=', orderId)
+    .where('book_id', '=', bookId)
+    .where('status', '=', 'reserved')
+    .orderBy('id')
+    .forUpdate()
+    .execute();
+  let left = quantity;
+  for (const row of rows) {
+    if (left <= 0) break;
+    const take = Math.min(left, row.quantity);
+    left -= take;
+    if (take === row.quantity) {
+      await q.updateTable('inventory_reservations').set({ status: 'deducted', updated_at: sql`now()` }).where('id', '=', row.id).execute();
+    } else {
+      await q.updateTable('inventory_reservations').set({ quantity: row.quantity - take, updated_at: sql`now()` }).where('id', '=', row.id).execute();
+      await q
+        .insertInto('inventory_reservations')
+        .values({ order_id: orderId, book_id: bookId, location_id: row.location_id, quantity: take, status: 'deducted' })
+        .execute();
+    }
+  }
 }
 
 export async function releaseReservations(q: Queryable, orderId: string): Promise<void> {

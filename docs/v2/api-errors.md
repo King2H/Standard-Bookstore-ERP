@@ -118,6 +118,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `CURRENCY_IN_USE`
 - `CUSTOMER_INACTIVE`
 - `CUSTOMER_REQUIRED_FOR_SETTLEMENT`
+- `DELIVERY_EXCEEDS_REMAINING`
 - `DEPOSIT_TOO_LOW`
 - `DISCOUNT_EXCEEDS_LIMIT`
 - `EXCEEDS_INSTALLMENT_AMOUNT`
@@ -148,6 +149,7 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `ORDER_INVALID`
 - `ORDER_NOT_DELIVERED`
 - `ORDER_NOT_ELIGIBLE`
+- `ORDER_PART_DELIVERED`
 - `OVER_RECEIPT`
 - `OVER_RETURN`
 - `PASSWORD_UNCHANGED`

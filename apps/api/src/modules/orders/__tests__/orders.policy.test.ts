@@ -7,7 +7,9 @@ import {
   checkCanCancel,
   checkCanConfirm,
   checkCanDelete,
+  checkCanDeliver,
   checkCanFulfill,
+  deliveryLines,
   checkDueDate,
   checkNewOrder,
   checkQuantity,
@@ -144,7 +146,7 @@ describe('cancelling an order that took payments (#167)', () => {
   it('keeps cancelling to the selling roles: refunding alone does not cancel an order (was: Finance_Officer could)', () => {
     expect(() => checkCancelReturn(Money.of(5), [...finance], 'original', true)).toThrow(expect.objectContaining({ statusCode: 403 }));
     expect(() => checkCancelReturn(Money.of(0), [...finance], undefined, true)).toThrow(expect.objectContaining({ statusCode: 403 }));
-    expect(computeOrderAllowedActions('CONFIRMED', [...finance], 'paid', 'cash_sale', 12.99)).toEqual(['fulfill']);
+    expect(computeOrderAllowedActions('CONFIRMED', [...finance], 'paid', 'cash_sale', 12.99)).toEqual(['deliver', 'fulfill']);
   });
 
   it('asks how the money goes back; store credit needs a customer', () => {
@@ -154,8 +156,32 @@ describe('cancelling an order that took payments (#167)', () => {
   });
 
   it('offers Cancel on an order that took payments only to whoever refunds', () => {
-    expect(computeOrderAllowedActions('CONFIRMED', [...seller], 'paid', 'cash_sale', 12.99)).toEqual(['fulfill']);
-    expect(computeOrderAllowedActions('CONFIRMED', [...refunder], 'paid', 'cash_sale', 12.99)).toEqual(['cancel', 'fulfill']);
-    expect(computeOrderAllowedActions('CONFIRMED', [...seller], 'unpaid', 'credit_sale', 0)).toEqual(['cancel', 'fulfill']);
+    expect(computeOrderAllowedActions('CONFIRMED', [...seller], 'paid', 'cash_sale', 12.99)).toEqual(['deliver', 'fulfill']);
+    expect(computeOrderAllowedActions('CONFIRMED', [...refunder], 'paid', 'cash_sale', 12.99)).toEqual(['cancel', 'deliver', 'fulfill']);
+    expect(computeOrderAllowedActions('CONFIRMED', [...seller], 'unpaid', 'credit_sale', 0)).toEqual(['cancel', 'deliver', 'fulfill']);
+  });
+});
+
+describe('delivering in parts (#174)', () => {
+  const lines = [
+    { id: '1', bookTitle: 'A', qtyReserved: 3 },
+    { id: '2', bookTitle: 'B', qtyReserved: 0 },
+  ];
+
+  it('hands over what is named, at most what is waiting, or with nothing named everything waiting', () => {
+    expect(deliveryLines(lines, [{ lineId: 1, quantity: 2 }])).toEqual([{ lineId: '1', quantity: 2 }]);
+    expect(deliveryLines(lines, undefined)).toEqual([{ lineId: '1', quantity: 3 }]);
+    expect(() => deliveryLines(lines, [{ lineId: 2, quantity: 1 }])).toThrow(expect.objectContaining({ code: 'DELIVERY_EXCEEDS_REMAINING' }));
+    expect(() => deliveryLines(lines, [{ lineId: 9, quantity: 1 }])).toThrow(expect.objectContaining({ statusCode: 404 }));
+    expect(() => deliveryLines([{ id: '1', bookTitle: 'A', qtyReserved: 0 }], undefined)).toThrow(expect.objectContaining({ code: 'INVALID_STATE' }));
+  });
+
+  it('keeps delivering a part-delivered order, which is not cancelled and returns what it handed over', () => {
+    expect(() => checkCanDeliver('PART_DELIVERED')).not.toThrow();
+    expect(() => checkCanDeliver('CONFIRMED')).not.toThrow();
+    expect(() => checkCanDeliver('COMPLETED')).toThrow(expect.objectContaining({ code: 'INVALID_STATE' }));
+    expect(() => checkCanCancel('PART_DELIVERED')).toThrow(expect.objectContaining({ code: 'ORDER_PART_DELIVERED' }));
+    expect(computeOrderAllowedActions('PART_DELIVERED', ['CREATE_SALE', 'PROCESS_PAYMENT'], 'paid', 'cash_sale', 10, false)).toEqual(['deliver', 'return']);
+    expect(computeOrderAllowedActions('PART_DELIVERED', ['PROCESS_PAYMENT'], 'paid', 'cash_sale', 10)).toEqual(['deliver', 'fulfill']);
   });
 });

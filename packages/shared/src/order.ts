@@ -38,6 +38,25 @@ export const OrderLineItemSchema = z.object({
 });
 export type OrderLineItem = z.infer<typeof OrderLineItemSchema>;
 
+/** One hand-over of an order's copies (#174, decision 2a), numbered DLV-. */
+export const OrderDeliverySchema = z.object({
+  id: z.number().int(),
+  /** DLV-YYYYMMDD-NNNN. */
+  deliveryNumber: z.string(),
+  deliveredBy: z.number().int(),
+  deliveredByName: z.string(),
+  deliveredAt: z.string(),
+  notes: z.string().nullable(),
+  lines: z.array(z.object({
+    /** The order's line, a bigint sent as a string like its id. */
+    orderLineItemId: z.string(),
+    bookId: z.number().int(),
+    bookTitle: z.string(),
+    quantity: z.number().int(),
+  })),
+});
+export type OrderDelivery = z.infer<typeof OrderDeliverySchema>;
+
 export const OrderSchema = z.object({
   id: z.string(),
   orderNumber: z.string(),
@@ -45,7 +64,7 @@ export const OrderSchema = z.object({
   branchId: z.number().int(),
   locationId: z.number().int().nullable(),
   channel: z.string(),
-  /** DRAFT, CONFIRMED, PAID, FULFILLED, COMPLETED or CANCELLED; older rows may hold pre-v1.1 names. */
+  /** DRAFT, CONFIRMED, PAID, PART_DELIVERED, FULFILLED, COMPLETED or CANCELLED; older rows may hold pre-v1.1 names. */
   status: z.string(),
   paymentStatus: z.string(),
   /** Payments taken less refunds: what cancelling gives back (#167). */
@@ -70,8 +89,10 @@ export const OrderSchema = z.object({
   paymentMethod: z.string().nullable(),
   /** Due date of a credit sale's receivable (YYYY-MM-DD). */
   dueDate: z.string().nullable(),
-  /** When the order was delivered; the return window counts from it (#166). */
+  /** When the order was last delivered; the return window counts from it (#166). */
   fulfilledAt: z.string().nullable(),
+  /** Its deliveries, oldest first (#174); on single-order responses, absent in lists. */
+  deliveries: z.array(OrderDeliverySchema).optional(),
 });
 export type Order = z.infer<typeof OrderSchema>;
 
@@ -147,3 +168,18 @@ export const CancelOrderRequestSchema = z.object({
   refundTo: CancelRefundToSchema.optional(),
 });
 export type CancelOrderRequest = z.infer<typeof CancelOrderRequestSchema>;
+
+/**
+ * A delivery of some of an order's copies (#174, decision 2a): per line, at
+ * most what is still waiting. With no lines, everything still waiting.
+ */
+export const DeliverOrderRequestSchema = z.object({
+  lines: z
+    .array(z.object({ lineId: IdSchema, quantity: z.number().int().positive() }))
+    .min(1, 'At least one line is required')
+    .max(500)
+    .refine((lines) => new Set(lines.map((l) => l.lineId)).size === lines.length, 'Each line once')
+    .optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+export type DeliverOrderRequest = z.infer<typeof DeliverOrderRequestSchema>;

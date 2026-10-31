@@ -594,6 +594,24 @@ export interface Notifications {
   title: string;
 }
 
+export interface OrderDeliveries {
+  delivered_at: Generated<Timestamp>;
+  delivered_by: number;
+  delivery_number: string;
+  id: Generated<number>;
+  notes: string | null;
+  order_id: Int8;
+  tenant_id: Generated<number>;
+}
+
+export interface OrderDeliveryLines {
+  delivery_id: number;
+  id: Generated<number>;
+  order_line_item_id: Int8;
+  quantity: number;
+  tenant_id: Generated<number>;
+}
+
 export interface OrderLineItems {
   book_id: number;
   discount_amount: Generated<Numeric>;
@@ -1204,6 +1222,8 @@ export interface DB {
   merchants: Merchants;
   notification_reads: NotificationReads;
   notifications: Notifications;
+  order_deliveries: OrderDeliveries;
+  order_delivery_lines: OrderDeliveryLines;
   order_line_items: OrderLineItems;
   order_payments: OrderPayments;
   order_refunds: OrderRefunds;

@@ -35,6 +35,7 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['CNT', 'stock_counts', 'count_number'],
   ['RTS', 'supplier_returns', 'return_number'],
   ['SREF', 'supplier_refunds', 'refund_number'],
+  ['DLV', 'order_deliveries', 'delivery_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -365,6 +366,23 @@ export const CHECKS: readonly Check[] = [
       FROM cash_sessions s LEFT JOIN m ON m.session_id = s.id
       WHERE s.status <> 'open'
         AND (s.expected_cash <> s.opening_float + COALESCE(m.net, 0) OR s.variance <> s.counted_cash - s.expected_cash)`,
+  },
+  {
+    id: 'orders.deliveries-add-up',
+    area: 'Orders',
+    title: 'An order delivered in parts handed over what its lines say',
+    severity: 'error',
+    // Orders delivered before #174 have no deliveries: their lines alone say it.
+    sql: `
+      SELECT o.tenant_id, o.order_number || ' line ' || li.id || ': delivered ' || li.qty_fulfilled || ', deliveries say ' || COALESCE(d.quantity, 0)
+        || ', waiting ' || li.qty_reserved || ' of ' || li.quantity AS ref
+      FROM orders o
+      JOIN order_line_items li ON li.order_id = o.id
+      LEFT JOIN (
+        SELECT dl.order_line_item_id, SUM(dl.quantity) AS quantity FROM order_delivery_lines dl GROUP BY dl.order_line_item_id
+      ) d ON d.order_line_item_id = li.id
+      WHERE EXISTS (SELECT 1 FROM order_deliveries od WHERE od.order_id = o.id)
+        AND (li.qty_fulfilled <> COALESCE(d.quantity, 0) OR (o.status <> 'CANCELLED' AND li.qty_fulfilled + li.qty_reserved <> li.quantity))`,
   },
   {
     id: 'stock-counts.posted-in-history',
