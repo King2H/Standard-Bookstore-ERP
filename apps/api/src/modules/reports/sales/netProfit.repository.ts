@@ -16,13 +16,15 @@ function buildOrderFilters(opts: ReportScope): { conditions: string[]; params: u
     params.push(opts.branchId);
     conditions.push(`o.branch_id = $${params.length}`);
   }
+  // Revenue counts on the delivery day (#175), so a reported day never changes; orders delivered
+  // before delivery dates were kept count on the day they were made.
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    conditions.push(`o.created_at::date >= $${params.length}::date`);
+    conditions.push(`COALESCE(o.fulfilled_at, o.created_at)::date >= $${params.length}::date`);
   }
   if (opts.dateTo) {
     params.push(opts.dateTo);
-    conditions.push(`o.created_at::date <= $${params.length}::date`);
+    conditions.push(`COALESCE(o.fulfilled_at, o.created_at)::date <= $${params.length}::date`);
   }
   return { conditions, params };
 }

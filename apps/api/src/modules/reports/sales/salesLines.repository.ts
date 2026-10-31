@@ -97,7 +97,7 @@ import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
 import { costBasisLateralJoin } from '../../../lib/costBasis.js';
 import type { DiscountType } from '../../../lib/discount.js';
-import { NOT_SALE_ORDER_STATUS_LIST } from './sales.policy.js';
+import { scopeConditions } from '../reportScope.js';
 import type { LinePaymentStatus, ReportScope, SalesLineRecord } from './sales.types.js';
 
 // ── Payment method vocabulary mapping ───────────────────────────────────────
@@ -187,19 +187,23 @@ const EXCHANGE_CASH_LATERAL = `
 
 // ── ORDER rows ───────────────────────────────────────────────────────────────
 
+/**
+ * An order's lines on its confirmation day, and again as minus on its
+ * cancellation day (#175, order_sale_events), so a reported day never changes.
+ */
 async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
-  const { conditions, params } = buildDateBranchConditions(filters, 'o');
-  conditions.unshift(`o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}`);
-  const where = 'WHERE ' + conditions.join(' AND ');
+  const { conditions, params } = scopeConditions(filters, 'ev', { column: 'sale_at', branchAlias: 'o' });
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
   const res = await reportRows(q, 
     `SELECT
-       TO_CHAR(o.created_at, 'YYYY-MM-DD') AS transaction_date,
+       TO_CHAR(ev.sale_at, 'YYYY-MM-DD') AS transaction_date,
        o.order_number AS reference_number,
        br.name AS branch, loc.name AS location_name,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title, b.isbn AS book_isbn,
-       oli.quantity, oli.unit_price, oli.discount_amount, oli.discount_type, oli.total_price,
+       oli.quantity * ev.sign AS quantity, oli.unit_price, oli.discount_amount * ev.sign AS discount_amount, oli.discount_type,
+       oli.total_price * ev.sign AS total_price,
        COALESCE(oli.unit_cost, lc.unit_cost, 0) AS resolved_unit_cost,
        o.payment_status,
        opay.payment_method,
@@ -207,6 +211,7 @@ async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLi
        s.username AS staff_username
      FROM order_line_items oli
      JOIN orders o ON o.id = oli.order_id
+     JOIN order_sale_events ev ON ev.order_id = o.id
      JOIN books b ON b.id = oli.book_id
      JOIN branches br ON br.id = o.branch_id
      LEFT JOIN locations loc ON loc.id = o.location_id
@@ -220,7 +225,7 @@ async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLi
        ORDER BY op.created_at DESC LIMIT 1
      ) opay ON true
      ${where}
-     ORDER BY o.created_at`,
+     ORDER BY ev.sale_at, oli.id`,
     params,
   );
 
@@ -336,15 +341,19 @@ async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLine
 async function getServiceRows(q: Queryable, filters: ReportScope): Promise<SalesLineRecord[]> {
   const pos = buildDateBranchConditions(filters, 't');
   pos.conditions.unshift(`t.status != 'voided'`);
-  const ord = buildDateBranchConditions(filters, 'o');
-  ord.conditions.unshift(`o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}`);
+  // An order's services count as its books do (#175): on confirmation, and as minus on cancellation.
+  const ord = scopeConditions(filters, 'ev', { column: 'sale_at', branchAlias: 'o' });
+  ord.conditions.unshift('true');
   // Bindings on an exchange's outgoing books (#169 PR 4): Quick Exchanges only, voided ones left out.
   const exc = buildDateBranchConditions(filters, 'e');
   exc.conditions.unshift(`e.status IN ('Completed','COMPLETED') AND e.lifecycle_status IS NULL`);
-  const columns = `
-       sl.quantity, sl.unit_fee, sl.discount_amount, sl.line_total, sl.standard_cost,
+  const described = `
        s.name AS service_name, b.title AS book_title, b.isbn AS book_isbn,
        br.name AS branch, loc.name AS location_name, COALESCE(c.full_name, 'Walk-in') AS customer_name, st.username AS staff_username`;
+  const columns = `sl.quantity, sl.unit_fee, sl.discount_amount, sl.line_total, sl.standard_cost, ${described}`;
+  // An order's, signed: minus on its cancellation day.
+  const orderColumns = `sl.quantity * ev.sign AS quantity, sl.unit_fee, sl.discount_amount * ev.sign AS discount_amount,
+       sl.line_total * ev.sign AS line_total, sl.standard_cost, ${described}`;
   const [posRes, orderRes, exchangeRes] = await Promise.all([
     reportRows(q,
       `SELECT TO_CHAR(t.created_at, 'YYYY-MM-DD') AS transaction_date, t.transaction_number AS reference_number, 'POS' AS source,
@@ -368,13 +377,14 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
       pos.params,
     ),
     reportRows(q,
-      `SELECT TO_CHAR(o.created_at, 'YYYY-MM-DD') AS transaction_date, o.order_number AS reference_number, 'ORDER' AS source,
+      `SELECT TO_CHAR(ev.sale_at, 'YYYY-MM-DD') AS transaction_date, o.order_number AS reference_number, 'ORDER' AS source,
          o.payment_status, opay.payment_method, ocash.paid AS cash_collected, orec.outstanding_amount AS receivable_balance,
-         ${columns}
+         ${orderColumns}
        FROM sale_service_lines sl
        JOIN services s ON s.id = sl.service_id
        JOIN order_line_items oli ON oli.id = sl.order_line_item_id
        JOIN orders o ON o.id = oli.order_id
+       JOIN order_sale_events ev ON ev.order_id = o.id
        JOIN books b ON b.id = oli.book_id
        JOIN branches br ON br.id = o.branch_id
        LEFT JOIN locations loc ON loc.id = o.location_id
@@ -387,7 +397,7 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
          ORDER BY op.created_at DESC LIMIT 1
        ) opay ON true
        WHERE ${ord.conditions.join(' AND ')}
-       ORDER BY o.created_at, sl.id`,
+       ORDER BY ev.sale_at, sl.id`,
       ord.params,
     ),
     reportRows(q,

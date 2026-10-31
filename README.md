@@ -847,6 +847,9 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 
 ### Reports (Slice 16) — FinancialReportService (Dashboard KPIs ↔ CSV Export, unified)
 - GET /api/v1/reports/sales — total sales, orders, AOV; by period + by branch (Manager, Admin)
+- Orders count on the day each event happens (#175), so a day already reported never changes: a sale on its
+  confirmation day, a cancellation as a minus on its own day (in the totals, the line export and the customer
+  reports), revenue and profit on the delivery day
 - GET /api/v1/reports/payments — collected/refunded/pending; by method + by period (Manager, Admin)
 - GET /api/v1/reports/exchanges — exchange totals; by settlement type + by period (Manager, Admin)
 - GET /api/v1/reports/inventory — stock summary, low-stock list, top-selling books, movement (Manager, Admin)

@@ -666,7 +666,9 @@ export interface OrderRefunds {
 export interface Orders {
   branch_id: number;
   cancel_reason: string | null;
+  cancelled_at: Timestamp | null;
   channel: Generated<string>;
+  confirmed_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   created_by: number;
   currency: string;
@@ -687,6 +689,13 @@ export interface Orders {
   tenant_id: Generated<number>;
   total: Generated<Numeric>;
   updated_at: Generated<Timestamp>;
+}
+
+export interface OrderSaleEvents {
+  order_id: Int8 | null;
+  sale_at: Timestamp | null;
+  sign: number | null;
+  tenant_id: number | null;
 }
 
 export interface Outbox {
@@ -1241,6 +1250,7 @@ export interface DB {
   order_line_items: OrderLineItems;
   order_payments: OrderPayments;
   order_refunds: OrderRefunds;
+  order_sale_events: OrderSaleEvents;
   orders: Orders;
   outbox: Outbox;
   po_line_items: PoLineItems;
