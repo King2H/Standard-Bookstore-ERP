@@ -50,5 +50,6 @@ export * from './transfer.js';
 export * from './cashSession.js';
 export * from './stockCount.js';
 export * from './supplierReturn.js';
+export * from './specialOrder.js';
 export { Money } from './money.js';
 export type { MoneyInput } from './money.js';

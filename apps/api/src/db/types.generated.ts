@@ -624,6 +624,7 @@ export interface OrderLineItems {
   qty_fulfilled: Generated<number>;
   qty_reserved: Generated<number>;
   quantity: number;
+  special_order: Generated<boolean>;
   tenant_id: Generated<number>;
   total_price: Numeric;
   unit_cost: Numeric | null;
@@ -913,6 +914,18 @@ export interface Services {
   turnaround_days: Generated<number>;
   updated_at: Generated<Timestamp>;
   updated_by: number | null;
+}
+
+export interface SpecialOrderLinks {
+  created_at: Generated<Timestamp>;
+  created_by: number;
+  id: Generated<number>;
+  order_line_item_id: Int8;
+  po_id: Int8;
+  quantity: number;
+  released_at: Timestamp | null;
+  reserved_quantity: Generated<number>;
+  tenant_id: Generated<number>;
 }
 
 export interface Staff {
@@ -1245,6 +1258,7 @@ export interface DB {
   service_branch_fees: ServiceBranchFees;
   service_jobs: ServiceJobs;
   services: Services;
+  special_order_links: SpecialOrderLinks;
   staff: Staff;
   staff_branch_roles: StaffBranchRoles;
   staff_locations: StaffLocations;

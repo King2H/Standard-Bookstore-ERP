@@ -14,6 +14,7 @@ import type { Permission } from '../../lib/permissions.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import * as saleServices from '../services/saleServices.service.js';
 import { returnUndelivered } from '../returns/returns.service.js';
+import * as specialOrders from '../specialOrders/specialOrders.repository.js';
 import { toSaleServiceLineResponse } from '../services/services.mapper.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
@@ -145,7 +146,8 @@ async function priceOrder(data: OrderInput, staffCtx: StaffCtx) {
   // (owner decision on #70).
   if (!(await isNegativeStockAllowed(staffCtx.branchId))) {
     const locationId = data.locationId || (await orders.findBranchLocation(kysely, staffCtx.branchId)) || staffCtx.branchId;
-    for (const line of lines) {
+    // A special-order line is for a book not in stock (#174): its copies are bought for it.
+    for (const line of lines.filter((l) => !l.specialOrder)) {
       const stock = await inventoryService.availableStock(kysely, line.bookId, locationId);
       if (stock.available < line.quantity) {
         const title = (await orders.findBook(kysely, line.bookId))?.title ?? `Book ${line.bookId}`;
@@ -244,13 +246,15 @@ export async function confirm(
     const order = await loadOrder(tx, orderId, { forUpdate: true });
     policy.checkCanConfirm(order.status);
     policy.checkDueDate(order, dueDate, await orders.today(tx));
-    const method = policy.confirmPaymentMethod(order, payment.method);
+    const deposit = payment.deposit ?? null;
+    const method = policy.confirmPaymentMethod(order, payment.method, deposit);
     // With bank accounts on, a bank payment names an active account of the branch (#21).
     const bankAccountId = method === 'bank' ? await accountForPayment(tx, payment.bankAccountId, order.branchId) : null;
 
     const locationId = await stockLocation(tx, order, staffCtx);
     await assertAssignedLocation(locationId, staffCtx);
-    for (const item of order.lineItems ?? []) {
+    // A special-order line takes no stock: its copies are on order until they arrive (#174, decision 1a).
+    for (const item of (order.lineItems ?? []).filter((i) => !i.specialOrder)) {
       await orders.lockStock(tx, item.bookId, locationId);
       const stock = await inventoryService.availableStock(tx, item.bookId, locationId);
       if (!(await isNegativeStockAllowed(order.branchId)) && stock.available < item.quantity) {
@@ -279,11 +283,13 @@ export async function confirm(
     }
 
     if (method !== null) {
-      await orders.setPaymentStatus(tx, order.id, 'paid');
-      const amount = Money.of(order.total).toFixed(2);
+      // A cash sale is paid in full; a credit sale's deposit is a part payment (#174, decision 2a).
+      const paid = deposit === null ? Money.of(order.total) : Money.of(deposit);
+      await orders.setPaymentStatus(tx, order.id, paid.lessThan(order.total) ? 'partial' : 'paid');
+      const amount = paid.toFixed(2);
       if (method === 'store_credit') {
         const customerId = order.customerId as number;
-        policy.checkStoreCredit(await orders.lockStoreCreditBalance(tx, customerId), order.total);
+        policy.checkStoreCredit(await orders.lockStoreCreditBalance(tx, customerId), paid.toNumber());
         await orders.debitStoreCredit(tx, customerId, amount, String(orderId));
       }
       const reference = await nextDailyNumber(tx, 'PAY');
@@ -295,7 +301,7 @@ export async function confirm(
         transactionReference: payment.transactionReference,
         payerBank: method === 'bank' ? payment.payerBank : null,
         bankAccountId,
-        notes: 'Recorded at order confirmation',
+        notes: deposit === null ? 'Recorded at order confirmation' : 'Deposit taken at order confirmation',
         processedBy: staffCtx.staffId,
       });
       await recordCounterMoney(tx, staffCtx, { kind: 'order_payment', sourceId: String(paymentId), method, direction: 'in', amount: Money.of(amount) });
@@ -372,7 +378,8 @@ export async function deliver(
     await orders.insertDelivery(tx, { deliveryNumber, orderId: order.id, deliveredBy: staffCtx.staffId, notes: input.notes ?? null, lines });
     await orders.setFulfilled(tx, order.id);
 
-    const waiting = items.reduce((n, i) => n + i.qtyReserved, 0) - lines.reduce((n, l) => n + l.quantity, 0);
+    // Copies still on order wait too (#174, special orders 6a).
+    const waiting = items.reduce((n, i) => n + i.qtyReserved + i.qtyOnOrder, 0) - lines.reduce((n, l) => n + l.quantity, 0);
     const toStatus = waiting > 0 ? 'PART_DELIVERED' : 'FULFILLED';
     await orders.setStatus(tx, order.id, toStatus);
     await audit(tx, staffCtx, 'UPDATE', order.id, {
@@ -400,6 +407,10 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
   if ((current.lineItems ?? []).some((item) => item.qtyReserved > 0)) {
     policy.checkCanDeliver(current.status);
     return deliver(orderId, {}, staffCtx, { verb: 'fulfill' });
+  }
+  // Only copies still on order: nothing has arrived to hand over (#174).
+  if ((current.lineItems ?? []).some((item) => item.qtyOnOrder > 0)) {
+    throw new BusinessError('INVALID_STATE', 'Nothing of this order has arrived yet: its special-order copies are still on order');
   }
   await withTransaction({ isolationLevel: 'repeatable read' }, async (tx, client) => {
     const order = await loadOrder(tx, orderId, { forUpdate: true });
@@ -469,6 +480,8 @@ export async function cancel(
     for (const item of order.lineItems ?? []) {
       if (item.qtyReserved > 0) await orders.setLineReserved(tx, item.id, 0);
     }
+    // Copies on order are not bought for it any more: they arrive as stock (#174, special orders 6a).
+    await specialOrders.releaseForLines(tx, (order.lineItems ?? []).filter((i) => i.specialOrder).map((i) => i.id));
 
     // The debt goes with the order: Cancelled, neither paid nor written off.
     // Money taken goes back now, so the debt is cancelled in full first and a
@@ -518,23 +531,79 @@ export async function cancelRest(
         orderNumber: order.orderNumber, saleType: order.saleType, locationId,
       },
       locationId,
-      lines,
+      lines: lines.map(({ lineId, quantity }) => ({ lineId, quantity })),
       reason,
       undelivered: {
         refundTo: opts.refundTo,
         authorize: (toRefund) => policy.checkCancelReturn(toRefund, opts.permissions, opts.refundTo, order.customerId !== null),
+        restock: new Map(lines.map((l) => [String(l.lineId), l.restock])),
       },
     });
     await orders.releaseReservations(tx, order.id);
     for (const line of lines) await orders.setLineReserved(tx, String(line.lineId), 0);
+    await specialOrders.releaseForLines(tx, lines.map((l) => String(l.lineId)));
 
     await orders.setStatus(tx, order.id, 'COMPLETED');
     await audit(tx, staffCtx, 'UPDATE', order.id, {
       action: 'cancel_rest', fromStatus: order.status, toStatus: 'COMPLETED', reason, returnNumber,
-      lines: lines.map((l) => ({ lineId: String(l.lineId), quantity: l.quantity })),
+      lines: lines.map((l) => ({ lineId: String(l.lineId), quantity: l.quantity, restocked: l.restock })),
       ...(opts.refundTo && { refundTo: opts.refundTo }),
     });
     await publish(client, 'order.completed', { ...order, id: String(orderId) }, staffCtx, { restCancelled: true });
+  });
+  return getById(orderId);
+}
+
+/**
+ * Reserves `quantity` copies of a special-order line from stock at
+ * `locationId` (#174): they leave stock at its average cost, as a confirmed
+ * line's do, and wait to be delivered. The caller holds the order's lock and
+ * has checked the stock.
+ */
+export async function reserveForLine(
+  tx: Queryable,
+  staffCtx: StaffCtx,
+  r: { orderId: string; lineId: string; bookId: number; locationId: number; quantity: number; note: string },
+): Promise<void> {
+  const line = (await orders.listLineItems(tx, r.orderId)).find((l) => l.id === r.lineId)!;
+  const { unitCost } = await inventoryService.issueStock(tx, {
+    bookId: r.bookId, locationId: r.locationId, quantity: r.quantity,
+    referenceType: 'order_confirmed', referenceId: r.orderId, reasonCode: 'sale', notes: r.note, staffCtx,
+  });
+  // The line's cost is the average of what its copies left at.
+  const before = line.qtyReserved + line.qtyFulfilled;
+  const cost = line.unitCost === null || before === 0
+    ? Money.of(unitCost)
+    : Money.of(line.unitCost).times(before).plus(Money.of(unitCost).times(r.quantity)).dividedBy(before + r.quantity);
+  await orders.setLineUnitCost(tx, r.lineId, cost.toFixed(2));
+  await orders.setLineReserved(tx, r.lineId, line.qtyReserved + r.quantity);
+  await orders.insertReservation(tx, { orderId: r.orderId, bookId: r.bookId, locationId: r.locationId, quantity: r.quantity });
+}
+
+/**
+ * Reserves a special-order line's copies on order from the stock at the
+ * order's location (#174): books that arrived elsewhere and were brought
+ * over, or came another way. They count against the purchase orders still
+ * bringing copies for it, which bring those as stock.
+ */
+export async function reserveSpecial(orderId: string | number, lineId: string | number, staffCtx: StaffCtx): Promise<OrderRow> {
+  await withTransaction({}, async (tx) => {
+    const order = await loadOrder(tx, orderId, { forUpdate: true });
+    const line = policy.specialLineToReserve(order.status, order.lineItems ?? [], String(lineId));
+    const locationId = await stockLocation(tx, order, staffCtx);
+    await assertAssignedLocation(locationId, staffCtx);
+    await orders.lockStock(tx, line.bookId, locationId);
+    const { available } = await inventoryService.availableStock(tx, line.bookId, locationId);
+    const quantity = Math.min(line.qtyOnOrder, available);
+    if (quantity <= 0) {
+      const place = (await orders.findLocationName(tx, locationId)) ?? `Location ${locationId}`;
+      throw new BusinessError('INSUFFICIENT_STOCK', `No copy of "${line.bookTitle}" is in stock at ${place} to reserve`);
+    }
+    await reserveForLine(tx, staffCtx, {
+      orderId: order.id, lineId: line.id, bookId: line.bookId, locationId, quantity, note: `Special order reserved from stock – order ${order.orderNumber}`,
+    });
+    await specialOrders.consumeLinks(tx, line.id, quantity);
+    await audit(tx, staffCtx, 'UPDATE', order.id, { action: 'reserve_special', lineId: line.id, quantity, locationId });
   });
   return getById(orderId);
 }

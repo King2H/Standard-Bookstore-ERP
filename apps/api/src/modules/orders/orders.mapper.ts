@@ -48,6 +48,8 @@ export interface LineItemDbRow {
   unit_cost: string | null;
   qty_returned: string | number;
   qty_cancelled: string | number;
+  special_order: boolean;
+  qty_on_order: string | number;
 }
 
 // Numeric columns arrive as exact decimal strings; the API returns them as
@@ -86,6 +88,8 @@ export function toLineItemRow(row: LineItemDbRow): OrderLineItemRow {
     unitCost: row.unit_cost != null ? Number(row.unit_cost) : null,
     qtyReturned: Number(row.qty_returned),
     qtyCancelled: Number(row.qty_cancelled),
+    specialOrder: row.special_order,
+    qtyOnOrder: Number(row.qty_on_order),
     service: null,
   };
 }

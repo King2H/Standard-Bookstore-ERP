@@ -11,6 +11,7 @@ import { getPOApprovalThreshold } from '../config/config.service.js';
 import { searchCatalog } from '../catalog/catalog.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { assertAssignedLocation } from '../location/location.service.js';
+import * as specialOrders from '../specialOrders/specialOrders.service.js';
 import { validateSupplierForProcurement } from '../supplier/supplier.service.js';
 import { poNumber } from './procurement.mapper.js';
 import * as policy from './procurement.policy.js';
@@ -162,6 +163,8 @@ export async function updatePurchaseOrder(actor: Actor, id: string, ch: Purchase
     checkShopCurrency(ch.currency, await findShopCurrency(tx), 'Purchase orders');
     if (ch.supplierId !== undefined) await validateSupplierForProcurement(ch.supplierId, tx);
     if (ch.lineItems) await checkBooks(tx, ch.lineItems);
+    // Copies bought for special orders stay on the order (#174).
+    if (ch.lineItems) await specialOrders.checkEdit(tx, id, ch.lineItems);
 
     // null takes the receiving branch back to the ordering branch.
     const branchId = ch.receivingBranchId === undefined ? po.receivingBranchId : (ch.receivingBranchId ?? po.branchId);
@@ -190,6 +193,25 @@ export async function updatePurchaseOrder(actor: Actor, id: string, ch: Purchase
       totalAmount: total?.toNumber(),
       lineCount: ch.lineItems?.length,
     });
+  });
+  return getById(id);
+}
+
+/**
+ * Special-order lines of the session branch added to its purchase order
+ * (#174, decision 3a): a draft's line for each book grows by their copies,
+ * or is created; a submitted order takes them where it has copies to spare.
+ */
+export async function linkSpecialOrders(
+  actor: Actor,
+  id: string,
+  lines: Array<{ orderLineId: number; quantity: number; unitCost?: string | number }>,
+): Promise<PurchaseOrderView> {
+  await withTransaction({}, async (tx) => {
+    const po = await lockOrder(tx, id);
+    policy.checkOrderingBranch(po, actor);
+    await specialOrders.link(tx, actor, { id, status: po.status }, lines);
+    await audit(tx, actor, id, { action: 'link_special_orders', lines });
   });
   return getById(id);
 }
@@ -259,6 +281,8 @@ export async function cancel(actor: Actor, id: string): Promise<PurchaseOrderVie
     policy.checkOrderingBranch(po, actor);
     policy.checkCanCancel(po.status, await orders.hasReceipts(tx, id));
     await orders.setStatus(tx, id, 'cancelled');
+    // Its special orders go back to be bought (#174).
+    await specialOrders.release(tx, id);
     await audit(tx, actor, id, { action: 'cancel', previousStatus: po.status });
     await insertOutboxEvent(tx, 'po.cancelled', { poId: id, poNumber: poNumber(id), branchId: po.branchId });
   });
@@ -276,6 +300,8 @@ export async function close(actor: Actor, id: string, reason: string | null): Pr
     policy.checkOrderingBranch(po, actor);
     policy.checkCanClose(po.status, reason);
     await orders.setStatus(tx, id, 'closed', { closed: { by: actor.staffId, reason } });
+    // Closed short, it brings nothing more: its special orders go back to be bought (#174).
+    await specialOrders.release(tx, id);
     await audit(tx, actor, id, { action: 'close', previousStatus: po.status, reason });
   });
   return getById(id);
@@ -321,6 +347,10 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
         staffCtx: actor,
       });
       value = value.plus(line.unitCost.times(item.quantityReceived));
+      // Copies bought for special orders are reserved for them (#174, decision 4a).
+      await specialOrders.arrive(tx, actor, {
+        poId: id, branchId: po.receivingBranchId, locationId, bookId: line.bookId, quantity: item.quantityReceived,
+      });
     }
 
     const receiptId = await orders.insertReceipt(tx, {

@@ -35,6 +35,10 @@ export const OrderLineItemSchema = z.object({
   qtyReturned: z.number().int(),
   /** Copies never delivered, cancelled with the rest of the order (#174). */
   qtyCancelled: z.number().int(),
+  /** A book ordered for the customer, confirmed without stock (#174). */
+  specialOrder: z.boolean(),
+  /** A special-order line's copies not arrived yet: neither reserved, delivered nor cancelled. */
+  qtyOnOrder: z.number().int(),
   /** The service on this line's copies (#169), if any. */
   service: SaleServiceLineSchema.nullable(),
 });
@@ -125,6 +129,8 @@ export const OrderLineInputSchema = z.object({
   discountMode: DiscountModeSchema.optional(),
   /** A service on some or all of the line's copies (#169); needs a customer on the order. */
   service: ServiceLineInputSchema.optional(),
+  /** Ordered for the customer, not in stock (#174): a credit sale's line, confirmed without stock. */
+  specialOrder: z.boolean().optional(),
 });
 
 export const CreateOrderRequestSchema = z.object({
@@ -147,8 +153,10 @@ export const ConfirmOrderRequestSchema = z
   .object({
     /** Credit sales: the receivable's due date, YYYY-MM-DD, today or later. */
     dueDate: z.string().nullable().optional(),
-    /** Cash sales: cash (default), bank, mobile or store_credit. */
+    /** Cash sales: cash (default), bank, mobile or store_credit; a credit sale's deposit too. */
     paymentMethod: z.string().nullable().optional(),
+    /** Credit sales: a part paid now (#174), at most the total; the rest is owed. */
+    deposit: z.number().positive().optional(),
     /** Cash sales paid by bank (the transfer's reference) or mobile (the Telebirr transaction number). */
     transactionReference: PaymentReferenceSchema.optional(),
     /** Cash sales paid by bank: the bank the customer paid from. */
@@ -185,3 +193,7 @@ export const DeliverOrderRequestSchema = z.object({
   notes: z.string().trim().max(500).nullable().optional(),
 });
 export type DeliverOrderRequest = z.infer<typeof DeliverOrderRequestSchema>;
+
+/** `/orders/:id/lines/:lineId` route parameters (#174). */
+export const OrderLineParamsSchema = z.object({ id: IdSchema, lineId: IdSchema });
+export type OrderLineParams = z.infer<typeof OrderLineParamsSchema>;

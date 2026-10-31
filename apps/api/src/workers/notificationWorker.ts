@@ -136,6 +136,23 @@ const EVENT_CATALOG: Record<string, PayloadMapper> = {
     entityType: 'service_job',
     entityId: String(p.jobId ?? ''),
   }),
+  // ── Special orders (#174) ──────────────────────────────────────────────────
+  'special_order.arrived': (p) => ({
+    title: '📦 Special Order Arrived',
+    body: `${p.orderNumber} — ${p.quantity} × ${p.bookTitle} reserved for the customer: ready to deliver`,
+    targetRoles: ['Sales', 'Manager', 'Admin'],
+    severity: 'success',
+    entityType: 'order',
+    entityId: String(p.orderId ?? ''),
+  }),
+  'special_order.arrived_elsewhere': (p) => ({
+    title: '📦 Special Order Arrived Elsewhere',
+    body: `${p.orderNumber} — ${p.quantity} × ${p.bookTitle} arrived at ${p.locationName}: bring them to the order's location and reserve them`,
+    targetRoles: ['Sales', 'Manager', 'Admin'],
+    severity: 'warning',
+    entityType: 'order',
+    entityId: String(p.orderId ?? ''),
+  }),
   'pos.transaction_voided': (p) => ({
     title: '❌ Transaction Voided',
     body: `${p.txNumber} voided${p.staffName ? ` by ${p.staffName}` : ''}`,

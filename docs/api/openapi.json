@@ -24560,6 +24560,14 @@
                                   "minimum": -9007199254740991,
                                   "maximum": 9007199254740991
                                 },
+                                "specialOrder": {
+                                  "type": "boolean"
+                                },
+                                "qtyOnOrder": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
                                 "service": {
                                   "anyOf": [
                                     {
@@ -24695,6 +24703,8 @@
                                 "unitCost",
                                 "qtyReturned",
                                 "qtyCancelled",
+                                "specialOrder",
+                                "qtyOnOrder",
                                 "service"
                               ],
                               "additionalProperties": false
@@ -25040,6 +25050,9 @@
                             "serviceId",
                             "quantity"
                           ]
+                        },
+                        "specialOrder": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -25245,6 +25258,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -25380,6 +25401,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -25705,6 +25728,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -25840,6 +25871,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -26197,6 +26230,9 @@
                             "serviceId",
                             "quantity"
                           ]
+                        },
+                        "specialOrder": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -26402,6 +26438,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -26537,6 +26581,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -26943,6 +26989,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -27078,6 +27132,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -27721,6 +27777,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -27856,6 +27920,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -28291,6 +28357,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -28426,6 +28500,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -28727,6 +28803,10 @@
                       "null"
                     ]
                   },
+                  "deposit": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
                   "transactionReference": {
                     "type": "string",
                     "maxLength": 200
@@ -28941,6 +29021,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -29076,6 +29164,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -29531,6 +29621,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -29666,6 +29764,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -30074,6 +30174,14 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -30209,6 +30317,8 @@
                           "unitCost",
                           "qtyReturned",
                           "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
                           "service"
                         ],
                         "additionalProperties": false
@@ -30460,6 +30570,569 @@
           },
           "410": {
             "description": "Retired; the message names the replacement (`DEPRECATED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{id}/lines/{lineId}/reserve": {
+      "post": {
+        "operationId": "reserveOrderLine",
+        "summary": "Reserve a special-order line's copies on order from the stock at the order's location, e.g. brought over after arriving elsewhere; they count against the purchase orders still bringing copies for it (CREATE_SALE, #174)",
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "lineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "orderNumber": {
+                      "type": "string"
+                    },
+                    "customerId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "channel": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "paymentStatus": {
+                      "type": "string"
+                    },
+                    "amountPaid": {
+                      "type": "number"
+                    },
+                    "saleType": {
+                      "type": "string",
+                      "enum": [
+                        "cash_sale",
+                        "credit_sale"
+                      ]
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "subtotal": {
+                      "type": "number"
+                    },
+                    "discountAmount": {
+                      "type": "number"
+                    },
+                    "discountTotal": {
+                      "type": "number"
+                    },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxAmount": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "lineItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "orderId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "bookIsbn": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "discountAmount": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "discountType": {
+                            "type": "string",
+                            "enum": [
+                              "Normal",
+                              "Merchant",
+                              "Special"
+                            ]
+                          },
+                          "discountMode": {
+                            "type": "string",
+                            "enum": [
+                              "Percentage",
+                              "Amount"
+                            ]
+                          },
+                          "discountPct": {
+                            "type": "number"
+                          },
+                          "qtyReserved": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "qtyFulfilled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "isBackordered": {
+                            "type": "boolean"
+                          },
+                          "unitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "specialOrder": {
+                            "type": "boolean"
+                          },
+                          "qtyOnOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "orderId",
+                          "bookId",
+                          "bookTitle",
+                          "bookIsbn",
+                          "quantity",
+                          "unitPrice",
+                          "discountAmount",
+                          "totalPrice",
+                          "discountType",
+                          "discountMode",
+                          "discountPct",
+                          "qtyReserved",
+                          "qtyFulfilled",
+                          "isBackordered",
+                          "unitCost",
+                          "qtyReturned",
+                          "qtyCancelled",
+                          "specialOrder",
+                          "qtyOnOrder",
+                          "service"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedActions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "paymentMethod": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deliveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "deliveryNumber": {
+                            "type": "string"
+                          },
+                          "deliveredBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "deliveredByName": {
+                            "type": "string"
+                          },
+                          "deliveredAt": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lines": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineItemId": {
+                                  "type": "string"
+                                },
+                                "bookId": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineItemId",
+                                "bookId",
+                                "bookTitle",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "deliveryNumber",
+                          "deliveredBy",
+                          "deliveredByName",
+                          "deliveredAt",
+                          "notes",
+                          "lines"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "orderNumber",
+                    "customerId",
+                    "branchId",
+                    "locationId",
+                    "channel",
+                    "status",
+                    "paymentStatus",
+                    "amountPaid",
+                    "saleType",
+                    "currency",
+                    "subtotal",
+                    "discountAmount",
+                    "discountTotal",
+                    "taxRate",
+                    "taxAmount",
+                    "total",
+                    "cancelReason",
+                    "notes",
+                    "createdBy",
+                    "createdAt",
+                    "updatedAt",
+                    "allowedActions",
+                    "paymentMethod",
+                    "dueDate",
+                    "fulfilledAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
             "content": {
               "application/json": {
                 "schema": {
@@ -45296,6 +45969,784 @@
         }
       }
     },
+    "/purchase-orders/{id}/special-orders": {
+      "post": {
+        "operationId": "linkSpecialOrders",
+        "summary": "Special-order lines of the branch bought on this order: a draft's line for each book grows by their copies, or is created at unitCost; a submitted order takes them where it has copies to spare (Admin, Manager, Purchasor; the ordering branch, #174)",
+        "tags": [
+          "Purchase orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "lines": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "orderLineId": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unitCost": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "orderLineId",
+                        "quantity"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "poNumber": {
+                      "type": "string"
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supplierName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "pending_approval",
+                        "approved",
+                        "ordered",
+                        "partially_received",
+                        "received",
+                        "closed",
+                        "cancelled"
+                      ]
+                    },
+                    "totalAmount": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "expectedDeliveryDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "receivingBranchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivingLocationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "receivingLocationName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "financialStatus": {
+                      "type": "string",
+                      "enum": [
+                        "unpaid",
+                        "partial",
+                        "paid"
+                      ]
+                    },
+                    "paymentTerms": {
+                      "type": "string",
+                      "enum": [
+                        "cash",
+                        "credit"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "approvedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalKind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "approver",
+                            "creator",
+                            "sole_approver"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "approvalReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "approvalThreshold": {
+                      "type": "number"
+                    },
+                    "closedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "closedBy": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "closedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "receivedValue": {
+                      "type": "number"
+                    },
+                    "amountPaid": {
+                      "type": "number"
+                    },
+                    "creditNotesTotal": {
+                      "type": "number"
+                    },
+                    "refundsTotal": {
+                      "type": "number"
+                    },
+                    "outstandingAmount": {
+                      "type": "number"
+                    },
+                    "refundDue": {
+                      "type": "number"
+                    },
+                    "orderedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "receivedQuantityTotal": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lineItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "bookIsbn": {
+                            "type": "string"
+                          },
+                          "formatId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "editionId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitCost": {
+                            "type": "number"
+                          },
+                          "receivedQuantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "returnedQuantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "remaining": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "bookId",
+                          "bookTitle",
+                          "bookIsbn",
+                          "formatId",
+                          "editionId",
+                          "quantity",
+                          "unitCost",
+                          "receivedQuantity",
+                          "returnedQuantity",
+                          "remaining"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "locationId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "locationName": {
+                            "type": "string"
+                          },
+                          "receivedBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "receivedAt": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "receiptId": {
+                                  "type": "string"
+                                },
+                                "poLineItemId": {
+                                  "type": "string"
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantityReceived": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "receiptId",
+                                "poLineItemId",
+                                "bookTitle",
+                                "quantityReceived"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "poId",
+                          "locationId",
+                          "locationName",
+                          "receivedBy",
+                          "receivedAt",
+                          "notes",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "payments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "paymentNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "paymentMethod": {
+                            "type": "string"
+                          },
+                          "bankAccountId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "manual",
+                              "auto_on_receipt"
+                            ]
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "reversedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reversedBy": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reversalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "paymentNumber",
+                          "poId",
+                          "amount",
+                          "paymentMethod",
+                          "bankAccountId",
+                          "source",
+                          "notes",
+                          "createdBy",
+                          "createdAt",
+                          "reversedAt",
+                          "reversedBy",
+                          "reversalReason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "creditNotes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "creditNoteNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "supplierId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "creditNoteNumber",
+                          "poId",
+                          "supplierId",
+                          "amount",
+                          "reason",
+                          "createdBy",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "supplierRefunds": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "refundNumber": {
+                            "type": "string"
+                          },
+                          "poId": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "method": {
+                            "type": "string",
+                            "enum": [
+                              "cash",
+                              "bank",
+                              "mobile",
+                              "cheque"
+                            ]
+                          },
+                          "reference": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "bankAccountId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "refundNumber",
+                          "poId",
+                          "amount",
+                          "method",
+                          "reference",
+                          "bankAccountId",
+                          "notes",
+                          "createdBy",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "poNumber",
+                    "branchId",
+                    "supplierId",
+                    "supplierName",
+                    "status",
+                    "totalAmount",
+                    "currency",
+                    "expectedDeliveryDate",
+                    "notes",
+                    "receivingBranchId",
+                    "receivingLocationId",
+                    "receivingLocationName",
+                    "financialStatus",
+                    "paymentTerms",
+                    "createdBy",
+                    "approvedBy",
+                    "approvedAt",
+                    "approvalKind",
+                    "approvalReason",
+                    "approvalThreshold",
+                    "closedReason",
+                    "closedBy",
+                    "closedAt",
+                    "createdAt",
+                    "updatedAt",
+                    "receivedValue",
+                    "amountPaid",
+                    "creditNotesTotal",
+                    "refundsTotal",
+                    "outstandingAmount",
+                    "refundDue",
+                    "orderedQuantityTotal",
+                    "receivedQuantityTotal"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state of the data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/purchase-orders/{id}/submit": {
       "post": {
         "operationId": "submitPurchaseOrder",
@@ -57590,6 +59041,253 @@
           },
           "422": {
             "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/special-orders": {
+      "get": {
+        "operationId": "listSpecialOrders",
+        "summary": "The session branch's special-order lines with copies on order, oldest order first; toOrder=true: only those with copies on no purchase order yet (Admin, Manager, Purchasor; the ordering branch, #174)",
+        "tags": [
+          "Purchase orders"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "toOrder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The lines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "orderLineId": {
+                            "type": "string"
+                          },
+                          "orderId": {
+                            "type": "string"
+                          },
+                          "orderNumber": {
+                            "type": "string"
+                          },
+                          "orderedAt": {
+                            "type": "string"
+                          },
+                          "customerId": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "customerName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "onOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "linked": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "toOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "orderLineId",
+                          "orderId",
+                          "orderNumber",
+                          "orderedAt",
+                          "customerId",
+                          "customerName",
+                          "bookId",
+                          "bookTitle",
+                          "isbn",
+                          "quantity",
+                          "onOrder",
+                          "linked",
+                          "toOrder",
+                          "purchaseOrders"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize",
+                    "totalPages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
             "content": {
               "application/json": {
                 "schema": {

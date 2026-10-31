@@ -5,6 +5,7 @@ import {
   ClosePurchaseOrderRequestSchema,
   CreatePurchaseOrderRequestSchema,
   IdParamsSchema,
+  LinkSpecialOrdersRequestSchema,
   Money,
   PurchaseOrderListQuerySchema,
   ReceivePurchaseOrderRequestSchema,
@@ -34,6 +35,7 @@ export const schemas = {
   receive: { params: IdParamsSchema, body: ReceivePurchaseOrderRequestSchema },
   approve: { params: IdParamsSchema, body: ApprovePurchaseOrderRequestSchema },
   close: { params: IdParamsSchema, body: ClosePurchaseOrderRequestSchema },
+  linkSpecialOrders: { params: IdParamsSchema, body: LinkSpecialOrdersRequestSchema },
 };
 
 /** The signed-in staff member; authenticate() runs before every controller. */
@@ -142,6 +144,12 @@ export async function receive(req: Request, res: Response): Promise<void> {
       notes: body.notes ?? null,
     }),
   );
+}
+
+/** Special-order lines of the session branch added to the purchase order (#174). */
+export async function linkSpecialOrders(req: Request, res: Response): Promise<void> {
+  const { params, body } = valid(req, schemas.linkSpecialOrders);
+  send(res, await service.linkSpecialOrders(actor(req), String(params.id), body.lines));
 }
 
 export async function cancel(req: Request, res: Response): Promise<void> {
