@@ -11418,6 +11418,72 @@
         }
       }
     },
+    "/business-days/today": {
+      "get": {
+        "operationId": "getBusinessToday",
+        "summary": "The session branch's local day today and whether it is closed, for every signed-in staff member",
+        "tags": [
+          "Day and month close"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Today",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "day": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "open",
+                        "closed",
+                        "reopened"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "branchId",
+                    "day",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/business-months": {
       "get": {
         "operationId": "listBusinessMonths",

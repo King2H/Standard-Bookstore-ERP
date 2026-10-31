@@ -21,6 +21,8 @@ const reopeners = requirePermission('REOPEN_PERIOD');
 const inBranch = recordInBranch('businessDay');
 
 router.get('/business-days', authenticate, readers, validate(schemas.listDays), close.listDays);
+// Anyone signed in learns whether the branch's day is closed, so the app can say so before they try (6a).
+router.get('/business-days/today', authenticate, close.today);
 router.get('/business-days/preview', authenticate, readers, validate(schemas.previewDay), close.previewDay);
 router.post('/business-days/close', authenticate, dayClosers, validate(schemas.closeDay), close.closeDay);
 router.get('/business-days/:id', authenticate, inBranch, readers, validate(schemas.byId), close.getDay);

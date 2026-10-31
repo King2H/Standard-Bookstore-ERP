@@ -12,6 +12,7 @@ import {
   type BusinessMonthListResponse,
   type DayPreview,
   type MonthPreview,
+  type TodayStatus,
 } from '@bms/shared';
 import { scopedBranch, scopedBranchOrAll } from '../../lib/scope.js';
 import { valid } from '../../middleware/validate.js';
@@ -45,6 +46,11 @@ function actor(req: Request): Actor {
 export async function listDays(req: Request, res: Response): Promise<void> {
   const { query } = valid(req, schemas.listDays);
   const body: BusinessDayListResponse = { items: (await service.listDays(scopedBranchOrAll(req), query)).map(toBusinessDay) };
+  res.json(body);
+}
+
+export async function today(req: Request, res: Response): Promise<void> {
+  const body: TodayStatus = await service.today(scopedBranch(req));
   res.json(body);
 }
 

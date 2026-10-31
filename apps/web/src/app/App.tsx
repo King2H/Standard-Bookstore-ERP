@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router';
 import LoginPage from '../features/auth/pages/LoginPage.js';
 import Layout from '../components/Layout.js';
 import SessionWarning from '../components/SessionWarning.js';
+import { ClosedDayBanner } from '../features/businessDays/components/ClosedDayBanner.js';
 import { AppProviders } from './providers.js';
 import { useSession } from './useSession.js';
 import { AppRoutes } from './routes.js';
@@ -60,6 +61,7 @@ function AppShell() {
           <span>Your password must be changed before continuing. Please update it in your profile.</span>
         </div>
       )}
+      <ClosedDayBanner />
       <AppRoutes session={session} onNavigate={handleNavigate} />
 
       {/* Inactivity warning overlay */}

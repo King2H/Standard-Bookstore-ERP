@@ -13,6 +13,7 @@
  *   exchange → exchanges, customer → customers, service_job → binding-jobs,
  *   branch_transfer → inventory, on Incoming with the note open (#170);
  *   cash_session → cash-sessions, on the session (#171);
+ *   business_day / business_month → day-close, on the day or month reopened (#175);
  *   anything else stays put.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -41,6 +42,8 @@ const ENTITY_PAGE: Record<string, string> = {
   service_job:    'binding-jobs',
   branch_transfer:'inventory',
   cash_session:   'cash-sessions',
+  business_day:   'day-close',
+  business_month: 'day-close',
   stock_count:    'inventory',
 };
 
@@ -114,6 +117,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     if (notif.entityType === 'branch_transfer' && onNavigate) onNavigate('inventory', { tab: 'incoming', transferId: notif.entityId ?? '' });
     else if (notif.entityType === 'stock_count' && onNavigate) onNavigate('inventory', { tab: 'counts', countId: notif.entityId ?? '' });
     else if (notif.entityType === 'cash_session' && onNavigate) onNavigate('cash-sessions', { sessionId: notif.entityId ?? '' });
+    else if (notif.entityType === 'business_day' && onNavigate) onNavigate('day-close', { dayId: notif.entityId ?? '' });
+    else if (notif.entityType === 'business_month' && onNavigate) onNavigate('day-close', { monthId: notif.entityId ?? '' });
     // An order opens itself, e.g. its special-order copies arrived (#174).
     else if (notif.entityType === 'order' && notif.entityId && onNavigate) onNavigate('orders', { orderId: notif.entityId });
     else if (page && onNavigate) onNavigate(page);

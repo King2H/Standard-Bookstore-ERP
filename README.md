@@ -749,6 +749,12 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   Closing again keeps a new report under a new number.
 - GET /api/v1/business-days?month= / /preview?day= / /:id and GET /api/v1/business-months?year= / /preview?month= /
   /:id — the kept days and months, and a day or month before it closes: its figures so far and what stops it (VIEW_REPORTS)
+- GET /api/v1/business-days/today — `{ branchId, day, status }` for anyone signed in: the banner that says the branch's
+  day is closed
+- Screens (#175 PR 2): Finance → Day Close. **Days**: the month's calendar for the session branch; a day opens with its
+  report so far (or as kept), what stops it closing, Close, Print and, for an Admin, Reopen with a reason. **Months**: a
+  year's months; a month shows whether it has ended, the days each branch still has to close, its summary, Close and
+  Reopen. A banner across the app says when the branch's day is closed. The time zone is under Settings → General.
 - `npm run db:check` reports anything recorded in a closed day after its close (`business-days.untouched-after-close`).
 
 ### Stock counts (#172)

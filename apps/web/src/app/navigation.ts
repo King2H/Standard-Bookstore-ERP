@@ -9,7 +9,7 @@
  *   Dashboard (standalone)
  *   Sales      → POS, Orders, Binding Jobs, Returns, Exchanges, Customers
  *   Stock      → Inventory, Procurement, Suppliers, Catalog
- *   Finance    → Payments, Receivables
+ *   Finance    → Payments, Receivables, Cash Sessions, Day Close
  *     (Bank Accounts is not an active module for this version: hidden
  *      from the nav, route/page left intact.)
  *   Organization → Branches, Locations, Staff
@@ -20,12 +20,12 @@ export type Page =
   | 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings'
   | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers'
   | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments'
-  | 'exchanges' | 'profile' | 'receivables' | 'binding-jobs' | 'cash-sessions';
+  | 'exchanges' | 'profile' | 'receivables' | 'binding-jobs' | 'cash-sessions' | 'day-close';
 
 export const PAGES: readonly Page[] = [
   'dashboard', 'branches', 'staff', 'audit-log', 'settings', 'bank-accounts', 'locations', 'catalog',
   'inventory', 'suppliers', 'procurement', 'customers', 'pos', 'returns', 'orders', 'payments',
-  'exchanges', 'profile', 'receivables', 'binding-jobs', 'cash-sessions',
+  'exchanges', 'profile', 'receivables', 'binding-jobs', 'cash-sessions', 'day-close',
 ];
 
 export const isPage = (value: string): value is Page => (PAGES as readonly string[]).includes(value);
@@ -94,6 +94,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: 'receivables',   label: 'Receivables',   icon: '🧾', roles: ['Admin', 'Manager', 'Finance_Officer'],             permissions: ['PROCESS_PAYMENT'] },
       // By role (#171, decision 2a): a cashier works with their own session on the POS page.
       { id: 'cash-sessions', label: 'Cash Sessions', icon: '💵', roles: ['Admin', 'Manager', 'Finance_Officer'] },
+      // Closing the branch's day and the shop's month (#175, decision 1a).
+      { id: 'day-close',     label: 'Day Close',     icon: '🔒', roles: ['Admin', 'Manager', 'Finance_Officer'],             permissions: ['CLOSE_DAY', 'CLOSE_MONTH'] },
       // 'bank-accounts' intentionally omitted — not an active module for
       // this version. The page/route still exists; only the nav entry is
       // hidden. (Installments were retired.)

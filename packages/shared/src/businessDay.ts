@@ -104,6 +104,14 @@ export const DayPreviewSchema = z.object({
 });
 export type DayPreview = z.infer<typeof DayPreviewSchema>;
 
+/** Whether the session branch's day today is closed: for the banner every signed-in staff member sees. */
+export const TodayStatusSchema = z.object({
+  branchId: z.number().int(),
+  day: z.string(),
+  status: BusinessPeriodStatusSchema,
+});
+export type TodayStatus = z.infer<typeof TodayStatusSchema>;
+
 export const CloseDayRequestSchema = z.object({ day: DateOnlySchema });
 export type CloseDayRequest = z.infer<typeof CloseDayRequestSchema>;
 

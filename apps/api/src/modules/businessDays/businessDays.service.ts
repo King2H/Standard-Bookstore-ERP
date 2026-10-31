@@ -49,6 +49,12 @@ export async function assertChangeable(q: Queryable, branchId: number, recordedA
 
 // ── Days (decision 2a) ────────────────────────────────────────────────────────
 
+/** The branch's local day today and whether it is closed: the app shell's banner (decision 6a). */
+export async function today(branchId: number): Promise<{ branchId: number; day: string; status: 'open' | 'closed' | 'reopened' }> {
+  const day = await localToday(kysely);
+  return { branchId, day, status: (await days.findDayOf(kysely, branchId, day))?.status ?? 'open' };
+}
+
 /** The day as it stands: its report so far, or as kept once closed, and what stops it closing. */
 export async function previewDay(branchId: number, day: string): Promise<DayPreview> {
   const [kept, openCashSessions, closedMonth] = await Promise.all([

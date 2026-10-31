@@ -31,6 +31,7 @@ import {
   MonthPreviewSchema,
   MonthQuerySchema,
   ReopenRequestSchema,
+  TodayStatusSchema,
   CashSessionListQuerySchema,
   CashSessionListResponseSchema,
   CloseCashSessionRequestSchema,
@@ -1683,6 +1684,15 @@ function businessDayOperations(): ApiOperation[] {
       request: { query: BusinessDayListQuerySchema },
       responses: { 200: { description: 'The days', schema: BusinessDayListResponseSchema } },
       errors: [400, 401, 403, 500],
+    },
+    {
+      operationId: 'getBusinessToday',
+      method: 'get',
+      path: '/business-days/today',
+      summary: "The session branch's local day today and whether it is closed, for every signed-in staff member",
+      tag,
+      responses: { 200: { description: 'Today', schema: TodayStatusSchema } },
+      errors: [401, 500],
     },
     {
       operationId: 'previewBusinessDay',
