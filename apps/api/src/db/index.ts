@@ -10,7 +10,8 @@ export const db = new Pool({
 });
 
 // Every connection handed out carries the tenant of the work that asked for
-// it (#13). Pool connections are shared, so it is set on each checkout,
+// it (#13), and works in that shop's time zone (#175), so its dates are the
+// shop's local days. Pool connections are shared, so it is set on each checkout,
 // never left from the previous user. Kysely, withTransaction and pool.query
 // all check out through here, so this is also where work that forgot its
 // tenant is stopped (ADR-0003): it gets no connection at all, rather than a
@@ -22,7 +23,7 @@ async function connectForTenant(): Promise<PoolClient> {
   if (!work) throw new NoTenantError();
   const client = await checkout();
   try {
-    await client.query(`SELECT set_config('app.tenant_id', $1, false)`, ['tenantId' in work ? String(work.tenantId) : '']);
+    await client.query(`SELECT apply_tenant($1)`, ['tenantId' in work ? String(work.tenantId) : '']);
   } catch (err) {
     client.release(err as Error);
     throw err;

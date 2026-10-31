@@ -56,6 +56,16 @@ describe('Data consistency check', () => {
     // ...with no day its sale counts on (#175): the trigger stamps one, an edit by hand can clear it.
     await client.query(`UPDATE orders SET confirmed_at = NULL WHERE id = $1`, [paidOrder]);
 
+    // Day close (#175): a stock movement recorded in a day after its close.
+    await client.query(
+      `INSERT INTO business_days (branch_id, day, status, day_number, report, closed_by, closed_at) VALUES ($1, '2001-03-05', 'closed', $2, '{}', $3, '2001-03-05T12:00:00Z')`,
+      [branchId, `${MARK}-DAY`, staffId],
+    );
+    await client.query(
+      `INSERT INTO inventory_history (book_id, location_id, qty_before, qty_after, delta, reason_code, staff_id, created_at) VALUES ($1, $2, 0, 0, 0, 'correction', $3, '2001-03-05T18:00:00Z')`,
+      [await one(`SELECT id FROM books ORDER BY id OFFSET 3 LIMIT 1`), loc, staffId],
+    );
+
     // Services: a confirmed order's service line with no job (#169).
     const orderLine = await one(`INSERT INTO order_line_items (order_id, book_id, quantity, unit_price, total_price) VALUES ($1, $2, 1, 10, 10) RETURNING id`, [paidOrder, book1]);
     // ...delivered in a part its line does not record (#174).
@@ -263,6 +273,7 @@ describe('Data consistency check', () => {
     ['transfers.stock-history', new RegExp(`^${MARK}-TRF: book \\d+ sent 3 \\(history 0\\), received 2 \\(history 0\\)$`)],
     ['cash.session-adds-up', new RegExp(`^${MARK}-Z: expected 120\\.00, float and movements say 150\\.00; variance 0\\.00, counted less expected 5\\.00$`)],
     ['orders.sale-dated', /^ORD-\d{8}-9999 \(CONFIRMED\): no confirmation date$/],
+    ['business-days.untouched-after-close', new RegExp(`^${MARK}-DAY \\(2001-03-05\\): stock movement \\d+ recorded after the close$`)],
     ['orders.deliveries-add-up', /^ORD-\d{8}-9999 line \d+: delivered 0, deliveries say 2, waiting 0, cancelled 0 of 1$/],
     ['special-orders.links-within', /^ORD-\d{8}-9999 line \d+: purchase orders bring 3, on order 1$/],
     ['stock-counts.posted-in-history', new RegExp(`^${MARK}-CNT: book \\d+ posted 2, history 0$`)],
@@ -289,6 +300,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/31 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/32 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

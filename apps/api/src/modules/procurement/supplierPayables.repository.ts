@@ -12,15 +12,22 @@ export async function lockPayment(
   q: Queryable,
   poId: string,
   paymentId: number,
-): Promise<{ id: string; paymentNumber: string | null; amount: Money; reversedAt: Date | null } | undefined> {
+): Promise<{ id: string; paymentNumber: string | null; amount: Money; reversedAt: Date | null; branchId: number; createdAt: Date } | undefined> {
   const row = await q
     .selectFrom('supplier_payments')
-    .select(['id', 'payment_number', 'amount', 'reversed_at'])
+    .select(['id', 'payment_number', 'amount', 'reversed_at', 'branch_id', 'created_at'])
     .where('id', '=', String(paymentId))
     .where('po_id', '=', poId)
     .forUpdate()
     .executeTakeFirst();
-  return row && { id: String(row.id), paymentNumber: row.payment_number, amount: Money.of(row.amount), reversedAt: row.reversed_at };
+  return row && {
+    id: String(row.id),
+    paymentNumber: row.payment_number,
+    amount: Money.of(row.amount),
+    reversedAt: row.reversed_at,
+    branchId: row.branch_id,
+    createdAt: row.created_at,
+  };
 }
 
 export async function reversePayment(q: Queryable, paymentId: string, by: number, reason: string): Promise<void> {

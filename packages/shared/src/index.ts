@@ -24,6 +24,7 @@ export * from './audit.js';
 export * from './auth.js';
 export * from './bankAccount.js';
 export * from './branch.js';
+export * from './businessDay.js';
 export * from './catalog.js';
 export * from './catalogReference.js';
 export * from './common.js';

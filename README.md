@@ -728,6 +728,29 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
   while open, the Z report once closed: totals by kind and method, and every movement. Admin, Manager and
   Finance_Officer see the branch's sessions; anyone else their own, without what is expected while it is open.
 
+### Day and month close (#175)
+- The shop's days are local days: `business_timezone` (system-wide, Africa/Addis_Ababa by default, checked against the
+  zones PostgreSQL knows). Every connection the API checks out works in it, so dates in reports, daily numbers and the
+  close are the shop's days, not UTC ones.
+- POST /api/v1/business-days/close — body `{ day }`: closes that day of the session branch once every cash session of it
+  is closed (`CASH_SESSIONS_OPEN`); not a day still to come. Its report is kept, numbered DAY-YYYYMMDD-NNNN: sales
+  (orders, POS, exchanges), money in and out by method (customers and suppliers), returns, stock movements by reason, and
+  each cash session's count (CLOSE_DAY: Admin, Manager, Finance_Officer). It waits for writes already under way in the
+  branch, and writes that start meanwhile wait for it.
+- From then on nothing is recorded in that branch on that day (`DAY_CLOSED`, 409): the ledger tables refuse it in the
+  database, whatever the flow. Corrections are new documents on an open day: a return, a refund, a credit note. What
+  changes an earlier day in place is refused once that day is closed: reversing a supplier payment; voiding a sale or an
+  exchange is for its own day only.
+- POST /api/v1/business-months/close — body `{ month }`: closes a month for the whole shop once it has ended and every
+  branch has closed each day it worked in it (`MONTH_HAS_OPEN_DAYS`, listing them); its summary is kept, and every day in
+  it is locked (CLOSE_MONTH: Admin, Finance_Officer)
+- POST /api/v1/business-days/:id/reopen, /api/v1/business-months/:id/reopen — body `{ reason }`: Admin only
+  (REOPEN_PERIOD), audited; Super_Admin and Finance_Officer are told. A day of a closed month reopens only after the month.
+  Closing again keeps a new report under a new number.
+- GET /api/v1/business-days?month= / /preview?day= / /:id and GET /api/v1/business-months?year= / /preview?month= /
+  /:id — the kept days and months, and a day or month before it closes: its figures so far and what stops it (VIEW_REPORTS)
+- `npm run db:check` reports anything recorded in a closed day after its close (`business-days.untouched-after-close`).
+
 ### Stock counts (#172)
 - POST /api/v1/stock-counts — body `{ locationId, scope: 'full' | 'selected', bookIds?, notes? }`: a count of a location one
   may use, every book it holds or the books named, numbered CNT-YYYYMMDD-NNNN; expected quantities frozen; one open count

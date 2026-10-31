@@ -80,6 +80,9 @@ export type OutboxEventType =
   | 'cash_session.review_needed'
   // Stock counts (#172)
   | 'stock_count.submitted'
+  // Day and month close (#175)
+  | 'business_day.reopened'
+  | 'business_month.reopened'
   // Customers
   | 'customer.store_credit_added'
   | 'customer.deactivated'

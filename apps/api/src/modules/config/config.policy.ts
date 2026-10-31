@@ -50,6 +50,11 @@ export function checkBranchOverridable(key: string): void {
  * order or a bank account included (#181, owner decision 3a): amounts are
  * kept as entered, never converted, so a new currency would relabel them.
  */
+/** The shop's time zone must be one PostgreSQL knows, or every date would fall back to the default (#175). */
+export function checkTimeZone(zone: unknown, known: boolean): void {
+  if (!known) throw new ValidationError(`Config key 'business_timezone' must be a time zone name, e.g. Africa/Addis_Ababa; '${String(zone)}' is not one`);
+}
+
 export function checkCurrencyChange(current: unknown, next: unknown, holders: string[]): void {
   if (current !== next && holders.length > 0) {
     throw new BusinessError(

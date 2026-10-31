@@ -97,6 +97,12 @@ export async function deleteBranch(q: Queryable, branchId: number, key: string):
  * Amounts are kept as entered, never converted, so none may be relabelled.
  * Returns what holds it, in words, or nothing.
  */
+/** Whether PostgreSQL knows the time zone, by its IANA name. */
+export async function isKnownTimeZone(q: Queryable, zone: string): Promise<boolean> {
+  const { rows } = await sql<{ known: boolean }>`SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = ${zone}) AS known`.execute(q);
+  return rows[0].known;
+}
+
 export async function findCurrencyHolders(q: Queryable): Promise<string[]> {
   const { rows } = await sql<{ holder: string }>`
     SELECT holder FROM (VALUES

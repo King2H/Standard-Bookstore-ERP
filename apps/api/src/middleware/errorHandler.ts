@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { closedPeriodError } from '../db/errors.js';
 import { AppError } from '../lib/errors.js';
 
 export function errorHandler(
@@ -7,6 +8,8 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  // A write the database refused because its day or month is closed (#175).
+  err = closedPeriodError(err) ?? err;
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       error: err.code,

@@ -20,7 +20,11 @@ export type Permission =
   // Reviewing, posting and cancelling a stock count (#172, decision 4a).
   | 'APPROVE_STOCK_COUNT'
   // Sending books back to a supplier (#173, decision 5a).
-  | 'SEND_SUPPLIER_RETURN';
+  | 'SEND_SUPPLIER_RETURN'
+  // Closing a branch's day, the shop's month, and reopening either (#175, decisions 2a, 4a, 5a).
+  | 'CLOSE_DAY'
+  | 'CLOSE_MONTH'
+  | 'REOPEN_PERIOD';
 
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // Super_Admin: governance-only role — manages staff, branches, and system config.
@@ -48,6 +52,9 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'REVIEW_CASH_SESSION',
     'APPROVE_STOCK_COUNT',
     'SEND_SUPPLIER_RETURN',
+    'CLOSE_DAY',
+    'CLOSE_MONTH',
+    'REOPEN_PERIOD',
   ],
   Manager: [
     'CREATE_SALE',
@@ -65,8 +72,9 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'REVIEW_CASH_SESSION',
     'APPROVE_STOCK_COUNT',
     'SEND_SUPPLIER_RETURN',
+    'CLOSE_DAY',
   ],
-  Finance_Officer: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'],
+  Finance_Officer: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS', 'CLOSE_DAY', 'CLOSE_MONTH'],
   Stock_Clerk: ['MANAGE_INVENTORY', 'SEND_TRANSFER', 'RECEIVE_TRANSFER'],
   Sales: ['CREATE_SALE', 'PROCESS_PAYMENT'],
   Purchasor: ['MANAGE_INVENTORY', 'VIEW_REPORTS'],

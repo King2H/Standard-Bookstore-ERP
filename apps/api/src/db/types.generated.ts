@@ -255,6 +255,34 @@ export interface BranchTransfers {
   updated_at: Generated<Timestamp>;
 }
 
+export interface BusinessDays {
+  branch_id: number;
+  closed_at: Generated<Timestamp>;
+  closed_by: number;
+  day: Timestamp;
+  day_number: string;
+  id: Generated<number>;
+  reopen_reason: string | null;
+  reopened_at: Timestamp | null;
+  reopened_by: number | null;
+  report: Json;
+  status: string;
+  tenant_id: Generated<number>;
+}
+
+export interface BusinessMonths {
+  closed_at: Generated<Timestamp>;
+  closed_by: number;
+  id: Generated<number>;
+  month: Timestamp;
+  reopen_reason: string | null;
+  reopened_at: Timestamp | null;
+  reopened_by: number | null;
+  status: string;
+  summary: Json;
+  tenant_id: Generated<number>;
+}
+
 export interface CashSessionMovements {
   amount: Numeric;
   category: string | null;
@@ -1220,6 +1248,8 @@ export interface DB {
   branch_transfer_lines: BranchTransferLines;
   branch_transfers: BranchTransfers;
   branches: Branches;
+  business_days: BusinessDays;
+  business_months: BusinessMonths;
   cash_session_movements: CashSessionMovements;
   cash_sessions: CashSessions;
   categories: Categories;

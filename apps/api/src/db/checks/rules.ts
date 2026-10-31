@@ -36,6 +36,7 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['RTS', 'supplier_returns', 'return_number'],
   ['SREF', 'supplier_refunds', 'refund_number'],
   ['DLV', 'order_deliveries', 'delivery_number'],
+  ['DAY', 'business_days', 'day_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -377,6 +378,42 @@ export const CHECKS: readonly Check[] = [
       SELECT o.tenant_id, o.order_number || ' (' || o.status || '): no confirmation date' AS ref
       FROM orders o
       WHERE o.confirmed_at IS NULL AND o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled')`,
+  },
+  {
+    id: 'business-days.untouched-after-close',
+    area: 'Day close',
+    title: 'Nothing is recorded in a closed day after its close',
+    severity: 'error',
+    // A closed day's report is final (#175): the ledger refuses writes in it and
+    // its in-place changes. The days are the shop's local ones.
+    sql: `
+      WITH recorded AS (
+        SELECT tenant_id, branch_id, created_at AS at, 'sale ' || transaction_number AS what FROM transactions
+        UNION ALL SELECT o.tenant_id, o.branch_id, ev.sale_at, 'order ' || o.order_number FROM order_sale_events ev JOIN orders o ON o.id = ev.order_id
+        UNION ALL SELECT p.tenant_id, o.branch_id, p.created_at, 'order payment ' || p.id FROM order_payments p JOIN orders o ON o.id = p.order_id
+        UNION ALL SELECT tenant_id, branch_id, created_at, 'return ' || return_number FROM returns
+        UNION ALL SELECT tenant_id, branch_id, created_at, 'exchange ' || exchange_reference FROM exchanges
+        UNION ALL SELECT h.tenant_id, l.branch_id, h.created_at, 'stock movement ' || h.id FROM inventory_history h JOIN locations l ON l.id = h.location_id
+        UNION ALL SELECT tenant_id, branch_id, opened_at, 'cash session ' || id FROM cash_sessions
+        UNION ALL SELECT tenant_id, branch_id, created_at, 'ledger entry ' || id FROM financial_transactions
+        UNION ALL SELECT tenant_id, branch_id, created_at, 'supplier payment ' || COALESCE(payment_number, id::text) FROM supplier_payments
+      ),
+      changed AS (
+        -- Changes in place: the record keeps its day, the change comes later.
+        SELECT tenant_id, branch_id, created_at AS day_of, reversed_at AS at, 'reversal of supplier payment ' || COALESCE(payment_number, id::text) AS what
+        FROM supplier_payments WHERE reversed_at IS NOT NULL
+        UNION ALL SELECT tenant_id, branch_id, created_at, voided_at, 'void of exchange ' || exchange_reference FROM exchanges WHERE voided_at IS NOT NULL
+      ),
+      events AS (
+        SELECT tenant_id, branch_id, at AS day_of, at, what FROM recorded
+        UNION ALL SELECT tenant_id, branch_id, day_of, at, what FROM changed
+      )
+      SELECT d.tenant_id, d.day_number || ' (' || d.day || '): ' || e.what || ' recorded after the close' AS ref
+      FROM business_days d
+      JOIN events e ON e.branch_id = d.branch_id
+        AND (e.day_of AT TIME ZONE business_timezone(d.tenant_id))::date = d.day
+        AND e.at > d.closed_at
+      WHERE d.status = 'closed'`,
   },
   {
     id: 'orders.deliveries-add-up',

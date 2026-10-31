@@ -87,9 +87,10 @@ const paymentMethods = `must be a list of payment methods: ${OrderPaymentMethodS
 /**
  * Settings that hold for every branch; a branch cannot override them. The
  * currency: every amount is recorded in it, so a branch showing another one
- * would label its amounts wrongly.
+ * would label its amounts wrongly. The time zone: a month is closed for the
+ * whole shop, so its days are the same in every branch (#175).
  */
-export const SYSTEM_WIDE_CONFIG_KEYS: readonly string[] = ['base_currency'];
+export const SYSTEM_WIDE_CONFIG_KEYS: readonly string[] = ['base_currency', 'business_timezone'];
 
 /**
  * The value each setting takes (#23). The API refuses any other key or value,
@@ -99,6 +100,8 @@ export const SYSTEM_WIDE_CONFIG_KEYS: readonly string[] = ['base_currency'];
  */
 export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   base_currency: currencyCode,
+  /** The shop's local time zone, an IANA name such as Africa/Addis_Ababa: its days are closed and reported in it (#175). */
+  business_timezone: text.regex(/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$|^UTC$/, 'must be a time zone name, e.g. Africa/Addis_Ababa'),
   fiscal_year_start_month: number,
   max_line_discount_pct: z
     .record(z.string(), number.min(0, 'must give each role 0 to 100').max(100, 'must give each role 0 to 100'), {
