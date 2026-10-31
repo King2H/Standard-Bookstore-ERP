@@ -388,7 +388,29 @@ export const CHECKS: readonly Check[] = [
       ) c ON c.order_line_item_id = li.id
       WHERE EXISTS (SELECT 1 FROM order_deliveries od WHERE od.order_id = o.id)
         AND (li.qty_fulfilled <> COALESCE(d.quantity, 0)
-          OR (o.status <> 'CANCELLED' AND li.qty_fulfilled + li.qty_reserved + COALESCE(c.quantity, 0) <> li.quantity))`,
+          OR (o.status <> 'CANCELLED' AND NOT li.special_order AND li.qty_fulfilled + li.qty_reserved + COALESCE(c.quantity, 0) <> li.quantity)
+          -- A special-order line's other copies are still on order (#174).
+          OR (li.special_order AND li.qty_fulfilled + li.qty_reserved + COALESCE(c.quantity, 0) > li.quantity))`,
+  },
+  {
+    id: 'special-orders.links-within',
+    area: 'Orders',
+    title: 'A special-order line waits on purchase orders for no more than it has on order',
+    severity: 'error',
+    sql: `
+      SELECT o.tenant_id, o.order_number || ' line ' || li.id || ': purchase orders bring ' || l.outstanding || ', on order ' || li.on_order AS ref
+      FROM (
+        SELECT oli.id, oli.order_id, GREATEST(0, oli.quantity - oli.qty_reserved - oli.qty_fulfilled - COALESCE((
+          SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+          WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND r.undelivered), 0)) AS on_order
+        FROM order_line_items oli WHERE oli.special_order
+      ) li
+      JOIN orders o ON o.id = li.order_id
+      JOIN (
+        SELECT order_line_item_id, SUM(quantity - reserved_quantity) AS outstanding FROM special_order_links
+        WHERE released_at IS NULL GROUP BY order_line_item_id
+      ) l ON l.order_line_item_id = li.id
+      WHERE l.outstanding > li.on_order OR (o.status IN ('CANCELLED', 'COMPLETED', 'FULFILLED') AND l.outstanding > 0)`,
   },
   {
     id: 'stock-counts.posted-in-history',

@@ -71,6 +71,9 @@ export type OutboxEventType =
   | 'exchange.settled'
   // Services (#169)
   | 'service_job.ready'
+  // Special orders (#174)
+  | 'special_order.arrived'
+  | 'special_order.arrived_elsewhere'
   // Transfers between branches (#170)
   | 'transfer.dispatched'
   // Cash sessions (#171)

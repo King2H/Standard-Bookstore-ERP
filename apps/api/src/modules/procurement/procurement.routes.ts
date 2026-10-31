@@ -35,6 +35,8 @@ router.post(
   po.receive,
 );
 router.post('/purchase-orders/:id/close', authenticate, inBranch, approvers, validate(schemas.close), po.close);
+// Special-order lines of the branch, bought for customers on this order (#174, decision 3a).
+router.post('/purchase-orders/:id/special-orders', authenticate, inBranch, buyers, validate(schemas.linkSpecialOrders), po.linkSpecialOrders);
 router.post('/purchase-orders/:id/cancel', authenticate, inBranch, buyers, validate(schemas.byId), po.cancel);
 
 export default router;

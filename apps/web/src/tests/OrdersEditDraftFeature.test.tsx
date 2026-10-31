@@ -58,7 +58,7 @@ const DRAFT = order({
   lineItems: [{
     id: '41', orderId: '20', bookId: 9, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '9780306406109', quantity: 2, unitPrice: 30,
     discountAmount: 6, totalPrice: 54, discountType: 'Merchant', discountMode: 'Percentage', discountPct: 10,
-    qtyReserved: 0, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, qtyCancelled: 0, service: null,
+    qtyReserved: 0, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, service: null,
   }],
 });
 

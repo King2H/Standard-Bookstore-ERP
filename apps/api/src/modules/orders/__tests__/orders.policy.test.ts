@@ -192,9 +192,36 @@ describe('delivering in parts (#174)', () => {
   it('cancels everything still waiting of a part-delivered order, a waiting binding first settled', () => {
     const line = (id: string, qtyReserved: number, job: string | null = null) => ({ id, qtyReserved, service: job ? { job: { status: job } } : null });
     expect(cancelRestLines('PART_DELIVERED', [line('1', 1), line('2', 0), line('3', 2, 'CANCELLED')]))
-      .toEqual([{ lineId: 1, quantity: 1 }, { lineId: 3, quantity: 2 }]);
+      .toEqual([{ lineId: 1, quantity: 1, restock: 1 }, { lineId: 3, quantity: 2, restock: 2 }]);
     expect(() => cancelRestLines('CONFIRMED', [line('1', 1)])).toThrow(expect.objectContaining({ code: 'INVALID_STATE' }));
     expect(() => cancelRestLines('PART_DELIVERED', [line('1', 1, 'READY')])).toThrow(expect.objectContaining({ code: 'UNDELIVERED_BINDING' }));
     expect(() => cancelRestLines('PART_DELIVERED', [line('1', 0, 'READY'), line('2', 1)])).not.toThrow();
   });
 });
+
+describe('special orders (#174)', () => {
+  it('are a credit sale\'s lines, with no service until the books arrive', () => {
+    const item = { bookId: 1, quantity: 1, specialOrder: true };
+    expect(() => checkNewOrder({ saleType: 'cash_sale', customerId: 5, items: [item] })).toThrow(expect.objectContaining({ code: 'SPECIAL_ORDER_NEEDS_CREDIT' }));
+    expect(() => checkNewOrder({ saleType: 'credit_sale', customerId: 5, items: [item] })).not.toThrow();
+    expect(() => checkNewOrder({ saleType: 'credit_sale', customerId: 5, items: [{ ...item, service: { serviceId: 1, quantity: 1 } }] }))
+      .toThrow(expect.objectContaining({ code: 'SPECIAL_ORDER_SERVICE' }));
+  });
+
+  it('take a deposit on a credit sale, at most its total; a cash sale is paid in full', () => {
+    const credit = { saleType: 'credit_sale' as const, customerId: 5, total: 100 };
+    expect(confirmPaymentMethod(credit, undefined)).toBeNull();
+    expect(confirmPaymentMethod(credit, 'mobile', 40)).toBe('mobile');
+    expect(confirmPaymentMethod(credit, undefined, 40)).toBe('cash');
+    expect(() => confirmPaymentMethod(credit, 'cash', 100.01)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(() => confirmPaymentMethod({ ...credit, saleType: 'cash_sale' }, 'cash', 40)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+  });
+
+  it('cancel copies still on order with the rest, putting back only those that left stock', () => {
+    expect(cancelRestLines('PART_DELIVERED', [
+      { id: '1', qtyReserved: 1, qtyOnOrder: 2, service: null },
+      { id: '2', qtyReserved: 0, qtyOnOrder: 0, service: null },
+    ])).toEqual([{ lineId: 1, quantity: 3, restock: 1 }]);
+  });
+});
+

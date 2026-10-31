@@ -46,7 +46,7 @@ function order(over: Partial<Order> = {}): Order {
 const line = (id: string, bookId: number, bookTitle: string, quantity: number, over: Partial<OrderLineItem> = {}): OrderLineItem => ({
   id, orderId: '30', bookId, bookTitle, bookIsbn: '9780306406109', quantity, unitPrice: 30 / quantity, discountAmount: 0, totalPrice: 30,
   discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: quantity, qtyFulfilled: 0, isBackordered: false,
-  unitCost: 5, qtyReturned: 0, qtyCancelled: 0, service: null, ...over,
+  unitCost: 5, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, service: null, ...over,
 });
 
 const CONFIRMED = order({

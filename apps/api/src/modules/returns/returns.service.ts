@@ -353,7 +353,11 @@ async function settleOrder(
   });
 
   if (r.locationId !== null) {
-    await restock(tx, actor, r.lines, {
+    // Undelivered copies still on order never left stock: only those that did go back (#174).
+    const restocked = r.undelivered?.restock
+      ? r.lines.map((l) => ({ ...l, quantity: r.undelivered!.restock!.get(l.line.id) ?? 0 })).filter((l) => l.quantity > 0)
+      : r.lines;
+    await restock(tx, actor, restocked, {
       locationId: r.locationId, referenceType: r.undelivered ? 'order_cancelled' : 'order_return', referenceId: order.id,
     });
   }
@@ -509,6 +513,8 @@ interface Undelivered {
   refundTo: 'original' | 'store_credit' | undefined;
   /** Refuses the staff member when `toRefund` would go back without the right to refund. */
   authorize: (toRefund: Money) => void;
+  /** Per order line, the copies that go back to stock; the rest were still on order. All when absent. */
+  restock?: Map<string, number>;
 }
 
 /**

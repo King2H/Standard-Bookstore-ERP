@@ -5,6 +5,7 @@ import {
   CreateOrderRequestSchema,
   DeliverOrderRequestSchema,
   IdParamsSchema,
+  OrderLineParamsSchema,
   OrderListQuerySchema,
   UpdateOrderRequestSchema,
   type MessageResponse,
@@ -33,6 +34,7 @@ export const schemas = {
   cancel: { params: IdParamsSchema, body: CancelOrderRequestSchema },
   deliver: { params: IdParamsSchema, body: DeliverOrderRequestSchema },
   cancelRest: { params: IdParamsSchema, body: CancelOrderRequestSchema },
+  reserveLine: { params: OrderLineParamsSchema },
 };
 
 /** The order as the API returns it, with the actions this staff member may take. */
@@ -108,6 +110,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
     transactionReference: body.transactionReference || null,
     payerBank: body.payerBank || null,
     bankAccountId: body.bankAccountId ?? null,
+    deposit: body.deposit ?? null,
   });
   res.json(toResponse(req, order));
 }
@@ -131,6 +134,11 @@ export async function cancelRest(req: Request, res: Response): Promise<void> {
   const { params, body } = valid(req, schemas.cancelRest);
   const permissions = (req.staff!.permissions ?? []) as Permission[];
   res.json(toResponse(req, await service.cancelRest(params.id, body.reason, req.staff!, { permissions, refundTo: body.refundTo })));
+}
+
+export async function reserveLine(req: Request, res: Response): Promise<void> {
+  const { params } = valid(req, schemas.reserveLine);
+  res.json(toResponse(req, await service.reserveSpecial(params.id, params.lineId, req.staff!)));
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {

@@ -9,6 +9,8 @@ export interface ConfirmPayment {
   transactionReference: string | null;
   payerBank: string | null;
   bankAccountId: number | null;
+  /** A credit sale's part paid at confirmation (#174). */
+  deposit?: number | null;
 }
 
 export type SaleType = 'cash_sale' | 'credit_sale';
@@ -27,6 +29,8 @@ export interface OrderLineInput {
   discountMode?: DiscountMode;
   /** A service on some or all of the line's copies (#169). */
   service?: ServiceLineInput;
+  /** Ordered for the customer, not in stock (#174). */
+  specialOrder?: boolean;
 }
 
 export interface OrderRow {
@@ -63,6 +67,10 @@ export interface OrderLineItemRow {
   qtyReturned: number;
   /** Copies never delivered, cancelled with the rest of the order (#174). */
   qtyCancelled: number;
+  /** Ordered for the customer, confirmed without stock (#174). */
+  specialOrder: boolean;
+  /** A special-order line's copies not arrived yet. */
+  qtyOnOrder: number;
   /** The service on the line's copies (#169). */
   service: SaleServiceLine | null;
 }
@@ -77,6 +85,7 @@ export interface PricedLine {
   discountType: DiscountType;
   discountMode: DiscountMode;
   totalPrice: string;
+  specialOrder: boolean;
 }
 
 export interface OrderTotals {

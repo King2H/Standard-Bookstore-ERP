@@ -43,17 +43,22 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
   const rows = await q
     .selectFrom('order_line_items as oli')
     .innerJoin('books as b', 'b.id', 'oli.book_id')
+    .innerJoin('orders as o', 'o.id', 'oli.order_id')
     .select([
       'oli.id', 'oli.order_id', 'oli.book_id', 'b.title as book_title', 'b.isbn as book_isbn', 'oli.quantity',
       'oli.unit_price', 'oli.discount_amount', 'oli.total_price', 'oli.discount_type', 'oli.discount_mode', 'oli.discount_pct',
       'oli.qty_reserved', 'oli.qty_fulfilled',
-      'oli.is_backordered', 'oli.unit_cost',
+      'oli.is_backordered', 'oli.unit_cost', 'oli.special_order',
       sql<string>`COALESCE((
         SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
         WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND NOT r.undelivered), 0)`.as('qty_returned'),
       sql<string>`COALESCE((
         SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
         WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND r.undelivered), 0)`.as('qty_cancelled'),
+      // Before confirmation nothing is on order: the line is a draft's.
+      sql<number>`CASE WHEN oli.special_order AND o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled') THEN GREATEST(0, oli.quantity - oli.qty_reserved - oli.qty_fulfilled
+        - COALESCE((SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+                    WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND r.undelivered), 0)) ELSE 0 END`.as('qty_on_order'),
     ])
     .where('oli.order_id', '=', orderId)
     .orderBy('oli.id')
@@ -201,6 +206,7 @@ export async function insertLineItem(q: Queryable, orderId: string, line: Priced
       discount_pct: line.discountPct.toFixed(4),
       discount_type: line.discountType,
       discount_mode: line.discountMode,
+      special_order: line.specialOrder,
     })
     .returning('id')
     .executeTakeFirstOrThrow();

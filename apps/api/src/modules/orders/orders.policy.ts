@@ -93,19 +93,30 @@ export function deliveryLines(
  */
 export function cancelRestLines(
   status: string,
-  lines: Array<{ id: string; qtyReserved: number; service: { job: { status: string } | null } | null }>,
-): Array<{ lineId: number; quantity: number }> {
+  lines: Array<{ id: string; qtyReserved: number; qtyOnOrder?: number; service: { job: { status: string } | null } | null }>,
+): Array<{ lineId: number; quantity: number; restock: number }> {
   if (status !== 'PART_DELIVERED') {
     throw new BusinessError('INVALID_STATE', `Only a part-delivered order has a rest to cancel; this one is '${status}'`);
   }
-  const waiting = lines.filter((l) => l.qtyReserved > 0);
+  // Copies still on order are cancelled too (#174, special orders 6a): they never left stock, so none goes back.
+  const waiting = lines.filter((l) => l.qtyReserved + (l.qtyOnOrder ?? 0) > 0);
   const bound = waiting.find((l) => l.service?.job && !['CANCELLED', 'COLLECTED'].includes(l.service.job.status));
   if (bound) {
     throw new BusinessError('UNDELIVERED_BINDING', 'A bound copy is still waiting: deliver it, or cancel its binding, before cancelling the rest', {
       lineId: bound.id,
     });
   }
-  return waiting.map((l) => ({ lineId: Number(l.id), quantity: l.qtyReserved }));
+  return waiting.map((l) => ({ lineId: Number(l.id), quantity: l.qtyReserved + (l.qtyOnOrder ?? 0), restock: l.qtyReserved }));
+}
+
+/** A special-order line of a confirmed order with copies still on order (#174). */
+export function specialLineToReserve<L extends { id: string; specialOrder: boolean; qtyOnOrder: number }>(status: string, lines: L[], lineId: string): L {
+  const line = lines.find((l) => l.id === lineId);
+  if (!line) throw new NotFoundError(`Order line ${lineId}`);
+  if (!['CONFIRMED', 'PAID', 'PART_DELIVERED', 'Confirmed', 'In_Progress'].includes(status) || !line.specialOrder || line.qtyOnOrder <= 0) {
+    throw new BusinessError('INVALID_STATE', 'Only a confirmed order\'s special-order line with copies on order is reserved');
+  }
+  return line;
 }
 
 /**
@@ -226,6 +237,15 @@ export function checkNewOrder(data: { saleType: SaleType; customerId?: number | 
   if (data.saleType === 'credit_sale' && !data.customerId) {
     throw new BusinessError('CREDIT_REQUIRES_CUSTOMER', 'Credit sales require a customer to be selected');
   }
+  // A book ordered for the customer is a credit sale's, paid in part as a deposit (#174, decision 2a).
+  const special = data.items.filter((i) => i.specialOrder);
+  if (special.length > 0 && data.saleType !== 'credit_sale') {
+    throw new BusinessError('SPECIAL_ORDER_NEEDS_CREDIT', 'A special order is a credit sale with a customer; a deposit can be taken when it is confirmed');
+  }
+  // Its binding is taken once the copies arrive, as a sale of its own.
+  if (special.some((i) => i.service)) {
+    throw new BusinessError('SPECIAL_ORDER_SERVICE', 'A special-order line takes no service until its books arrive');
+  }
 }
 
 export function checkQuantity(item: OrderLineInput): void {
@@ -258,6 +278,7 @@ export function priceLine(item: OrderLineInput, unitPrice: number, maxDiscountPc
 
   const totalPrice = Money.of(unitPrice).times(item.quantity).minus(discount.discountAmount);
   return {
+    specialOrder: item.specialOrder ?? false,
     bookId: item.bookId,
     quantity: item.quantity,
     unitPrice: Money.of(unitPrice).toFixed(2),
@@ -308,10 +329,18 @@ export function checkDueDate(order: { saleType: SaleType; customerId: number | n
  * method: the one chosen, or cash. Credit orders record none.
  */
 export function confirmPaymentMethod(
-  order: { saleType: SaleType; customerId: number | null },
+  order: { saleType: SaleType; customerId: number | null; total?: number },
   paymentMethod: string | null | undefined,
+  deposit: number | null = null,
 ): string | null {
-  if (order.saleType !== 'cash_sale') return null;
+  if (order.saleType === 'cash_sale' && deposit !== null) {
+    throw new ValidationError('A cash sale is paid in full when it is confirmed; a deposit is a credit sale\'s', { field: 'deposit' });
+  }
+  // A credit sale records a payment only for its deposit (#174, decision 2a), at most its total.
+  if (order.saleType !== 'cash_sale' && deposit === null) return null;
+  if (deposit !== null && order.total !== undefined && Money.of(deposit).greaterThan(order.total)) {
+    throw new ValidationError(`The deposit is at most the order's total, ${Money.of(order.total).toFixed(2)}`, { field: 'deposit' });
+  }
   const method = paymentMethod || 'cash';
   if (!(CASH_PAYMENT_METHODS as readonly string[]).includes(method)) {
     throw new ValidationError(`payment_method must be one of: ${CASH_PAYMENT_METHODS.join(', ')}`);
