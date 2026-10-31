@@ -94,7 +94,7 @@ function stubApi() {
       return json(contract(ReturnSchema, {
         id: '5', returnNumber: 'RET-20261026-0001', transactionId: '77', transactionNumber: 'POS-20261026-0001', branchId: 1,
         customerId: 1, totalRefundAmount: 200, refundMethod: 'cash', status: 'completed', reason: 'Spine cracked',
-        processedBy: 9, approvedBy: 9, createdAt: CREATED, orderId: null, orderNumber: null, exchangeId: null, exchangeReference: null,
+        processedBy: 9, approvedBy: 9, undelivered: false, createdAt: CREATED, orderId: null, orderNumber: null, exchangeId: null, exchangeReference: null,
       }), 201);
     }
     if (u.pathname === '/notifications/stream') return new Response(new ReadableStream(), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });

@@ -13,6 +13,7 @@ import { returnOrderPayments } from '../payments/payments.service.js';
 import type { Permission } from '../../lib/permissions.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import * as saleServices from '../services/saleServices.service.js';
+import { returnUndelivered } from '../returns/returns.service.js';
 import { toSaleServiceLineResponse } from '../services/services.mapper.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
@@ -487,6 +488,53 @@ export async function cancel(
       note: 'Payment collection disabled. Receivable voided. No further financial transactions allowed.',
     });
     await publish(client, 'order.cancelled', { ...order, id: String(orderId) }, staffCtx, { reason });
+  });
+  return getById(orderId);
+}
+
+/**
+ * Cancels what a part-delivered order will never deliver (#174, decisions
+ * 1a–5a): everything still waiting goes back to stock as a return marked
+ * undelivered, its value off a credit order's debt first and the rest back
+ * the way it was paid or as store credit (refundTo); whoever sells cancels,
+ * with PROCESS_REFUND when money goes back. The order is completed: what it
+ * delivered is all it will deliver.
+ */
+export async function cancelRest(
+  orderId: string | number,
+  reason: string,
+  staffCtx: StaffCtx,
+  opts: { permissions: readonly Permission[]; refundTo?: CancelRefundTo },
+): Promise<OrderRow> {
+  await withTransaction({}, async (tx, client) => {
+    const order = await loadOrder(tx, orderId, { forUpdate: true });
+    const lines = policy.cancelRestLines(order.status, order.lineItems ?? []);
+    const locationId = await stockLocation(tx, order, staffCtx);
+    await assertAssignedLocation(locationId, staffCtx);
+
+    const { returnNumber } = await returnUndelivered(tx, { ...staffCtx, roles: staffCtx.roles ?? [staffCtx.role] }, {
+      order: {
+        id: order.id, branchId: order.branchId, customerId: order.customerId, status: order.status,
+        orderNumber: order.orderNumber, saleType: order.saleType, locationId,
+      },
+      locationId,
+      lines,
+      reason,
+      undelivered: {
+        refundTo: opts.refundTo,
+        authorize: (toRefund) => policy.checkCancelReturn(toRefund, opts.permissions, opts.refundTo, order.customerId !== null),
+      },
+    });
+    await orders.releaseReservations(tx, order.id);
+    for (const line of lines) await orders.setLineReserved(tx, String(line.lineId), 0);
+
+    await orders.setStatus(tx, order.id, 'COMPLETED');
+    await audit(tx, staffCtx, 'UPDATE', order.id, {
+      action: 'cancel_rest', fromStatus: order.status, toStatus: 'COMPLETED', reason, returnNumber,
+      lines: lines.map((l) => ({ lineId: String(l.lineId), quantity: l.quantity })),
+      ...(opts.refundTo && { refundTo: opts.refundTo }),
+    });
+    await publish(client, 'order.completed', { ...order, id: String(orderId) }, staffCtx, { restCancelled: true });
   });
   return getById(orderId);
 }

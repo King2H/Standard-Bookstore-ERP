@@ -137,6 +137,7 @@ async function recordReturn(
     refundMethod: RefundMethod | 'mixed';
     reason: string | null;
     approved: boolean;
+    undelivered?: boolean;
   },
 ): Promise<{ returnId: string; returnNumber: string }> {
   const returnNumber = await nextDailyNumber(q, 'RET');
@@ -153,6 +154,7 @@ async function recordReturn(
     processedBy: actor.staffId,
     // Above the limit, the Manager or Admin who processed it approved it.
     approvedBy: r.approved ? actor.staffId : null,
+    undelivered: r.undelivered,
   });
   for (const l of r.lines) {
     const byOrder = r.sale.orderId !== null;
@@ -333,24 +335,28 @@ async function settleOrder(
   tx: Queryable,
   actor: Actor,
   order: OrderForReturn,
-  r: { locationId: number | null; lines: ValuedLine[]; fees: FeeReturn[]; reason: string | null; approved: boolean },
+  r: { locationId: number | null; lines: ValuedLine[]; fees: FeeReturn[]; reason: string | null; approved: boolean; undelivered?: Undelivered },
 ): Promise<string> {
   const total = Money.sum([...r.lines.map((l) => l.value), ...r.fees.map((f) => f.amount)]);
   const credited = order.saleType === 'credit_sale'
     ? await creditReturn(tx, { sourceType: 'order_credit_sale', sourceEntityId: order.id, amount: total })
     : Money.ZERO;
   const toRefund = total.minus(credited);
-  const storeCreditOnly = policy.storeCreditOnly(
-    order.daysSinceDelivery ?? 0,
-    await getReturnWindowDays(order.branchId),
-    await getRefundMethodAfterWindow(),
-  );
+  // Undelivered copies know no return window: the money goes back as chosen (#174).
+  const storeCreditOnly = r.undelivered
+    ? r.undelivered.refundTo === 'store_credit'
+    : policy.storeCreditOnly(order.daysSinceDelivery ?? 0, await getReturnWindowDays(order.branchId), await getRefundMethodAfterWindow());
+  r.undelivered?.authorize(toRefund);
   // The same refusals as a counter sale's, before anything is written.
   policy.allocateRefund(toRefund, [], {
     storeCreditOnly, hasCustomer: order.customerId !== null, paidLeft: await refundableOnOrder(tx, order.id),
   });
 
-  if (r.locationId !== null) await restock(tx, actor, r.lines, { locationId: r.locationId, referenceType: 'order_return', referenceId: order.id });
+  if (r.locationId !== null) {
+    await restock(tx, actor, r.lines, {
+      locationId: r.locationId, referenceType: r.undelivered ? 'order_cancelled' : 'order_return', referenceId: order.id,
+    });
+  }
   // The refund method is known once the payments have been refunded; the
   // return is recorded first so each refund can name it.
   const { returnId, returnNumber } = await recordReturn(tx, actor, {
@@ -360,6 +366,7 @@ async function settleOrder(
     refundMethod: 'cash',
     reason: r.reason,
     approved: r.approved,
+    undelivered: r.undelivered !== undefined,
   });
   for (const fee of r.fees) await saleServices.recordFeeReturn(tx, actor, returnId, fee, order.orderNumber);
   if (credited.greaterThan(0)) await returns.insertRefund(tx, returnId, { method: 'credit_note', amount: credited });
@@ -495,6 +502,41 @@ async function returnOrder(
   const maxWithoutAuth = Money.of(await getMaxReturnValueWithoutAuth());
   policy.checkApproval(total, maxWithoutAuth, actor.roles);
   return settleOrder(tx, actor, order, { locationId, lines, fees, reason: input.reason, approved: total.greaterThan(maxWithoutAuth) || fees.length > 0 });
+}
+
+/** How the money for undelivered copies goes back, and who may send it (#174). */
+interface Undelivered {
+  refundTo: 'original' | 'store_credit' | undefined;
+  /** Refuses the staff member when `toRefund` would go back without the right to refund. */
+  authorize: (toRefund: Money) => void;
+}
+
+/**
+ * The copies a part-delivered order will never deliver (#174, decisions
+ * 1a–2a), within the order's own transaction, the order locked by the
+ * caller: a return of them, marked as never delivered, at their share of
+ * their lines. They go back to stock at the cost they left at; a credit
+ * order's debt takes the value first and the rest goes back the way it was
+ * paid or as store credit. No return window or approval limit: nothing came
+ * back over the counter.
+ */
+export async function returnUndelivered(
+  tx: Queryable,
+  actor: Actor,
+  input: {
+    order: Omit<OrderForReturn, 'daysSinceDelivery'>;
+    locationId: number;
+    lines: Array<{ lineId: number; quantity: number }>;
+    reason: string;
+    undelivered: Undelivered;
+  },
+): Promise<{ returnId: string; returnNumber: string }> {
+  const requested: ReturnLineRequest[] = input.lines.map((l) => ({ ...l, disposition: 'SELLABLE' }));
+  const lines = valueLines(await returns.orderLines(tx, input.order.id), requested, 'Order line item');
+  const returnId = await settleOrder(tx, actor, { ...input.order, daysSinceDelivery: null }, {
+    locationId: input.locationId, lines, fees: [], reason: `Not delivered: ${input.reason}`, approved: true, undelivered: input.undelivered,
+  });
+  return { returnId, returnNumber: await returns.returnNumberOf(tx, returnId) };
 }
 
 // ── Cancelling a binding ──────────────────────────────────────────────────────

@@ -47,6 +47,7 @@ export interface LineItemDbRow {
   is_backordered: boolean;
   unit_cost: string | null;
   qty_returned: string | number;
+  qty_cancelled: string | number;
 }
 
 // Numeric columns arrive as exact decimal strings; the API returns them as
@@ -84,6 +85,7 @@ export function toLineItemRow(row: LineItemDbRow): OrderLineItemRow {
     isBackordered: row.is_backordered,
     unitCost: row.unit_cost != null ? Number(row.unit_cost) : null,
     qtyReturned: Number(row.qty_returned),
+    qtyCancelled: Number(row.qty_cancelled),
     service: null,
   };
 }

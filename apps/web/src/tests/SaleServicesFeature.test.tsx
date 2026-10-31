@@ -144,7 +144,7 @@ function order(status: 'REQUESTED' | 'AT_BINDER' | 'READY', allowedActions: stri
     createdAt: CREATED, updatedAt: CREATED, allowedActions, paymentMethod: 'cash', dueDate: null, fulfilledAt: null,
     lineItems: [{
       id: '8', orderId: '10', bookId: 2, bookTitle: 'Oromay', bookIsbn: '1', quantity: 2, unitPrice: 100, discountAmount: 0,
-      totalPrice: 200, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: 40, qtyReturned: 0, service: bound(status),
+      totalPrice: 200, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: 40, qtyReturned: 0, qtyCancelled: 0, service: bound(status),
     }],
   });
 }

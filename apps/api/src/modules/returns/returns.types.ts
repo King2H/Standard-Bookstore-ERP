@@ -105,6 +105,8 @@ export interface ReturnRecord {
   reason: string | null;
   processedBy: number;
   approvedBy: number | null;
+  /** Copies an order never delivered, cancelled with its rest (#174). */
+  undelivered: boolean;
   createdAt: Date;
   lineItems?: ReturnLineRecord[];
   refunds?: RefundRecord[];

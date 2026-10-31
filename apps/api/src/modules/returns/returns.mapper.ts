@@ -19,6 +19,7 @@ export interface ReturnRow {
   reason: string | null;
   processed_by: number;
   approved_by: number | null;
+  undelivered: boolean;
   created_at: Date;
 }
 
@@ -62,6 +63,7 @@ export function toReturnRecord(row: ReturnRow): ReturnRecord {
     reason: row.reason,
     processedBy: row.processed_by,
     approvedBy: row.approved_by,
+    undelivered: row.undelivered,
     createdAt: row.created_at,
   };
 }

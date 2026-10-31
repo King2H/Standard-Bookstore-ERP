@@ -842,6 +842,7 @@ export interface Returns {
   tenant_id: Generated<number>;
   total_refund_amount: Numeric;
   transaction_id: Int8 | null;
+  undelivered: Generated<boolean>;
 }
 
 export interface ReturnServiceLines {

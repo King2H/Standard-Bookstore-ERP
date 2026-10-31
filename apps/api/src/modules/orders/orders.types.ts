@@ -61,6 +61,8 @@ export interface OrderLineItemRow {
   unitCost: number | null;
   /** Copies brought back through Returns (#166). */
   qtyReturned: number;
+  /** Copies never delivered, cancelled with the rest of the order (#174). */
+  qtyCancelled: number;
   /** The service on the line's copies (#169). */
   service: SaleServiceLine | null;
 }

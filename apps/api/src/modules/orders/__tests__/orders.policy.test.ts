@@ -10,6 +10,7 @@ import {
   checkCanDeliver,
   checkCanFulfill,
   deliveryLines,
+  cancelRestLines,
   checkDueDate,
   checkNewOrder,
   checkQuantity,
@@ -182,6 +183,18 @@ describe('delivering in parts (#174)', () => {
     expect(() => checkCanDeliver('COMPLETED')).toThrow(expect.objectContaining({ code: 'INVALID_STATE' }));
     expect(() => checkCanCancel('PART_DELIVERED')).toThrow(expect.objectContaining({ code: 'ORDER_PART_DELIVERED' }));
     expect(computeOrderAllowedActions('PART_DELIVERED', ['CREATE_SALE', 'PROCESS_PAYMENT'], 'paid', 'cash_sale', 10, false)).toEqual(['deliver', 'return']);
+    expect(computeOrderAllowedActions('PART_DELIVERED', ['CREATE_SALE', 'PROCESS_PAYMENT', 'PROCESS_REFUND'], 'paid', 'cash_sale', 10))
+      .toEqual(['deliver', 'fulfill', 'cancel_rest', 'return']);
+    expect(computeOrderAllowedActions('PART_DELIVERED', ['CREATE_SALE'], 'unpaid', 'credit_sale', 0)).toEqual(['cancel_rest', 'return']);
     expect(computeOrderAllowedActions('PART_DELIVERED', ['PROCESS_PAYMENT'], 'paid', 'cash_sale', 10)).toEqual(['deliver', 'fulfill']);
+  });
+
+  it('cancels everything still waiting of a part-delivered order, a waiting binding first settled', () => {
+    const line = (id: string, qtyReserved: number, job: string | null = null) => ({ id, qtyReserved, service: job ? { job: { status: job } } : null });
+    expect(cancelRestLines('PART_DELIVERED', [line('1', 1), line('2', 0), line('3', 2, 'CANCELLED')]))
+      .toEqual([{ lineId: 1, quantity: 1 }, { lineId: 3, quantity: 2 }]);
+    expect(() => cancelRestLines('CONFIRMED', [line('1', 1)])).toThrow(expect.objectContaining({ code: 'INVALID_STATE' }));
+    expect(() => cancelRestLines('PART_DELIVERED', [line('1', 1, 'READY')])).toThrow(expect.objectContaining({ code: 'UNDELIVERED_BINDING' }));
+    expect(() => cancelRestLines('PART_DELIVERED', [line('1', 0, 'READY'), line('2', 1)])).not.toThrow();
   });
 });

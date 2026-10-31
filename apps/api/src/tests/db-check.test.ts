@@ -249,7 +249,7 @@ describe('Data consistency check', () => {
     ['transfers.status-matches-lines', new RegExp(`^${MARK}-TRF \\(in_transit\\): 2 of 3 accounted for$`)],
     ['transfers.stock-history', new RegExp(`^${MARK}-TRF: book \\d+ sent 3 \\(history 0\\), received 2 \\(history 0\\)$`)],
     ['cash.session-adds-up', new RegExp(`^${MARK}-Z: expected 120\\.00, float and movements say 150\\.00; variance 0\\.00, counted less expected 5\\.00$`)],
-    ['orders.deliveries-add-up', /^ORD-\d{8}-9999 line \d+: delivered 0, deliveries say 2, waiting 0 of 1$/],
+    ['orders.deliveries-add-up', /^ORD-\d{8}-9999 line \d+: delivered 0, deliveries say 2, waiting 0, cancelled 0 of 1$/],
     ['stock-counts.posted-in-history', new RegExp(`^${MARK}-CNT: book \\d+ posted 2, history 0$`)],
     ['bank.matched-line-cleared', /is uncleared$/],
     ['bank.cleared-one-line', /: 0 matched lines$/],

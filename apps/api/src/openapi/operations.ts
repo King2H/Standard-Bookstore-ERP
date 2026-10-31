@@ -2155,6 +2155,16 @@ function orderOperations(): ApiOperation[] {
       errors: [400, 401, 403, 404, 422, 500],
     },
     {
+      operationId: 'cancelOrderRest',
+      method: 'post',
+      path: '/orders/{id}/cancel-rest',
+      summary: 'Cancel what a part-delivered order did not deliver: back to stock as a return marked undelivered, its value off a credit order\'s debt first, the rest back the way it was paid or as store credit (refundTo); the order is COMPLETED. CREATE_SALE, and PROCESS_REFUND when money goes back (#174)',
+      tag,
+      request: { params: IdParamsSchema, body: CancelOrderRequestSchema },
+      responses: order('The completed order'),
+      errors: [400, 401, 403, 404, 422, 500],
+    },
+    {
       operationId: 'collectOrderPayment',
       method: 'post',
       path: '/orders/{id}/collect-payment',

@@ -40,7 +40,7 @@ const sale: PosTransaction = contract(PosTransactionSchema, {
 const ret: Return = contract(ReturnSchema, {
   id: '5', returnNumber: 'RET-20261010-0001', transactionId: '41', transactionNumber: 'POS-20261010-0001', branchId: 1,
   customerId: null, totalRefundAmount: 29, refundMethod: 'mixed', status: 'completed', reason: null,
-  processedBy: 9, approvedBy: null, createdAt: CREATED, orderId: null, orderNumber: null, exchangeId: null, exchangeReference: null,
+  processedBy: 9, approvedBy: null, undelivered: false, createdAt: CREATED, orderId: null, orderNumber: null, exchangeId: null, exchangeReference: null,
 });
 
 const DELIVERED = '2026-10-19T09:00:00.000Z';
@@ -52,7 +52,7 @@ const deliveredOrder = (over: Partial<Order> = {}): Order => contract(OrderSchem
   createdAt: CREATED, updatedAt: CREATED, allowedActions: ['print', 'return'], paymentMethod: 'cash', dueDate: null, fulfilledAt: DELIVERED,
   lineItems: [{
     id: '8', orderId: '30', bookId: 1, bookTitle: 'Oromay', bookIsbn: '2', quantity: 3, unitPrice: 25, discountAmount: 0,
-    totalPrice: 75, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1, service: null,
+    totalPrice: 75, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1, qtyCancelled: 0, service: null,
   }],
   ...over,
 });

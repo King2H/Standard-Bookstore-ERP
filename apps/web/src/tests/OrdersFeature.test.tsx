@@ -39,7 +39,7 @@ function order(over: Partial<Order> = {}): Order {
 
 const LINE = {
   id: 'li1', orderId: '10', bookId: 1, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '000', quantity: 2, unitPrice: 25,
-  discountAmount: 0, totalPrice: 50, discountType: 'Normal' as const, discountMode: 'Amount' as const, discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, service: null,
+  discountAmount: 0, totalPrice: 50, discountType: 'Normal' as const, discountMode: 'Amount' as const, discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, qtyCancelled: 0, service: null,
 };
 let line = LINE;
 
@@ -73,7 +73,7 @@ function stubApi() {
         items: u.searchParams.get('orderId') === '10' ? [{
           id: '5', returnNumber: 'RET-20261019-0001', transactionId: null, transactionNumber: null, orderId: '10',
           orderNumber: 'ORD-20261018-0001', branchId: 1, customerId: null, totalRefundAmount: 25, refundMethod: 'cash',
-          status: 'completed', reason: null, processedBy: 9, approvedBy: null, createdAt: CREATED, exchangeId: null, exchangeReference: null,
+          status: 'completed', reason: null, processedBy: 9, approvedBy: null, undelivered: false, createdAt: CREATED, exchangeId: null, exchangeReference: null,
         }] : [],
         total: 1, page: 1, totalPages: 1,
       }));

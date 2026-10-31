@@ -72,7 +72,7 @@ function stubApi() {
       return json(contract(ReturnSchema, {
         id: '9', returnNumber: 'RET-20261026-0003', transactionId: null, transactionNumber: null, orderId: null, orderNumber: null,
         exchangeId: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, customerId: 77, totalRefundAmount: 250,
-        refundMethod: 'store_credit', status: 'completed', reason: 'Spine cracked', processedBy: 9, approvedBy: 9, createdAt: CREATED,
+        refundMethod: 'store_credit', status: 'completed', reason: 'Spine cracked', processedBy: 9, approvedBy: 9, undelivered: false, createdAt: CREATED,
       }), 201);
     }
     return json({ items: [], total: 0, page: 1, totalPages: 0 });
