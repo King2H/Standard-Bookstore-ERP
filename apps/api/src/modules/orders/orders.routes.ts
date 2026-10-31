@@ -16,6 +16,8 @@ const inBranch = recordInBranch('order');
 router.get('/orders', authenticate, validate(schemas.list), orders.list);
 router.post('/orders', authenticate, requirePermission('CREATE_SALE'), validate(schemas.create), orders.create);
 router.get('/orders/:id', authenticate, inBranch, validate(schemas.byId), orders.get);
+// A draft is edited until it is confirmed, by whoever sells (#174, decision 1a).
+router.put('/orders/:id', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.update), orders.update);
 // Admin-only cleanup of Draft and Cancelled orders without history.
 router.delete('/orders/:id', authenticate, inBranch, requireRole('Admin'), validate(schemas.byId), orders.remove);
 

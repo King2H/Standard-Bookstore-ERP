@@ -792,6 +792,7 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - POST /api/v1/orders — body: { customerId?, locationId?, channel?, notes?, items: [{bookId, quantity, discountAmount?}] }
 - GET /api/v1/orders — filters: branchId, customerId, status, paymentStatus, channel
 - GET /api/v1/orders/:id
+- PUT /api/v1/orders/:id — a draft's new contents (same body as POST), checked as a new order is; the selling roles of its branch (#174)
 - POST /api/v1/orders/:id/confirm — reserve stock (Manager, Admin)
 - POST /api/v1/orders/:id/progress — mark in progress (Manager, Admin, Stock_Clerk)
 - POST /api/v1/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk)

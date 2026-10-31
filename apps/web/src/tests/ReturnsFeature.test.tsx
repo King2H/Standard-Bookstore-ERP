@@ -52,7 +52,7 @@ const deliveredOrder = (over: Partial<Order> = {}): Order => contract(OrderSchem
   createdAt: CREATED, updatedAt: CREATED, allowedActions: ['print', 'return'], paymentMethod: 'cash', dueDate: null, fulfilledAt: DELIVERED,
   lineItems: [{
     id: '8', orderId: '30', bookId: 1, bookTitle: 'Oromay', bookIsbn: '2', quantity: 3, unitPrice: 25, discountAmount: 0,
-    totalPrice: 75, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1, service: null,
+    totalPrice: 75, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1, service: null,
   }],
   ...over,
 });

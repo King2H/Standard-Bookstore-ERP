@@ -144,7 +144,7 @@ describe('stock', () => {
     available = 2;
     const user = await openForm();
     await addBook(user);
-    const plus = screen.getByRole('button', { name: '+' });
+    const plus = screen.getByRole('button', { name: 'One more Fikir Eske Mekabir' });
     await user.click(plus);
     await waitFor(() => expect(plus).toBeDisabled());
     expect(screen.getByText('2', { selector: 'span' })).toBeInTheDocument();

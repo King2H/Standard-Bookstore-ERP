@@ -30,6 +30,11 @@ function invalidState(verb: string, status: string): BusinessError {
   return new BusinessError('INVALID_STATE', `Cannot ${verb} order in status '${status}'`);
 }
 
+/** A draft is edited until it is confirmed (#174, decision 1a). */
+export function checkCanEdit(status: string): void {
+  if (normaliseStatus(status) !== 'DRAFT') throw invalidState('edit', status);
+}
+
 export function checkCanConfirm(status: string): void {
   if (normaliseStatus(status) !== 'DRAFT') throw invalidState('confirm', status);
 }
@@ -128,7 +133,7 @@ export function computeOrderAllowedActions(
   switch (status) {
     case 'DRAFT':
     case 'Pending':
-      return can('CREATE_SALE') ? ['confirm', ...cancel] : [];
+      return can('CREATE_SALE') ? ['edit', 'confirm', ...cancel] : [];
     case 'CONFIRMED':
     case 'PARTIALLY_PAID':
     case 'Confirmed':

@@ -53,6 +53,7 @@ export interface OrderRow {
 export interface OrderLineItemRow {
   id: string; orderId: string; bookId: number; bookTitle: string; bookIsbn: string;
   quantity: number; unitPrice: number; discountAmount: number; totalPrice: number;
+  discountType: 'Normal' | 'Merchant' | 'Special'; discountMode: 'Percentage' | 'Amount'; discountPct: number;
   qtyReserved: number; qtyFulfilled: number; isBackordered: boolean;
   /** Cost this line was posted at (Weighted Average Cost at confirm() time). Null until confirmed, or for pre-migration rows. */
   unitCost: number | null;

@@ -45,6 +45,9 @@ export type NewOrder = z.input<typeof CreateOrderRequestSchema>;
 /** Created as a draft; the form confirms it at once. */
 export const createOrder = (body: NewOrder) => api.post<Order>('/orders', body);
 
+/** A draft's new contents, checked as a new order is (#174). */
+export const updateOrder = (id: string, body: NewOrder) => api.put<Order>(`/orders/${id}`, body);
+
 /** Books matching what was typed, with their stock at the order's location and the branch's price. */
 export const searchBooksForOrder = (q: string, locationId: number | null) =>
   api.get<BookAvailabilityListResponse>(`/books/with-availability${toQuery({ q, pageSize: 8, locationId })}`);

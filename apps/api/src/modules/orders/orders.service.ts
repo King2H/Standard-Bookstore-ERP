@@ -94,17 +94,22 @@ export async function list(opts: {
   };
 }
 
-export async function create(
-  data: {
-    customerId?: number | null;
-    locationId?: number | null;
-    channel?: string;
-    notes?: string;
-    saleType?: SaleType;
-    items: OrderLineInput[];
-  },
-  staffCtx: StaffCtx,
-): Promise<OrderRow> {
+type OrderInput = {
+  customerId?: number | null;
+  locationId?: number | null;
+  channel?: string;
+  notes?: string;
+  saleType?: SaleType;
+  items: OrderLineInput[];
+};
+
+/**
+ * An order's lines priced and checked, for a new order or a draft's edit
+ * (#174): an active branch and customer, active priced books, discounts
+ * within the limit of every role held, services at the branch's fee, and
+ * enough stock where the branch allows none below zero.
+ */
+async function priceOrder(data: OrderInput, staffCtx: StaffCtx) {
   const saleType = data.saleType ?? 'cash_sale';
   policy.checkNewOrder({ ...data, saleType });
 
@@ -149,6 +154,21 @@ export async function create(
       }
     }
   }
+  return { saleType, services, lines, totals };
+}
+
+async function insertLines(tx: Queryable, orderId: string, priced: Awaited<ReturnType<typeof priceOrder>>): Promise<void> {
+  for (const [i, line] of priced.lines.entries()) {
+    const lineId = await orders.insertLineItem(tx, orderId, line);
+    const service = priced.services[i];
+    // Its job opens at confirmation, when the order counts as a sale (5a).
+    if (service) await saleServices.recordServiceLine(tx, { orderLineId: lineId }, service);
+  }
+}
+
+export async function create(data: OrderInput, staffCtx: StaffCtx): Promise<OrderRow> {
+  const priced = await priceOrder(data, staffCtx);
+  const { saleType, lines, totals } = priced;
 
   const orderId = await withTransaction({}, async (tx, client) => {
     const orderNumber = await nextDailyNumber(tx, 'ORD');
@@ -163,12 +183,7 @@ export async function create(
       createdBy: staffCtx.staffId,
       totals,
     });
-    for (const [i, line] of lines.entries()) {
-      const lineId = await orders.insertLineItem(tx, id, line);
-      const service = services[i];
-      // Its job opens at confirmation, when the order counts as a sale (5a).
-      if (service) await saleServices.recordServiceLine(tx, { orderLineId: lineId }, service);
-    }
+    await insertLines(tx, id, priced);
 
     const total = Number(totals.total);
     await audit(tx, staffCtx, 'CREATE', id, { orderNumber, total, saleType, itemCount: lines.length });
@@ -176,6 +191,35 @@ export async function create(
       orderId: id, orderNumber, branchId: staffCtx.branchId, total, saleType, channel: data.channel ?? 'in_store',
     });
     return id;
+  });
+  return getById(orderId);
+}
+
+/**
+ * A draft's new contents (#174, decision 1a), checked as a new order is: its
+ * lines and their services are replaced, its head and totals rewritten.
+ * Locked, so an edit and a confirmation take turns.
+ */
+export async function update(orderId: string, data: OrderInput, staffCtx: StaffCtx): Promise<OrderRow> {
+  const priced = await priceOrder(data, staffCtx);
+  await withTransaction({}, async (tx) => {
+    const order = await loadOrder(tx, orderId, { forUpdate: true });
+    policy.checkCanEdit(order.status);
+    await orders.deleteLineItems(tx, order.id);
+    await insertLines(tx, order.id, priced);
+    await orders.updateDraft(tx, order.id, {
+      customerId: data.customerId ?? null,
+      locationId: data.locationId ?? null,
+      channel: data.channel ?? 'in_store',
+      saleType: priced.saleType,
+      notes: data.notes ?? null,
+      totals: priced.totals,
+    });
+    await audit(tx, staffCtx, 'UPDATE', order.id, {
+      orderNumber: order.orderNumber,
+      before: { total: order.total, itemCount: order.lineItems?.length ?? 0, customerId: order.customerId, saleType: order.saleType },
+      after: { total: Number(priced.totals.total), itemCount: priced.lines.length, customerId: data.customerId ?? null, saleType: priced.saleType },
+    });
   });
   return getById(orderId);
 }
