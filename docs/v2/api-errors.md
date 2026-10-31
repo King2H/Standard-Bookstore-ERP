@@ -192,4 +192,5 @@ an admin reset, deactivation, or a refresh token presented again after it was re
 - `TRANSACTION_VOIDED`
 - `TRANSFER_INVALID_STATUS`
 - `TRANSFER_OVER_OUTSTANDING`
+- `UNDELIVERED_BINDING`
 - `VOID_WINDOW_CLOSED`

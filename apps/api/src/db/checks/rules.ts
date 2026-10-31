@@ -373,16 +373,22 @@ export const CHECKS: readonly Check[] = [
     title: 'An order delivered in parts handed over what its lines say',
     severity: 'error',
     // Orders delivered before #174 have no deliveries: their lines alone say it.
+    // A line's copies are delivered, waiting, or cancelled undelivered.
     sql: `
       SELECT o.tenant_id, o.order_number || ' line ' || li.id || ': delivered ' || li.qty_fulfilled || ', deliveries say ' || COALESCE(d.quantity, 0)
-        || ', waiting ' || li.qty_reserved || ' of ' || li.quantity AS ref
+        || ', waiting ' || li.qty_reserved || ', cancelled ' || COALESCE(c.quantity, 0) || ' of ' || li.quantity AS ref
       FROM orders o
       JOIN order_line_items li ON li.order_id = o.id
       LEFT JOIN (
         SELECT dl.order_line_item_id, SUM(dl.quantity) AS quantity FROM order_delivery_lines dl GROUP BY dl.order_line_item_id
       ) d ON d.order_line_item_id = li.id
+      LEFT JOIN (
+        SELECT rli.order_line_item_id, SUM(rli.quantity) AS quantity FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+        WHERE r.undelivered AND r.status = 'completed' GROUP BY rli.order_line_item_id
+      ) c ON c.order_line_item_id = li.id
       WHERE EXISTS (SELECT 1 FROM order_deliveries od WHERE od.order_id = o.id)
-        AND (li.qty_fulfilled <> COALESCE(d.quantity, 0) OR (o.status <> 'CANCELLED' AND li.qty_fulfilled + li.qty_reserved <> li.quantity))`,
+        AND (li.qty_fulfilled <> COALESCE(d.quantity, 0)
+          OR (o.status <> 'CANCELLED' AND li.qty_fulfilled + li.qty_reserved + COALESCE(c.quantity, 0) <> li.quantity))`,
   },
   {
     id: 'stock-counts.posted-in-history',

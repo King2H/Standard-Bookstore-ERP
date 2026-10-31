@@ -24555,6 +24555,11 @@
                                   "minimum": -9007199254740991,
                                   "maximum": 9007199254740991
                                 },
+                                "qtyCancelled": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
                                 "service": {
                                   "anyOf": [
                                     {
@@ -24689,6 +24694,7 @@
                                 "isBackordered",
                                 "unitCost",
                                 "qtyReturned",
+                                "qtyCancelled",
                                 "service"
                               ],
                               "additionalProperties": false
@@ -25234,6 +25240,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -25368,6 +25379,7 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -25688,6 +25700,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -25822,6 +25839,7 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -26379,6 +26397,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -26513,6 +26536,7 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -26914,6 +26938,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -27048,6 +27077,7 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -27686,6 +27716,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -27820,6 +27855,577 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
+                          "service"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "allowedActions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "paymentMethod": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "fulfilledAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deliveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "deliveryNumber": {
+                            "type": "string"
+                          },
+                          "deliveredBy": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "deliveredByName": {
+                            "type": "string"
+                          },
+                          "deliveredAt": {
+                            "type": "string"
+                          },
+                          "notes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lines": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineItemId": {
+                                  "type": "string"
+                                },
+                                "bookId": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "bookTitle": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineItemId",
+                                "bookId",
+                                "bookTitle",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "deliveryNumber",
+                          "deliveredBy",
+                          "deliveredByName",
+                          "deliveredAt",
+                          "notes",
+                          "lines"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "orderNumber",
+                    "customerId",
+                    "branchId",
+                    "locationId",
+                    "channel",
+                    "status",
+                    "paymentStatus",
+                    "amountPaid",
+                    "saleType",
+                    "currency",
+                    "subtotal",
+                    "discountAmount",
+                    "discountTotal",
+                    "taxRate",
+                    "taxAmount",
+                    "total",
+                    "cancelReason",
+                    "notes",
+                    "createdBy",
+                    "createdAt",
+                    "updatedAt",
+                    "allowedActions",
+                    "paymentMethod",
+                    "dueDate",
+                    "fulfilledAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A business rule forbids the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{id}/cancel-rest": {
+      "post": {
+        "operationId": "cancelOrderRest",
+        "summary": "Cancel what a part-delivered order did not deliver: back to stock as a return marked undelivered, its value off a credit order's debt first, the rest back the way it was paid or as store credit (refundTo); the order is COMPLETED. CREATE_SALE, and PROCESS_REFUND when money goes back (#174)",
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "refundTo": {
+                    "type": "string",
+                    "enum": [
+                      "original",
+                      "store_credit"
+                    ]
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The completed order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "orderNumber": {
+                      "type": "string"
+                    },
+                    "customerId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "branchId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "locationId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "channel": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "paymentStatus": {
+                      "type": "string"
+                    },
+                    "amountPaid": {
+                      "type": "number"
+                    },
+                    "saleType": {
+                      "type": "string",
+                      "enum": [
+                        "cash_sale",
+                        "credit_sale"
+                      ]
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "subtotal": {
+                      "type": "number"
+                    },
+                    "discountAmount": {
+                      "type": "number"
+                    },
+                    "discountTotal": {
+                      "type": "number"
+                    },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxAmount": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "cancelReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "notes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "lineItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "orderId": {
+                            "type": "string"
+                          },
+                          "bookId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "bookTitle": {
+                            "type": "string"
+                          },
+                          "bookIsbn": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "unitPrice": {
+                            "type": "number"
+                          },
+                          "discountAmount": {
+                            "type": "number"
+                          },
+                          "totalPrice": {
+                            "type": "number"
+                          },
+                          "discountType": {
+                            "type": "string",
+                            "enum": [
+                              "Normal",
+                              "Merchant",
+                              "Special"
+                            ]
+                          },
+                          "discountMode": {
+                            "type": "string",
+                            "enum": [
+                              "Percentage",
+                              "Amount"
+                            ]
+                          },
+                          "discountPct": {
+                            "type": "number"
+                          },
+                          "qtyReserved": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "qtyFulfilled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "isBackordered": {
+                            "type": "boolean"
+                          },
+                          "unitCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "qtyReturned": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "service": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "serviceCode": {
+                                    "type": "string"
+                                  },
+                                  "serviceName": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "unitFee": {
+                                    "type": "number"
+                                  },
+                                  "discountAmount": {
+                                    "type": "number"
+                                  },
+                                  "lineTotal": {
+                                    "type": "number"
+                                  },
+                                  "standardCost": {
+                                    "type": "number"
+                                  },
+                                  "job": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "jobNumber": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": [
+                                              "REQUESTED",
+                                              "AT_BINDER",
+                                              "READY",
+                                              "COLLECTED",
+                                              "CANCELLED",
+                                              "RETURNED"
+                                            ]
+                                          },
+                                          "readyDate": {
+                                            "type": "string"
+                                          },
+                                          "customerId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "branchId": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "updatedAt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "jobNumber",
+                                          "status",
+                                          "readyDate",
+                                          "customerId",
+                                          "branchId",
+                                          "updatedAt"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "serviceId",
+                                  "serviceCode",
+                                  "serviceName",
+                                  "quantity",
+                                  "unitFee",
+                                  "discountAmount",
+                                  "lineTotal",
+                                  "standardCost",
+                                  "job"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "orderId",
+                          "bookId",
+                          "bookTitle",
+                          "bookIsbn",
+                          "quantity",
+                          "unitPrice",
+                          "discountAmount",
+                          "totalPrice",
+                          "discountType",
+                          "discountMode",
+                          "discountPct",
+                          "qtyReserved",
+                          "qtyFulfilled",
+                          "isBackordered",
+                          "unitCost",
+                          "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -28330,6 +28936,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -28464,6 +29075,7 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -28914,6 +29526,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -29048,6 +29665,7 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -29451,6 +30069,11 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyCancelled": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -29585,6 +30208,7 @@
                           "isBackordered",
                           "unitCost",
                           "qtyReturned",
+                          "qtyCancelled",
                           "service"
                         ],
                         "additionalProperties": false
@@ -53413,6 +54037,9 @@
                         }
                       ]
                     },
+                    "undelivered": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -53537,6 +54164,7 @@
                     "reason",
                     "processedBy",
                     "approvedBy",
+                    "undelivered",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -53830,6 +54458,9 @@
                               }
                             ]
                           },
+                          "undelivered": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string"
                           },
@@ -53954,6 +54585,7 @@
                           "reason",
                           "processedBy",
                           "approvedBy",
+                          "undelivered",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -54167,6 +54799,9 @@
                         }
                       ]
                     },
+                    "undelivered": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -54291,6 +54926,7 @@
                     "reason",
                     "processedBy",
                     "approvedBy",
+                    "undelivered",
                     "createdAt"
                   ],
                   "additionalProperties": false

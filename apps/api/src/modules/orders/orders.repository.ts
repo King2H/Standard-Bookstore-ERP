@@ -50,7 +50,10 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
       'oli.is_backordered', 'oli.unit_cost',
       sql<string>`COALESCE((
         SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
-        WHERE rli.order_line_item_id = oli.id AND r.status = 'completed'), 0)`.as('qty_returned'),
+        WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND NOT r.undelivered), 0)`.as('qty_returned'),
+      sql<string>`COALESCE((
+        SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+        WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND r.undelivered), 0)`.as('qty_cancelled'),
     ])
     .where('oli.order_id', '=', orderId)
     .orderBy('oli.id')

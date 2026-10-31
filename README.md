@@ -798,6 +798,9 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - POST /api/v1/orders/:id/deliveries — body: { lines?: [{lineId, quantity}], notes? }; hands over some copies, per line at most
   what is waiting (no lines: all of it), numbered DLV-. The order is PART_DELIVERED until nothing is left, then COMPLETED;
   a part-delivered order is not cancelled, and returns only what it handed over (#174)
+- POST /api/v1/orders/:id/cancel-rest — body: { reason, refundTo? }; cancels what a part-delivered order did not deliver:
+  back to stock as a return (RET-) marked undelivered, its value off a credit order's debt first, the rest back the way it
+  was paid or as store credit. Whoever sells, with PROCESS_REFUND when money goes back; the order is completed (#174)
 - POST /api/v1/orders/:id/fulfill — decrement inventory (Manager, Admin, Stock_Clerk); delivers what is still waiting
 - POST /api/v1/orders/:id/cancel — body: { reason } (Manager, Admin)
 - An order's line may carry a service as at the counter (#169); its job opens when the order is confirmed. The order is

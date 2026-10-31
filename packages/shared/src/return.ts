@@ -59,6 +59,8 @@ export const ReturnSchema = z.object({
   processedBy: z.number().int(),
   /** The Manager or Admin who processed a return above the approval limit. */
   approvedBy: z.number().int().nullable(),
+  /** Copies an order never delivered, cancelled with its rest (#174): nothing came back over the counter. */
+  undelivered: z.boolean(),
   createdAt: z.string(),
   /** On a single return only. */
   lineItems: z.array(ReturnLineSchema).optional(),

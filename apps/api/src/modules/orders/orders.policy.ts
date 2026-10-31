@@ -86,6 +86,29 @@ export function deliveryLines(
 }
 
 /**
+ * What a part-delivered order will never deliver is cancelled in one step
+ * (#174, decisions 4a–5a): everything still waiting. A bound copy still
+ * waiting goes first, delivered or its binding cancelled, so its fee and job
+ * are settled where they belong.
+ */
+export function cancelRestLines(
+  status: string,
+  lines: Array<{ id: string; qtyReserved: number; service: { job: { status: string } | null } | null }>,
+): Array<{ lineId: number; quantity: number }> {
+  if (status !== 'PART_DELIVERED') {
+    throw new BusinessError('INVALID_STATE', `Only a part-delivered order has a rest to cancel; this one is '${status}'`);
+  }
+  const waiting = lines.filter((l) => l.qtyReserved > 0);
+  const bound = waiting.find((l) => l.service?.job && !['CANCELLED', 'COLLECTED'].includes(l.service.job.status));
+  if (bound) {
+    throw new BusinessError('UNDELIVERED_BINDING', 'A bound copy is still waiting: deliver it, or cancel its binding, before cancelling the rest', {
+      lineId: bound.id,
+    });
+  }
+  return waiting.map((l) => ({ lineId: Number(l.id), quantity: l.qtyReserved }));
+}
+
+/**
  * Cancelling is refused after fulfilment (that is a return). Returns whether
  * confirm() already took the stock out, so the cancellation must put it back.
  */
@@ -96,7 +119,7 @@ export function checkCanCancel(status: string): { restoresStock: boolean } {
   }
   if (ns === 'CANCELLED') throw new BusinessError('ALREADY_CANCELLED', 'Order is already cancelled');
   if (ns === 'PART_DELIVERED') {
-    throw new BusinessError('ORDER_PART_DELIVERED', 'Some of this order was delivered: deliver the rest, or return what was delivered.');
+    throw new BusinessError('ORDER_PART_DELIVERED', 'Some of this order was delivered: deliver the rest or cancel it, and return what was delivered.');
   }
   return { restoresStock: ['CONFIRMED', 'PARTIALLY_PAID', 'PAID'].includes(ns) };
 }
@@ -182,8 +205,9 @@ export function computeOrderAllowedActions(
     case 'PAID':
       return cancelOrFulfill;
     // What it handed over is returned through Returns.
+    // Or what it did not deliver is cancelled, by whoever cancels (#174).
     case 'PART_DELIVERED':
-      return [...deliver, ...fulfill, ...(can('CREATE_SALE') ? ['return'] : [])];
+      return [...deliver, ...fulfill, ...(cancel.length ? ['cancel_rest'] : []), ...(can('CREATE_SALE') ? ['return'] : [])];
     // A delivered order is returned through Returns, by whoever sells (#166); a
     // legacy fulfilled order is printed like a completed one.
     case 'FULFILLED':

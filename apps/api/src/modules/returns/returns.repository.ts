@@ -316,6 +316,7 @@ export async function insertReturn(
     reason: string | null;
     processedBy: number;
     approvedBy: number | null;
+    undelivered?: boolean;
   },
 ): Promise<string> {
   const row = await q
@@ -333,6 +334,7 @@ export async function insertReturn(
       reason: r.reason,
       processed_by: r.processedBy,
       approved_by: r.approvedBy,
+      undelivered: r.undelivered ?? false,
     })
     .returning('id')
     .executeTakeFirstOrThrow();
@@ -414,8 +416,13 @@ function selectReturns(q: Queryable) {
       'r.reason',
       'r.processed_by',
       'r.approved_by',
+      'r.undelivered',
       'r.created_at',
     ]);
+}
+
+export async function returnNumberOf(q: Queryable, id: string): Promise<string> {
+  return (await q.selectFrom('returns').select('return_number').where('id', '=', id).executeTakeFirstOrThrow()).return_number;
 }
 
 export async function findReturn(q: Queryable, id: string): Promise<ReturnRecord | undefined> {

@@ -32,6 +32,7 @@ export const schemas = {
   confirm: { params: IdParamsSchema, body: ConfirmOrderRequestSchema },
   cancel: { params: IdParamsSchema, body: CancelOrderRequestSchema },
   deliver: { params: IdParamsSchema, body: DeliverOrderRequestSchema },
+  cancelRest: { params: IdParamsSchema, body: CancelOrderRequestSchema },
 };
 
 /** The order as the API returns it, with the actions this staff member may take. */
@@ -124,6 +125,12 @@ export async function cancel(req: Request, res: Response): Promise<void> {
   const { params, body } = valid(req, schemas.cancel);
   const permissions = (req.staff!.permissions ?? []) as Permission[];
   res.json(toResponse(req, await service.cancel(params.id, body.reason, req.staff!, { permissions, refundTo: body.refundTo })));
+}
+
+export async function cancelRest(req: Request, res: Response): Promise<void> {
+  const { params, body } = valid(req, schemas.cancelRest);
+  const permissions = (req.staff!.permissions ?? []) as Permission[];
+  res.json(toResponse(req, await service.cancelRest(params.id, body.reason, req.staff!, { permissions, refundTo: body.refundTo })));
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {

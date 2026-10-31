@@ -33,6 +33,8 @@ export const OrderLineItemSchema = z.object({
   unitCost: z.number().nullable(),
   /** Copies of the line brought back through Returns (#166). */
   qtyReturned: z.number().int(),
+  /** Copies never delivered, cancelled with the rest of the order (#174). */
+  qtyCancelled: z.number().int(),
   /** The service on this line's copies (#169), if any. */
   service: SaleServiceLineSchema.nullable(),
 });

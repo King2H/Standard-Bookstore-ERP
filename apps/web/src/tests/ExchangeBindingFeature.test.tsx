@@ -124,7 +124,7 @@ function stubApi() {
         items: [contract(ReturnSchema, {
           id: '9', returnNumber: 'RET-20261026-0002', transactionId: null, transactionNumber: null, orderId: null, orderNumber: null,
           exchangeId: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, customerId: 77, totalRefundAmount: 100,
-          refundMethod: 'store_credit', status: 'completed', reason: 'Customer changed their mind', processedBy: 9, approvedBy: 9, createdAt: CREATED,
+          refundMethod: 'store_credit', status: 'completed', reason: 'Customer changed their mind', processedBy: 9, approvedBy: 9, undelivered: false, createdAt: CREATED,
         })],
         total: 1, page: 1, totalPages: 1,
       }));

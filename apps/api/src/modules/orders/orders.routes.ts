@@ -27,6 +27,8 @@ router.post('/orders/:id/deliveries', authenticate, inBranch, requirePermission(
 router.post('/orders/:id/fulfill', authenticate, inBranch, requirePermission('PROCESS_PAYMENT'), validate(schemas.byId), orders.fulfill);
 // One that took payments also needs PROCESS_REFUND: the money goes back in the same step (#167, orders.policy.ts).
 router.post('/orders/:id/cancel', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.cancel), orders.cancel);
+// What a part-delivered order will not deliver, by the same rule (#174, decision 3a).
+router.post('/orders/:id/cancel-rest', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.cancelRest), orders.cancelRest);
 
 // Retired endpoints answer 410 (#69). Payments, part payments of a credit
 // order included, are recorded with POST /payments, which keeps the payment,
