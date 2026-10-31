@@ -37068,6 +37068,41 @@
                                   "type": "integer",
                                   "minimum": -9007199254740991,
                                   "maximum": 9007199254740991
+                                },
+                                "specialOrders": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "orderLineId": {
+                                        "type": "string"
+                                      },
+                                      "orderId": {
+                                        "type": "string"
+                                      },
+                                      "orderNumber": {
+                                        "type": "string"
+                                      },
+                                      "quantity": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "reserved": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "orderLineId",
+                                      "orderId",
+                                      "orderNumber",
+                                      "quantity",
+                                      "reserved"
+                                    ],
+                                    "additionalProperties": false
+                                  }
                                 }
                               },
                               "required": [
@@ -37503,7 +37538,7 @@
       },
       "post": {
         "operationId": "createPurchaseOrder",
-        "summary": "A draft order in ETB from the session branch, received by it or another branch (Admin, Manager, Purchasor)",
+        "summary": "A draft order in ETB from the session branch, received by it or another branch (Admin, Manager, Purchasor); with specialOrders, the special-order lines of customers bought on it, alone or with other lines (#174)",
         "tags": [
           "Purchase orders"
         ],
@@ -37584,7 +37619,7 @@
                     ]
                   },
                   "lineItems": {
-                    "minItems": 1,
+                    "default": [],
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -37641,11 +37676,44 @@
                         "unitCost"
                       ]
                     }
+                  },
+                  "specialOrders": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "orderLineId": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unitCost": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "orderLineId",
+                        "quantity"
+                      ]
+                    }
                   }
                 },
                 "required": [
-                  "supplierId",
-                  "lineItems"
+                  "supplierId"
                 ]
               }
             }
@@ -37921,6 +37989,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -38649,6 +38752,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -39488,6 +39626,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -40234,6 +40407,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -40962,6 +41170,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -41708,6 +41951,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -42468,6 +42746,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -43196,6 +43509,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -43983,6 +44331,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -44741,6 +45124,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -45530,6 +45948,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -45996,7 +46449,6 @@
                 "type": "object",
                 "properties": {
                   "lines": {
-                    "minItems": 1,
                     "maxItems": 200,
                     "type": "array",
                     "items": {
@@ -46308,6 +46760,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -47036,6 +47523,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -47835,6 +48357,41 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "specialOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "orderLineId": {
+                                  "type": "string"
+                                },
+                                "orderId": {
+                                  "type": "string"
+                                },
+                                "orderNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "reserved": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "orderLineId",
+                                "orderId",
+                                "orderNumber",
+                                "quantity",
+                                "reserved"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [

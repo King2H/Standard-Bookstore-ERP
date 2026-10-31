@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
+import { SpecialOrderLinkLinesSchema } from './specialOrder.js';
 
 /** Contracts for /api/v1/purchase-orders: buying stock from suppliers (#21). */
 
@@ -30,6 +31,10 @@ export const PurchaseOrderLineSchema = z.object({
   returnedQuantity: z.number().int(),
   /** Still expected: nothing once the order is closed or cancelled. */
   remaining: z.number().int(),
+  /** Copies bought for customers' special orders (#174), on a single order; on the order's first line for the book. */
+  specialOrders: z.array(z.object({
+    orderLineId: z.string(), orderId: z.string(), orderNumber: z.string(), quantity: z.number().int(), reserved: z.number().int(),
+  })).optional(),
 });
 
 export const PurchaseOrderReceiptSchema = z.object({
@@ -260,8 +265,10 @@ export const CreatePurchaseOrderRequestSchema = z.object({
   expectedDeliveryDate: DateOnlySchema.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   paymentTerms: z.enum(['cash', 'credit']).default('credit'),
-  lineItems: z.array(PurchaseOrderLineInputSchema).min(1, 'At least one line item is required'),
-});
+  lineItems: z.array(PurchaseOrderLineInputSchema).default([]),
+  /** Customers' special-order lines bought on it (#174): its line for each book grows by them, or is created at unitCost. */
+  specialOrders: SpecialOrderLinkLinesSchema.optional(),
+}).refine((po) => po.lineItems.length + (po.specialOrders?.length ?? 0) > 0, { message: 'At least one line item is required', path: ['lineItems'] });
 export type CreatePurchaseOrderRequest = z.infer<typeof CreatePurchaseOrderRequestSchema>;
 
 /** A draft's changes; lineItems replaces every line. */

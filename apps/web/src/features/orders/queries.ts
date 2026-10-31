@@ -6,7 +6,7 @@ import { paymentKeys } from '../payments/queries.js';
 import { receivableKeys } from '../receivables/queries.js';
 import { returnKeys } from '../returns/queries.js';
 import {
-  cancelOrder, cancelOrderRest, confirmOrder, deliverOrder, createOrder, deleteOrder, fulfillOrder, getOrder, listOrders, searchBooksForOrder,
+  cancelOrder, cancelOrderRest, confirmOrder, deliverOrder, reserveOrderLine, createOrder, deleteOrder, fulfillOrder, getOrder, listOrders, searchBooksForOrder,
   searchCustomersForOrder, updateOrder, type ConfirmOrder, type NewOrder, type OrdersParams,
 } from './api.js';
 
@@ -41,6 +41,7 @@ function useOrderStep<A, R>(mutationFn: (a: A) => Promise<R>) {
 
 export const useConfirmOrder = () => useOrderStep(({ id, body }: { id: string; body: ConfirmOrder }) => confirmOrder(id, body));
 export const useFulfillOrder = () => useOrderStep(fulfillOrder);
+export const useReserveOrderLine = () => useOrderStep(({ id, lineId }: { id: string; lineId: string }) => reserveOrderLine(id, lineId));
 export const useDeliverOrder = () => useOrderStep(({ id, body }: { id: string; body: DeliverOrderRequest }) => deliverOrder(id, body));
 
 /** The rest of a part-delivered order is cancelled as a return (#174): stock, payments, debts and returns change. */

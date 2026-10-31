@@ -324,6 +324,28 @@ export async function listDeliveries(q: Queryable, orderId: string): Promise<Ord
   return [...byId.values()];
 }
 
+/**
+ * Of some orders, those with nothing to hand over yet (#174): special-order
+ * copies on order and no copy reserved.
+ */
+export async function ordersAwaitingArrival(q: Queryable, orderIds: string[]): Promise<Set<string>> {
+  if (orderIds.length === 0) return new Set();
+  const rows = await q
+    .selectFrom('orders as o')
+    .select('o.id')
+    .where('o.id', 'in', orderIds)
+    .where(({ exists, not, selectFrom }) => not(exists(
+      selectFrom('order_line_items').select(sql`1`.as('one')).whereRef('order_id', '=', 'o.id').where('qty_reserved', '>', 0),
+    )))
+    .where(({ exists, selectFrom }) => exists(
+      selectFrom('order_line_items as oli').select(sql`1`.as('one')).whereRef('oli.order_id', '=', 'o.id').where('oli.special_order', '=', true)
+        .where(sql<boolean>`oli.quantity > oli.qty_fulfilled + COALESCE((SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
+          WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND r.undelivered), 0)`),
+    ))
+    .execute();
+  return new Set(rows.map((r) => String(r.id)));
+}
+
 export async function deleteOrder(q: Queryable, orderId: string): Promise<void> {
   await q.deleteFrom('orders').where('id', '=', orderId).execute();
 }

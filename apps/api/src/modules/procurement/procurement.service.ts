@@ -72,14 +72,22 @@ async function approvalThreshold(): Promise<Money> {
 
 export async function getById(id: string): Promise<PurchaseOrderView> {
   const po = found(await orders.findOrder(kysely, id));
-  const [lineItems, receipts, payments, creditNotes, supplierRefunds, threshold] = await Promise.all([
+  const [lines, links, receipts, payments, creditNotes, supplierRefunds, threshold] = await Promise.all([
     orders.lineItems(kysely, id),
+    specialOrders.linksOf(kysely, id),
     orders.receipts(kysely, id),
     orders.payments(kysely, id),
     orders.creditNotes(kysely, id),
     orders.supplierRefunds(kysely, id),
     approvalThreshold(),
   ]);
+  // Each book's copies for customers show on its first line (#174), as arrivals reserve them by book.
+  const lineItems = lines.map((l) => {
+    const first = lines.find((x) => x.bookId === l.bookId) === l;
+    return { ...l, specialOrders: first ? links.filter((s) => s.bookId === l.bookId).map((s) => ({
+      orderLineId: s.orderLineId, orderId: s.orderId, orderNumber: s.orderNumber, quantity: s.quantity, reserved: s.reserved,
+    })) : [] };
+  });
   return { ...po, lineItems, receipts, payments, creditNotes, supplierRefunds, approvalThreshold: threshold };
 }
 
@@ -138,12 +146,16 @@ export async function createPurchaseOrder(actor: Actor, input: NewPurchaseOrder)
       paymentTerms: input.paymentTerms,
     });
     await orders.replaceLines(tx, id, input.lineItems);
-    await audit(tx, actor, id, { supplierId: input.supplierId, totalAmount: total.toNumber(), receivingBranchId }, 'CREATE');
+    // Customers' special orders bought on it from the start (#174): the total follows its lines.
+    if (input.specialOrders?.length) await specialOrders.link(tx, actor, { id, status: 'draft' }, input.specialOrders);
+    await audit(tx, actor, id, {
+      supplierId: input.supplierId, totalAmount: total.toNumber(), receivingBranchId, specialOrders: input.specialOrders?.length ?? 0,
+    }, 'CREATE');
     await insertOutboxEvent(tx, 'po.created', {
       poId: id,
       poNumber: poNumber(id),
       supplierName: await orders.supplierName(tx, input.supplierId),
-      total: total.toNumber(),
+      total: (await orders.findOrder(tx, id))!.totalAmount.toNumber(),
       branchId: input.branchId,
     });
     return id;

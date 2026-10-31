@@ -2523,7 +2523,7 @@ function purchaseOrderOperations(): ApiOperation[] {
       operationId: 'createPurchaseOrder',
       method: 'post',
       path: '/purchase-orders',
-      summary: 'A draft order in ETB from the session branch, received by it or another branch (Admin, Manager, Purchasor)',
+      summary: 'A draft order in ETB from the session branch, received by it or another branch (Admin, Manager, Purchasor); with specialOrders, the special-order lines of customers bought on it, alone or with other lines (#174)',
       tag,
       request: { body: CreatePurchaseOrderRequestSchema },
       responses: { 201: { description: 'The draft', schema: PurchaseOrderSchema } },

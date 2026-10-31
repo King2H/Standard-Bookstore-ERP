@@ -24,7 +24,7 @@ const BRANCH_PREFIX = 'Special Order ';
 const CODE = 'SPORD';
 
 interface Line { id: string; bookId: number; quantity: number; qtyReserved: number; qtyFulfilled: number; qtyCancelled: number; qtyOnOrder: number; specialOrder: boolean }
-interface Order { id: string; orderNumber: string; status: string; total: number; amountPaid: number; lineItems: Line[] }
+interface Order { id: string; orderNumber: string; status: string; total: number; amountPaid: number; lineItems: Line[]; allowedActions: string[] }
 interface OpenLine { orderLineId: string; orderNumber: string; customerName: string | null; bookId: number; quantity: number; onOrder: number; linked: number; toOrder: number }
 
 describe('Special orders for books not in stock (#174)', () => {
@@ -168,7 +168,14 @@ describe('Special orders for books not in stock (#174)', () => {
       { orderLineId: Number(lineOf(second, rare).id), quantity: 2 },
     ]);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.lineItems.find((l: { bookId: number }) => l.bookId === rare)).toMatchObject({ quantity: 4, unitCost: 8 });
+    expect(res.body.lineItems.find((l: { bookId: number }) => l.bookId === rare)).toMatchObject({
+      quantity: 4, unitCost: 8,
+      // Receiving staff see which copies are for customers (screens 6a).
+      specialOrders: [
+        { orderLineId: lineOf(first, rare).id, orderNumber: first.orderNumber, quantity: 2, reserved: 0 },
+        { orderLineId: lineOf(second, rare).id, orderNumber: second.orderNumber, quantity: 2, reserved: 0 },
+      ],
+    });
     expect((await link(po.id, [{ orderLineId: Number(lineOf(first, rare).id), quantity: 1 }])).body.error).toBe('SPECIAL_ORDER_EXCEEDS_REMAINING');
     expect((await link(po.id, [{ orderLineId: Number(lineOf(first, rare).id), quantity: 1 }], t.purchasorB)).status).toBe(404);
     expect((await openLines()).find((l) => l.orderLineId === lineOf(first, rare).id)).toMatchObject({ linked: 2, toOrder: 0 });
@@ -212,6 +219,13 @@ describe('Special orders for books not in stock (#174)', () => {
     const mixed = await specialOrder(2, 1, 10);
     const only = await specialOrder(1);
     expect((await as(t.sales).post(`/api/v1/orders/${only.id}/fulfill`)).body.error).toBe('INVALID_STATE');
+    // Nothing to hand over: neither the order nor the list offers it (screens 5a).
+    expect(only.allowedActions).not.toEqual(expect.arrayContaining(['fulfill']));
+    expect(only.allowedActions).not.toContain('deliver');
+    const listed = (await as(t.sales).get(`/api/v1/orders?orderNumber=${only.orderNumber}`)).body.items[0];
+    expect(listed.allowedActions).not.toContain('fulfill');
+    expect(listed.allowedActions).not.toContain('deliver');
+    expect(mixed.allowedActions).toEqual(expect.arrayContaining(['deliver', 'fulfill']));
     const part = await as(t.sales).post(`/api/v1/orders/${mixed.id}/fulfill`);
     expect([part.body.status, lineOf(part.body, rare).qtyOnOrder]).toEqual(['PART_DELIVERED', 2]);
 
@@ -231,5 +245,19 @@ describe('Special orders for books not in stock (#174)', () => {
     await submit(po.id);
     await receive(po.id, 3);
     expect(await onHand(rare)).toBe(stock + 3);
+  });
+
+  it('starts a purchase order from special-order lines alone, each copy counted once (screens 3a)', async () => {
+    const order = await specialOrder(2);
+    const line = Number(lineOf(order, rare).id);
+    const res = await as(t.purchasor).post('/api/v1/purchase-orders', { supplierId, specialOrders: [{ orderLineId: line, quantity: 2, unitCost: 9 }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.lineItems.map((l: { bookId: number; quantity: number; unitCost: number }) => [l.bookId, l.quantity, l.unitCost])).toEqual([[rare, 2, 9]]);
+    expect(res.body.totalAmount).toBe(18);
+    expect((await openLines()).find((l) => l.orderLineId === String(line))).toMatchObject({ linked: 2, toOrder: 0 });
+    const empty = await as(t.purchasor).post('/api/v1/purchase-orders', { supplierId });
+    expect([empty.status, empty.body.error]).toEqual([400, 'VALIDATION_ERROR']);
+    const over = await as(t.purchasor).post('/api/v1/purchase-orders', { supplierId, specialOrders: [{ orderLineId: line, quantity: 1, unitCost: 9 }] });
+    expect(over.body.error).toBe('SPECIAL_ORDER_EXCEEDS_REMAINING');
   });
 });

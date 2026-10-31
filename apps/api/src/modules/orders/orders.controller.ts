@@ -40,12 +40,12 @@ export const schemas = {
 /** The order as the API returns it, with the actions this staff member may take. */
 function toResponse(req: Request, order: OrderRow): Order {
   const permissions = (req.staff!.permissions ?? []) as Permission[];
-  const { jobsReady, ...rest } = order;
+  const { jobsReady, deliverable, ...rest } = order;
   return {
     ...rest,
     paymentMethod: order.paymentMethod ?? null,
     dueDate: order.dueDate ?? null,
-    allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType, order.amountPaid, jobsReady),
+    allowedActions: computeOrderAllowedActions(order.status, permissions, order.paymentStatus, order.saleType, order.amountPaid, jobsReady, deliverable),
   };
 }
 

@@ -46,16 +46,17 @@ export type SpecialOrderListResponse = z.infer<typeof SpecialOrderListResponseSc
  * Special-order lines added to a purchase order (decision 3a): its line for
  * the book grows by their copies, or is created at `unitCost`.
  */
+export const SpecialOrderLinkLinesSchema = z
+  .array(z.object({
+    orderLineId: IdSchema,
+    quantity: z.number().int().positive(),
+    /** Needed only when the purchase order has no line for the book yet. */
+    unitCost: MoneyInputSchema.refine((v) => Number(v) >= 0, 'Cannot be negative').optional(),
+  }))
+  .max(200)
+  .refine((lines) => new Set(lines.map((l) => l.orderLineId)).size === lines.length, 'Each line once');
+
 export const LinkSpecialOrdersRequestSchema = z.object({
-  lines: z
-    .array(z.object({
-      orderLineId: IdSchema,
-      quantity: z.number().int().positive(),
-      /** Needed only when the purchase order has no line for the book yet. */
-      unitCost: MoneyInputSchema.refine((v) => Number(v) >= 0, 'Cannot be negative').optional(),
-    }))
-    .min(1, 'At least one line is required')
-    .max(200)
-    .refine((lines) => new Set(lines.map((l) => l.orderLineId)).size === lines.length, 'Each line once'),
+  lines: SpecialOrderLinkLinesSchema.refine((lines) => lines.length > 0, 'At least one line is required'),
 });
 export type LinkSpecialOrdersRequest = z.infer<typeof LinkSpecialOrdersRequestSchema>;

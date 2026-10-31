@@ -98,6 +98,7 @@ export async function create(req: Request, res: Response): Promise<void> {
     paymentTerms: body.paymentTerms,
     lineItems: lines(body.lineItems),
     currency: body.currency,
+    specialOrders: body.specialOrders,
   });
   send(res, record, 201);
 }

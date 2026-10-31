@@ -61,6 +61,7 @@ async function loadOrder(q: Queryable, id: string | number, opts: { forUpdate?: 
   });
   order.jobsReady = await saleServices.orderDeliverable(q, order.id);
   order.deliveries = await orders.listDeliveries(q, order.id);
+  order.deliverable = !(await orders.ordersAwaitingArrival(q, [order.id])).has(order.id);
   order.allowedActions = [];
   return order;
 }
@@ -89,8 +90,9 @@ export async function list(opts: {
   );
   // A list offers Fulfill only where the binding jobs are ready, as the order's own page does (#169).
   const waiting = await saleServices.ordersWaitingOnJobs(kysely, items.map((o) => o.id));
+  const awaiting = await orders.ordersAwaitingArrival(kysely, items.map((o) => o.id));
   return {
-    items: items.map((o) => ({ ...o, jobsReady: !waiting.has(o.id), allowedActions: [] as string[] })),
+    items: items.map((o) => ({ ...o, jobsReady: !waiting.has(o.id), deliverable: !awaiting.has(o.id), allowedActions: [] as string[] })),
     total,
     page,
     totalPages: Math.ceil(total / pageSize),

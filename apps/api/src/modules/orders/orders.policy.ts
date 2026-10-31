@@ -194,14 +194,16 @@ export function computeOrderAllowedActions(
   _saleType?: SaleType,
   amountPaid = 0,
   jobsReady = true,
+  deliverable = true,
 ): string[] {
   const can = (p: Permission) => permissions.includes(p);
   // An order that took payments is cancelled by whoever refunds, giving the money back (#167).
   const cancel = can('CREATE_SALE') && (amountPaid <= 0 || can('PROCESS_REFUND')) ? ['cancel'] : [];
   // It is delivered with its bound copies, once their jobs are ready (#169).
   // Delivered in parts by whoever fulfils (#174); a line whose job is not ready waits.
-  const deliver = can('PROCESS_PAYMENT') ? ['deliver'] : [];
-  const fulfill = can('PROCESS_PAYMENT') && jobsReady ? ['fulfill'] : [];
+  // Nothing to hand over while only special-order copies are on order (#174).
+  const deliver = can('PROCESS_PAYMENT') && deliverable ? ['deliver'] : [];
+  const fulfill = can('PROCESS_PAYMENT') && jobsReady && deliverable ? ['fulfill'] : [];
   const cancelOrFulfill = [...cancel, ...deliver, ...fulfill];
 
   switch (status) {

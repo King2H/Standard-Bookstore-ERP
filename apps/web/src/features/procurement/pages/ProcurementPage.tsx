@@ -10,8 +10,11 @@ import { ReturnDetail } from '../../supplierReturns/components/ReturnDetail.js';
 import { ReturnForm } from '../../supplierReturns/components/ReturnForm.js';
 import { ReturnsList } from '../../supplierReturns/components/ReturnsList.js';
 import type { SupplierReturnDetail } from '@bms/shared';
+import { useMyProfile } from '../../account/queries.js';
+import { SpecialOrdersTab } from '../../specialOrders/components/SpecialOrdersTab.js';
+import { canBuy } from '../rules.js';
 
-type View = 'list' | 'detail' | 'receive' | 'form' | 'ledger' | 'returns' | 'return' | 'returnForm';
+type View = 'list' | 'detail' | 'receive' | 'form' | 'ledger' | 'returns' | 'return' | 'returnForm' | 'special';
 
 /** A draft's form needs its order; the order is read first (#173). */
 function EditReturn({ draft, onDone, onCancel }: { draft: SupplierReturnDetail; onDone: (id: number) => void; onCancel: () => void }) {
@@ -26,6 +29,7 @@ function EditReturn({ draft, onDone, onCancel }: { draft: SupplierReturnDetail; 
  */
 export default function ProcurementPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
   const refresh = useRefreshPurchaseOrders();
+  const { data: me } = useMyProfile();
   const linkedReturn = Number(initialContext.returnId) || null;
   const [view, setView] = useState<View>(linkedReturn ? 'return' : 'list');
   const [selected, setSelected] = useState<PurchaseOrder | null>(null);
@@ -40,7 +44,7 @@ export default function ProcurementPage({ initialContext = {} }: { initialContex
   const openReturn = (id: number) => { setReturnId(id); setView('return'); };
   const listsSwitch = (
     <div className="px-6 pt-4 flex gap-2" role="group" aria-label="Procurement lists">
-      {([['list', 'Purchase Orders'], ['returns', 'Returns to Supplier']] as const).map(([v, label]) => (
+      {([['list', 'Purchase Orders'], ['returns', 'Returns to Supplier'], ...(canBuy(me) ? [['special', 'Special Orders'] as const] : [])] as const).map(([v, label]) => (
         <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}
           className={`px-3 py-1.5 text-sm rounded-lg ${view === v ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{label}</button>
       ))}
@@ -70,6 +74,10 @@ export default function ProcurementPage({ initialContext = {} }: { initialContex
   if (view === 'return' && returnId !== null) {
     return <ReturnDetail id={returnId} onBack={() => setView('returns')} onOpenOrder={openOrder}
       onEdit={(draft) => { setReturning({ po: null, draft }); setView('returnForm'); }} />;
+  }
+  // Customers' special orders still to buy (#174), for the roles that buy.
+  if (view === 'special' && canBuy(me)) {
+    return <>{listsSwitch}<SpecialOrdersTab onOpenOrder={openOrder} /></>;
   }
   if (view === 'returns') {
     return <>{listsSwitch}<div className="p-6"><ReturnsList onOpen={openReturn} /></div></>;

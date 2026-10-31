@@ -150,11 +150,13 @@ describe('stock', () => {
     expect(screen.getByText('2', { selector: 'span' })).toBeInTheDocument();
   });
 
-  it('refuses an out-of-stock book', async () => {
+  it('takes an out-of-stock book only as a special order, a credit sale (#174; was: refused)', async () => {
     available = 0;
     const user = await openForm();
     await user.type(screen.getByPlaceholderText('Search books to add...'), 'Fikir');
-    expect((await screen.findByText('Fikir Eske Mekabir')).closest('button')).toBeDisabled();
+    await user.click(await screen.findByRole('button', { name: /Fikir Eske Mekabir.*special order/i }));
+    expect(screen.getByLabelText('Special order: Fikir Eske Mekabir')).toBeChecked();
+    expect(screen.getByRole('button', { name: /Credit Sale/ }).className).toMatch(/bg-amber-600/);
   });
 
   it("searches at the branch's location, leaving the branch to the session (was: the branch sent from the client)", async () => {
