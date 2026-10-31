@@ -69,6 +69,8 @@ export interface LineRecord {
   receivedQuantity: number;
   /** Sent back to the supplier (#173). */
   returnedQuantity: number;
+  /** Copies bought for customers' special orders (#174), on a single order. */
+  specialOrders?: Array<{ orderLineId: string; orderId: string; orderNumber: string; quantity: number; reserved: number }>;
 }
 
 export interface ReceiptRecord {
@@ -136,6 +138,8 @@ export interface NewPurchaseOrder {
   lineItems: NewLine[];
   /** Must be the shop's when given (#181). */
   currency?: string;
+  /** Customers' special-order lines bought on it (#174). */
+  specialOrders?: Array<{ orderLineId: number; quantity: number; unitCost?: string | number }>;
 }
 
 /** A draft's changes; undefined leaves a field as it is. */

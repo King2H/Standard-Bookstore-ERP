@@ -12,7 +12,7 @@ import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useBranchBankAccounts } from '../../bankAccounts/queries.js';
 import {
-  useCancelOrder, useCancelOrderRest, useConfirmOrder, useDeleteOrder, useDeliverOrder, useFulfillOrder, useOrders,
+  useCancelOrder, useCancelOrderRest, useConfirmOrder, useDeleteOrder, useDeliverOrder, useFulfillOrder, useOrder, useOrders,
 } from '../queries.js';
 import {
   canDeleteOrder, cashConfirmBody, cashPaymentProblem, isDeletable, PENDING_FULFILLMENT, STATUS_FILTERS, statusLabel,
@@ -84,7 +84,11 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
   const [status, setStatus] = useState(initialContext.status ?? '');
   const [dateFrom, setDateFrom] = useState(initialContext.dateFrom ?? '');
   const [dateTo, setDateTo] = useState(initialContext.dateTo ?? '');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // A notification opens its order (#174): the list shows it, expanded.
+  const linkedId = initialContext.orderId ?? null;
+  const [expandedId, setExpandedId] = useState<string | null>(linkedId);
+  const { data: linked } = useOrder(linkedId ?? '', linkedId !== null);
+  const [confirmDeposit, setConfirmDeposit] = useState('');
   const [asking, setAsking] = useState<Asking>(null);
   const [printing, setPrinting] = useState<string | null>(null);
   const [note, setNote] = useState<{ orderId: string; deliveryId: number } | null>(null);
@@ -94,7 +98,7 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
   const [confirmProof, setConfirmProof] = useState<PaymentProof>(EMPTY_PROOF);
   const [confirmBankAccountId, setConfirmBankAccountId] = useState<number | null>(null);
 
-  const { data: listData, isLoading } = useOrders({ page, pageSize, status, dateFrom, dateTo });
+  const { data: listData, isLoading } = useOrders({ page, pageSize, status, dateFrom, dateTo, ...(linked && { orderNumber: linked.orderNumber }) });
   // With Bank Accounts on, a bank payment names the account it went to (#21).
   const { accounts: bankAccounts, required: bankAccountRequired } = useBranchBankAccounts(getCurrentBranchId(), confirmMethod === 'bank');
   const confirm = useConfirmOrder();
@@ -110,9 +114,26 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
 
   function openConfirm(order: Order) {
     setConfirmingId(order.id); setConfirmDueDate(''); setConfirmMethod(''); setConfirmProof(EMPTY_PROOF); setConfirmBankAccountId(null);
+    setConfirmDeposit('');
   }
   const closeConfirm = () => setConfirmingId(null);
   const updated = () => { showToast('Order updated', 'success'); setConfirmingId(null); };
+
+  /** A credit order owes by its due date; a deposit, when given, is paid now (#174, decision 2a). */
+  function confirmCredit(order: Order) {
+    const deposit = confirmDeposit.trim();
+    if (deposit !== '') {
+      if (!/^\d+(\.\d{1,2})?$/.test(deposit) || !Money.of(deposit).greaterThan(0)) { showToast('Enter the deposit as an amount, e.g. 20.00', 'error'); return; }
+      if (Money.of(deposit).greaterThan(order.total)) { showToast('The deposit is at most the order\'s total', 'error'); return; }
+      const problem = cashPaymentProblem(confirmMethod || 'cash', confirmProof, confirmBankAccountId, bankAccountRequired);
+      if (problem) { showToast(problem, 'error'); return; }
+    }
+    const body = {
+      dueDate: confirmDueDate,
+      ...(deposit !== '' && { deposit: Number(deposit), ...cashConfirmBody(confirmMethod || 'cash', confirmProof, confirmBankAccountId) }),
+    };
+    confirm.mutate({ id: order.id, body }, { onSuccess: updated, onError });
+  }
 
   function confirmCash(order: Order) {
     const problem = cashPaymentProblem(confirmMethod, confirmProof, confirmBankAccountId, bankAccountRequired);
@@ -183,8 +204,20 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
         return confirmingId === order.id ? (
           <div key="confirm-credit" className="flex gap-1" onClick={stop}>
             <input type="date" aria-label="Due date" value={confirmDueDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setConfirmDueDate(e.target.value)} className={INLINE} />
-            <button disabled={!confirmDueDate || busy}
-              onClick={() => confirm.mutate({ id: order.id, body: { dueDate: confirmDueDate } }, { onSuccess: updated, onError })}
+            <input type="text" inputMode="decimal" aria-label="Deposit (optional)" placeholder="Deposit" value={confirmDeposit}
+              onChange={(e) => setConfirmDeposit(e.target.value)} className={`w-20 ${INLINE}`} />
+            {confirmDeposit.trim() !== '' && (
+              <>
+                <select aria-label="Payment method" value={confirmMethod || 'cash'} onChange={(e) => setConfirmMethod(e.target.value)} className={INLINE}>
+                  {CASH_PAYMENT_METHODS.map((code) => <option key={code} value={code}>{paymentMethodLabel(code)}</option>)}
+                </select>
+                {confirmMethod === 'bank' && bankAccountRequired && (
+                  <BankAccountSelect accounts={bankAccounts} value={confirmBankAccountId} onChange={setConfirmBankAccountId} className={`w-40 ${INLINE}`} />
+                )}
+                <PaymentProofFields method={confirmMethod || 'cash'} value={confirmProof} onChange={setConfirmProof} inputClassName={`w-40 ${INLINE}`} />
+              </>
+            )}
+            <button disabled={!confirmDueDate || busy} onClick={() => confirmCredit(order)}
               className="text-xs bg-blue-600 disabled:opacity-40 text-white px-2 py-0.5 rounded-sm">OK</button>
             <button onClick={closeConfirm} className="text-xs text-gray-500 px-1">✕</button>
           </div>

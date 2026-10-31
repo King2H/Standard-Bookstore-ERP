@@ -47,6 +47,9 @@ export async function link(
   await links.retotalPo(tx, po.id);
 }
 
+/** A purchase order's special orders still linked, by book. */
+export const linksOf = links.linksOf;
+
 /** A draft purchase order's new lines keep the copies its special orders wait for. */
 export async function checkEdit(tx: Queryable, poId: string, lines: Array<{ bookId: number; quantity: number }>): Promise<void> {
   policy.checkKeepsLinked(await links.linkedByBook(tx, poId), lines);

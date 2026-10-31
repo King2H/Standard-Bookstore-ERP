@@ -114,6 +114,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     if (notif.entityType === 'branch_transfer' && onNavigate) onNavigate('inventory', { tab: 'incoming', transferId: notif.entityId ?? '' });
     else if (notif.entityType === 'stock_count' && onNavigate) onNavigate('inventory', { tab: 'counts', countId: notif.entityId ?? '' });
     else if (notif.entityType === 'cash_session' && onNavigate) onNavigate('cash-sessions', { sessionId: notif.entityId ?? '' });
+    // An order opens itself, e.g. its special-order copies arrived (#174).
+    else if (notif.entityType === 'order' && notif.entityId && onNavigate) onNavigate('orders', { orderId: notif.entityId });
     else if (page && onNavigate) onNavigate(page);
     setOpen(false);
   }, [markReadMutation, onNavigate]);

@@ -16,6 +16,8 @@ export type OrdersParams = {
   pageSize?: number;
   /** One status, or several separated by commas. */
   status?: string;
+  /** The order with this ORD- number. */
+  orderNumber?: string;
   dateFrom?: string;
   dateTo?: string;
 };
@@ -38,6 +40,9 @@ export const deliverOrder = (id: string, body: DeliverOrderRequest) => api.post<
 
 /** What a part-delivered order will not deliver is cancelled; the order is completed (#174). */
 export const cancelOrderRest = (id: string, body: CancelOrderRequest) => api.post<Order>(`/orders/${id}/cancel-rest`, body);
+
+/** A special-order line's copies brought to the order's location reserved for it (#174). */
+export const reserveOrderLine = (id: string, lineId: string) => api.post<Order>(`/orders/${id}/lines/${lineId}/reserve`);
 
 /** Cancelled with a reason (owner decision 2a); a confirmed order's stock goes back. */
 export const cancelOrder = (id: string, body: CancelOrderRequest) => api.post<Order>(`/orders/${id}/cancel`, body);

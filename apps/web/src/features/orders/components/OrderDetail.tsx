@@ -6,7 +6,8 @@ import { useReturns } from '../../returns/queries.js';
 import { refundLabel } from '../../returns/rules.js';
 import { useMyProfile } from '../../account/queries.js';
 import { ServiceJobLine } from '../../services/components/ServiceJobLine.js';
-import { orderKeys, useOrder } from '../queries.js';
+import { useToast } from '../../../components/Toast.js';
+import { orderKeys, useOrder, useReserveOrderLine } from '../queries.js';
 import { canCreateOrder } from '../rules.js';
 import { DeliveryNote } from './DeliveryNote.js';
 
@@ -26,6 +27,8 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const { data } = useOrder(orderId);
   const { data: me } = useMyProfile();
   const [note, setNote] = useState<number | null>(null);
+  const reserve = useReserveOrderLine();
+  const { showToast } = useToast();
   const stage = data ? stageOf(data.status) : null;
   // What came back of a delivered order (#166, owner decision 4a): it stays completed.
   const { data: returns } = useReturns({ orderId, pageSize: 50 }, stage === 'FULFILLED' || stage === 'PART');
@@ -66,7 +69,8 @@ export function OrderDetail({ orderId }: { orderId: string }) {
               reserved = 0; fulfilled = 0;
               state = <span className="text-gray-400 italic">Pending confirmation</span>;
             } else if (stage === 'CONFIRMED') {
-              reserved = li.qtyReserved > 0 ? li.qtyReserved : li.quantity;
+              // A special-order line's copies are reserved as they arrive (#174).
+              reserved = li.qtyReserved > 0 || li.specialOrder ? li.qtyReserved : li.quantity;
               state = <span className="text-blue-600 dark:text-blue-400 font-medium">🔒 Stock reserved</span>;
             } else if (stage === 'PART') {
               // Delivered in parts (#174): the counts are the record.
@@ -82,10 +86,34 @@ export function OrderDetail({ orderId }: { orderId: string }) {
               reserved = 0; fulfilled = 0;
               state = <span className="text-red-500 dark:text-red-400 italic">Stock restored</span>;
             }
+            // Copies still on order wait for their books; brought over, they are reserved from stock (#174).
+            if (li.qtyOnOrder > 0 && (stage === 'CONFIRMED' || stage === 'PART')) {
+              state = (
+                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                  On order {li.qtyOnOrder}
+                  {canCreateOrder(me) && (
+                    <button type="button" aria-label={`Reserve ${li.bookTitle} from stock`} disabled={reserve.isPending}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        reserve.mutate({ id: data.id, lineId: li.id }, {
+                          onSuccess: () => showToast(`${li.bookTitle}: reserved from stock`, 'success'),
+                          onError: (err) => showToast((err as Error).message, 'error'),
+                        });
+                      }}
+                      className="ml-2 px-1.5 rounded-sm bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 hover:bg-amber-200 disabled:opacity-50">
+                      Reserve from stock
+                    </button>
+                  )}
+                </span>
+              );
+            }
             return (
               <Fragment key={li.id}>
               <tr className="border-t border-gray-100 dark:border-gray-700">
-                <td className="pr-4 py-1.5 text-gray-900 dark:text-white">{li.bookTitle}</td>
+                <td className="pr-4 py-1.5 text-gray-900 dark:text-white">
+                  {li.bookTitle}
+                  {li.specialOrder && <span className="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Special order</span>}
+                </td>
                 <td className="pr-4 text-gray-600 dark:text-gray-400">{li.quantity}</td>
                 <td className={`pr-4 font-medium ${reserved > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-gray-400'}`}>{reserved}</td>
                 <td className={`pr-4 font-medium ${fulfilled > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>{fulfilled}</td>

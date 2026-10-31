@@ -330,6 +330,8 @@ export async function insertOrder(
 
 export async function replaceLines(q: Queryable, poId: string, lines: NewLine[]): Promise<void> {
   await q.deleteFrom('po_line_items').where('po_id', '=', poId).execute();
+  // An order started from special orders alone has none yet (#174).
+  if (lines.length === 0) return;
   await q
     .insertInto('po_line_items')
     .values(

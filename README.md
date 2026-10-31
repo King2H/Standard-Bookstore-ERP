@@ -801,7 +801,8 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 - Special orders (#174): a line `specialOrder: true` is for a book not in stock, on a credit sale with a customer. It is
   confirmed without stock; `deposit` on confirm takes part of the total now. GET /api/v1/special-orders lists the lines
   with copies on order (Admin, Manager, Purchasor); POST /api/v1/purchase-orders/:id/special-orders adds them to a
-  purchase order. Arriving at the order's location, the copies are reserved for it, oldest order first; arriving
+  purchase order, or `specialOrders` on POST /api/v1/purchase-orders starts one from them alone; a purchase order's lines
+  show the copies bought for customers. Arriving at the order's location, the copies are reserved for it, oldest order first; arriving
   elsewhere, the sellers are told to bring them over and POST /api/v1/orders/:id/lines/:lineId/reserve
 - POST /api/v1/orders/:id/cancel-rest — body: { reason, refundTo? }; cancels what a part-delivered order did not deliver:
   back to stock as a return (RET-) marked undelivered, its value off a credit order's debt first, the rest back the way it

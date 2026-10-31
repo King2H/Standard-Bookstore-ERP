@@ -52,6 +52,8 @@ export interface OrderRow {
   fulfilledAt: string | null;
   /** False while a binding job is not ready: the order waits for it (#169). */
   jobsReady?: boolean;
+  /** False while only special-order copies still on order wait: nothing to hand over yet (#174). */
+  deliverable?: boolean;
   /** Its deliveries (#174), on a single order. */
   deliveries?: OrderDelivery[];
 }

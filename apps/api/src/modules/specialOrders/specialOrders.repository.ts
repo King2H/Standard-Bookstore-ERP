@@ -81,6 +81,26 @@ export async function addLink(q: Queryable, l: { orderLineId: string; poId: stri
       released_at = NULL`.execute(q);
 }
 
+/** A purchase order's links not released, oldest order first: what it brings for which order. */
+export async function linksOf(q: Queryable, poId: string): Promise<Array<{
+  bookId: number; orderLineId: string; orderId: string; orderNumber: string; quantity: number; reserved: number;
+}>> {
+  const rows = await q
+    .selectFrom('special_order_links as l')
+    .innerJoin('order_line_items as oli', 'oli.id', 'l.order_line_item_id')
+    .innerJoin('orders as o', 'o.id', 'oli.order_id')
+    .select(['oli.book_id', 'l.order_line_item_id', 'o.id as order_id', 'o.order_number', 'l.quantity', 'l.reserved_quantity'])
+    .where('l.po_id', '=', poId)
+    .where('l.released_at', 'is', null)
+    .orderBy('o.created_at')
+    .orderBy('l.id')
+    .execute();
+  return rows.map((r) => ({
+    bookId: r.book_id, orderLineId: String(r.order_line_item_id), orderId: String(r.order_id), orderNumber: r.order_number,
+    quantity: r.quantity, reserved: r.reserved_quantity,
+  }));
+}
+
 /** Per book, the copies a purchase order still has to bring for its linked lines. */
 export async function linkedByBook(q: Queryable, poId: string): Promise<Map<number, number>> {
   const { rows } = await sql<{ book_id: number; n: number }>`

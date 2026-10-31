@@ -22,6 +22,8 @@ export interface OrderLine {
   availableStock: number | null;
   /** Binding on some or all of the line's copies (#169): its own line, under the book. */
   service?: BindingChoice;
+  /** Ordered for the customer, not in stock (#174): a credit sale's line, with no binding. */
+  specialOrder?: boolean;
 }
 
 const NUMBER = /^\d+(\.\d{1,2})?$/;
@@ -76,5 +78,6 @@ export function lineInput(l: OrderLine) {
     discountType: l.discountType,
     discountMode: l.discountMode,
     ...(l.service && { service: bindingInput(l.service) }),
+    ...(l.specialOrder && { specialOrder: true }),
   };
 }

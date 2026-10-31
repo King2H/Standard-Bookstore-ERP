@@ -132,7 +132,15 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {(po.lineItems ?? []).map(li => (
               <tr key={li.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td className="px-4 py-3 text-gray-900 dark:text-white">{li.bookTitle}</td>
+                <td className="px-4 py-3 text-gray-900 dark:text-white">
+                  {li.bookTitle}
+                  {/* Copies bought for customers, reserved for their orders when they arrive (#174). */}
+                  {(li.specialOrders ?? []).map((s) => (
+                    <span key={s.orderLineId} className="block text-xs text-amber-700 dark:text-amber-400">
+                      {s.quantity} for {s.orderNumber}{s.reserved > 0 ? ` (${s.reserved} arrived)` : ''}
+                    </span>
+                  ))}
+                </td>
                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{li.bookIsbn}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.quantity}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{li.receivedQuantity}</td>

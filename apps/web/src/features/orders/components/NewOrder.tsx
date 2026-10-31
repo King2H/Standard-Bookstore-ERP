@@ -35,6 +35,7 @@ function lineOf(l: NonNullable<Order['lineItems']>[number]): OrderLine {
     discountType: l.discountType, discountMode: l.discountMode,
     discount: l.discountMode === 'Percentage' ? String(l.discountPct) : Money.of(l.discountAmount).toFixed(),
     availableStock: null,
+    specialOrder: l.specialOrder,
     // A fee with no discount reads as one that takes none; "Change" picks the service again from the list.
     service: l.service ? {
       serviceId: l.service.serviceId, code: l.service.serviceCode, name: l.service.serviceName, unitFee: l.service.unitFee,
@@ -64,6 +65,8 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
   const [proof, setProof] = useState<PaymentProof>(EMPTY_PROOF);
   const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [dueDate, setDueDate] = useState('');
+  // A credit order's part paid now (#174): paid by paymentMethod, with its proof.
+  const [deposit, setDeposit] = useState('');
   const [channel, setChannel] = useState<Channel>('in_store');
   const [bookSearch, setBookSearch] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
@@ -109,23 +112,31 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
       return { ...next, service: 'service' in change ? change.service : fitTo(l.service, next.quantity) };
     }));
 
+  /** A special order is a credit sale's line, with no binding until its books arrive (#174). */
+  function setSpecial(bookId: number, special: boolean) {
+    setLine(bookId, { specialOrder: special, ...(special && { service: undefined }) });
+    if (special) setSaleType('credit_sale');
+  }
+
   function addItem(book: Book) {
     const availableStock = book.availability?.available ?? null;
     const existing = lines.find((l) => l.bookId === book.id);
     if (existing) {
-      if (availableStock != null && existing.quantity >= availableStock) {
+      if (!existing.specialOrder && availableStock != null && existing.quantity >= availableStock) {
         showToast(`Only ${availableStock} in stock for "${book.title}"`, 'error');
         return;
       }
       setLine(book.id, { quantity: existing.quantity + 1 });
     } else {
-      if (availableStock != null && availableStock <= 0) {
-        showToast(`"${book.title}" is out of stock`, 'error');
-        return;
+      // Not in stock: ordered for the customer, as a credit sale (#174, decision 1a).
+      const special = availableStock != null && availableStock <= 0;
+      if (special) {
+        setSaleType('credit_sale');
+        showToast(`"${book.title}" is out of stock: added as a special order (a credit sale)`, 'success');
       }
       setLines((ls) => [...ls, {
         bookId: book.id, bookTitle: book.title, quantity: 1, unitPrice: Money.of(book.branchPrice ?? book.defaultPrice ?? 0),
-        discountType: 'Normal', discountMode: 'Percentage', discount: '0', availableStock,
+        discountType: 'Normal', discountMode: 'Percentage', discount: '0', availableStock, ...(special && { specialOrder: true }),
       }]);
     }
     setBookSearch('');
@@ -134,7 +145,7 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
   const subtotal = orderSubtotal(lines);
 
   function reset() {
-    setLines([]); setSelectedCustomer(null); setPaymentMethod('cash'); setDueDate('');
+    setLines([]); setSelectedCustomer(null); setPaymentMethod('cash'); setDueDate(''); setDeposit('');
     setProof(EMPTY_PROOF); setBankAccountId(null);
   }
 
@@ -144,6 +155,12 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
     if (saleType === 'credit_sale' && !selectedCustomer) return 'Credit sales require a customer';
     if (lines.some((l) => l.service) && !selectedCustomer) return 'A binding needs a customer, who is called when it is ready';
     if (saleType === 'credit_sale' && !dueDate) return 'Credit sales require a due date';
+    if (saleType === 'cash_sale' && lines.some((l) => l.specialOrder)) return 'A special order is a credit sale: choose Credit Sale';
+    if (saleType === 'credit_sale' && deposit.trim() !== '') {
+      if (!/^\d+(\.\d{1,2})?$/.test(deposit.trim()) || !Money.of(deposit.trim()).greaterThan(0)) return 'Enter the deposit as an amount, e.g. 20.00';
+      if (Money.of(deposit.trim()).greaterThan(subtotal)) return 'The deposit is at most the order\'s total';
+      return cashPaymentProblem(paymentMethod, proof, bankAccountId, bankAccountRequired);
+    }
     const discounts = discountProblem(lines, maxPct);
     if (discounts) return discounts;
     if (saleType === 'cash_sale' && paymentMethod === 'store_credit') {
@@ -170,7 +187,9 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
   /** A draft saved as it is now, not yet confirmed (#174). */
   async function saveDraft() {
     const stop = lines.length === 0 ? 'Add at least one item'
-      : saleType === 'credit_sale' && !selectedCustomer ? 'Credit sales require a customer' : discountProblem(lines, maxPct);
+      : saleType === 'credit_sale' && !selectedCustomer ? 'Credit sales require a customer'
+      : saleType === 'cash_sale' && lines.some((l) => l.specialOrder) ? 'A special order is a credit sale: choose Credit Sale'
+      : discountProblem(lines, maxPct);
     if (stop) { showToast(stop, 'error'); return; }
     setBusy(true);
     try {
@@ -199,7 +218,10 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
       try {
         const confirmed = await confirmOrder.mutateAsync({
           id: draft.id,
-          body: saleType === 'cash_sale' ? cashConfirmBody(paymentMethod, proof, bankAccountId) : { dueDate },
+          body: saleType === 'cash_sale' ? cashConfirmBody(paymentMethod, proof, bankAccountId) : {
+            dueDate,
+            ...(deposit.trim() !== '' && { deposit: Number(deposit.trim()), ...cashConfirmBody(paymentMethod, proof, bankAccountId) }),
+          },
         });
         showToast(`Order ${confirmed.orderNumber} ${draftId !== null ? 'saved' : 'created'} & ${saleType === 'cash_sale' ? 'paid' : 'confirmed'}`, 'success');
       } catch (e) {
@@ -262,6 +284,18 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
           <div className="pt-1 space-y-1">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Due Date</p>
             <input type="date" aria-label="Due date" value={dueDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setDueDate(e.target.value)} className={INPUT} />
+            {/* A deposit is paid now, the rest owed (#174, decision 2a). */}
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 pt-1">Deposit (optional)</p>
+            <input type="text" inputMode="decimal" aria-label="Deposit (optional)" value={deposit} placeholder="0.00" onChange={(e) => setDeposit(e.target.value)} className={INPUT} />
+            {deposit.trim() !== '' && (
+              <>
+                <PaymentMethodTabs methods={['cash', 'bank', 'mobile', 'store_credit']} value={paymentMethod} onChange={setPaymentMethod} columns={4} />
+                {paymentMethod === 'bank' && bankAccountRequired && (
+                  <BankAccountSelect accounts={bankAccounts} value={bankAccountId} onChange={setBankAccountId} />
+                )}
+                <PaymentProofFields method={paymentMethod} value={proof} onChange={setProof} />
+              </>
+            )}
           </div>
         )}
         {/* A cash order is paid at once: how, and for bank and Telebirr the proof. */}
@@ -310,13 +344,12 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
             <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
               {books.map((b) => (
                 <button key={b.id} onClick={() => addItem(b)}
-                  disabled={b.availability != null && b.availability.available === 0}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0 ${b.availability != null && b.availability.available === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/30'}`}>
+                  className="w-full text-left px-3 py-2 text-sm transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-blue-50 dark:hover:bg-blue-950/30">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium text-gray-900 dark:text-white truncate min-w-0">{b.title}</p>
                     {b.availability != null && (
                       <span className={`text-xs font-semibold shrink-0 px-1.5 py-0.5 rounded-full ${b.availability.available === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : b.availability.available <= 3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'}`}>
-                        {b.availability.available === 0 ? 'Out of stock' : `${b.availability.available} avail`}
+                        {b.availability.available === 0 ? 'Out of stock · special order' : `${b.availability.available} avail`}
                       </span>
                     )}
                   </div>
@@ -350,17 +383,17 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
                   <span aria-label={`Quantity of ${item.bookTitle}`} className="w-8 text-center text-sm">{item.quantity}</span>
                   <button
                     onClick={() => {
-                      if (item.availableStock != null && item.quantity >= item.availableStock) {
+                      if (!item.specialOrder && item.availableStock != null && item.quantity >= item.availableStock) {
                         showToast(`Only ${item.availableStock} in stock for "${item.bookTitle}"`, 'error');
                         return;
                       }
                       setLine(item.bookId, { quantity: item.quantity + 1 });
                     }}
-                    disabled={item.availableStock != null && item.quantity >= item.availableStock}
+                    disabled={!item.specialOrder && item.availableStock != null && item.quantity >= item.availableStock}
                     aria-label={`One more ${item.bookTitle}`}
                     className="w-6 h-6 rounded-sm bg-gray-200 dark:bg-gray-700 text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                   >+</button>
-                  {item.availableStock != null && (
+                  {item.availableStock != null && !item.specialOrder && (
                     <span className="text-[10px] text-gray-400 ml-1">/{item.availableStock} avail</span>
                   )}
                 </div>
@@ -383,7 +416,15 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
                 </span>
                 <button onClick={() => setLines((ls) => ls.filter((l) => l.bookId !== item.bookId))} className="text-gray-400 hover:text-red-500 text-sm">×</button>
               </div>
-              {item.service ? (
+              {/* Short of stock, the copies can be ordered for the customer (#174). */}
+              {(item.specialOrder || (item.availableStock != null && item.quantity >= item.availableStock)) && (
+                <label className="flex items-center gap-1.5 px-2 -mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  <input type="checkbox" aria-label={`Special order: ${item.bookTitle}`} checked={!!item.specialOrder}
+                    onChange={(e) => setSpecial(item.bookId, e.target.checked)} />
+                  Special order (not in stock): ordered for the customer, a credit sale
+                </label>
+              )}
+              {item.specialOrder ? null : item.service ? (
                 <div className="flex items-center gap-3 px-2 -mt-1 text-xs text-gray-700 dark:text-gray-300">
                   <span className="flex-1">
                     🧵 {item.service.name} × {item.service.quantity}
