@@ -1,11 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CancelOrderRequest } from '@bms/shared';
+import type { CancelOrderRequest, DeliverOrderRequest } from '@bms/shared';
 import { customerKeys } from '../customers/queries.js';
 import { inventoryKeys } from '../inventory/queries.js';
 import { paymentKeys } from '../payments/queries.js';
 import { receivableKeys } from '../receivables/queries.js';
+import { returnKeys } from '../returns/queries.js';
 import {
-  cancelOrder, confirmOrder, createOrder, deleteOrder, fulfillOrder, getOrder, listOrders, searchBooksForOrder,
+  cancelOrder, cancelOrderRest, confirmOrder, deliverOrder, createOrder, deleteOrder, fulfillOrder, getOrder, listOrders, searchBooksForOrder,
   searchCustomersForOrder, updateOrder, type ConfirmOrder, type NewOrder, type OrdersParams,
 } from './api.js';
 
@@ -40,6 +41,17 @@ function useOrderStep<A, R>(mutationFn: (a: A) => Promise<R>) {
 
 export const useConfirmOrder = () => useOrderStep(({ id, body }: { id: string; body: ConfirmOrder }) => confirmOrder(id, body));
 export const useFulfillOrder = () => useOrderStep(fulfillOrder);
+export const useDeliverOrder = () => useOrderStep(({ id, body }: { id: string; body: DeliverOrderRequest }) => deliverOrder(id, body));
+
+/** The rest of a part-delivered order is cancelled as a return (#174): stock, payments, debts and returns change. */
+export function useCancelOrderRest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CancelOrderRequest }) => cancelOrderRest(id, body),
+    onSuccess: () => Promise.all([orderKeys.all, inventoryKeys.all, paymentKeys.all, receivableKeys.all, customerKeys.all, returnKeys.all]
+      .map((queryKey) => qc.invalidateQueries({ queryKey }))),
+  });
+}
 /** Cancelling gives back what the order took (#167): payments, debts and store credit change too. */
 export function useCancelOrder() {
   const qc = useQueryClient();

@@ -211,6 +211,20 @@ describe('Returning a customer order (#166)', () => {
     expect(screen.getByRole('textbox', { name: 'Transaction or order number' })).toHaveValue('ORD-20261018-0003');
   });
 
+  it('returns what a part-delivered order handed over, not what it did not (#174; was: refused as not delivered)', async () => {
+    const base = deliveredOrder();
+    delivered = deliveredOrder({
+      status: 'PART_DELIVERED', allowedActions: ['deliver', 'return'],
+      lineItems: base.lineItems!.map((l) => ({ ...l, qtyFulfilled: 2, qtyReserved: 1, qtyReturned: 0 })),
+    });
+    await openPage({ sale: 'ORD-20261018-0003' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Use this order/ }));
+    await settle();
+    expect(screen.getByText(/3 ordered, 2 delivered/)).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton')).toHaveAttribute('max', '2');
+  });
+
   it('sends an order not delivered yet to be cancelled instead (2a)', async () => {
     delivered = deliveredOrder({ status: 'CONFIRMED', fulfilledAt: null, allowedActions: ['cancel', 'fulfill'] });
     await openPage({ sale: 'ORD-20261018-0003' });

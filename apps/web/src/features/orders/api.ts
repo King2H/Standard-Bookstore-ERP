@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type {
-  BookAvailabilityListResponse, CancelOrderRequest, ConfirmOrderRequestSchema, CreateOrderRequestSchema, CustomerListResponse, Order,
-  OrderListResponse,
+  BookAvailabilityListResponse, CancelOrderRequest, ConfirmOrderRequestSchema, CreateOrderRequestSchema, CustomerListResponse,
+  DeliverOrderRequest, Order, OrderListResponse,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
@@ -32,6 +32,12 @@ export const confirmOrder = (id: string, body: ConfirmOrder) => api.post<Order>(
 
 /** The books are handed over. */
 export const fulfillOrder = (id: string) => api.post<Order>(`/orders/${id}/fulfill`);
+
+/** Some copies handed over, per line at most what is waiting (#174); numbered DLV-. */
+export const deliverOrder = (id: string, body: DeliverOrderRequest) => api.post<Order>(`/orders/${id}/deliveries`, body);
+
+/** What a part-delivered order will not deliver is cancelled; the order is completed (#174). */
+export const cancelOrderRest = (id: string, body: CancelOrderRequest) => api.post<Order>(`/orders/${id}/cancel-rest`, body);
 
 /** Cancelled with a reason (owner decision 2a); a confirmed order's stock goes back. */
 export const cancelOrder = (id: string, body: CancelOrderRequest) => api.post<Order>(`/orders/${id}/cancel`, body);

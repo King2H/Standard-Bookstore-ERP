@@ -32,11 +32,16 @@ export function refundLabel(method: string): string {
   return paymentMethodPlainLabel(method);
 }
 
-/** How many units of a line can still come back; unknown returns (a counter sale's) leave it to the API. */
-export const returnable = (line: { quantity: number; returned: number | null }) => line.quantity - (line.returned ?? 0);
+/**
+ * How many units of a line can still come back; unknown returns (a counter
+ * sale's) leave it to the API. An order's copies not delivered, waiting or
+ * cancelled, never come back (#174).
+ */
+export const returnable = (line: { quantity: number; returned: number | null; undelivered?: number }) =>
+  line.quantity - (line.returned ?? 0) - (line.undelivered ?? 0);
 
 type BoundLine = {
-  quantity: number; returned: number | null; binding: { quantity: number; lineTotal: number; status: string | null } | null;
+  quantity: number; returned: number | null; undelivered?: number; binding: { quantity: number; lineTotal: number; status: string | null } | null;
   /** An exchange's line (#203): no plain copy comes back. */
   boundOnly?: boolean;
 };
