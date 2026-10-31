@@ -1,6 +1,5 @@
 import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
-import { NOT_SALE_ORDER_STATUS_LIST } from '../sales/sales.policy.js';
 
 // The dashboard's KPI figures (#22). "Today" and "this month" are the
 // database's calendar (CURRENT_DATE), never a JS Date, so the boundary is
@@ -23,14 +22,12 @@ function branchFilter(branchId: number | undefined, alias?: string): { cond: str
   return { cond: `AND ${alias ? `${alias}.` : ''}branch_id = $1`, params: [branchId] };
 }
 
+/** Orders as sales (#175): on their confirmation day, and as a minus on their cancellation day. */
+const ORDER_SALES = 'order_sale_events ev JOIN orders o ON o.id = ev.order_id';
+
 function orderSales(q: Queryable, branchId: number | undefined, when: string) {
-  const b = branchFilter(branchId);
-  return value(
-    q,
-    `SELECT COALESCE(SUM(total), 0)::NUMERIC AS val FROM orders
-     WHERE ${when} AND status NOT IN ${NOT_SALE_ORDER_STATUS_LIST} ${b.cond}`,
-    b.params,
-  );
+  const b = branchFilter(branchId, 'o');
+  return value(q, `SELECT COALESCE(SUM(ev.sign * o.total), 0)::NUMERIC AS val FROM ${ORDER_SALES} WHERE ${when} ${b.cond}`, b.params);
 }
 
 function posSales(q: Queryable, branchId: number | undefined, when: string) {
@@ -70,16 +67,16 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
     outstanding, overdue, averageOrderValue, inventoryValue, inventoryInTransit,
     activeCustomers, lowStockAlerts, pendingOrders, exchangesToday,
   ] = await Promise.all([
-    orderSales(q, branchId, today('created_at')),
+    orderSales(q, branchId, today('ev.sale_at')),
     posSales(q, branchId, today('created_at')),
     exchangeSales(q, branchId, today('created_at')),
-    orderSales(q, branchId, thisMonth('created_at')),
+    orderSales(q, branchId, thisMonth('ev.sale_at')),
     posSales(q, branchId, thisMonth('created_at')),
     exchangeSales(q, branchId, thisMonth('created_at')),
     value(q, `SELECT COALESCE(SUM(outstanding_amount), 0)::NUMERIC AS val FROM receivables WHERE status IN ('Pending', 'PartiallyPaid', 'Overdue') ${b.cond}`, b.params),
     // Overdue is kept up to date by the receivables' overdue job, not derived here.
     value(q, `SELECT COALESCE(SUM(outstanding_amount), 0)::NUMERIC AS val FROM receivables WHERE status = 'Overdue' ${b.cond}`, b.params),
-    value(q, `SELECT COALESCE(AVG(total), 0)::NUMERIC AS val FROM orders WHERE status NOT IN ${NOT_SALE_ORDER_STATUS_LIST} ${b.cond}`, b.params),
+    value(q, `SELECT COALESCE(SUM(ev.sign * o.total) / NULLIF(SUM(ev.sign), 0), 0)::NUMERIC AS val FROM ${ORDER_SALES} WHERE true ${branchFilter(branchId, 'o').cond}`, b.params),
     // Quantity × average cost now, not a period flow.
     value(q, `SELECT COALESCE(SUM(i.inventory_value), 0)::NUMERIC AS val FROM inventory i JOIN locations l ON l.id = i.location_id WHERE true ${l.cond}`, l.params),
     // On its way between branches, in neither branch's stock: a branch sees what it sends and what it receives (#170, 3a).

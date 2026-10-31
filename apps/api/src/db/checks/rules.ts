@@ -368,6 +368,17 @@ export const CHECKS: readonly Check[] = [
         AND (s.expected_cash <> s.opening_float + COALESCE(m.net, 0) OR s.variance <> s.counted_cash - s.expected_cash)`,
   },
   {
+    id: 'orders.sale-dated',
+    area: 'Orders',
+    title: 'A confirmed order has the day its sale counts on',
+    severity: 'error',
+    // Reports count a sale on its confirmation day (#175); without one it counts on no day.
+    sql: `
+      SELECT o.tenant_id, o.order_number || ' (' || o.status || '): no confirmation date' AS ref
+      FROM orders o
+      WHERE o.confirmed_at IS NULL AND o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled')`,
+  },
+  {
     id: 'orders.deliveries-add-up',
     area: 'Orders',
     title: 'An order delivered in parts handed over what its lines say',

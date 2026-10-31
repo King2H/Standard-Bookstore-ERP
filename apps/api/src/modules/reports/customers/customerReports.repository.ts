@@ -8,6 +8,12 @@ import { scopeConditions, where, type ReportFilters, type ReportScope } from '..
 
 const IS_SALE = `o.status NOT IN ${NOT_SALE_ORDER_STATUS_LIST}`;
 
+/**
+ * Sales in a range (#175): each order on its confirmation day, and as a minus
+ * on its cancellation day, so a reported day never changes.
+ */
+const ORDER_SALES = 'order_sale_events ev JOIN orders o ON o.id = ev.order_id';
+
 export async function customerTotals(q: Queryable, branchId: number | undefined): Promise<{ total_customers: number; active_customers: number }> {
   const params = branchId ? [branchId] : [];
   const [row] = await reportRows<{ total_customers: number; active_customers: number }>(
@@ -22,22 +28,27 @@ export async function customerTotals(q: Queryable, branchId: number | undefined)
 
 /** Customers with a sale in the range who have made more than one sale in all. */
 export async function repeatCustomers(q: Queryable, scope: ReportScope): Promise<number> {
-  const { conditions, params } = scopeConditions({ dateFrom: scope.dateFrom, dateTo: scope.dateTo }, 'o');
+  const { conditions, params } = scopeConditions({ dateFrom: scope.dateFrom, dateTo: scope.dateTo }, 'ev', { column: 'sale_at' });
   if (scope.branchId) {
     params.push(scope.branchId);
     conditions.push(`c.branch_id = $${params.length}`);
   }
+  // A sale in the range nets its cancellations there; "more than one in all" is the customer as of now.
   const [row] = await reportRows<{ repeat_customers: number }>(
     q,
-    `SELECT COUNT(DISTINCT o.customer_id)::INTEGER AS repeat_customers
-     FROM orders o
-     JOIN customers c ON c.id = o.customer_id
-     ${where([IS_SALE, ...conditions])}
-       AND o.customer_id IN (
-         SELECT o.customer_id FROM orders o
-         WHERE o.customer_id IS NOT NULL AND ${IS_SALE}
-         GROUP BY o.customer_id HAVING COUNT(*) > 1
-       )`,
+    `SELECT COUNT(*)::INTEGER AS repeat_customers FROM (
+       SELECT o.customer_id
+       FROM ${ORDER_SALES}
+       JOIN customers c ON c.id = o.customer_id
+       ${where(conditions)}
+       GROUP BY o.customer_id
+       HAVING SUM(ev.sign) > 0
+     ) sold
+     WHERE sold.customer_id IN (
+       SELECT o.customer_id FROM orders o
+       WHERE o.customer_id IS NOT NULL AND ${IS_SALE}
+       GROUP BY o.customer_id HAVING COUNT(*) > 1
+     )`,
     params,
   );
   return row.repeat_customers;
@@ -66,7 +77,7 @@ export async function topCustomers(
   q: Queryable,
   scope: ReportScope,
 ): Promise<Array<{ customer_id: number; full_name: string; total_spend: string; order_count: number }>> {
-  const { conditions, params } = scopeConditions({ dateFrom: scope.dateFrom, dateTo: scope.dateTo }, 'o');
+  const { conditions, params } = scopeConditions({ dateFrom: scope.dateFrom, dateTo: scope.dateTo }, 'ev', { column: 'sale_at' });
   if (scope.branchId) {
     params.push(scope.branchId);
     conditions.push(`c.branch_id = $${params.length}`);
@@ -74,12 +85,13 @@ export async function topCustomers(
   return reportRows(
     q,
     `SELECT c.id AS customer_id, c.full_name,
-            COALESCE(SUM(o.total), 0)::NUMERIC AS total_spend,
-            COUNT(o.id)::INTEGER AS order_count
-     FROM customers c
-     JOIN orders o ON o.customer_id = c.id
-     ${where([IS_SALE, ...conditions])}
+            COALESCE(SUM(ev.sign * o.total), 0)::NUMERIC AS total_spend,
+            COALESCE(SUM(ev.sign), 0)::INTEGER AS order_count
+     FROM ${ORDER_SALES}
+     JOIN customers c ON c.id = o.customer_id
+     ${where(conditions)}
      GROUP BY c.id, c.full_name
+     HAVING SUM(ev.sign * o.total) <> 0 OR SUM(ev.sign) <> 0
      ORDER BY total_spend DESC
      LIMIT 20`,
     params,

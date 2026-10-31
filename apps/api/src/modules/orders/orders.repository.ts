@@ -247,6 +247,7 @@ export async function deleteLineItems(q: Queryable, orderId: string): Promise<vo
 export async function setStatus(q: Queryable, orderId: string, status: string, cancelReason?: string): Promise<void> {
   await q
     .updateTable('orders')
+    // The days its sale and its cancellation count on are stamped with the status (#175, migration 93).
     .set({ status, ...(cancelReason !== undefined ? { cancel_reason: cancelReason } : {}), updated_at: sql`now()` })
     .where('id', '=', orderId)
     .execute();
