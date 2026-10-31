@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import {
+  UpdateOrderRequestSchema,
   CancelStockCountRequestSchema,
   CancelSupplierReturnRequestSchema,
   CreateSupplierRefundRequestSchema,
@@ -2081,6 +2082,16 @@ function orderOperations(): ApiOperation[] {
         200: { description: 'Replay of an earlier request with the same Idempotency-Key', schema: OrderSchema },
       },
       errors: [400, 401, 403, 404, 409, 422, 500],
+    },
+    {
+      operationId: 'updateOrder',
+      method: 'put',
+      path: '/orders/{id}',
+      summary: 'Edit a draft order: its lines, customer, discounts, location, channel, sale type and notes, checked as a new order is (CREATE_SALE, #174)',
+      tag,
+      request: { params: IdParamsSchema, body: UpdateOrderRequestSchema },
+      responses: { 200: { description: 'The draft, priced again', schema: OrderSchema } },
+      errors: [400, 401, 403, 404, 422, 500],
     },
     {
       operationId: 'getOrder',

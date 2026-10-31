@@ -5,6 +5,7 @@ import {
   CreateOrderRequestSchema,
   IdParamsSchema,
   OrderListQuerySchema,
+  UpdateOrderRequestSchema,
   type MessageResponse,
   type Order,
   type OrderListResponse,
@@ -26,6 +27,7 @@ export const schemas = {
   list: { query: OrderListQuerySchema },
   byId: { params: IdParamsSchema },
   create: { body: CreateOrderRequestSchema },
+  update: { params: IdParamsSchema, body: UpdateOrderRequestSchema },
   confirm: { params: IdParamsSchema, body: ConfirmOrderRequestSchema },
   cancel: { params: IdParamsSchema, body: CancelOrderRequestSchema },
 };
@@ -81,6 +83,19 @@ export async function create(req: Request, res: Response): Promise<void> {
     return;
   }
   res.status(201).json(toResponse(req, await service.create(data, req.staff!)));
+}
+
+/** A draft's new contents (#174); its location is one the staff member may use (#72). */
+export async function update(req: Request, res: Response): Promise<void> {
+  const { params, body: dto } = valid(req, schemas.update);
+  await assertLocationUsable(req, dto.locationId ?? null);
+  const order = await service.update(String(params.id), {
+    ...dto,
+    customerId: dto.customerId ?? null,
+    locationId: dto.locationId ?? null,
+    items: dto.items.map((i) => ({ ...i, discountAmount: i.discountAmount ?? undefined, discountPct: i.discountPct ?? undefined })),
+  }, req.staff!);
+  res.json(toResponse(req, order));
 }
 
 export async function confirm(req: Request, res: Response): Promise<void> {

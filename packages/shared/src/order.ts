@@ -22,6 +22,10 @@ export const OrderLineItemSchema = z.object({
   unitPrice: z.number(),
   discountAmount: z.number(),
   totalPrice: z.number(),
+  /** How the line's discount was given (#174): its type, mode and percentage of the line. */
+  discountType: DiscountTypeSchema,
+  discountMode: DiscountModeSchema,
+  discountPct: z.number(),
   qtyReserved: z.number().int(),
   qtyFulfilled: z.number().int(),
   isBackordered: z.boolean(),
@@ -111,6 +115,10 @@ export const CreateOrderRequestSchema = z.object({
   items: z.array(OrderLineInputSchema).min(1),
 });
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
+
+/** A draft's new contents (#174, decision 1a): checked as a new order is. */
+export const UpdateOrderRequestSchema = CreateOrderRequestSchema;
+export type UpdateOrderRequest = z.infer<typeof UpdateOrderRequestSchema>;
 
 export const ConfirmOrderRequestSchema = z
   .object({

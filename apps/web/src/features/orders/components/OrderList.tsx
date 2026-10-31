@@ -63,9 +63,11 @@ type Asking = { kind: 'cancel' | 'delete'; order: Order } | null;
  * API reports them): confirm a draft, fulfil, cancel with a reason, print,
  * delete a draft or cancelled one (Admin), or collect what is owed in Payments.
  */
-export function OrderList({ initialContext = {}, onNavigate }: {
+export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
   initialContext?: Record<string, string>;
   onNavigate?: (page: string, context?: Record<string, string>) => void;
+  /** Opens a draft in the order form (#174). */
+  onEdit?: (order: Order) => void;
 }) {
   const { showToast } = useToast();
   const currency = useCurrency();
@@ -128,6 +130,15 @@ export function OrderList({ initialContext = {}, onNavigate }: {
   function actionsOf(order: Order) {
     const stop = (e: MouseEvent) => e.stopPropagation();
     return order.allowedActions.map((action) => {
+      // A draft is edited until it is confirmed (#174, decision 1a).
+      if (action === 'edit') {
+        return onEdit && (
+          <button key="edit" onClick={(e) => { stop(e); onEdit(order); }}
+            className={`text-xs px-2 py-0.5 rounded-sm transition-colors ${ACTION.print}`}>
+            Edit
+          </button>
+        );
+      }
       if (action === 'cancel') {
         return (
           <button key="cancel" onClick={(e) => { stop(e); setAsking({ kind: 'cancel', order }); }}

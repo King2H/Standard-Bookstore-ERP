@@ -1,5 +1,5 @@
-import { Fragment, useState } from 'react';
-import { Money, type BookWithAvailabilitySchema, type Customer } from '@bms/shared';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { Money, type BookWithAvailabilitySchema, type Customer, type Order } from '@bms/shared';
 import type { z } from 'zod';
 import BankAccountSelect from '../../../components/BankAccountSelect.js';
 import PaymentMethodTabs from '../../../components/PaymentMethodTabs.js';
@@ -11,13 +11,14 @@ import { EMPTY_PROOF, type PaymentProof } from '../../../lib/paymentProof.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useBranchBankAccounts } from '../../bankAccounts/queries.js';
+import { useCustomer } from '../../customers/queries.js';
 import { useLocations } from '../../locations/queries.js';
 import { maxDiscountPct } from '../../pos/rules.js';
 import { useEffectiveSetting } from '../../settings/queries.js';
 import { bindingTotal, fitTo } from '../../services/binding.js';
 import { BindingDialog } from '../../services/components/BindingDialog.js';
 import { discountProblem, lineInput, lineTotal, orderSubtotal, type OrderLine } from '../lines.js';
-import { useBooksForOrder, useConfirmOrder, useCreateOrder, useCustomersForOrder } from '../queries.js';
+import { useBooksForOrder, useConfirmOrder, useCreateOrder, useCustomersForOrder, useOrder, useUpdateOrder } from '../queries.js';
 import { canCreateOrder, cashConfirmBody, cashPaymentProblem } from '../rules.js';
 
 type Book = z.infer<typeof BookWithAvailabilitySchema>;
@@ -27,13 +28,30 @@ type Channel = 'in_store' | 'phone' | 'online';
 const INPUT = 'w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 const CARD = 'bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4';
 
+/** A draft's line as the form holds it (#174): its discount as it was given, its binding as chosen. */
+function lineOf(l: NonNullable<Order['lineItems']>[number]): OrderLine {
+  return {
+    bookId: l.bookId, bookTitle: l.bookTitle, quantity: l.quantity, unitPrice: Money.of(l.unitPrice),
+    discountType: l.discountType, discountMode: l.discountMode,
+    discount: l.discountMode === 'Percentage' ? String(l.discountPct) : Money.of(l.discountAmount).toFixed(),
+    availableStock: null,
+    // A fee with no discount reads as one that takes none; "Change" picks the service again from the list.
+    service: l.service ? {
+      serviceId: l.service.serviceId, code: l.service.serviceCode, name: l.service.serviceName, unitFee: l.service.unitFee,
+      discountable: l.service.discountAmount > 0, quantity: l.service.quantity,
+      discountPct: l.service.discountAmount > 0 ? Money.of(l.service.discountAmount).times(100).dividedBy(Money.of(l.service.unitFee).times(l.service.quantity).toFixed(2)).round(2).toNumber() : 0,
+    } : undefined,
+  };
+}
+
 /**
  * A new order, created and confirmed in one step: a cash order is paid now,
  * a credit order owes by its due date. If confirming fails the order stays a
  * draft, the form is cleared and the list shows it (owner decision 3a), so a
- * retry never creates a second order.
+ * retry never creates a second order. With `draftId`, a draft opens as it was
+ * entered, to be saved again or saved and confirmed (#174, decision 1a).
  */
-export function NewOrder({ onDone }: { onDone: () => void }) {
+export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draftId?: string | null }) {
   const { showToast } = useToast();
   const currency = useCurrency();
   const { data: me } = useMyProfile();
@@ -65,7 +83,23 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
   const discountLimits = useEffectiveSetting('max_line_discount_pct');
   const maxPct = discountLimits === undefined ? null : maxDiscountPct(discountLimits, me);
   const createOrder = useCreateOrder();
+  const updateOrder = useUpdateOrder();
   const confirmOrder = useConfirmOrder();
+  const { data: draft } = useOrder(draftId ?? '', draftId !== null);
+  const { data: draftCustomer } = useCustomer(draft?.customerId ?? null);
+  const [notes, setNotes] = useState<string | null>(null);
+  const filled = useRef(false);
+  // The draft fills the form once, when it has loaded; its customer when that has.
+  useEffect(() => {
+    if (!draft?.lineItems || filled.current) return;
+    filled.current = true;
+    setSaleType(draft.saleType);
+    setChannel(draft.channel as Channel);
+    setSelectedLocationId(draft.locationId);
+    setNotes(draft.notes);
+    setLines(draft.lineItems.map(lineOf));
+  }, [draft]);
+  useEffect(() => { if (draftCustomer) setSelectedCustomer(draftCustomer); }, [draftCustomer]);
 
   const setLine = (bookId: number, change: Partial<OrderLine>) =>
     setLines((ls) => ls.map((l) => {
@@ -122,6 +156,34 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
     return saleType === 'cash_sale' ? cashPaymentProblem(paymentMethod, proof, bankAccountId, bankAccountRequired) : null;
   }
 
+  /** The order as the form sends it; a draft keeps its notes. */
+  const orderBody = () => ({
+    customerId: selectedCustomer?.id ?? null,
+    channel,
+    saleType,
+    locationId: locationId ?? undefined,
+    ...(draftId !== null && { notes: notes ?? undefined }),
+    items: lines.map(lineInput),
+  });
+  const save = () => (draftId !== null ? updateOrder.mutateAsync({ id: draftId, body: orderBody() }) : createOrder.mutateAsync(orderBody()));
+
+  /** A draft saved as it is now, not yet confirmed (#174). */
+  async function saveDraft() {
+    const stop = lines.length === 0 ? 'Add at least one item'
+      : saleType === 'credit_sale' && !selectedCustomer ? 'Credit sales require a customer' : discountProblem(lines, maxPct);
+    if (stop) { showToast(stop, 'error'); return; }
+    setBusy(true);
+    try {
+      const saved = await save();
+      showToast(`Draft ${saved.orderNumber} saved`, 'success');
+      onDone();
+    } catch (e) {
+      showToast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitOrder() {
     const stop = problem();
     if (stop) { showToast(stop, 'error'); return; }
@@ -129,13 +191,7 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
     try {
       let draft;
       try {
-        draft = await createOrder.mutateAsync({
-          customerId: selectedCustomer?.id ?? null,
-          channel,
-          saleType,
-          locationId: locationId ?? undefined,
-          items: lines.map(lineInput),
-        });
+        draft = await save();
       } catch (e) {
         showToast((e as Error).message, 'error');
         return;
@@ -145,7 +201,7 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
           id: draft.id,
           body: saleType === 'cash_sale' ? cashConfirmBody(paymentMethod, proof, bankAccountId) : { dueDate },
         });
-        showToast(`Order ${confirmed.orderNumber} created & ${saleType === 'cash_sale' ? 'paid' : 'confirmed'}`, 'success');
+        showToast(`Order ${confirmed.orderNumber} ${draftId !== null ? 'saved' : 'created'} & ${saleType === 'cash_sale' ? 'paid' : 'confirmed'}`, 'success');
       } catch (e) {
         showToast(`Order ${draft.orderNumber} was saved as a draft: ${(e as Error).message} Confirm it in the list.`, 'error');
       }
@@ -157,11 +213,13 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
   }
 
   if (!canCreateOrder(me)) return null;
+  if (draftId !== null && !draft) return <p className="p-4 text-sm text-gray-400">Loading...</p>;
   const customers = customerResults?.items ?? [];
   const books = bookResults?.items ?? [];
 
   return (
     <div className="flex-1 overflow-auto p-4 pb-6 max-w-2xl mx-auto w-full space-y-4">
+      {draft && <h2 className="text-base font-semibold text-gray-900 dark:text-white">Editing {draft.orderNumber}</h2>}
       <div className={`${CARD} space-y-2`}>
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Customer (optional)</h3>
         {selectedCustomer ? (
@@ -287,8 +345,9 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
                   <p className="text-xs text-gray-500 dark:text-gray-400">{currency} {item.unitPrice.toFixed()} each</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setLine(item.bookId, { quantity: Math.max(1, item.quantity - 1) })} className="w-6 h-6 rounded-sm bg-gray-200 dark:bg-gray-700 text-sm font-bold">-</button>
-                  <span className="w-8 text-center text-sm">{item.quantity}</span>
+                  <button onClick={() => setLine(item.bookId, { quantity: Math.max(1, item.quantity - 1) })} aria-label={`One fewer ${item.bookTitle}`}
+                    className="w-6 h-6 rounded-sm bg-gray-200 dark:bg-gray-700 text-sm font-bold">-</button>
+                  <span aria-label={`Quantity of ${item.bookTitle}`} className="w-8 text-center text-sm">{item.quantity}</span>
                   <button
                     onClick={() => {
                       if (item.availableStock != null && item.quantity >= item.availableStock) {
@@ -298,6 +357,7 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
                       setLine(item.bookId, { quantity: item.quantity + 1 });
                     }}
                     disabled={item.availableStock != null && item.quantity >= item.availableStock}
+                    aria-label={`One more ${item.bookTitle}`}
                     className="w-6 h-6 rounded-sm bg-gray-200 dark:bg-gray-700 text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                   >+</button>
                   {item.availableStock != null && (
@@ -345,10 +405,18 @@ export function NewOrder({ onDone }: { onDone: () => void }) {
         )}
       </div>
 
-      <button onClick={submitOrder} disabled={busy || lines.length === 0}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
-        {busy ? 'Creating...' : 'Create Order'}
-      </button>
+      <div className="flex gap-2">
+        {draftId !== null && (
+          <button onClick={saveDraft} disabled={busy || lines.length === 0}
+            className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-800 dark:text-gray-200 font-semibold py-3 rounded-lg transition-colors text-sm">
+            Save Draft
+          </button>
+        )}
+        <button onClick={submitOrder} disabled={busy || lines.length === 0}
+          className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
+          {busy ? 'Saving...' : draftId !== null ? 'Save & Confirm' : 'Create Order'}
+        </button>
+      </div>
       {(() => {
         const line = bindingFor === null ? undefined : lines.find((l) => l.bookId === bindingFor);
         return line && (

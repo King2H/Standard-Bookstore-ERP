@@ -44,7 +44,8 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
     .innerJoin('books as b', 'b.id', 'oli.book_id')
     .select([
       'oli.id', 'oli.order_id', 'oli.book_id', 'b.title as book_title', 'b.isbn as book_isbn', 'oli.quantity',
-      'oli.unit_price', 'oli.discount_amount', 'oli.total_price', 'oli.qty_reserved', 'oli.qty_fulfilled',
+      'oli.unit_price', 'oli.discount_amount', 'oli.total_price', 'oli.discount_type', 'oli.discount_mode', 'oli.discount_pct',
+      'oli.qty_reserved', 'oli.qty_fulfilled',
       'oli.is_backordered', 'oli.unit_cost',
       sql<string>`COALESCE((
         SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
@@ -200,6 +201,37 @@ export async function insertLineItem(q: Queryable, orderId: string, line: Priced
     .returning('id')
     .executeTakeFirstOrThrow();
   return String(row.id);
+}
+
+/** A draft's new head (#174): what it is, for whom, and what it comes to. */
+export async function updateDraft(
+  q: Queryable,
+  orderId: string,
+  order: { customerId: number | null; locationId: number | null; channel: string; saleType: SaleType; notes: string | null; totals: OrderTotals },
+): Promise<void> {
+  await q
+    .updateTable('orders')
+    .set({
+      customer_id: order.customerId,
+      location_id: order.locationId,
+      channel: order.channel,
+      sale_type: order.saleType,
+      notes: order.notes,
+      subtotal: order.totals.subtotal,
+      discount_amount: order.totals.discountTotal,
+      discount_total: order.totals.discountTotal,
+      tax_rate: order.totals.taxRate,
+      tax_amount: order.totals.taxAmount,
+      total: order.totals.total,
+      updated_at: sql`now()`,
+    })
+    .where('id', '=', orderId)
+    .execute();
+}
+
+/** A draft's lines, with the services on them, go; new ones take their place. */
+export async function deleteLineItems(q: Queryable, orderId: string): Promise<void> {
+  await q.deleteFrom('order_line_items').where('order_id', '=', orderId).execute();
 }
 
 export async function setStatus(q: Queryable, orderId: string, status: string, cancelReason?: string): Promise<void> {

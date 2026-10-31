@@ -39,6 +39,9 @@ export interface LineItemDbRow {
   unit_price: string;
   discount_amount: string;
   total_price: string;
+  discount_type: string;
+  discount_mode: string;
+  discount_pct: string;
   qty_reserved: number;
   qty_fulfilled: number;
   is_backordered: boolean;
@@ -75,6 +78,8 @@ export function toLineItemRow(row: LineItemDbRow): OrderLineItemRow {
     bookTitle: row.book_title ?? '', bookIsbn: row.book_isbn ?? '',
     quantity: row.quantity, unitPrice: Number(row.unit_price),
     discountAmount: Number(row.discount_amount), totalPrice: Number(row.total_price),
+    discountType: row.discount_type as OrderLineItemRow['discountType'], discountMode: row.discount_mode as OrderLineItemRow['discountMode'],
+    discountPct: Number(row.discount_pct),
     qtyReserved: row.qty_reserved, qtyFulfilled: row.qty_fulfilled,
     isBackordered: row.is_backordered,
     unitCost: row.unit_cost != null ? Number(row.unit_cost) : null,

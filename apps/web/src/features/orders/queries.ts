@@ -6,7 +6,7 @@ import { paymentKeys } from '../payments/queries.js';
 import { receivableKeys } from '../receivables/queries.js';
 import {
   cancelOrder, confirmOrder, createOrder, deleteOrder, fulfillOrder, getOrder, listOrders, searchBooksForOrder,
-  searchCustomersForOrder, type ConfirmOrder, type OrdersParams,
+  searchCustomersForOrder, updateOrder, type ConfirmOrder, type NewOrder, type OrdersParams,
 } from './api.js';
 
 /** Query keys for orders. Every key starts with `orderKeys.all`. */
@@ -22,8 +22,8 @@ export function useOrders(params: OrdersParams) {
   return useQuery({ queryKey: orderKeys.list(params), queryFn: () => listOrders(params), placeholderData: keepPreviousData });
 }
 
-export function useOrder(id: string) {
-  return useQuery({ queryKey: orderKeys.detail(id), queryFn: () => getOrder(id) });
+export function useOrder(id: string, enabled = true) {
+  return useQuery({ queryKey: orderKeys.detail(id), queryFn: () => getOrder(id), enabled });
 }
 
 /** Confirming, fulfilling and cancelling move stock (reserved, delivered, put back). */
@@ -56,6 +56,15 @@ export function useDeleteOrder() {
 }
 
 /** A draft adds an order to the list; its confirmation (a separate step) moves the stock. */
+/** Saves a draft's new contents (#174). */
+export function useUpdateOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: NewOrder }) => updateOrder(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: orderKeys.all }),
+  });
+}
+
 export function useCreateOrder() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: createOrder, onSuccess: () => qc.invalidateQueries({ queryKey: orderKeys.all }) });
