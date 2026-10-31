@@ -13,6 +13,7 @@ import {
 
 const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType; description: string }> = {
   base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. ETB), for every branch. Changes only while nothing is kept in it, draft purchase orders and bank accounts included' },
+  business_timezone:                { label: 'Business Time Zone',           tab: 'General',      type: 'string',  description: "The shop's local time zone, for every branch: its days are closed and reported in it" },
   // tax_rate removed — taxation disabled for this phase
   fiscal_year_start_month:          { label: 'Fiscal Year Start Month',      tab: 'General',      type: 'number',  description: 'Month number 1–12 (1 = January)' },
   max_line_discount_pct:            { label: 'Max Line Discount % (per role)',tab: 'Discounts',    type: 'json',    description: 'JSON object: {"Sales":10,"Manager":25,"Admin":50}' },
@@ -45,6 +46,12 @@ const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType;
   account_lockout_minutes:          { label: 'Account Lockout Duration (min)',tab: 'Security',     type: 'number',  description: 'Minutes an account stays locked after too many failures (default: 30)' },
   password_expiry_days:             { label: 'Password Expiry (days)',        tab: 'Security',     type: 'number',  description: 'Days before password must be changed; 0 = never expires (default: 0)' },
 };
+
+/** Zones offered for business_timezone (#175); any other name PostgreSQL knows may be typed. */
+const TIME_ZONES = [
+  'Africa/Addis_Ababa', 'Africa/Nairobi', 'Africa/Cairo', 'Africa/Lagos', 'Africa/Johannesburg',
+  'Asia/Dubai', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'UTC',
+];
 
 const TABS = ['General', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Cash', 'Notifications', 'Security'];
 
@@ -152,13 +159,21 @@ function ConfigRowItem({
                 className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-64"
               />
             ) : (
-              <input
-                type={meta?.type === 'number' ? 'number' : 'text'}
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                step={meta?.type === 'number' ? 'any' : undefined}
-                className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-36"
-              />
+              <>
+                <input
+                  type={meta?.type === 'number' ? 'number' : 'text'}
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  step={meta?.type === 'number' ? 'any' : undefined}
+                  list={row.key === 'business_timezone' ? 'business-timezones' : undefined}
+                  className={`bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${row.key === 'business_timezone' ? 'w-52' : 'w-36'}`}
+                />
+                {row.key === 'business_timezone' && (
+                  <datalist id="business-timezones">
+                    {TIME_ZONES.map(z => <option key={z} value={z} />)}
+                  </datalist>
+                )}
+              </>
             )}
             <button onClick={handleSave} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors">Save</button>
             <button onClick={() => { setEditing(false); setDraft(formatValue(row.value)); draftCheck.clear(); }} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">Cancel</button>

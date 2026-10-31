@@ -34,7 +34,7 @@ function profile(roles: string[], isAllBranches = false, currentBranchId = 1): P
 
 const entry = (key: string, value: unknown) => ({ key, value, updatedBy: 1, updatedAt: '2026-10-01T00:00:00.000Z' });
 const SYSTEM = [
-  entry('base_currency', 'ETB'), entry('max_line_discount_pct', { Sales: 10, Manager: 25 }),
+  entry('base_currency', 'ETB'), entry('business_timezone', 'Africa/Addis_Ababa'), entry('max_line_discount_pct', { Sales: 10, Manager: 25 }),
   entry('default_discount_type', 'Normal'), entry('return_window_days', 7),
   entry('require_cash_session', false), entry('cash_variance_limit', 50),
 ];
@@ -103,6 +103,25 @@ describe('Settings', () => {
     await user.click(await screen.findByRole('button', { name: 'Cash' }));
     expect(await settingRow('Require Cash Session')).toBeInTheDocument();
     expect(await settingRow('Cash Variance Limit')).toBeInTheDocument();
+  });
+
+  it('sets the shop\'s time zone under General, suggesting zones (#175, 1a; was: not offered)', async () => {
+    me = profile(['Super_Admin'], true);
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+    const row = await settingRow('Business Time Zone');
+    expect(within(row).getByText(/its days are closed and reported in it/)).toBeInTheDocument();
+    await user.click(within(row).getByTitle('Edit'));
+    const box = within(row).getByRole('combobox');
+    const suggestions = [...document.querySelectorAll('datalist#business-timezones option')].map((o) => (o as HTMLOptionElement).value);
+    expect(suggestions[0]).toBe('Africa/Addis_Ababa');
+    expect(suggestions).toContain('UTC');
+    await user.clear(box);
+    await user.type(box, 'Africa/Nairobi');
+    await user.click(within(row).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.filter(c => c.method === 'PUT').map(c => [c.path, c.body])).toEqual([
+      ['/config/system/business_timezone', { value: 'Africa/Nairobi' }],
+    ]));
   });
 
   it('counts any role held: a Manager also made Super_Admin edits system defaults (was: read-only)', async () => {

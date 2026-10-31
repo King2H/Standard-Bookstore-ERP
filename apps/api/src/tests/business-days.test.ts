@@ -201,6 +201,13 @@ describe('Day and month close (#175)', () => {
       expect(again.body.error).toBe('DAY_ALREADY_CLOSED');
     });
 
+    it('tells anyone signed in to the branch that its day is closed, for the banner (6a)', async () => {
+      const today = await as(t.sales).get('/api/v1/business-days/today');
+      expect(today.status, JSON.stringify(today.body)).toBe(200);
+      expect(today.body).toEqual({ branchId: branchA, day: localToday(), status: 'closed' });
+      expect((await as(t.managerB).get('/api/v1/business-days/today')).body).toEqual({ branchId: branchB, day: localToday(), status: 'open' });
+    });
+
     it('takes nothing more in the branch that day (was: anything, any time)', async () => {
       const sale = await sell(t.sales, location.A);
       expect(sale.status).toBe(409);
@@ -242,6 +249,7 @@ describe('Day and month close (#175)', () => {
       expect(res.body).toMatchObject({ status: 'reopened', reopenedBy: id.admin, reopenReason: 'A sale was missed' });
       expect((await reopenDay(t.admin, dayId, 'Again')).body.error).toBe('DAY_NOT_CLOSED');
       expect((await sell(t.sales, location.A)).status).toBe(201);
+      expect((await as(t.sales).get('/api/v1/business-days/today')).body.status).toBe('reopened');
 
       const event = await one(`SELECT payload FROM outbox WHERE event_type = 'business_day.reopened' AND payload->>'businessDayId' = $1`, [String(dayId)]);
       expect(event.payload).toMatchObject({ branchId: branchA, day: localToday(), reason: 'A sale was missed' });
