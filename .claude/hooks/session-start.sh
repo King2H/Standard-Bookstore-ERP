@@ -58,6 +58,24 @@ if [ "$(node -v 2>/dev/null | cut -d. -f1)" != "v${NODE_MAJOR}" ]; then
 fi
 log "node $(node -v)"
 
+# ── npm (the major version Node.js 24 ships with) ────────────────────────────
+# The node binary above comes without npm, and the image's npm is older. npm
+# writes package-lock.json slightly differently from one major version to the
+# next, so sessions use the npm a developer's Node 24 has (#223).
+NPM_MAJOR=11
+if [ "$(npm -v | cut -d. -f1)" != "$NPM_MAJOR" ]; then
+  NPM_HOME="${CACHE_DIR}/npm-${NPM_MAJOR}"
+  if [ ! -x "${NPM_HOME}/bin/npm" ]; then
+    log "installing npm ${NPM_MAJOR}"
+    npm install --global --prefix "$NPM_HOME" "npm@${NPM_MAJOR}" --no-audit --no-fund >/dev/null
+  fi
+  export PATH="${NPM_HOME}/bin:${PATH}"
+  if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    echo "export PATH=\"${NPM_HOME}/bin:\$PATH\"" >> "$CLAUDE_ENV_FILE"
+  fi
+fi
+log "npm $(npm -v)"
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 # npm install (not npm ci) so the cached container state is reused.
 (cd "$PROJECT_DIR" && npm install --no-audit --no-fund)
