@@ -195,6 +195,12 @@ describe('Special orders for books not in stock (#174)', () => {
     expect(await onHand(rare)).toBe(0);
     const told = await db.query(`SELECT payload FROM outbox WHERE event_type = 'special_order.arrived' AND payload->>'orderId' IN ($1, $2)`, [first.id, second.id]);
     expect(told.rows.map((r) => r.payload.quantity).sort()).toEqual([1, 2]);
+    // Copies that went straight to their reservation were never for sale: no stock alert (#232, S8; was: "Out of Stock").
+    const alarmed = await db.query(
+      `SELECT 1 FROM outbox WHERE event_type IN ('inventory.out_of_stock', 'inventory.low_stock') AND (payload->>'bookId')::int = $1 AND (payload->>'locationId')::int = $2`,
+      [rare, shelf],
+    );
+    expect(alarmed.rowCount).toBe(0);
 
     // The first order is delivered in full; the second hands over what came and waits for the rest.
     expect((await as(t.sales).post(`/api/v1/orders/${first.id}/fulfill`)).body.status).toBe('COMPLETED');

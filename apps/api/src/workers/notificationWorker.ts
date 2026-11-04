@@ -13,6 +13,8 @@
  * IMPORTANT: This worker must NEVER throw — errors are logged and swallowed
  * so that a notification failure never blocks the outbox poller.
  */
+import { notifies } from '@bms/shared';
+import { getNotificationPrefs } from '../modules/config/config.service.js';
 import { createNotification } from '../modules/notifications/notifications.service.js';
 import { sseManager, type NotificationPayload } from '../lib/sseManager.js';
 import { currentWork } from '../db/tenantContext.js';
@@ -456,6 +458,10 @@ export async function handleNotification(payload: Record<string, unknown>): Prom
     return;
   }
 
+  const branchId = (payload.branchId as number | null) ?? null;
+  // Routine events notify only where the shop or the branch turned them on (#232, owner decisions 1a, 2a).
+  if (!notifies(eventType, payload, await getNotificationPrefs(branchId))) return;
+
   let spec: NotificationSpec;
   try {
     spec = mapper(payload);
@@ -468,8 +474,6 @@ export async function handleNotification(payload: Record<string, unknown>): Prom
     }));
     return;
   }
-
-  const branchId = (payload.branchId as number | null) ?? null;
 
   try {
     const row = await createNotification({

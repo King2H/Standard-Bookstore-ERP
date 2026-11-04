@@ -38,6 +38,7 @@ const SYSTEM = [
   entry('default_discount_type', 'Normal'), entry('return_window_days', 7),
   entry('require_cash_session', false), entry('cash_variance_limit', 50),
   entry('shop_name', ''), entry('shop_motto', ''), entry('shop_tin', ''),
+  entry('notification_prefs', { 'inventory.stock_in': true }),
 ];
 
 type Call = { method: string; path: string; body: unknown };
@@ -65,7 +66,8 @@ function stubApi() {
     if (branchConfig && method === 'GET') {
       return json(contract(BranchConfigListResponseSchema, { items: [
         { ...entry('base_currency', 'ETB'), source: 'system' }, { ...entry('return_window_days', 14), source: 'branch' },
-      ], total: 2 }));
+        { ...entry('notification_prefs', {}), source: 'system' },
+      ], total: 3 }));
     }
     if (u.pathname === '/audit-logs') {
       return json(contract(AuditLogListResponseSchema, { items: [{
@@ -124,6 +126,38 @@ describe('Settings', () => {
     await waitFor(() => expect(calls.filter(c => c.method === 'PUT').map(c => [c.path, c.body])).toEqual([
       ['/config/system/shop_name', { value: 'Kuraz Books' }],
     ]));
+  });
+
+  it('turns routine notifications on, one box per event, for the shop (#232, 2a; was: raw JSON nothing read)', async () => {
+    me = profile(['Super_Admin'], true);
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Notifications' }));
+    const row = await settingRow('Routine Notifications');
+    expect(within(row).getByText('1 of 30 on')).toBeInTheDocument();
+    await user.click(within(row).getByTitle('Edit'));
+    expect(within(row).getByRole('checkbox', { name: 'Stock received' })).toBeChecked();
+    await user.click(within(row).getByRole('checkbox', { name: 'Counter sale' }));
+    await user.click(within(row).getByRole('checkbox', { name: 'Stock received' }));
+    await user.click(within(row).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.filter(c => c.method === 'PUT').map(c => [c.path, c.body])).toEqual([
+      ['/config/system/notification_prefs', { value: { 'pos.sale_completed': true } }],
+    ]));
+  });
+
+  it('lets a Manager turn routine notifications on for their branch', async () => {
+    me = profile(['Manager']);
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Notifications' }));
+    await user.selectOptions(await screen.findByRole('combobox'), '1');
+    await settle();
+    const rows = await screen.findAllByText('Routine Notifications');
+    const branchRow = rows[rows.length - 1].closest('div.flex.items-start') as HTMLElement;
+    await user.click(within(branchRow).getByTitle('Override'));
+    await user.click(within(branchRow).getByRole('checkbox', { name: 'Order created' }));
+    await user.click(within(branchRow).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent('PUT', '/config/branches/1/notification_prefs')?.body).toEqual({ value: { 'order.created': true } }));
   });
 
   it('sets the shop\'s time zone under General, suggesting zones (#175, 1a; was: not offered)', async () => {

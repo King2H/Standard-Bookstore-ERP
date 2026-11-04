@@ -149,6 +149,12 @@ export interface DamagedChange {
 
 export interface StockIssue extends StockChange {
   reasonCode: IssueReason;
+  /**
+   * False for copies that arrived for a reservation and go straight to it
+   * (#232, owner decision 3a): they were never for sale, so the shelf did not
+   * run low or out.
+   */
+  alert?: boolean;
 }
 
 export interface StockReceipt extends StockChange {
