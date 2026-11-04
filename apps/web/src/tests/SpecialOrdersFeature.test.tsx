@@ -51,12 +51,12 @@ const customer: Customer = contract(CustomerSchema, {
 const line = (over: Partial<OrderLineItem> = {}): OrderLineItem => ({
   id: '51', orderId: '30', bookId: 9, bookTitle: 'Yegna Tarik', bookIsbn: '9780306406109', quantity: 2, unitPrice: 40, discountAmount: 0,
   totalPrice: 80, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 0, qtyFulfilled: 0, isBackordered: false,
-  unitCost: null, qtyReturned: 0, qtyCancelled: 0, specialOrder: true, qtyOnOrder: 2, service: null, ...over,
+  unitCost: null, qtyReturned: 0, qtyCancelled: 0, specialOrder: true, qtyOnOrder: 2, qtyToOrder: 2, purchaseOrders: [], service: null, ...over,
 });
 
 function order(over: Partial<Order> = {}): Order {
   return contract(OrderSchema, {
-    id: '30', orderNumber: 'ORD-20261031-0030', customerId: 5, branchId: 1, locationId: 7, channel: 'in_store',
+    id: '30', orderNumber: 'ORD-20261031-0030', customerId: 5, customerName: 'Abebe Kebede', branchId: 1, locationId: 7, channel: 'in_store',
     status: 'CONFIRMED', paymentStatus: 'partial', amountPaid: 20, saleType: 'credit_sale', currency: 'ETB', subtotal: 80, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 80, cancelReason: null, notes: null, createdBy: 9,
     createdAt: CREATED, updatedAt: CREATED, allowedActions: ['cancel'], paymentMethod: 'cash', dueDate: '2099-12-31', fulfilledAt: null,
@@ -116,7 +116,7 @@ function stubApi() {
     if (method === 'POST' && u.pathname === '/orders') return json(contract(OrderSchema, order({ status: 'DRAFT', allowedActions: [] })), 201);
     if (method === 'POST' && u.pathname === '/orders/30/confirm') return json(contract(OrderSchema, current));
     if (method === 'POST' && u.pathname === '/orders/30/lines/51/reserve') {
-      current = order({ lineItems: [line({ qtyReserved: 2, qtyOnOrder: 0 })], allowedActions: ['cancel', 'deliver', 'fulfill'] });
+      current = order({ lineItems: [line({ qtyReserved: 2, qtyOnOrder: 0, qtyToOrder: 0 })], allowedActions: ['cancel', 'deliver', 'fulfill'] });
       return json(contract(OrderSchema, current));
     }
     if (u.pathname === '/orders/30') return json(contract(OrderSchema, current));
@@ -183,12 +183,24 @@ describe('Special orders on screen (#174)', () => {
     expect(sent('POST', '/orders/30/confirm')).toEqual([{ dueDate: '2099-12-31', deposit: 20, paymentMethod: 'cash' }]);
   });
 
+  it('names the purchase orders holding the copies, and what is still to order (#236, O5)', async () => {
+    current = order({ lineItems: [line({ quantity: 3, qtyOnOrder: 3, qtyToOrder: 1, purchaseOrders: [{ poId: '12', poNumber: 'PO-000012', quantity: 2 }] })] });
+    renderPage('orders', { orderId: '30' });
+    await settle();
+    expect(await screen.findByText('Special order')).toBeTruthy();
+    const text = screen.getByRole('row', { name: /^Yegna Tarik/ }).textContent;
+    expect(text).toMatch(/On order 2 · PO-000012/);
+    expect(text).toMatch(/To order 1/);
+  });
+
   it('shows a special-order line with its copies on order, and reserves what was brought over', async () => {
     renderPage('orders', { orderId: '30' });
     await settle();
     // Opened from a notification, the order is shown expanded.
     expect(await screen.findByText('Special order')).toBeTruthy();
-    expect(screen.getByRole('row', { name: /^Yegna Tarik/ }).textContent).toMatch(/On order 2/);
+    // No purchase order holds the copies yet (#236, O5; was: "On order 2").
+    expect(screen.getByRole('row', { name: /^Yegna Tarik/ }).textContent).toMatch(/To order 2/);
+    expect(screen.getByRole('row', { name: /^Yegna Tarik/ }).textContent).not.toMatch(/On order/);
     expect(screen.queryByRole('button', { name: 'Fulfill' })).toBeNull();
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Reserve Yegna Tarik from stock' }));

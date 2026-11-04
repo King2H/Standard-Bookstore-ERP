@@ -28,7 +28,7 @@ function profile(roles: string[]): ProfileResponse {
 }
 
 const sale: PosTransaction = contract(PosTransactionSchema, {
-  id: '41', branchId: 1, locationId: 7, customerId: null, staffId: 9, transactionNumber: 'POS-20261010-0001',
+  id: '41', branchId: 1, locationId: 7, customerId: null, customerName: null, staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261010-0001',
   subtotal: 30, discountTotal: 1, taxTotal: 0, grandTotal: 29, amountPaid: 29, amountDue: 0, paymentStatus: 'paid',
   currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: false,
   lineItems: [{
@@ -46,13 +46,13 @@ const ret: Return = contract(ReturnSchema, {
 const DELIVERED = '2026-10-19T09:00:00.000Z';
 let delivered: Order;
 const deliveredOrder = (over: Partial<Order> = {}): Order => contract(OrderSchema, {
-  id: '30', orderNumber: 'ORD-20261018-0003', customerId: 5, branchId: 1, locationId: 7, channel: 'in_store',
+  id: '30', orderNumber: 'ORD-20261018-0003', customerId: 5, customerName: 'Abebe Kebede', branchId: 1, locationId: 7, channel: 'in_store',
   status: 'COMPLETED', paymentStatus: 'paid', amountPaid: 75, saleType: 'cash_sale', currency: 'ETB', subtotal: 75, discountAmount: 0,
   discountTotal: 0, taxRate: 0, taxAmount: 0, total: 75, cancelReason: null, notes: null, createdBy: 9,
   createdAt: CREATED, updatedAt: CREATED, allowedActions: ['print', 'return'], paymentMethod: 'cash', dueDate: null, fulfilledAt: DELIVERED,
   lineItems: [{
     id: '8', orderId: '30', bookId: 1, bookTitle: 'Oromay', bookIsbn: '2', quantity: 3, unitPrice: 25, discountAmount: 0,
-    totalPrice: 75, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, service: null,
+    totalPrice: 75, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 0, qtyFulfilled: 3, isBackordered: false, unitCost: 10, qtyReturned: 1, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, qtyToOrder: 0, purchaseOrders: [], service: null,
   }],
   ...over,
 });

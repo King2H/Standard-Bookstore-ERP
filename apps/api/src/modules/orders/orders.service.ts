@@ -4,6 +4,7 @@ import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
+import { piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertOutbox, insertOutboxEvent, type OutboxEventType } from '../../lib/outbox.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
@@ -76,7 +77,7 @@ export function getById(id: string | number): Promise<OrderRow> {
 }
 
 export async function list(opts: {
-  branchId?: number; customerId?: number; orderNumber?: string; status?: string; paymentStatus?: string;
+  branchId?: number; customerId?: number; orderNumber?: string; q?: string; status?: string; paymentStatus?: string;
   channel?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number;
 }): Promise<{ items: OrderRow[]; total: number; page: number; totalPages: number }> {
   const page = Math.max(1, opts.page ?? 1);
@@ -85,7 +86,7 @@ export async function list(opts: {
   const statuses = opts.status?.split(',').map((s) => s.trim()).filter(Boolean);
   const { items, total } = await orders.list(
     kysely,
-    { ...opts, statuses },
+    { ...opts, statuses, q: opts.q || undefined, qLookup: piiLookupHash(opts.q || undefined) },
     { limit: pageSize, offset: (page - 1) * pageSize },
   );
   // A list offers Fulfill only where the binding jobs are ready, as the order's own page does (#169).

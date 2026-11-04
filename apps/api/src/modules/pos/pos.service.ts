@@ -4,6 +4,7 @@ import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
+import { piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxLineDiscountPct } from '../config/config.service.js';
@@ -110,7 +111,7 @@ export async function getById(id: string): Promise<PosTransactionRecord> {
 }
 
 export function list(filter: PosFilter, paging: Paging): Promise<{ items: PosTransactionRecord[]; total: number }> {
-  return pos.list(kysely, filter, { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize });
+  return pos.list(kysely, { ...filter, qLookup: piiLookupHash(filter.q) }, { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize });
 }
 
 // ── Selling ───────────────────────────────────────────────────────────────────

@@ -84,6 +84,7 @@ export async function list(req: Request, res: Response): Promise<void> {
       status: query.status,
       paymentStatus: query.paymentStatus,
       transactionNumber: query.transactionNumber,
+      q: query.q || undefined,
     },
     { page: query.page, pageSize: query.pageSize },
   );

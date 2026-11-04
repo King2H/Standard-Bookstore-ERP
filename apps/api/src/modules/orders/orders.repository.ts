@@ -16,6 +16,9 @@ const ORDER_COLUMNS = [
   'o.updated_at', 'o.fulfilled_at',
 ] as const;
 
+/** The customer's name, null for a walk-in (#236). */
+const CUSTOMER_NAME = sql<string | null>`(SELECT c.full_name FROM customers c WHERE c.id = o.customer_id)`.as('customer_name');
+
 /** Payments taken less refunds (#167): what cancelling the order gives back. */
 const AMOUNT_PAID = sql<string>`(
   COALESCE((SELECT SUM(op.amount) FROM order_payments op
@@ -30,6 +33,7 @@ export async function findById(q: Queryable, id: string | number, opts: { forUpd
     .select(ORDER_COLUMNS)
     .select([
       AMOUNT_PAID,
+      CUSTOMER_NAME,
       sql<string | null>`(SELECT op.payment_method FROM order_payments op WHERE op.order_id = o.id ORDER BY op.created_at ASC LIMIT 1)`.as('payment_method'),
       sql<string | null>`(SELECT TO_CHAR(r.due_date, 'YYYY-MM-DD') FROM receivables r WHERE r.source_type = 'order_credit_sale' AND r.source_entity_id = o.id LIMIT 1)`.as('due_date'),
     ])
@@ -59,6 +63,11 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
       sql<number>`CASE WHEN oli.special_order AND o.status NOT IN ('DRAFT', 'Pending', 'CANCELLED', 'Cancelled') THEN GREATEST(0, oli.quantity - oli.qty_reserved - oli.qty_fulfilled
         - COALESCE((SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
                     WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND r.undelivered), 0)) ELSE 0 END`.as('qty_on_order'),
+      // The purchase orders holding its copies, with what each still brings (#236).
+      sql<Array<{ poId: string; quantity: number }>>`COALESCE((
+        SELECT json_agg(json_build_object('poId', l.po_id::text, 'quantity', l.quantity - l.reserved_quantity) ORDER BY l.id)
+        FROM special_order_links l
+        WHERE l.order_line_item_id = oli.id AND l.released_at IS NULL AND l.quantity > l.reserved_quantity), '[]')`.as('purchase_orders'),
     ])
     .where('oli.order_id', '=', orderId)
     .orderBy('oli.id')
@@ -68,6 +77,9 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
 
 export interface OrderFilter {
   branchId?: number;
+  /** An order number in part, a customer's name or code in part, or (as its lookup hash) their phone or email (#236). */
+  q?: string;
+  qLookup?: string | null;
   customerId?: number;
   orderNumber?: string;
   statuses?: string[];
@@ -86,6 +98,19 @@ export async function list(
   if (filter.branchId) query = query.where('o.branch_id', '=', filter.branchId);
   if (filter.customerId) query = query.where('o.customer_id', '=', filter.customerId);
   if (filter.orderNumber) query = query.where(sql`upper(o.order_number)`, '=', filter.orderNumber.toUpperCase());
+  if (filter.q) {
+    // Phone and email are encrypted, so they match only exactly, through their lookup hash (#90).
+    const like = `%${filter.q}%`;
+    const lookup = filter.qLookup;
+    query = query.where((eb) => eb.or([
+      eb('o.order_number', 'ilike', like),
+      eb.exists(eb.selectFrom('customers as c').select('c.id').whereRef('c.id', '=', 'o.customer_id').where((c) => c.or([
+        c('c.full_name', 'ilike', like),
+        c('c.customer_code', 'ilike', like),
+        ...(lookup ? [c('c.phone_lookup', '=', lookup), c('c.email_lookup', '=', lookup)] : []),
+      ]))),
+    ]));
+  }
   if (filter.statuses?.length) query = query.where('o.status', 'in', filter.statuses);
   if (filter.paymentStatus) query = query.where('o.payment_status', '=', filter.paymentStatus);
   if (filter.channel) query = query.where('o.channel', '=', filter.channel);
@@ -93,7 +118,7 @@ export async function list(
   if (filter.dateTo) query = query.where('o.created_at', '<=', sql<Date>`${filter.dateTo}`);
 
   const [rows, count] = await Promise.all([
-    query.select(ORDER_COLUMNS).select(AMOUNT_PAID).orderBy('o.created_at', 'desc').limit(page.limit).offset(page.offset).execute(),
+    query.select(ORDER_COLUMNS).select([AMOUNT_PAID, CUSTOMER_NAME]).orderBy('o.created_at', 'desc').limit(page.limit).offset(page.offset).execute(),
     query.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirstOrThrow(),
   ]);
   return { items: rows.map((r) => toOrderRow(r as OrderDbRow)), total: Number(count.total) };

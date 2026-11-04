@@ -9,7 +9,9 @@ export interface PosTransactionRow {
   branch_id: number;
   location_id: number;
   customer_id: number | null;
+  customer_name: string | null;
   staff_id: number;
+  cashier_name: string;
   transaction_number: string;
   subtotal: string;
   discount_total: string;
@@ -60,7 +62,9 @@ export function toTransactionRecord(row: PosTransactionRow): PosTransactionRecor
     branchId: row.branch_id,
     locationId: row.location_id,
     customerId: row.customer_id,
+    customerName: row.customer_name,
     staffId: row.staff_id,
+    cashierName: row.cashier_name,
     transactionNumber: row.transaction_number,
     subtotal: Money.of(row.subtotal),
     discountTotal: Money.of(row.discount_total),
@@ -116,7 +120,9 @@ export function toTransactionResponse(t: PosTransactionRecord): PosTransaction {
     branchId: t.branchId,
     locationId: t.locationId,
     customerId: t.customerId,
+    customerName: t.customerName,
     staffId: t.staffId,
+    cashierName: t.cashierName,
     transactionNumber: t.transactionNumber,
     subtotal: t.subtotal.toNumber(),
     discountTotal: t.discountTotal.toNumber(),

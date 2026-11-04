@@ -34,7 +34,10 @@ export interface OrderLineInput {
 }
 
 export interface OrderRow {
-  id: string; orderNumber: string; customerId: number | null; branchId: number;
+  id: string; orderNumber: string; customerId: number | null;
+  /** Null for a walk-in (#236). */
+  customerName: string | null;
+  branchId: number;
   locationId: number | null; channel: string; status: string; paymentStatus: string;
   /** Payments taken less refunds (#167). */
   amountPaid: number;
@@ -73,6 +76,9 @@ export interface OrderLineItemRow {
   specialOrder: boolean;
   /** A special-order line's copies not arrived yet. */
   qtyOnOrder: number;
+  /** Of those, the copies no purchase order holds (#236). */
+  qtyToOrder: number;
+  purchaseOrders: Array<{ poId: string; poNumber: string; quantity: number }>;
   /** The service on the line's copies (#169). */
   service: SaleServiceLine | null;
 }

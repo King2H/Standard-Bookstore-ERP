@@ -18,7 +18,11 @@ export interface PosTransactionRecord {
   branchId: number;
   locationId: number;
   customerId: number | null;
+  /** Null for a walk-in (#236). */
+  customerName: string | null;
   staffId: number;
+  /** Who sold it (#236). */
+  cashierName: string;
   transactionNumber: string;
   subtotal: Money;
   discountTotal: Money;
@@ -123,6 +127,9 @@ export interface PosFilter {
   status?: 'completed' | 'voided';
   paymentStatus?: PosPaymentStatus;
   transactionNumber?: string;
+  /** A sale number in part, a customer's name or code in part, or (as its lookup hash) their phone or email (#236). */
+  q?: string;
+  qLookup?: string | null;
 }
 
 export type Paging = { page: number; pageSize: number };

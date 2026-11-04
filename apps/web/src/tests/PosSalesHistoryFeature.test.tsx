@@ -29,7 +29,7 @@ function profile(roles: string[]): ProfileResponse {
 
 function sale(over: Partial<PosTransaction> = {}): PosTransaction {
   return contract(PosTransactionSchema, {
-    id: '77', branchId: 1, locationId: 7, customerId: null, staffId: 9, transactionNumber: 'POS-20261018-0001',
+    id: '77', branchId: 1, locationId: 7, customerId: null, customerName: null, staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261018-0001',
     subtotal: 10, discountTotal: 0, taxTotal: 0, grandTotal: 10, amountPaid: 10, amountDue: 0, paymentStatus: 'paid',
     currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: true,
     ...over,
@@ -118,6 +118,25 @@ describe('Sales History: the list', () => {
     const list = calls.find((c) => c.path.startsWith('/pos/transactions?'));
     expect(list?.path).toContain('dateFrom=2026-10-18');
     expect(list?.path).not.toContain('branchId');
+  });
+});
+
+describe('Sales History: who bought and who sold (#236, P10)', () => {
+  it('names the customer, a walk-in as such, and the cashier (was: neither)', async () => {
+    me = profile(['Sales']);
+    const row = await openHistory('Sales');
+    expect(screen.getByRole('columnheader', { name: 'Customer' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Cashier' })).toBeInTheDocument();
+    expect(within(row).getByText('Walk-in')).toBeInTheDocument();
+    expect(within(row).getByText('Sara Tesfaye')).toBeInTheDocument();
+  });
+
+  it('finds sales by customer, phone or number', async () => {
+    me = profile(['Sales']);
+    await openHistory('Sales');
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('searchbox', { name: 'Search sales' }), '0911');
+    await waitFor(() => expect(calls.some((c) => c.path.startsWith('/pos/transactions?') && c.path.includes('q=0911'))).toBe(true));
   });
 });
 

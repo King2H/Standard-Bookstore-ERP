@@ -87,10 +87,12 @@ export function OrderDetail({ orderId }: { orderId: string }) {
               state = <span className="text-red-500 dark:text-red-400 italic">Stock restored</span>;
             }
             // Copies still on order wait for their books; brought over, they are reserved from stock (#174).
+            // "On order" only where a purchase order holds them; the rest is still to order (#236, O5).
             if (li.qtyOnOrder > 0 && (stage === 'CONFIRMED' || stage === 'PART')) {
               state = (
                 <span className="text-amber-600 dark:text-amber-400 font-medium">
-                  On order {li.qtyOnOrder}
+                  {li.purchaseOrders.map((p) => <span key={p.poId} className="block">On order {p.quantity} · {p.poNumber}</span>)}
+                  {li.qtyToOrder > 0 && <span className="block">To order {li.qtyToOrder}</span>}
                   {canCreateOrder(me) && (
                     <button type="button" aria-label={`Reserve ${li.bookTitle} from stock`} disabled={reserve.isPending}
                       onClick={(e) => {

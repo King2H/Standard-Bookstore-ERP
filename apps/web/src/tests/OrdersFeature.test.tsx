@@ -30,7 +30,7 @@ function profile(roles: string[]): ProfileResponse {
 
 function order(over: Partial<Order> = {}): Order {
   return contract(OrderSchema, {
-    id: '10', orderNumber: 'ORD-20261018-0001', customerId: null, branchId: 1, locationId: 7, channel: 'in_store',
+    id: '10', orderNumber: 'ORD-20261018-0001', customerId: null, customerName: null, branchId: 1, locationId: 7, channel: 'in_store',
     status: 'CONFIRMED', paymentStatus: 'paid', amountPaid: 0, saleType: 'cash_sale', currency: 'ETB', subtotal: 50, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 50, cancelReason: null, notes: null, createdBy: 9,
     createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: 'cash', dueDate: null, fulfilledAt: null,
@@ -40,7 +40,7 @@ function order(over: Partial<Order> = {}): Order {
 
 const LINE = {
   id: 'li1', orderId: '10', bookId: 1, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '000', quantity: 2, unitPrice: 25,
-  discountAmount: 0, totalPrice: 50, discountType: 'Normal' as const, discountMode: 'Amount' as const, discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, service: null,
+  discountAmount: 0, totalPrice: 50, discountType: 'Normal' as const, discountMode: 'Amount' as const, discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, qtyToOrder: 0, purchaseOrders: [], service: null,
 };
 let line = LINE;
 
@@ -136,6 +136,21 @@ describe('the list', () => {
     await user.click(screen.getByRole('button', { name: /next page/i }));
     await waitFor(() => expect(listCalls().some((p) => p.includes('page=2') && p.includes('pageSize=10'))).toBe(true));
     expect(listCalls().every((p) => !p.includes('branchId'))).toBe(true);
+  });
+
+  it("names each order's customer, a walk-in as such (#236, O1; was: no customer column)", async () => {
+    orders = [order({ customerId: 5, customerName: 'Abebe Kebede' }), order({ id: '11', orderNumber: 'ORD-20261018-0002' })];
+    await openPage();
+    expect(screen.getByRole('columnheader', { name: 'Customer' })).toBeInTheDocument();
+    expect(within(await rowOf()).getByText('Abebe Kebede')).toBeInTheDocument();
+    expect(within(await rowOf('ORD-20261018-0002')).getByText('Walk-in')).toBeInTheDocument();
+  });
+
+  it('finds orders by customer, phone or number, from page 1 (#236, O1)', async () => {
+    const { user } = await openPage();
+    await rowOf();
+    await user.type(screen.getByRole('searchbox', { name: 'Search orders' }), 'abebe');
+    await waitFor(() => expect(listCalls().some((p) => p.includes('q=abebe') && p.includes('page=1'))).toBe(true));
   });
 
   it('offers only the statuses an order can have now, and a filter goes back to page 1 (was: 7 statuses no order has)', async () => {
@@ -250,11 +265,15 @@ describe('steps on an order', () => {
     await waitFor(() => expect(posted('/orders/10/cancel')).toEqual([{ reason: 'Walk-in left', refundTo: 'original' }]));
   });
 
-  it('fulfils a confirmed order', async () => {
-    orders = [order({ allowedActions: ['cancel', 'fulfill'] })];
+  it('delivers through Deliver… alone, every copy filled in (#236, O4; was: Fulfill too, handing everything over unasked)', async () => {
+    orders = [order({ allowedActions: ['cancel', 'deliver', 'fulfill'] })];
     const { user } = await openPage();
-    await user.click(within(await rowOf()).getByRole('button', { name: 'Fulfill' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/orders/10/fulfill')).toBe(true));
+    const row = await rowOf();
+    expect(within(row).queryByRole('button', { name: 'Fulfill' })).not.toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: 'Deliver…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByLabelText(/Copies of .* to deliver/)).toHaveValue('2');
+    expect(calls.some((c) => c.path === '/orders/10/fulfill')).toBe(false);
   });
 
   it('offers no button for a step the page does not know (was: one posting to an endpoint that does not exist)', async () => {
