@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   BookAvailabilityListResponseSchema, BookSchema, CurrencyResponseSchema, CustomerListResponseSchema, CustomerSchema, EffectiveConfigResponseSchema,
-  CurrentCashSessionResponseSchema, LocationListResponseSchema, PosTransactionSchema, ProfileResponseSchema,
+  CurrentCashSessionResponseSchema, LocationListResponseSchema, PosTransactionSchema, ProfileResponseSchema, ShopIdentitySchema,
   type Book, type Customer, type PosTransaction, type ProfileResponse,
 } from '@bms/shared';
 import PosPage from '../features/pos/pages/PosPage.js';
@@ -72,6 +72,11 @@ function stubApi() {
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/config/currency') return json(contract(CurrencyResponseSchema, { currency: shopCurrency }));
+    if (u.pathname === '/config/shop') {
+      return json(contract(ShopIdentitySchema, {
+        name: 'Kuraz Books', motto: '', tin: '0012345678', branch: { id: 1, name: 'Home', address: 'Bole, Addis Ababa', phone: '+251911000000' },
+      }));
+    }
     if (u.pathname === '/branches/1/locations') {
       return json(contract(LocationListResponseSchema, {
         items: [{ id: 7, branchId: 1, name: 'Main Floor', isDefaultFulfillment: true, createdAt: CREATED }], total: 1, accessMode: 'full',
@@ -358,6 +363,17 @@ describe('POS terminal: the sale and its receipt', () => {
     expect(row('Subtotal')).toHaveTextContent('ETB 10.00');
     expect(row('Discount')).toHaveTextContent('-ETB 2.00');
     expect(row('Total')).toHaveTextContent('ETB 8.00');
+  });
+
+  it("heads the receipt with the shop, the branch's address and phone, the TIN and the cashier (#228, P1; was: none of them)", async () => {
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
+    await screen.findByText('POS-20261018-0001');
+    const receipt = document.getElementById('pos-receipt')!;
+    await within(receipt).findByText('Kuraz Books');
+    for (const text of ['Home', 'Bole, Addis Ababa', '+251911000000', 'TIN 0012345678', 'Cashier: Me']) expect(receipt).toHaveTextContent(text);
   });
 
   it('prints only the receipt (owner decision 2a; was: the whole page)', async () => {

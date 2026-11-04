@@ -20,6 +20,7 @@ import OrdersPage from '../features/orders/pages/OrdersPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-18T07:00:00.000Z';
 
@@ -79,6 +80,7 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/orders/30' && method === 'GET') return json(contract(OrderSchema, current));
     if (method === 'POST' && u.pathname === '/orders/30/deliveries') {
       current = PART;

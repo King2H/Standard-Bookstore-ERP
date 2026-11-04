@@ -23,6 +23,7 @@ import { canOpenPage, NAV_SECTIONS } from '../app/navigation.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const OPENED = '2026-10-29T06:00:00.000Z';
 const CLOSED = '2026-10-29T18:00:00.000Z';
@@ -86,6 +87,7 @@ function stubApi() {
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/config/currency') return json(contract(CurrencyResponseSchema, { currency: 'ETB' }));
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/cash-sessions/current') return json(contract(CurrentCashSessionResponseSchema, current));
     if (u.pathname === '/cash-sessions' && method === 'GET') {
       const status = u.searchParams.get('status');

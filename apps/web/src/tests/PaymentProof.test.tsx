@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '../components/Toast.js';
 import POSPage from '../features/pos/pages/PosPage.js';
 
+import { SHOP_IDENTITY } from './shop.js';
 const getMock = vi.fn();
 const postMock = vi.fn();
 
@@ -35,6 +36,7 @@ beforeEach(() => {
 describe('POS: a bank payment names the bank and the reference', () => {
   beforeEach(() => {
     getMock.mockImplementation((path: string) => {
+      if (path === '/config/shop') return Promise.resolve(SHOP_IDENTITY);
       if (path.startsWith('/branches/1/locations')) return Promise.resolve({ items: [{ id: 7, name: 'Main', isDefaultFulfillment: true }] });
       if (path.startsWith('/books/with-availability')) {
         return Promise.resolve({ items: [{ id: 5, title: 'Fikir Eske Mekabir', isbn: '9789994400001', defaultPrice: 10, branchPrice: null }] });

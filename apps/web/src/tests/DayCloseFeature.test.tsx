@@ -24,6 +24,7 @@ import { canOpenPage, NAV_SECTIONS } from '../app/navigation.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const TODAY = '2026-10-31';
 const CLOSED_AT = '2026-10-31T18:00:00.000Z';
@@ -91,6 +92,7 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/business-days/today') return json(contract(TodayStatusSchema, { branchId: 1, day: TODAY, status: today }));
     if (u.pathname === '/business-days/preview') {
       const day = u.searchParams.get('day')!;

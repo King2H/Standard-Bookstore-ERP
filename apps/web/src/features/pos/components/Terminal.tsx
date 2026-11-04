@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Money, type BookAvailabilityListResponse, type Customer, type PosTransaction } from '@bms/shared';
 import { getCurrentBranchId } from '../../../lib/api.js';
 import { ActionDialog } from '../../../components/ActionDialog.js';
+import { ShopHeader } from '../../../components/ShopHeader.js';
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import QuickAddCustomer, { type QuickCustomerPayload } from '../../../components/QuickAddCustomer.js';
@@ -483,6 +484,11 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
               )}
             </div>
             <div className="p-6 space-y-5">
+              {/* Where the receipt came from, and who sold (#228, P1). */}
+              <div className="space-y-1 text-gray-900 dark:text-white">
+                <ShopHeader />
+                {me && <p className="text-center text-xs text-gray-500">Cashier: {me.fullName}</p>}
+              </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 dark:border-gray-800">

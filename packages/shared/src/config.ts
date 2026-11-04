@@ -88,9 +88,13 @@ const paymentMethods = `must be a list of payment methods: ${OrderPaymentMethodS
  * Settings that hold for every branch; a branch cannot override them. The
  * currency: every amount is recorded in it, so a branch showing another one
  * would label its amounts wrongly. The time zone: a month is closed for the
- * whole shop, so its days are the same in every branch (#175).
+ * whole shop, so its days are the same in every branch (#175). The shop's
+ * name, motto and TIN: one shop, whichever branch prints (#228).
  */
-export const SYSTEM_WIDE_CONFIG_KEYS: readonly string[] = ['base_currency', 'business_timezone'];
+export const SYSTEM_WIDE_CONFIG_KEYS: readonly string[] = ['base_currency', 'business_timezone', 'shop_name', 'shop_motto', 'shop_tin'];
+
+export const SHOP_NAME_MAX = 120;
+export const SHOP_MOTTO_MAX = 200;
 
 /**
  * The value each setting takes (#23). The API refuses any other key or value,
@@ -100,6 +104,11 @@ export const SYSTEM_WIDE_CONFIG_KEYS: readonly string[] = ['base_currency', 'bus
  */
 export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   base_currency: currencyCode,
+  /** The shop's name on receipts, slips and the welcome banner; empty until the shop sets it (#228). */
+  shop_name: text.max(SHOP_NAME_MAX, `must be at most ${SHOP_NAME_MAX} characters`),
+  shop_motto: text.max(SHOP_MOTTO_MAX, `must be at most ${SHOP_MOTTO_MAX} characters`),
+  /** The shop's tax identification number, 10 digits, on receipts and slips; empty when not given. */
+  shop_tin: text.regex(/^(\d{10})?$/, 'must be a TIN of 10 digits, or empty'),
   /** The shop's local time zone, an IANA name such as Africa/Addis_Ababa: its days are closed and reported in it (#175). */
   business_timezone: text.regex(/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$|^UTC$/, 'must be a time zone name, e.g. Africa/Addis_Ababa'),
   fiscal_year_start_month: number,
@@ -140,3 +149,18 @@ export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   account_lockout_minutes: number,
   password_expiry_days: number,
 };
+
+// ── The shop's identity (#228) ────────────────────────────────────────────────
+
+/**
+ * GET /config/shop: what heads every receipt and slip, and the welcome
+ * banner: the shop's name, motto and TIN (empty when not set), and the
+ * session branch's name, address and phone. Any signed-in staff member.
+ */
+export const ShopIdentitySchema = z.object({
+  name: z.string(),
+  motto: z.string(),
+  tin: z.string(),
+  branch: z.object({ id: z.number().int(), name: z.string(), address: z.string(), phone: z.string() }),
+});
+export type ShopIdentity = z.infer<typeof ShopIdentitySchema>;

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ShopHeader } from './ShopHeader.js';
 
 // Only the slip is printed, not the screen behind it (owner decision 1a, #23),
 // as the POS terminal prints only its receipt.
@@ -16,6 +17,7 @@ export function PrintSlip({ title, children, onClose }: { title: string; childre
       <style>{SLIP_PRINT_CSS}</style>
       <div id="print-slip" role="dialog" aria-labelledby="print-slip-title" onClick={(e) => e.stopPropagation()}
         className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto p-6 space-y-4">
+        <ShopHeader className="border-b border-gray-200 dark:border-gray-700 pb-3" />
         <h2 id="print-slip-title" className="text-lg font-bold">{title}</h2>
         {children}
         <div className="no-print flex gap-2 pt-2">

@@ -13,6 +13,9 @@ import {
 
 const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType; description: string }> = {
   base_currency:                    { label: 'Base Currency',                tab: 'General',      type: 'string',  description: 'ISO 4217 code (e.g. ETB), for every branch. Changes only while nothing is kept in it, draft purchase orders and bank accounts included' },
+  shop_name:                        { label: 'Shop Name',                    tab: 'Shop',         type: 'string',  description: 'Heads every receipt and slip, and the welcome banner; for every branch' },
+  shop_motto:                       { label: 'Shop Motto',                   tab: 'Shop',         type: 'string',  description: 'Shown with the name on the welcome banner' },
+  shop_tin:                         { label: 'Shop TIN',                     tab: 'Shop',         type: 'string',  description: 'Tax identification number, 10 digits, on every receipt and slip; empty to leave it off' },
   business_timezone:                { label: 'Business Time Zone',           tab: 'General',      type: 'string',  description: "The shop's local time zone, for every branch: its days are closed and reported in it" },
   // tax_rate removed — taxation disabled for this phase
   fiscal_year_start_month:          { label: 'Fiscal Year Start Month',      tab: 'General',      type: 'number',  description: 'Month number 1–12 (1 = January)' },
@@ -53,7 +56,7 @@ const TIME_ZONES = [
   'Asia/Dubai', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'UTC',
 ];
 
-const TABS = ['General', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Cash', 'Notifications', 'Security'];
+const TABS = ['General', 'Shop', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Cash', 'Notifications', 'Security'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -166,7 +169,7 @@ function ConfigRowItem({
                   onChange={e => setDraft(e.target.value)}
                   step={meta?.type === 'number' ? 'any' : undefined}
                   list={row.key === 'business_timezone' ? 'business-timezones' : undefined}
-                  className={`bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${row.key === 'business_timezone' ? 'w-52' : 'w-36'}`}
+                  className={`bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${row.key === 'business_timezone' || row.key.startsWith('shop_') ? 'w-52' : 'w-36'}`}
                 />
                 {row.key === 'business_timezone' && (
                   <datalist id="business-timezones">
@@ -345,7 +348,11 @@ export default function SettingsPage() {
 
   // ── Filter rows by active tab ──────────────────────────────────────────────
 
-  const systemRows = (systemData?.items ?? []).filter(r => CONFIG_META[r.key]?.tab === activeTab);
+  // In the order the page lists them (Shop: name, motto, TIN), not the API's alphabetical one.
+  const metaOrder = Object.keys(CONFIG_META);
+  const systemRows = (systemData?.items ?? [])
+    .filter(r => CONFIG_META[r.key]?.tab === activeTab)
+    .sort((a, b) => metaOrder.indexOf(a.key) - metaOrder.indexOf(b.key));
   // A setting that holds for every branch (the currency) has no branch override.
   const branchRows = (branchConfigData?.items ?? [])
     .filter(r => CONFIG_META[r.key]?.tab === activeTab && !SYSTEM_WIDE_CONFIG_KEYS.includes(r.key));

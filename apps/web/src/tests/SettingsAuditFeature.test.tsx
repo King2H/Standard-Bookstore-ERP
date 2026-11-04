@@ -37,6 +37,7 @@ const SYSTEM = [
   entry('base_currency', 'ETB'), entry('business_timezone', 'Africa/Addis_Ababa'), entry('max_line_discount_pct', { Sales: 10, Manager: 25 }),
   entry('default_discount_type', 'Normal'), entry('return_window_days', 7),
   entry('require_cash_session', false), entry('cash_variance_limit', 50),
+  entry('shop_name', ''), entry('shop_motto', ''), entry('shop_tin', ''),
 ];
 
 type Call = { method: string; path: string; body: unknown };
@@ -103,6 +104,26 @@ describe('Settings', () => {
     await user.click(await screen.findByRole('button', { name: 'Cash' }));
     expect(await settingRow('Require Cash Session')).toBeInTheDocument();
     expect(await settingRow('Cash Variance Limit')).toBeInTheDocument();
+  });
+
+  it("sets the shop's name, motto and TIN on a Shop tab, a TIN checked before sending (#228, 1a; was: not offered)", async () => {
+    me = profile(['Super_Admin'], true);
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Shop' }));
+    expect(await settingRow('Shop Motto')).toBeInTheDocument();
+    const tin = await settingRow('Shop TIN');
+    await user.click(within(tin).getByTitle('Edit'));
+    await user.type(within(tin).getByRole('textbox'), '12345');
+    await user.click(within(tin).getByRole('button', { name: 'Save' }));
+    expect(await within(tin).findByRole('alert')).toHaveTextContent('10 digits');
+    const name = await settingRow('Shop Name');
+    await user.click(within(name).getByTitle('Edit'));
+    await user.type(within(name).getByRole('textbox'), 'Kuraz Books');
+    await user.click(within(name).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.filter(c => c.method === 'PUT').map(c => [c.path, c.body])).toEqual([
+      ['/config/system/shop_name', { value: 'Kuraz Books' }],
+    ]));
   });
 
   it('sets the shop\'s time zone under General, suggesting zones (#175, 1a; was: not offered)', async () => {

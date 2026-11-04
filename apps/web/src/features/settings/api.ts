@@ -1,5 +1,5 @@
 import type {
-  BranchConfigListResponse, ConfigEntry, EffectiveConfigResponse, MessageResponse, SystemConfigListResponse,
+  BranchConfigListResponse, ConfigEntry, EffectiveConfigResponse, MessageResponse, ShopIdentity, SystemConfigListResponse,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
@@ -9,6 +9,9 @@ export const listSystemConfig = () => api.get<SystemConfigListResponse>('/config
 
 /** The values in effect in the session's branch; open to all staff. */
 export const getEffectiveConfig = (keys: string[]) => api.get<EffectiveConfigResponse>(`/config/effective${toQuery({ keys: keys.join(',') })}`);
+
+/** What heads receipts and slips: the shop, and the session's branch (#228); open to all staff. */
+export const getShopIdentity = () => api.get<ShopIdentity>('/config/shop');
 
 export const listBranchConfig = (branchId: number) => api.get<BranchConfigListResponse>(`/config/branches/${branchId}`);
 
