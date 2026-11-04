@@ -16,6 +16,7 @@ import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-26T07:00:00.000Z';
 
@@ -62,6 +63,8 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    // The return slip is headed by the shop (#240, R2).
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/exchanges') {
       const found = u.searchParams.get('exchangeReference') === theExchange.exchangeReference
         ? [{ ...theExchange, incomingItems: undefined, outgoingItems: undefined, settlementEntries: undefined }] : [];
