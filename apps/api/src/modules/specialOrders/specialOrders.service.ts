@@ -86,6 +86,8 @@ export async function arrive(
     await reserveForLine(tx, { ...actor, roles: actor.roles }, {
       orderId: l.orderId, lineId: l.orderLineId, bookId: a.bookId, locationId: a.locationId, quantity: take,
       note: `Special order arrived – order ${l.orderNumber}`,
+      // Straight from the delivery to the customer's reservation: no stock alert (#232, 3a).
+      alert: false,
     });
     await links.addReserved(tx, l.id, take);
     await insertAuditEntry(tx, {

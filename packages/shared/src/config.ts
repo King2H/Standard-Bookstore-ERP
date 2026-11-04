@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ROLES } from './auth.js';
 import { IdSchema } from './common.js';
+import { NotificationPrefsSchema } from './notification.js';
 import { OrderPaymentMethodSchema } from './payment.js';
 
 /** Contracts for /api/v1/config (#21). */
@@ -143,7 +144,8 @@ export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   require_cash_session: flag,
   /** Over or short at a cash session's close beyond this waits for a Manager or Admin (#171). */
   cash_variance_limit: number.min(0, 'must not be negative'),
-  notification_prefs: z.record(z.string(), z.unknown(), { error: 'must be an object' }),
+  /** Routine events turned on (#232); every other event always notifies. */
+  notification_prefs: NotificationPrefsSchema,
   allowed_payment_methods: z.array(z.enum(OrderPaymentMethodSchema.options, { error: paymentMethods }), { error: paymentMethods }),
   max_failed_login_attempts: number,
   account_lockout_minutes: number,

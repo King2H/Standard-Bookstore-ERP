@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SYSTEM_WIDE_CONFIG_KEYS, type ConfigEntry, type EffectiveConfigEntry } from '@bms/shared';
+import { ROUTINE_NOTIFICATION_EVENTS, SYSTEM_WIDE_CONFIG_KEYS, type ConfigEntry, type EffectiveConfigEntry, type RoutineNotificationEvent } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useOpenBranches } from '../../branches/queries.js';
@@ -44,7 +44,7 @@ const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType;
   exchange_cash_adjustment_allowed: { label: 'Exchange Cash Adjustment',     tab: 'Exchange',     type: 'boolean', description: 'Allow cash settlement on exchange orders' },
   require_cash_session:             { label: 'Require Cash Session',         tab: 'Cash',         type: 'boolean', description: 'Take cash at the counter only with an open cash session' },
   cash_variance_limit:              { label: 'Cash Variance Limit',          tab: 'Cash',         type: 'number',  description: 'Over or short at close beyond this waits for a Manager or Admin' },
-  notification_prefs:               { label: 'Notification Preferences',     tab: 'Notifications',type: 'json',    description: 'Per-event notification toggles (JSONB)' },
+  notification_prefs:               { label: 'Routine Notifications',        tab: 'Notifications',type: 'json',    description: 'Routine events that notify, each off unless turned on. Approvals, reviews, stock alerts and the like always notify' },
   max_failed_login_attempts:        { label: 'Max Failed Login Attempts',     tab: 'Security',     type: 'number',  description: 'Lock account after this many consecutive failures (default: 5)' },
   account_lockout_minutes:          { label: 'Account Lockout Duration (min)',tab: 'Security',     type: 'number',  description: 'Minutes an account stays locked after too many failures (default: 30)' },
   password_expiry_days:             { label: 'Password Expiry (days)',        tab: 'Security',     type: 'number',  description: 'Days before password must be changed; 0 = never expires (default: 0)' },
@@ -195,6 +195,96 @@ function ConfigRowItem({
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+                </svg>
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Routine notifications (#232, owner decision 2a) ──────────────────────────
+
+const ROUTINE_EVENTS = Object.entries(ROUTINE_NOTIFICATION_EVENTS) as Array<[RoutineNotificationEvent, string]>;
+const turnedOn = (value: unknown): Set<string> =>
+  new Set(Object.entries(typeof value === 'object' && value !== null ? value : {}).filter(([, on]) => on === true).map(([k]) => k));
+
+/** The routine events that notify, one box each; saved as the events turned on. */
+function NotificationPrefsRow({ row, canEdit, editTitle, canRemove = false, onSave, onDelete }: {
+  row: ConfigEntry & { source?: 'branch' | 'system' };
+  canEdit: boolean;
+  editTitle: string;
+  canRemove?: boolean;
+  onSave: (key: string, value: unknown) => void;
+  onDelete?: (key: string) => void;
+}) {
+  const meta = CONFIG_META[row.key];
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Set<string>>(() => turnedOn(row.value));
+  const on = turnedOn(row.value);
+  const toggle = (event: string) => setDraft(d => {
+    const next = new Set(d);
+    if (next.has(event)) next.delete(event); else next.add(event);
+    return next;
+  });
+  const save = () => {
+    onSave(row.key, Object.fromEntries(ROUTINE_EVENTS.filter(([e]) => draft.has(e)).map(([e]) => [e, true])));
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-start gap-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-sm font-medium text-gray-900 dark:text-white">{meta?.label}</span>
+          {row.source && (
+            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+              row.source === 'branch'
+                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+            }`}>
+              {row.source === 'branch' ? 'branch override' : 'system default'}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500">{meta?.description}</p>
+        {editing && (
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+            {ROUTINE_EVENTS.map(([event, label]) => (
+              <label key={event} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                <input type="checkbox" checked={draft.has(event)} onChange={() => toggle(event)} className="rounded-sm border-gray-300 dark:border-gray-600" />
+                {label}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        {editing ? (
+          <>
+            <button onClick={save} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors">Save</button>
+            <button onClick={() => { setEditing(false); setDraft(turnedOn(row.value)); }} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">Cancel</button>
+          </>
+        ) : (
+          <>
+            <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-sm">
+              {on.size === 0 ? 'None on' : `${on.size} of ${ROUTINE_EVENTS.length} on`}
+            </span>
+            {canEdit && (
+              <button onClick={() => { setDraft(turnedOn(row.value)); setEditing(true); }}
+                className="text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title={editTitle}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+                </svg>
+              </button>
+            )}
+            {canEdit && canRemove && row.source === 'branch' && onDelete && (
+              <button onClick={() => onDelete(row.key)}
+                className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Remove override">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             )}
@@ -399,12 +489,16 @@ export default function SettingsPage() {
               <p className="text-sm text-gray-400 dark:text-gray-500 py-4">No settings in this category</p>
             ) : (
               systemRows.map(row => (
+                row.key === 'notification_prefs' ? (
+                  <NotificationPrefsRow key={row.key} row={row} canEdit={isSuperAdmin} editTitle="Edit" onSave={saveSystem} />
+                ) : (
                 <ConfigRowItem
                   key={row.key}
                   row={row}
                   isSuperAdmin={isSuperAdmin}
                   onSave={saveSystem}
                 />
+                )
               ))
             )}
           </div>
@@ -436,6 +530,10 @@ export default function SettingsPage() {
               <p className="text-sm text-gray-400 dark:text-gray-500 py-4">No settings in this category</p>
             ) : (
               branchRows.map(row => (
+                row.key === 'notification_prefs' ? (
+                  <NotificationPrefsRow key={row.key} row={row} canEdit={canEditBranch} editTitle="Override"
+                    canRemove={canRemoveOverride} onSave={saveBranch} onDelete={removeOverride} />
+                ) : (
                 <BranchConfigRowItem
                   key={row.key}
                   row={row}
@@ -444,6 +542,7 @@ export default function SettingsPage() {
                   onSave={saveBranch}
                   onDelete={removeOverride}
                 />
+                )
               ))
             )}
           </div>

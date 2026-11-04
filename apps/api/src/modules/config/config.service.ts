@@ -80,6 +80,20 @@ export async function getShopIdentity(branchId: number): Promise<ShopIdentity> {
   return { ...shop, branch: { id: branchId, name: branchName, address, phone } };
 }
 
+/**
+ * The routine notifications turned on where an event happened (#232): the
+ * branch's notification_prefs, else the shop's; none when it cannot be read,
+ * so a routine event never notifies by mistake.
+ */
+export async function getNotificationPrefs(branchId: number | null): Promise<unknown> {
+  try {
+    if (branchId === null) return (await config.findSystemValue(kysely, 'notification_prefs'))?.value ?? {};
+    return await getEffectiveConfig(branchId, 'notification_prefs');
+  } catch {
+    return {};
+  }
+}
+
 // ── System settings ───────────────────────────────────────────────────────────
 
 export function listSystemConfig(): Promise<ConfigRecord[]> {

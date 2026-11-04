@@ -565,11 +565,11 @@ export async function cancelRest(
 export async function reserveForLine(
   tx: Queryable,
   staffCtx: StaffCtx,
-  r: { orderId: string; lineId: string; bookId: number; locationId: number; quantity: number; note: string },
+  r: { orderId: string; lineId: string; bookId: number; locationId: number; quantity: number; note: string; alert?: boolean },
 ): Promise<void> {
   const line = (await orders.listLineItems(tx, r.orderId)).find((l) => l.id === r.lineId)!;
   const { unitCost } = await inventoryService.issueStock(tx, {
-    bookId: r.bookId, locationId: r.locationId, quantity: r.quantity,
+    bookId: r.bookId, locationId: r.locationId, quantity: r.quantity, alert: r.alert,
     referenceType: 'order_confirmed', referenceId: r.orderId, reasonCode: 'sale', notes: r.note, staffCtx,
   });
   // The line's cost is the average of what its copies left at.

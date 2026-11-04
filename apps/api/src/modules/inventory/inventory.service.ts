@@ -330,7 +330,7 @@ export async function issueStock(tx: Queryable, issue: StockIssue): Promise<{ un
     staffId: issue.staffCtx.staffId,
     unitCost: before.averageCost,
   });
-  await alertOnThreshold(tx, bookId, locationId, before.quantity);
+  if (issue.alert !== false) await alertOnThreshold(tx, bookId, locationId, before.quantity);
   return { unitCost: before.averageCost };
 }
 

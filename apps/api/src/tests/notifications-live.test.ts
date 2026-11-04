@@ -130,7 +130,8 @@ describe('Live notifications', () => {
   it('counts every role held: a Sales clerk also made Manager gets Manager notifications live and in the list (was: neither)', async () => {
     const seen = await listen(promoted);
     await handleNotification({
-      _eventType: 'inventory.adjustment', branchId: branchA, bookTitle: `${PREFIX}book`, locationName: 'Floor', delta: -1, bookId: 1,
+      // An event that always notifies (#232: stock adjustments are routine, off unless turned on).
+      _eventType: 'inventory.low_stock', branchId: branchA, bookTitle: `${PREFIX}book`, locationName: 'Floor', quantity: 1, reorderPoint: 5, bookId: 1,
     });
     await settle();
 
@@ -142,7 +143,7 @@ describe('Live notifications', () => {
   it('gives staff with access to all branches every branch\'s notifications live, as the list does (was: the session branch only)', async () => {
     const seen = await listen(allBranches);
     await handleNotification({
-      _eventType: 'inventory.adjustment', branchId: branchA, bookTitle: `${PREFIX}elsewhere`, locationName: 'Floor', delta: 2, bookId: 1,
+      _eventType: 'inventory.low_stock', branchId: branchA, bookTitle: `${PREFIX}elsewhere`, locationName: 'Floor', quantity: 1, reorderPoint: 5, bookId: 1,
     });
     await settle();
 
