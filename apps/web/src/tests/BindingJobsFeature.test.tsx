@@ -54,7 +54,7 @@ const bound = (status: ServiceJobStatus): SaleServiceLine => ({
   }),
 });
 const sale = (status: ServiceJobStatus): PosTransaction => contract(PosTransactionSchema, {
-  id: '77', branchId: 1, locationId: 7, customerId: 1, staffId: 9, transactionNumber: 'POS-20261026-0001',
+  id: '77', branchId: 1, locationId: 7, customerId: 1, customerName: 'Abebe Kebede', staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261026-0001',
   subtotal: 500, discountTotal: 0, taxTotal: 0, grandTotal: 500, amountPaid: 500, amountDue: 0, paymentStatus: 'paid',
   currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: false,
   lineItems: [{

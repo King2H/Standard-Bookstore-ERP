@@ -13,6 +13,8 @@ import { api, toQuery } from '../../lib/api.js';
 export type SalesParams = {
   /** One sale, opened from Payment History (#230). */
   transactionNumber?: string;
+  /** A sale number in part, a customer's name or code in part, or their phone (#236). */
+  q?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;

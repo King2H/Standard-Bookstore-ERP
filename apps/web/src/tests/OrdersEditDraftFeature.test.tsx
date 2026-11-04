@@ -44,7 +44,7 @@ const customer: Customer = contract(CustomerSchema, {
 
 function order(over: Partial<Order> = {}): Order {
   return contract(OrderSchema, {
-    id: '20', orderNumber: 'ORD-20261018-0020', customerId: null, branchId: 1, locationId: 7, channel: 'in_store',
+    id: '20', orderNumber: 'ORD-20261018-0020', customerId: null, customerName: null, branchId: 1, locationId: 7, channel: 'in_store',
     status: 'DRAFT', paymentStatus: 'unpaid', amountPaid: 0, saleType: 'cash_sale', currency: 'ETB', subtotal: 30, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 30, cancelReason: null, notes: null, createdBy: 9,
     createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: null, dueDate: null, fulfilledAt: null,
@@ -58,7 +58,7 @@ const DRAFT = order({
   lineItems: [{
     id: '41', orderId: '20', bookId: 9, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '9780306406109', quantity: 2, unitPrice: 30,
     discountAmount: 6, totalPrice: 54, discountType: 'Merchant', discountMode: 'Percentage', discountPct: 10,
-    qtyReserved: 0, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, service: null,
+    qtyReserved: 0, qtyFulfilled: 0, isBackordered: false, unitCost: null, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, qtyToOrder: 0, purchaseOrders: [], service: null,
   }],
 });
 

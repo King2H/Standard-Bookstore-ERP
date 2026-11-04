@@ -18,6 +18,8 @@ export type OrdersParams = {
   status?: string;
   /** The order with this ORD- number. */
   orderNumber?: string;
+  /** An order number in part, a customer's name or code in part, or their phone (#236). */
+  q?: string;
   dateFrom?: string;
   dateTo?: string;
 };
@@ -31,9 +33,6 @@ export type ConfirmOrder = z.input<typeof ConfirmOrderRequestSchema>;
 
 /** A draft is confirmed: a cash order is paid now, a credit order owes by its due date. */
 export const confirmOrder = (id: string, body: ConfirmOrder) => api.post<Order>(`/orders/${id}/confirm`, body);
-
-/** The books are handed over. */
-export const fulfillOrder = (id: string) => api.post<Order>(`/orders/${id}/fulfill`);
 
 /** Some copies handed over, per line at most what is waiting (#174); numbered DLV-. */
 export const deliverOrder = (id: string, body: DeliverOrderRequest) => api.post<Order>(`/orders/${id}/deliveries`, body);

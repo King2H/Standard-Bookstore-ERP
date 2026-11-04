@@ -51,7 +51,11 @@ export const PosTransactionSchema = z.object({
   branchId: z.number().int(),
   locationId: z.number().int(),
   customerId: z.number().int().nullable(),
+  /** The customer's name; null for a walk-in (#236). */
+  customerName: z.string().nullable(),
   staffId: z.number().int(),
+  /** Who sold it (#236). */
+  cashierName: z.string(),
   /** POS-YYYYMMDD-NNNN. */
   transactionNumber: z.string(),
   subtotal: z.number(),
@@ -84,6 +88,8 @@ const DateOnlySchema = z
   }, 'Not a calendar date');
 
 export const PosTransactionListQuerySchema = ListPagingQuerySchema.extend({
+  /** A sale number in part, a customer's name or code in part, or their phone (#236). */
+  q: z.string().trim().max(100).optional(),
   customerId: IdSchema.optional(),
   staffId: IdSchema.optional(),
   /** From this day on. */

@@ -34,7 +34,9 @@ function selectTransactions(q: Queryable) {
       't.branch_id',
       't.location_id',
       't.customer_id',
+      sql<string | null>`(SELECT c.full_name FROM customers c WHERE c.id = t.customer_id)`.as('customer_name'),
       't.staff_id',
+      sql<string>`(SELECT s.full_name FROM staff s WHERE s.id = t.staff_id)`.as('cashier_name'),
       't.transaction_number',
       't.subtotal',
       't.discount_total',
@@ -105,6 +107,19 @@ export async function list(q: Queryable, filter: PosFilter, page: Page): Promise
   if (filter.status) query = query.where('t.status', '=', filter.status);
   if (filter.paymentStatus) query = query.where('t.payment_status', '=', filter.paymentStatus);
   if (filter.transactionNumber) query = query.where('t.transaction_number', '=', filter.transactionNumber);
+  if (filter.q) {
+    // Phone and email are encrypted, so they match only exactly, through their lookup hash (#90).
+    const like = `%${filter.q}%`;
+    const lookup = filter.qLookup;
+    query = query.where((eb) => eb.or([
+      eb('t.transaction_number', 'ilike', like),
+      eb.exists(eb.selectFrom('customers as c').select('c.id').whereRef('c.id', '=', 't.customer_id').where((c) => c.or([
+        c('c.full_name', 'ilike', like),
+        c('c.customer_code', 'ilike', like),
+        ...(lookup ? [c('c.phone_lookup', '=', lookup), c('c.email_lookup', '=', lookup)] : []),
+      ]))),
+    ]));
+  }
   if (filter.dateFrom) query = query.where('t.created_at', '>=', sql<Date>`${filter.dateFrom}::date`);
   // Through the end of that day.
   if (filter.dateTo) query = query.where('t.created_at', '<', sql<Date>`${filter.dateTo}::date + 1`);

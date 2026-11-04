@@ -1,7 +1,7 @@
 // #174 (owner decisions 1a–5a, 2026-10-31): an order is delivered in parts
 // and what it will not deliver is cancelled. The list offers "Deliver…" (a
-// dialog of every line with what is still waiting, prefilled) beside Fulfill,
-// which still delivers everything; each delivery opens its note (DLV-) to
+// dialog of every line with what is still waiting, prefilled; Fulfill, which
+// delivered everything unasked, is gone since #236); each delivery opens its note (DLV-) to
 // print. A part-delivered order shows as such, counts as pending fulfilment,
 // and its page lists its deliveries and what was delivered, waiting and
 // cancelled. "Cancel the rest…" lists what will not be delivered and asks why
@@ -36,7 +36,7 @@ function profile(roles: string[]): ProfileResponse {
 
 function order(over: Partial<Order> = {}): Order {
   return contract(OrderSchema, {
-    id: '30', orderNumber: 'ORD-20261031-0030', customerId: 5, branchId: 1, locationId: 7, channel: 'in_store',
+    id: '30', orderNumber: 'ORD-20261031-0030', customerId: 5, customerName: 'Abebe Kebede', branchId: 1, locationId: 7, channel: 'in_store',
     status: 'CONFIRMED', paymentStatus: 'paid', amountPaid: 60, saleType: 'cash_sale', currency: 'ETB', subtotal: 60, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 60, cancelReason: null, notes: null, createdBy: 9,
     createdAt: CREATED, updatedAt: CREATED, allowedActions: [], paymentMethod: 'cash', dueDate: null, fulfilledAt: null, deliveries: [],
@@ -47,7 +47,7 @@ function order(over: Partial<Order> = {}): Order {
 const line = (id: string, bookId: number, bookTitle: string, quantity: number, over: Partial<OrderLineItem> = {}): OrderLineItem => ({
   id, orderId: '30', bookId, bookTitle, bookIsbn: '9780306406109', quantity, unitPrice: 30 / quantity, discountAmount: 0, totalPrice: 30,
   discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: quantity, qtyFulfilled: 0, isBackordered: false,
-  unitCost: 5, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, service: null, ...over,
+  unitCost: 5, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, qtyToOrder: 0, purchaseOrders: [], service: null, ...over,
 });
 
 const CONFIRMED = order({
@@ -123,7 +123,8 @@ describe('Delivering an order in parts, and cancelling the rest (#174)', () => {
 
   it('delivers the copies entered per line, at most what is waiting, and opens the delivery note (was: all or nothing)', async () => {
     const user = await openList();
-    expect(screen.getByRole('button', { name: 'Fulfill' })).toBeTruthy();
+    // Deliver… is the one way to deliver (#236, O4; was: Fulfill beside it).
+    expect(screen.queryByRole('button', { name: 'Fulfill' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Deliver…' }));
     const dialog = await screen.findByRole('dialog', { name: /Deliver ORD-20261031-0030/ });
     const first = within(dialog).getByLabelText('Copies of Fikir Eske Mekabir to deliver') as HTMLInputElement;

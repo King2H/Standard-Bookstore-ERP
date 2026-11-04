@@ -27411,6 +27411,15 @@
             }
           },
           {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
             "name": "customerId",
             "in": "query",
             "required": false,
@@ -27505,6 +27514,12 @@
                               {
                                 "type": "null"
                               }
+                            ]
+                          },
+                          "customerName": {
+                            "type": [
+                              "string",
+                              "null"
                             ]
                           },
                           "branchId": {
@@ -27678,6 +27693,36 @@
                                   "minimum": -9007199254740991,
                                   "maximum": 9007199254740991
                                 },
+                                "qtyToOrder": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "purchaseOrders": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "poId": {
+                                        "type": "string"
+                                      },
+                                      "poNumber": {
+                                        "type": "string"
+                                      },
+                                      "quantity": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "poId",
+                                      "poNumber",
+                                      "quantity"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "service": {
                                   "anyOf": [
                                     {
@@ -27815,6 +27860,8 @@
                                 "qtyCancelled",
                                 "specialOrder",
                                 "qtyOnOrder",
+                                "qtyToOrder",
+                                "purchaseOrders",
                                 "service"
                               ],
                               "additionalProperties": false
@@ -27923,6 +27970,7 @@
                           "id",
                           "orderNumber",
                           "customerId",
+                          "customerName",
                           "branchId",
                           "locationId",
                           "channel",
@@ -28205,6 +28253,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -28376,6 +28430,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -28513,6 +28597,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -28621,6 +28707,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -28675,6 +28762,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -28846,6 +28939,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -28983,6 +29106,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -29091,6 +29216,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -29385,6 +29511,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -29556,6 +29688,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -29693,6 +29855,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -29801,6 +29965,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -29936,6 +30101,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -30107,6 +30278,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -30244,6 +30445,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -30352,6 +30555,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -30724,6 +30928,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -30895,6 +31105,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -31032,6 +31272,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -31140,6 +31382,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -31304,6 +31547,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -31475,6 +31724,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -31612,6 +31891,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -31720,6 +32001,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -31968,6 +32250,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -32139,6 +32427,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -32276,6 +32594,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -32384,6 +32704,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -32568,6 +32889,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -32739,6 +33066,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -32876,6 +33233,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -32984,6 +33343,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -33121,6 +33481,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -33292,6 +33658,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -33429,6 +33825,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -33537,6 +33935,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -33746,6 +34145,12 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "branchId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -33917,6 +34322,36 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "qtyToOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "purchaseOrders": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "poId": {
+                                  "type": "string"
+                                },
+                                "poNumber": {
+                                  "type": "string"
+                                },
+                                "quantity": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "poId",
+                                "poNumber",
+                                "quantity"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "service": {
                             "anyOf": [
                               {
@@ -34054,6 +34489,8 @@
                           "qtyCancelled",
                           "specialOrder",
                           "qtyOnOrder",
+                          "qtyToOrder",
+                          "purchaseOrders",
                           "service"
                         ],
                         "additionalProperties": false
@@ -34162,6 +34599,7 @@
                     "id",
                     "orderNumber",
                     "customerId",
+                    "customerName",
                     "branchId",
                     "locationId",
                     "channel",
@@ -36500,10 +36938,19 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "staffId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "cashierName": {
+                      "type": "string"
                     },
                     "transactionNumber": {
                       "type": "string"
@@ -36805,7 +37252,9 @@
                     "branchId",
                     "locationId",
                     "customerId",
+                    "customerName",
                     "staffId",
+                    "cashierName",
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",
@@ -36927,6 +37376,15 @@
             }
           },
           {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
             "name": "customerId",
             "in": "query",
             "required": false,
@@ -37036,10 +37494,19 @@
                               }
                             ]
                           },
+                          "customerName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "staffId": {
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "cashierName": {
+                            "type": "string"
                           },
                           "transactionNumber": {
                             "type": "string"
@@ -37341,7 +37808,9 @@
                           "branchId",
                           "locationId",
                           "customerId",
+                          "customerName",
                           "staffId",
+                          "cashierName",
                           "transactionNumber",
                           "subtotal",
                           "discountTotal",
@@ -37481,10 +37950,19 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "staffId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "cashierName": {
+                      "type": "string"
                     },
                     "transactionNumber": {
                       "type": "string"
@@ -37786,7 +38264,9 @@
                     "branchId",
                     "locationId",
                     "customerId",
+                    "customerName",
                     "staffId",
+                    "cashierName",
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",
@@ -37984,10 +38464,19 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "staffId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "cashierName": {
+                      "type": "string"
                     },
                     "transactionNumber": {
                       "type": "string"
@@ -38289,7 +38778,9 @@
                     "branchId",
                     "locationId",
                     "customerId",
+                    "customerName",
                     "staffId",
+                    "cashierName",
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",
@@ -38434,10 +38925,19 @@
                         }
                       ]
                     },
+                    "customerName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "staffId": {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "cashierName": {
+                      "type": "string"
                     },
                     "transactionNumber": {
                       "type": "string"
@@ -38739,7 +39239,9 @@
                     "branchId",
                     "locationId",
                     "customerId",
+                    "customerName",
                     "staffId",
+                    "cashierName",
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",

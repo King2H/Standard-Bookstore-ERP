@@ -1,3 +1,4 @@
+import { poNumber } from '../procurement/procurement.mapper.js';
 import type { OrderLineItemRow, OrderRow, SaleType } from './orders.types.js';
 
 /** The orders columns the repository selects, plus the two derived fields. */
@@ -25,6 +26,7 @@ export interface OrderDbRow {
   updated_at: Date;
   fulfilled_at: Date | null;
   amount_paid: string;
+  customer_name: string | null;
   payment_method?: string | null;
   due_date?: string | null;
 }
@@ -50,6 +52,7 @@ export interface LineItemDbRow {
   qty_cancelled: string | number;
   special_order: boolean;
   qty_on_order: string | number;
+  purchase_orders: Array<{ poId: string; quantity: number }>;
 }
 
 // Numeric columns arrive as exact decimal strings; the API returns them as
@@ -57,7 +60,7 @@ export interface LineItemDbRow {
 export function toOrderRow(row: OrderDbRow): OrderRow {
   return {
     id: String(row.id), orderNumber: row.order_number,
-    customerId: row.customer_id, branchId: row.branch_id,
+    customerId: row.customer_id, customerName: row.customer_name, branchId: row.branch_id,
     locationId: row.location_id, channel: row.channel,
     status: row.status, paymentStatus: row.payment_status, amountPaid: Number(row.amount_paid),
     saleType: (row.sale_type ?? 'cash_sale') as SaleType,
@@ -75,6 +78,13 @@ export function toOrderRow(row: OrderDbRow): OrderRow {
   };
 }
 
+/** Copies on order: those a purchase order holds, by order, and the rest still to order (#236, decision 2a). */
+function onPurchaseOrders(onOrder: number, held: Array<{ poId: string; quantity: number }>) {
+  if (onOrder <= 0) return { qtyToOrder: 0, purchaseOrders: [] };
+  const purchaseOrders = held.map((h) => ({ poId: h.poId, poNumber: poNumber(h.poId), quantity: Number(h.quantity) }));
+  return { qtyToOrder: Math.max(0, onOrder - purchaseOrders.reduce((n, p) => n + p.quantity, 0)), purchaseOrders };
+}
+
 export function toLineItemRow(row: LineItemDbRow): OrderLineItemRow {
   return {
     id: String(row.id), orderId: String(row.order_id), bookId: row.book_id,
@@ -90,6 +100,7 @@ export function toLineItemRow(row: LineItemDbRow): OrderLineItemRow {
     qtyCancelled: Number(row.qty_cancelled),
     specialOrder: row.special_order,
     qtyOnOrder: Number(row.qty_on_order),
+    ...onPurchaseOrders(Number(row.qty_on_order), row.purchase_orders),
     service: null,
   };
 }

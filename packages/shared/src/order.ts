@@ -39,6 +39,10 @@ export const OrderLineItemSchema = z.object({
   specialOrder: z.boolean(),
   /** A special-order line's copies not arrived yet: neither reserved, delivered nor cancelled. */
   qtyOnOrder: z.number().int(),
+  /** Of those, the copies no purchase order holds yet: still to order (#236, decision 2a). */
+  qtyToOrder: z.number().int(),
+  /** The purchase orders holding the rest, with the copies each still brings. */
+  purchaseOrders: z.array(z.object({ poId: z.string(), poNumber: z.string(), quantity: z.number().int() })),
   /** The service on this line's copies (#169), if any. */
   service: SaleServiceLineSchema.nullable(),
 });
@@ -67,6 +71,8 @@ export const OrderSchema = z.object({
   id: z.string(),
   orderNumber: z.string(),
   customerId: z.number().int().nullable(),
+  /** The customer's name; null for a walk-in (#236). */
+  customerName: z.string().nullable(),
   branchId: z.number().int(),
   locationId: z.number().int().nullable(),
   channel: z.string(),
@@ -103,6 +109,8 @@ export const OrderSchema = z.object({
 export type Order = z.infer<typeof OrderSchema>;
 
 export const OrderListQuerySchema = ListPagingQuerySchema.extend({
+  /** An order number in part, a customer's name or code in part, or their phone (#236). */
+  q: z.string().trim().max(100).optional(),
   customerId: IdSchema.optional(),
   /** The order with this ORD- number. */
   orderNumber: z.string().trim().min(1).max(64).optional(),

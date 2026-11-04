@@ -31,12 +31,16 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [dateTo, setDateTo] = useState(initialDateTo);
   const [transactionNumber, setTransactionNumber] = useState(initialTransactionNumber);
+  // Who bought, or the number (#236, P10).
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [voiding, setVoiding] = useState<PosTransaction | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
-  const { data, isLoading } = useSales({ page, pageSize, dateFrom, dateTo, transactionNumber: transactionNumber || undefined });
+  const { data, isLoading } = useSales({
+    page, pageSize, dateFrom, dateTo, transactionNumber: transactionNumber || undefined, ...(search.trim() && { q: search.trim() }),
+  });
   const voidSale = useVoidSale();
 
   function confirmVoid() {
@@ -56,6 +60,8 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
   return (
     <div className="flex-1 overflow-auto p-4">
       <div className="flex items-center gap-2 mb-3">
+        <input type="search" aria-label="Search sales" placeholder="Customer, phone or sale #" value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }} className={`w-56 ${DATE_INPUT}`} />
         <input type="date" aria-label="From date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className={DATE_INPUT} />
         <span className="text-xs text-gray-400">to</span>
         <input type="date" aria-label="To date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className={DATE_INPUT} />
@@ -83,7 +89,7 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
             <table className="w-full text-sm min-w-[800px]">
               <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                  {['Tx #', 'Total', 'Paid', 'Due', 'Status', 'Payment', 'Date', 'Actions'].map((h) => (
+                  {['Tx #', 'Customer', 'Cashier', 'Total', 'Paid', 'Due', 'Status', 'Payment', 'Date', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -98,6 +104,12 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
                         {tx.transactionNumber}
                       </button>
                     </td>
+                    <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      {tx.customerName
+                        ? <span className="text-gray-900 dark:text-white">{tx.customerName}</span>
+                        : <span className="text-gray-400 dark:text-gray-500">Walk-in</span>}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">{tx.cashierName}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{currency} {money(tx.grandTotal)}</td>
                     <td className="px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 tabular-nums whitespace-nowrap">{currency} {money(tx.amountPaid)}</td>
                     <td className="px-4 py-3 text-sm text-amber-700 dark:text-amber-400 tabular-nums whitespace-nowrap">
@@ -136,7 +148,7 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
                   </tr>
                   {open === tx.id && (
                     <tr className="bg-gray-50/60 dark:bg-gray-800/20">
-                      <td colSpan={8} className="px-6 py-3"><SaleLines saleId={tx.id} canStep={canSell(me)} /></td>
+                      <td colSpan={10} className="px-6 py-3"><SaleLines saleId={tx.id} canStep={canSell(me)} /></td>
                     </tr>
                   )}
                   </Fragment>

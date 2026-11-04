@@ -126,7 +126,7 @@ const posted = (path: string) => calls.filter((c) => c.method === 'POST' && c.pa
 
 function sale(over: Partial<PosTransaction> = {}): PosTransaction {
   return contract(PosTransactionSchema, {
-    id: '77', branchId: 1, locationId: 7, customerId: 1, staffId: 9, transactionNumber: 'POS-20261025-0001',
+    id: '77', branchId: 1, locationId: 7, customerId: 1, customerName: 'Abebe Kebede', staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261025-0001',
     subtotal: 860, discountTotal: 0, taxTotal: 0, grandTotal: 860, amountPaid: 860, amountDue: 0, paymentStatus: 'paid',
     currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: true,
     lineItems: [{
@@ -140,13 +140,13 @@ function sale(over: Partial<PosTransaction> = {}): PosTransaction {
 
 function order(status: 'REQUESTED' | 'AT_BINDER' | 'READY', allowedActions: string[]): Order {
   return contract(OrderSchema, {
-    id: '10', orderNumber: 'ORD-20261025-0001', customerId: 1, branchId: 1, locationId: 7, channel: 'in_store',
+    id: '10', orderNumber: 'ORD-20261025-0001', customerId: 1, customerName: 'Abebe Kebede', branchId: 1, locationId: 7, channel: 'in_store',
     status: 'CONFIRMED', paymentStatus: 'paid', amountPaid: 760, saleType: 'cash_sale', currency: 'ETB', subtotal: 760, discountAmount: 0,
     discountTotal: 0, taxRate: 0, taxAmount: 0, total: 760, cancelReason: null, notes: null, createdBy: 9,
     createdAt: CREATED, updatedAt: CREATED, allowedActions, paymentMethod: 'cash', dueDate: null, fulfilledAt: null,
     lineItems: [{
       id: '8', orderId: '10', bookId: 2, bookTitle: 'Oromay', bookIsbn: '1', quantity: 2, unitPrice: 100, discountAmount: 0,
-      totalPrice: 200, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: 40, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, service: bound(status),
+      totalPrice: 200, discountType: 'Normal', discountMode: 'Amount', discountPct: 0, qtyReserved: 2, qtyFulfilled: 0, isBackordered: false, unitCost: 40, qtyReturned: 0, qtyCancelled: 0, specialOrder: false, qtyOnOrder: 0, qtyToOrder: 0, purchaseOrders: [], service: bound(status),
     }],
   });
 }
