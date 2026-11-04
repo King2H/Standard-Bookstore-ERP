@@ -49,6 +49,7 @@ export interface PosPaymentRow {
   reference: string | null;
   payer_bank: string | null;
   bank_account_id: number | null;
+  cash_tendered: string | null;
   created_at: Date;
 }
 
@@ -104,6 +105,7 @@ export function toPaymentRecord(row: PosPaymentRow): PosPaymentRecord {
     reference: row.reference,
     payerBank: row.payer_bank,
     bankAccountId: row.bank_account_id,
+    tendered: row.cash_tendered === null ? null : Money.of(row.cash_tendered),
     createdAt: row.created_at,
   };
 }
@@ -140,7 +142,7 @@ export function toTransactionResponse(t: PosTransactionRecord): PosTransaction {
       })),
     }),
     ...(t.payments && {
-      payments: t.payments.map((p) => ({ ...p, amount: p.amount.toNumber(), createdAt: p.createdAt.toISOString() })),
+      payments: t.payments.map((p) => ({ ...p, amount: p.amount.toNumber(), tendered: p.tendered?.toNumber() ?? null, createdAt: p.createdAt.toISOString() })),
     }),
   };
 }

@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } fr
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Money, type BookAvailabilityListResponse, type Customer, type PosTransaction } from '@bms/shared';
 import { getCurrentBranchId } from '../../../lib/api.js';
+import { ActionDialog } from '../../../components/ActionDialog.js';
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import QuickAddCustomer, { type QuickCustomerPayload } from '../../../components/QuickAddCustomer.js';
@@ -58,8 +59,8 @@ const DISCOUNT_KEYS = [
   'max_line_discount_pct',
 ];
 
-/** A receipt: the sale as the API recorded it, and the change given on cash. */
-type Receipt = PosTransaction & { change: Money };
+/** A receipt: the sale as the API recorded it, cash given included (#226). */
+type Receipt = PosTransaction;
 
 /** The day itself, wherever the till is (a YYYY-MM-DD read as UTC midnight shows the day before west of UTC). */
 const localDay = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString();
@@ -122,6 +123,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
   const [payProof, setPayProof]                   = useState<PaymentProof>(EMPTY_PROOF);
   const [receipt, setReceipt]                     = useState<Receipt | null>(null);
   const [bindingFor, setBindingFor]               = useState<number | null>(null);
+  const [confirmClear, setConfirmClear]           = useState(false);
 
   // Discount state
   const [defaultDiscountType, setDefaultDiscountType]     = useState<DiscountPresetType>('Normal');
@@ -365,6 +367,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
       method: p.method as PaymentMethod & ('cash' | 'bank' | 'mobile' | 'store_credit' | 'loyalty_points'),
       amount: Money.of(p.amount).toNumber(),
       bankAccountId: p.bankAccountId, payerBank: p.payerBank, reference: p.reference,
+      tendered: p.tendered ? Money.of(p.tendered).toNumber() : undefined,
     }));
   }
 
@@ -377,7 +380,6 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
   }
 
   function sell(body: { customerId: number | null; allowCredit: boolean; dueDate?: string | null }) {
-    const change = Money.sum(paymentLines.map(changeOf));
     createSale.mutate({
       locationId: locationId!,
       items: cart.map(i => ({
@@ -388,7 +390,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
       payments: buildPaymentPayload(),
       ...body,
     }, {
-      onSuccess: (tx) => { setReceipt({ ...tx, change }); showToast(`Sale ${tx.transactionNumber} completed`, 'success'); },
+      onSuccess: (tx) => { setReceipt(tx); showToast(`Sale ${tx.transactionNumber} completed`, 'success'); },
       onError:   (e: Error) => {
         showToast(e.message, 'error');
         if ((e as Error & { code?: string }).code === 'CASH_SESSION_REQUIRED') onCashSessionRequired?.();
@@ -414,7 +416,21 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
     sell({ customerId: selectedCustomer.id, allowCredit: true, dueDate: dueDate || null });
   }
 
-  function newSale() { setCart([]); setPaymentLines([]); setSelectedCustomer(null); setReceipt(null); setPayAmount(''); setDueDate(''); }
+  /** Clear and New Sale start afresh (#226, P8): nothing of the last sale, its tender included, is carried over. */
+  function newSale() {
+    setCart([]); setPaymentLines([]); setSelectedCustomer(null); setCustomerSearch(''); setDueDate('');
+    setPayMethod('cash'); setPayAmount(''); setPayProof(EMPTY_PROOF); setPayBankAccountId('');
+    setBindingFor(null); setConfirmClear(false); setReceipt(null);
+  }
+
+  /** Clearing a sale that already has payments asks first. */
+  function clearSale() {
+    if (paymentLines.length > 0) setConfirmClear(true);
+    else newSale();
+  }
+
+  // A line discounted beyond this cashier's limit keeps the sale from completing (#226, P7); the API refuses it too.
+  const overLimit = maxPct !== null && lineOverLimit(cart, maxPct) !== null;
 
   const isSelling = createSale.isPending;
 
@@ -500,7 +516,8 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                 </tbody>
               </table>
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4 space-y-2">
-                <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span className="tabular-nums">{currency} {Number(receipt.subtotal).toFixed(2)}</span></div>
+                {/* The stored subtotal is net of discount; the receipt shows it before (#226, P5). */}
+                <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span className="tabular-nums">{currency} {Money.of(receipt.subtotal).plus(receipt.discountTotal).toFixed(2)}</span></div>
                 {Number(receipt.discountTotal) > 0 && (
                   <div className="flex justify-between text-sm text-emerald-600"><span>Discount</span><span className="tabular-nums">-{currency} {Number(receipt.discountTotal).toFixed(2)}</span></div>
                 )}
@@ -515,16 +532,15 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                       <span className="text-gray-500">
                         {paymentMethodPlainLabel(p.method)}
                         {proofLabel(p) && <span className="block text-xs text-gray-400">{proofLabel(p)}</span>}
+                        {p.tendered !== null && (
+                          <span className="block text-xs text-gray-400 tabular-nums">
+                            Cash given {currency} {Money.of(p.tendered).toFixed(2)} · Change {currency} {Money.of(p.tendered).minus(p.amount).toFixed(2)}
+                          </span>
+                        )}
                       </span>
                       <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {Number(p.amount).toFixed(2)}</span>
                     </div>
                   ))}
-                  {receipt.change.greaterThan(0) && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Change</span>
-                      <span className="font-medium text-gray-900 dark:text-white tabular-nums">{currency} {receipt.change.toFixed(2)}</span>
-                    </div>
-                  )}
                 </div>
               )}
               <div className="no-print flex gap-3 pt-1">
@@ -693,7 +709,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
               </div>
               {cart.length > 0 && (
                 <button
-                  onClick={() => setCart([])}
+                  onClick={clearSale}
                   className="text-xs font-semibold text-red-500 hover:text-red-700 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -796,6 +812,10 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                               )}
                             </div>
                           </div>
+
+                          {maxPct !== null && lineOverLimit([item], maxPct) && (
+                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-0.5">Over your {maxPct}% limit</p>
+                          )}
 
                           {/* Bidirectional preview — compact single line */}
                           {(item.discountPct > 0 || item.discountAmount > 0) && (
@@ -1012,7 +1032,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                 <button
                   id="pos-complete-sale"
                   onClick={handleCompleteSale}
-                  disabled={isSelling || cart.length === 0 || !locationId || needsCustomer || Math.abs(remaining) > 0.01}
+                  disabled={isSelling || cart.length === 0 || !locationId || needsCustomer || overLimit || Math.abs(remaining) > 0.01}
                   className="w-full flex items-center justify-between gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md shadow-emerald-600/20 active:scale-[0.98]"
                 >
                   <span className="text-sm">{isSelling ? '⏳ Processing…' : '✓ Complete Sale'}</span>
@@ -1042,7 +1062,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                   <button
                     id="pos-credit-sale"
                     onClick={completeCreditSale}
-                    disabled={isSelling || cart.length === 0 || !locationId || !selectedCustomer}
+                    disabled={isSelling || cart.length === 0 || !locationId || !selectedCustomer || overLimit}
                     title={!selectedCustomer ? 'Select a customer to allow credit sale' : ''}
                     className="w-full flex items-center justify-between gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-4 rounded-xl transition-colors active:scale-[0.98]"
                   >
@@ -1055,6 +1075,17 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
           </div>
 
         </div>
+      )}
+      {confirmClear && (
+        <ActionDialog
+          title="Clear Sale"
+          message="Clear this sale? Its items, payments and customer are removed."
+          confirmLabel="Clear Sale"
+          tone="red"
+          busy={false}
+          onConfirm={newSale}
+          onCancel={() => setConfirmClear(false)}
+        />
       )}
       {(() => {
         const line = bindingFor === null ? undefined : cart.find(i => i.bookId === bindingFor);

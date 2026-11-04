@@ -716,4 +716,41 @@ describe('POS — Transactions', () => {
     )).rows;
     expect(line).toEqual([{ discount_type: 'Merchant', discount_mode: 'Amount', discount_amount: '1.00' }]);
   });
+
+  it('17. Keeps the cash handed over on a cash payment, and returns it with the sale (#226, P2; was: lost)', async () => {
+    const amount = bookPrice;
+    const res = await request(getTestApp())
+      .post('/api/v1/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ locationId, items: [{ bookId, quantity: 1 }], payments: [{ method: 'cash', amount, tendered: amount + 50 }] });
+    expect(res.status).toBe(201);
+    expect(res.body.payments).toEqual([expect.objectContaining({ method: 'cash', amount, tendered: amount + 50 })]);
+
+    const stored = (await db.query(`SELECT cash_tendered FROM transaction_payments WHERE transaction_id = $1`, [res.body.id])).rows;
+    expect(stored).toEqual([{ cash_tendered: (amount + 50).toFixed(2) }]);
+
+    const again = await request(getTestApp())
+      .get(`/api/v1/pos/transactions/${res.body.id}`)
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId));
+    expect(again.body.payments[0].tendered).toBe(amount + 50);
+  });
+
+  it('18. Takes cash handed over only on cash, and never less than the payment (#226, P2)', async () => {
+    const send = (payment: Record<string, unknown>) => request(getTestApp())
+      .post('/api/v1/pos/transactions')
+      .set('Authorization', `Bearer ${salesToken}`)
+      .set('X-Branch-Id', String(branchId))
+      .send({ locationId, items: [{ bookId, quantity: 1 }], payments: [payment] });
+    const onBank = await send({ method: 'mobile', amount: bookPrice, reference: 'TB-226', tendered: bookPrice + 1 });
+    expect(onBank.status).toBe(400);
+    expect(JSON.stringify(onBank.body)).toContain('Only cash is handed over');
+    const tooLittle = await send({ method: 'cash', amount: bookPrice, tendered: bookPrice - 1 });
+    expect(tooLittle.status).toBe(400);
+    expect(JSON.stringify(tooLittle.body)).toContain('At least the amount paid');
+    const plain = await send({ method: 'cash', amount: bookPrice });
+    expect(plain.status).toBe(201);
+    expect(plain.body.payments[0].tendered).toBeNull();
+  });
 });

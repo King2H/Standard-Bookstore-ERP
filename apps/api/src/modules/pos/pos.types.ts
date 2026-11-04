@@ -65,6 +65,7 @@ export interface PosPaymentRecord {
   reference: string | null;
   payerBank: string | null;
   bankAccountId: number | null;
+  tendered: Money | null;
   createdAt: Date;
 }
 
@@ -74,6 +75,8 @@ export interface PaymentLine {
   reference: string | null;
   payerBank: string | null;
   bankAccountId?: number | null;
+  /** Cash handed over (#226). */
+  tendered?: Money | null;
 }
 
 export interface SaleLine {

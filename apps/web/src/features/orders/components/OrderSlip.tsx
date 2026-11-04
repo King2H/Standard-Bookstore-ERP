@@ -60,7 +60,8 @@ export function OrderSlip({ orderId, onClose }: { orderId: string; onClose: () =
             </tbody>
           </table>
           <div className="space-y-1">
-            <SlipRow label="Subtotal">{money(order.subtotal)}</SlipRow>
+            {/* The stored subtotal is net of discount; the slip shows it before (#226, P5). */}
+            <SlipRow label="Subtotal">{`${currency} ${Money.of(order.subtotal).plus(order.discountTotal).toFixed()}`}</SlipRow>
             {order.discountTotal > 0 && <SlipRow label="Discount">− {money(order.discountTotal)}</SlipRow>}
             {order.taxAmount > 0 && <SlipRow label="Tax">{money(order.taxAmount)}</SlipRow>}
             <SlipRow label="Total"><span className="font-bold">{money(order.total)}</span></SlipRow>

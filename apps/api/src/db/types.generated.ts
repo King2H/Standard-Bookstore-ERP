@@ -1199,6 +1199,7 @@ export interface TransactionLineItems {
 export interface TransactionPayments {
   amount: Numeric;
   bank_account_id: number | null;
+  cash_tendered: Numeric | null;
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
   method: string;

@@ -46,7 +46,7 @@ describe('POS: a bank payment names the bank and the reference', () => {
     postMock.mockResolvedValue({
       id: 'tx-9', transactionNumber: 'POS-20261018-0001', subtotal: 10, discountTotal: 0, grandTotal: 10,
       amountPaid: 10, amountDue: 0, paymentStatus: 'paid', currency: 'ETB', status: 'completed', createdAt: new Date().toISOString(),
-      lineItems: [], payments: [{ method: 'bank', amount: 10, payerBank: 'Awash Bank', reference: 'FT24001' }],
+      lineItems: [], payments: [{ method: 'bank', amount: 10, payerBank: 'Awash Bank', reference: 'FT24001', tendered: null }],
     });
   });
 
