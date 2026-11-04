@@ -17,8 +17,15 @@ export const CHART_TOOLTIP_PROPS = {
   itemStyle: { color: '#f3f4f6', fontSize: 12 },
 } as const;
 
-/** Axis ticks in thousands. */
-export const thousands = (v: number) => `${(v / 1000).toFixed(0)}K`;
+/** Axis ticks: small amounts as they are, then in K and M (#230, K6; was: "0K" below 1,000). */
+export function axisAmount(v: number): string {
+  const sign = v < 0 ? '-' : '';
+  const a = Math.abs(v);
+  const short = (n: number, unit: string) => `${sign}${Number(n.toFixed(1))}${unit}`;
+  if (a >= 1_000_000) return short(a / 1_000_000, 'M');
+  if (a >= 1_000) return short(a / 1_000, 'K');
+  return `${sign}${Number(a.toFixed(0))}`;
+}
 
 /**
  * A period's label in the reader's calendar. Periods start with their first

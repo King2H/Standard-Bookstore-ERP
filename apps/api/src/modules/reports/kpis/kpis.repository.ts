@@ -1,5 +1,6 @@
 import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
+import { STOCK_LOW, STOCK_OUT } from '../inventory/inventoryReports.repository.js';
 
 // The dashboard's KPI figures (#22). "Today" and "this month" are the
 // database's calendar (CURRENT_DATE), never a JS Date, so the boundary is
@@ -54,7 +55,7 @@ export interface KpiFigures {
   dailyOrderSales: string; dailyPosSales: string; dailyExchangeSales: string;
   monthlyOrderSales: string; monthlyPosSales: string; monthlyExchangeSales: string;
   outstanding: string; overdue: string; averageOrderValue: string; inventoryValue: string; inventoryInTransit: string;
-  activeCustomers: number; lowStockAlerts: number; pendingOrders: number; exchangesToday: number;
+  activeCustomers: number; lowStockItems: number; outOfStockItems: number; pendingOrders: number; exchangesToday: number;
 }
 
 export async function kpiFigures(q: Queryable, branchId: number | undefined): Promise<KpiFigures> {
@@ -65,7 +66,7 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
     dailyOrderSales, dailyPosSales, dailyExchangeSales,
     monthlyOrderSales, monthlyPosSales, monthlyExchangeSales,
     outstanding, overdue, averageOrderValue, inventoryValue, inventoryInTransit,
-    activeCustomers, lowStockAlerts, pendingOrders, exchangesToday,
+    activeCustomers, lowStockItems, outOfStockItems, pendingOrders, exchangesToday,
   ] = await Promise.all([
     orderSales(q, branchId, today('ev.sale_at')),
     posSales(q, branchId, today('created_at')),
@@ -88,7 +89,8 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
       branchId ? [branchId] : [],
     ),
     count(`SELECT COUNT(*)::INTEGER AS val FROM customers WHERE is_active = true ${b.cond}`, b.params),
-    count(`SELECT COUNT(*)::INTEGER AS val FROM inventory i JOIN locations l ON l.id = i.location_id WHERE i.quantity <= i.reorder_point ${l.cond}`, l.params),
+    count(`SELECT COUNT(*)::INTEGER AS val FROM inventory i JOIN locations l ON l.id = i.location_id WHERE ${STOCK_LOW} ${l.cond}`, l.params),
+    count(`SELECT COUNT(*)::INTEGER AS val FROM inventory i JOIN locations l ON l.id = i.location_id WHERE ${STOCK_OUT} ${l.cond}`, l.params),
     count(`SELECT COUNT(*)::INTEGER AS val FROM orders WHERE status IN ${OPEN_ORDER_STATUSES} ${b.cond}`, b.params),
     count(`SELECT COUNT(*)::INTEGER AS val FROM exchanges WHERE DATE(created_at) = CURRENT_DATE ${b.cond}`, b.params),
   ]);
@@ -96,7 +98,7 @@ export async function kpiFigures(q: Queryable, branchId: number | undefined): Pr
     dailyOrderSales, dailyPosSales, dailyExchangeSales,
     monthlyOrderSales, monthlyPosSales, monthlyExchangeSales,
     outstanding, overdue, averageOrderValue, inventoryValue, inventoryInTransit,
-    activeCustomers, lowStockAlerts, pendingOrders, exchangesToday,
+    activeCustomers, lowStockItems, outOfStockItems, pendingOrders, exchangesToday,
   };
 }
 

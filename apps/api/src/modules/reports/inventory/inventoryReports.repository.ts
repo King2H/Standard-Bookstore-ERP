@@ -5,6 +5,14 @@ import { scopeConditions, where, type ReportFilters, type ReportScope } from '..
 // Stock reports (#22). Stock levels are a balance now; sales and movements
 // are flows over the date range, both ends included.
 
+/**
+ * One rule for stock needing attention, everywhere it is counted or listed
+ * (#230, owner decision 3a): low is above 0 and at or below the reorder
+ * point; out is 0 or less (negative where the branch allows it).
+ */
+export const STOCK_LOW = '(i.quantity > 0 AND i.quantity <= i.reorder_point)';
+export const STOCK_OUT = '(i.quantity <= 0)';
+
 const branchOfLocation = (branchId: number | undefined): { cond: string; params: unknown[] } =>
   branchId ? { cond: 'l.branch_id = $1', params: [branchId] } : { cond: '', params: [] };
 
@@ -24,8 +32,8 @@ export async function stockSummary(q: Queryable, branchId: number | undefined): 
        -- bookkeeping, not a second hold, so available stock is the quantity.
        COALESCE(SUM(i.quantity), 0)::INTEGER AS available_stock,
        COALESCE(SUM(COALESCE(r.reserved, 0)), 0)::INTEGER AS reserved_stock,
-       COUNT(CASE WHEN i.quantity <= i.reorder_point AND i.quantity > 0 THEN 1 END)::INTEGER AS low_stock,
-       COUNT(CASE WHEN i.quantity = 0 THEN 1 END)::INTEGER AS out_of_stock
+       COUNT(CASE WHEN ${STOCK_LOW} THEN 1 END)::INTEGER AS low_stock,
+       COUNT(CASE WHEN ${STOCK_OUT} THEN 1 END)::INTEGER AS out_of_stock
      FROM inventory i
      JOIN locations l ON l.id = i.location_id
      LEFT JOIN (
@@ -39,18 +47,20 @@ export async function stockSummary(q: Queryable, branchId: number | undefined): 
   return row;
 }
 
-export async function lowStock(
+/** The books needing stock, each low or out, fewest on hand first. */
+export async function stockAlerts(
   q: Queryable,
   branchId: number | undefined,
-): Promise<Array<{ book_id: number; title: string; location_id: number; location_name: string; quantity: number; reorder_point: number }>> {
+): Promise<Array<{ book_id: number; title: string; location_id: number; location_name: string; quantity: number; reorder_point: number; status: 'low' | 'out' }>> {
   const b = branchOfLocation(branchId);
   return reportRows(
     q,
-    `SELECT i.book_id, b.title, i.location_id, l.name AS location_name, i.quantity, i.reorder_point
+    `SELECT i.book_id, b.title, i.location_id, l.name AS location_name, i.quantity, i.reorder_point,
+            CASE WHEN ${STOCK_OUT} THEN 'out' ELSE 'low' END AS status
      FROM inventory i
      JOIN books b ON b.id = i.book_id
      JOIN locations l ON l.id = i.location_id
-     ${where(['i.quantity <= i.reorder_point', ...(b.cond ? [b.cond] : [])])}
+     ${where([`(${STOCK_LOW} OR ${STOCK_OUT})`, ...(b.cond ? [b.cond] : [])])}
      ORDER BY i.quantity ASC
      LIMIT 50`,
     b.params,

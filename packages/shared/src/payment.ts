@@ -7,7 +7,8 @@ import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './pa
 export const OrderPaymentMethodSchema = z.enum(['cash', 'bank', 'mobile', 'card', 'store_credit', 'loyalty_points', 'other']);
 export type OrderPaymentMethod = z.infer<typeof OrderPaymentMethodSchema>;
 
-export const PaymentStatusSchema = z.enum(['pending', 'success', 'failed', 'refunded', 'partially_refunded']);
+/** `voided`: a POS payment whose sale was voided, the money given back (#230). */
+export const PaymentStatusSchema = z.enum(['pending', 'success', 'failed', 'refunded', 'partially_refunded', 'voided']);
 export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
 
 export const PaymentRefundSchema = z.object({
@@ -27,7 +28,7 @@ export type PaymentRefund = z.infer<typeof PaymentRefundSchema>;
 export const PaymentSchema = z.object({
   /** A bigint, sent as a string. */
   id: z.string(),
-  /** PAY-YYYYMMDD-NNNN for order payments. */
+  /** PAY-YYYYMMDD-NNNN for order payments; a POS payment's sale number (#230). */
   paymentReference: z.string(),
   /** The order's id; for history rows of a POS sale or exchange, theirs. */
   orderId: z.string(),

@@ -40,21 +40,11 @@ const KPIS = {
   monthlyRevenue: 100000,
   averageOrderValue: 500,
   totalActiveCustomers: 42,
-  lowStockAlerts: 5,
+  lowStockItems: 5,
+  outOfStockItems: 1,
   pendingOrders: 3,
   totalExchangesToday: 1,
   outstandingBalance: 8000,
-  netProfit: 20000,
-  fulfilledRevenue: 90000,
-  outstandingReceivables: 8000,
-  cashSalesRevenue: 40000,
-  creditSalesRevenue: 20000,
-  collectedCreditRevenue: 10000,
-  purchaseCost: 30000,
-  totalDiscounts: 2500,
-  grossProfit: 60000,
-  dailyNetProfit: 1000,
-  monthlyNetProfit: 15000,
   // Dashboard Standardization & Unified Reports Engine fields
   dailyNetSalesRevenue: 3000,
   monthlyNetSalesRevenue: 120000,
@@ -145,10 +135,10 @@ describe('DashboardPage — KPI hierarchy (Prompt 2)', () => {
     expect(screen.getByText('ETB 1.2K')).toBeInTheDocument(); // overdueReceivablesAmount
   });
 
-  it('Inventory & Operations shows Low Stock Items, Inventory Value, and Pending Customer Orders — no Procurement Expense card', async () => {
+  it('Inventory & Operations shows Stock Alerts (#230: low and out apart), Inventory Value, and Pending Customer Orders — no Procurement Expense card', async () => {
     renderDashboard();
 
-    await waitFor(() => expect(screen.getByText('Low Stock Items')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Stock Alerts')).toBeInTheDocument());
     expect(screen.getByText('Inventory Value')).toBeInTheDocument();
     expect(screen.getByText('ETB 55.0K')).toBeInTheDocument(); // kpis.inventoryValue
     expect(screen.getByText('Pending Customer Orders')).toBeInTheDocument();

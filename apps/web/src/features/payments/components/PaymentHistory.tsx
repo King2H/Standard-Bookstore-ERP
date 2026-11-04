@@ -12,14 +12,19 @@ const STATUS_COLORS: Record<string, string> = {
   success: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
   refunded: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
   partially_refunded: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+  voided: 'bg-gray-100 text-gray-500 line-through dark:bg-gray-800 dark:text-gray-400',
 };
 
 /**
  * Payments taken in the branch, newest first; an order payment can be
- * refunded. Opened on a period (`tab: 'history'`), it shows the dates as a
- * filter to clear (was: the dates were dropped).
+ * refunded, a POS payment opens its sale (#230, M5). Opened on a period
+ * (`tab: 'history'`), it shows the dates as a filter to clear (was: the dates
+ * were dropped).
  */
-export function PaymentHistory({ initialRange }: { initialRange?: { dateFrom: string; dateTo: string } }) {
+export function PaymentHistory({ initialRange, onNavigate }: {
+  initialRange?: { dateFrom: string; dateTo: string };
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}) {
   const currency = useCurrency();
   const { data: me } = useMyProfile();
   const [page, setPage] = useState(1);
@@ -81,7 +86,12 @@ export function PaymentHistory({ initialRange }: { initialRange?: { dateFrom: st
                             Refund
                           </button>
                         )}
-                        {pay.sourceType === 'pos' && pay.status !== 'refunded' && <span className="text-xs text-gray-400 italic">POS Returns only</span>}
+                        {pay.sourceType === 'pos' && pay.entityNumber && onNavigate && (
+                          <button onClick={(e) => { e.stopPropagation(); onNavigate('pos', { transactionNumber: pay.entityNumber! }); }}
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 px-2 py-0.5 rounded-sm transition-colors">
+                            Open sale
+                          </button>
+                        )}
                         {pay.sourceType === 'exchange' && <span className="text-xs text-gray-400 italic">Manage via Exchanges</span>}
                       </td>
                     </tr>

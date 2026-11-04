@@ -256,7 +256,8 @@ describe('Bank and Telebirr payments carry their proof', () => {
       await collect(receivable, { amount: 1, paymentMethod: 'mobile', transactionReference: 'TB-POS-5' });
       const history = await as(api().get('/api/v1/payments?pageSize=100'));
       const row = history.body.items.find((p: { orderId: string }) => p.orderId === sale.id);
-      expect(row).toMatchObject({ transactionReference: 'TB-POS-5', paymentReference: expect.stringMatching(/^PAY-POS-\d+$/) });
+      // Under the sale's own number (#230, M5; was: a made-up PAY-POS- reference).
+      expect(row).toMatchObject({ transactionReference: 'TB-POS-5', paymentReference: expect.stringMatching(/^POS-\d{8}-\d{4}$/) });
     });
   });
 

@@ -55,36 +55,6 @@ export interface SalesSummary {
   rowCount: number;
 }
 
-/** The parts of the collected-cash profit, as the database sums them. */
-export interface NetProfitParts {
-  cashSalesRevenue: string;
-  orderDiscounts: string;
-  orderCost: string;
-  posCost: string;
-  returnsValue: string;
-  returnsCost: string;
-  exchangeAdjustment: string;
-  collectedCreditRevenue: string;
-  outstandingReceivables: string;
-  posRevenue: string;
-  posDiscounts: string;
-}
-
-/** Collected-cash profit (Cash & Receivables cards); see sales.policy netProfit(). */
-export interface NetProfitResult {
-  netProfit: number;
-  fulfilledRevenue: number;     // cash orders + collected credit + cash POS
-  purchaseCost: number;
-  totalDiscounts: number;
-  returnsValue: number;
-  returnsCost: number;
-  exchangeAdjustment: number;
-  cashSalesRevenue: number;
-  creditSalesRevenue: number;
-  collectedCreditRevenue: number;
-  outstandingReceivables: number;
-}
-
 export interface OrderTotalsRow {
   total_sales: string;
   total_orders: number;

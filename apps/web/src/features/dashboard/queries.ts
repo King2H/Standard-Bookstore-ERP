@@ -41,16 +41,16 @@ export function usePeriodKpis(period: KpiPeriod, branchId?: number) {
 }
 
 /** A report read with the Dashboard's filters, fresh for 30 seconds. */
-function useReport<T>(name: string, params: ReportParams, read: (p: ReportParams) => Promise<T>) {
+function useReport<T>(name: string, params: ReportParams, read: (p: ReportParams) => Promise<T>, enabled = true) {
   return useQuery({
-    queryKey: reportKeys.report(name, params), queryFn: () => read(params),
+    queryKey: reportKeys.report(name, params), queryFn: () => read(params), enabled,
     staleTime: 30_000, refetchOnWindowFocus: true,
   });
 }
 
 export const useInventoryReport = (params: ReportParams) => useReport('inventory', params, getInventoryReport);
 export const useSalesReport = (params: ReportParams) => useReport('sales', params, getSalesReport);
-export const usePaymentReport = (params: ReportParams) => useReport('payments', params, getPaymentReport);
+export const usePaymentReport = (params: ReportParams, enabled = true) => useReport('payments', params, getPaymentReport, enabled);
 export const useExchangeReport = (params: ReportParams) => useReport('exchanges', params, getExchangeReport);
 export const useCustomerReport = (params: ReportParams) => useReport('customers', params, getCustomerReport);
 export const useGrossProfitTrend = (params: ReportParams) => useReport('sales/gross-profit-trend', params, getGrossProfitTrend);

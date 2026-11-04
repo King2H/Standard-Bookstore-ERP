@@ -13,14 +13,13 @@ export function InventoryInsights({ params }: { params: ReportParams }) {
     <Section title="Inventory Insights" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>} {...sectionState(query)}>
       {inventory ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+          {/* Low and out of stock are on the Stock Alerts card and its list, once (#230, 3a). */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             {[
               { label: 'Books', value: inventory.summary.totalBooks, color: 'text-gray-900 dark:text-white' },
               { label: 'Units', value: inventory.summary.totalStockUnits, color: 'text-gray-900 dark:text-white' },
               { label: 'Available', value: inventory.summary.availableStock, color: 'text-emerald-600 dark:text-emerald-400' },
               { label: 'Reserved', value: inventory.summary.reservedStock, color: 'text-blue-600 dark:text-blue-400' },
-              { label: 'Low Stock', value: inventory.summary.lowStockItems, color: 'text-amber-600 dark:text-amber-400' },
-              { label: 'Out of Stock', value: inventory.summary.outOfStockItems, color: 'text-red-600 dark:text-red-400' },
             ].map(c => (
               <div key={c.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
                 <p className="text-xs text-gray-500 dark:text-gray-400">{c.label}</p>
@@ -43,20 +42,6 @@ export function InventoryInsights({ params }: { params: ReportParams }) {
                 ))}
               </div>
             </>
-          )}
-          {inventory.lowStockItems.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-2">Low Stock Alerts</p>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {inventory.lowStockItems.slice(0, 6).map(item => (
-                  <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 rounded-sm px-2 py-1">
-                    <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
-                    <span className="text-gray-500 dark:text-gray-400 truncate">{item.locationName}</span>
-                    <span className="text-amber-700 dark:text-amber-300 font-medium whitespace-nowrap">{item.quantity}/{item.reorderPoint}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           )}
         </>
       ) : <Empty />}

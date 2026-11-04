@@ -3,8 +3,7 @@ import { reportDb } from '../../../db/reportDb.js';
 import * as policy from './sales.policy.js';
 import * as sales from './sales.repository.js';
 import { salesLines } from './salesLines.repository.js';
-import { netProfitParts } from './netProfit.repository.js';
-import type { NetProfitResult, ReportFilters, ReportScope, SalesSummary } from './sales.types.js';
+import type { ReportFilters, ReportScope, SalesSummary } from './sales.types.js';
 
 /**
  * Sales report use cases (#22). Reports only read, on the report connection
@@ -18,19 +17,13 @@ export async function salesSummary(scope: ReportScope): Promise<SalesSummary> {
   return policy.summarizeLines(await salesLines(reportDb, scope));
 }
 
-/** The collected-cash profit for a scope (Cash & Receivables cards). */
-export async function netProfit(scope: ReportScope): Promise<NetProfitResult> {
-  return policy.netProfit(await netProfitParts(reportDb, scope));
-}
-
 export async function getSalesReport(filters: ReportFilters): Promise<SalesReport> {
   const scope: ReportScope = { branchId: filters.branchId, dateFrom: filters.dateFrom, dateTo: filters.dateTo };
-  const [orders, pos, byPeriod, byBranch, profit, summary] = await Promise.all([
+  const [orders, pos, byPeriod, byBranch, summary] = await Promise.all([
     sales.orderTotals(reportDb, scope),
     sales.posTotals(reportDb, scope),
     sales.orderTotalsByPeriod(reportDb, filters),
     sales.orderTotalsByBranch(reportDb, scope),
-    netProfit(scope),
     salesSummary(scope),
   ]);
   return {
@@ -40,13 +33,6 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
       averageOrderValue: num(orders.avg_order_value),
       totalPosSales: num(pos.total_pos_sales),
       totalPosTransactions: pos.total_pos_transactions,
-      netProfit: profit.netProfit,
-      purchaseCost: profit.purchaseCost,
-      totalDiscounts: profit.totalDiscounts,
-      fulfilledRevenue: profit.fulfilledRevenue,
-      outstandingReceivables: profit.outstandingReceivables,
-      cashSalesRevenue: profit.cashSalesRevenue,
-      creditSalesRevenue: profit.creditSalesRevenue,
       netSales: summary.netSalesRevenue,
       grossProfit: summary.grossProfit,
       grossMarginPct: summary.grossMarginPct,

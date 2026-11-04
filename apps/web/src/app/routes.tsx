@@ -53,7 +53,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'returns'      && <ReturnsPage initialContext={initialContext} />}
         {page === 'orders'       && <OrdersPage initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'binding-jobs' && <BindingJobsPage />}
-        {page === 'payments'     && <PaymentsPage initialContext={initialContext} />}
+        {page === 'payments'     && <PaymentsPage initialContext={initialContext} onNavigate={navigateTo} />}
         {page === 'exchanges'    && <ExchangesPage />}
         {page === 'cash-sessions'&& <CashSessionsPage initialContext={initialContext} />}
         {page === 'day-close'    && <DayClosePage initialContext={initialContext} />}

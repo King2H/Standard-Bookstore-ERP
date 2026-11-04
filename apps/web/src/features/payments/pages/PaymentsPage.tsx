@@ -26,7 +26,11 @@ const IDLE = 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:te
  * `tab` ('history' or 'money'), `dateFrom` and `dateTo`; the Dashboard's Cash
  * Collected opens Money In & Out (owner decision b).
  */
-export default function PaymentsPage({ initialContext = {} }: { initialContext?: Record<string, string> }) {
+export default function PaymentsPage({ initialContext = {}, onNavigate }: {
+  initialContext?: Record<string, string>;
+  /** Opens a POS payment's sale in Sales History (#230, M5). */
+  onNavigate?: (page: string, context?: Record<string, string>) => void;
+}) {
   const { showToast } = useToast();
   const { dateFrom, dateTo } = initialContext;
   const { data: me } = useMyProfile();
@@ -94,7 +98,7 @@ export default function PaymentsPage({ initialContext = {} }: { initialContext?:
           setPage={setPage} setPageSize={setPageSize} onCollect={collect} />
       )}
       {tab === 'collect' && selected && <CollectPayment key={`${selected.sourceType}:${selected.id}`} item={selected} onDone={close} onCancel={close} />}
-      {tab === 'history' && <PaymentHistory initialRange={asked === 'history' ? linkedRange : undefined} />}
+      {tab === 'history' && <PaymentHistory initialRange={asked === 'history' ? linkedRange : undefined} onNavigate={onNavigate} />}
       {tab === 'money' && showMoney && <MoneyInOut initialRange={asked === 'money' ? linkedRange : undefined} />}
     </div>
   );

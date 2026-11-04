@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { KpiPeriod } from '@bms/shared';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { PENDING_FULFILLMENT } from '../../orders/rules.js';
@@ -12,13 +11,18 @@ import { HighlightKpiCard, KpiCard, kpiToneClass, PERIOD_LABELS, PeriodSelector,
  * rows behind its figure (owner decision b; before, Payment History, order
  * payments only).
  */
-export function Overview({ params, onNavigate }: {
+/** Books low or out of stock, counted apart (#230, owner decision 3a). */
+const stockAlerts = (k: { lowStockItems: number; outOfStockItems: number } | undefined) => (k ? k.lowStockItems + k.outOfStockItems : 0);
+
+export function Overview({ params, salesPeriod, setSalesPeriod, onNavigate }: {
   params: ReportParams;
+  /** The period of Sales Performance and Cash Collected, and of Payment Methods (#230, K7). */
+  salesPeriod: KpiPeriod;
+  setSalesPeriod: (period: KpiPeriod) => void;
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }) {
   const currency = useCurrency();
   const short = (n: number) => shortMoney(n, currency);
-  const [salesPeriod, setSalesPeriod] = useState<KpiPeriod>('today');
   const { data: kpis, isLoading: kpiLoading, dataUpdatedAt: kpiUpdatedAt } = useKpis(params.branchId);
   const { data: periodKpis, isLoading: periodLoading } = usePeriodKpis(salesPeriod, params.branchId);
   const { data: inventory } = useInventoryReport(params);
@@ -141,11 +145,11 @@ export function Overview({ params, onNavigate }: {
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Inventory &amp; Operations</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <KpiCard
-                  label="Low Stock Items"
-                  value={kpis.lowStockAlerts.toString()}
-                  sub={kpis.lowStockAlerts > 0 ? 'At or below reorder threshold' : 'All good'}
+                  label="Stock Alerts"
+                  value={`Low ${kpis.lowStockItems} · Out ${kpis.outOfStockItems}`}
+                  sub={stockAlerts(kpis) > 0 ? 'Low: at or below the reorder point · Out: none left' : 'All good'}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
-                  color={kpiToneClass(warningCountTone(kpis.lowStockAlerts))}
+                  color={kpiToneClass(warningCountTone(stockAlerts(kpis)))}
                   onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true' })}
                 />
                 <KpiCard
@@ -174,31 +178,33 @@ export function Overview({ params, onNavigate }: {
       </div>
 
       {/* ── Alerts & Activity ── */}
-      {inventory && (kpis?.lowStockAlerts ?? 0) + (kpis?.pendingOrders ?? 0) > 0 && (
+      {inventory && stockAlerts(kpis) + (kpis?.pendingOrders ?? 0) > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Low stock alerts */}
-          {(kpis?.lowStockAlerts ?? 0) > 0 && inventory.lowStockItems.length > 0 && (
+          {stockAlerts(kpis) > 0 && inventory.stockAlerts.length > 0 && (
             <div
               className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 cursor-pointer hover:border-amber-400 dark:hover:border-amber-600 transition-colors"
               onClick={() => onNavigate?.('inventory', { lowStockOnly: 'true' })}
             >
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-amber-600 dark:text-amber-400 shrink-0"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></span>
-                <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Low Stock Items</h3>
+                <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Needs Stock</h3>
                 <span className="ml-auto text-xs font-medium bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full">
-                  {kpis?.lowStockAlerts}
+                  {stockAlerts(kpis)}
                 </span>
               </div>
               <div className="space-y-1.5">
-                {inventory.lowStockItems.slice(0, 4).map(item => (
+                {inventory.stockAlerts.slice(0, 4).map(item => (
                   <div key={`${item.bookId}-${item.locationId}`} className="flex items-center gap-2 text-xs">
                     <span className="flex-1 min-w-0 text-gray-700 dark:text-gray-300 truncate">{item.title}</span>
                     <span className="text-gray-500 dark:text-gray-400 truncate max-w-[80px]">{item.locationName}</span>
-                    <span className="font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">{item.quantity} left</span>
+                    {item.status === 'out'
+                      ? <span className="font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">Out</span>
+                      : <span className="font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap">Low · {item.quantity} left</span>}
                   </div>
                 ))}
-                {inventory.lowStockItems.length > 4 && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">+{inventory.lowStockItems.length - 4} more — View Inventory</p>
+                {inventory.stockAlerts.length > 4 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">+{inventory.stockAlerts.length - 4} more — View Inventory</p>
                 )}
               </div>
             </div>

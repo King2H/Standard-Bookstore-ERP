@@ -157,7 +157,10 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
                 </td>
                 <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">{row.reorderPoint}</td>
                 <td className="px-4 py-3 text-center">
-                  {row.isLowStock ? (
+                  {/* None on hand is out, not low (#230, S2). */}
+                  {row.isLowStock && row.quantity <= 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 rounded-full font-medium">Out</span>
+                  ) : row.isLowStock ? (
                     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 rounded-full font-medium">⚠ Low</span>
                   ) : (
                     <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400 rounded-full font-medium">OK</span>

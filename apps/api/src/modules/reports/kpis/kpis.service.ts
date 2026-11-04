@@ -1,6 +1,6 @@
 import { Money, type KpiPeriod, type KpiReport, type PeriodKpis } from '@bms/shared';
 import { reportDb } from '../../../db/reportDb.js';
-import { netProfit, salesSummary } from '../sales/sales.service.js';
+import { salesSummary } from '../sales/sales.service.js';
 import { pctChange } from '../sales/sales.policy.js';
 import { moneyTotals } from '../payments/paymentReports.repository.js';
 import * as kpis from './kpis.repository.js';
@@ -22,10 +22,8 @@ export async function getKpis(branchId: number | undefined): Promise<KpiReport> 
   const cal = await kpis.calendar(reportDb);
   const today = { branchId, dateFrom: cal.today, dateTo: cal.today };
   const month = { branchId, dateFrom: cal.month_start, dateTo: cal.today };
-  const [f, dailyProfit, monthlyProfit, daily, monthly, todayCash, monthCash] = await Promise.all([
+  const [f, daily, monthly, todayCash, monthCash] = await Promise.all([
     kpis.kpiFigures(reportDb, branchId),
-    netProfit(today),
-    netProfit(month),
     salesSummary(today),
     salesSummary(month),
     cash(branchId, today.dateFrom, today.dateTo),
@@ -39,23 +37,12 @@ export async function getKpis(branchId: number | undefined): Promise<KpiReport> 
     monthlyRevenue: monthCash.net,
     averageOrderValue: policy.total(f.averageOrderValue),
     totalActiveCustomers: f.activeCustomers,
-    lowStockAlerts: f.lowStockAlerts,
+    lowStockItems: f.lowStockItems,
+    outOfStockItems: f.outOfStockItems,
     pendingOrders: f.pendingOrders,
     totalExchangesToday: f.exchangesToday,
     outstandingBalance: policy.total(f.outstanding),
-    // Collected-cash view for the month (Cash & Receivables cards).
-    netProfit: monthlyProfit.netProfit,
-    fulfilledRevenue: monthlyProfit.fulfilledRevenue,
-    outstandingReceivables: monthlyProfit.outstandingReceivables,
-    cashSalesRevenue: monthlyProfit.cashSalesRevenue,
-    creditSalesRevenue: monthlyProfit.creditSalesRevenue,
-    collectedCreditRevenue: monthlyProfit.collectedCreditRevenue,
-    purchaseCost: monthlyProfit.purchaseCost,
-    totalDiscounts: monthlyProfit.totalDiscounts,
-    grossProfit: Money.of(monthlyProfit.fulfilledRevenue).minus(monthlyProfit.purchaseCost).toNumber(),
-    dailyNetProfit: dailyProfit.netProfit,
-    monthlyNetProfit: monthlyProfit.netProfit,
-    // Accrual view over the sales lines: the dashboard's one "Net Profit" figure.
+    // The shop's one profit (#230, 1b): over the sales lines, by the day of the sale.
     dailyNetSalesRevenue: daily.netSalesRevenue,
     monthlyNetSalesRevenue: monthly.netSalesRevenue,
     dailyNetProfitUnified: daily.grossProfit,

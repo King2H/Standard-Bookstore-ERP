@@ -48,7 +48,7 @@ function profile(roles: string[], isAllBranches = false): ProfileResponse {
 }
 
 const ZERO_KPIS = Object.fromEntries(Object.keys(KpiReportSchema.shape).map((k) => [k, 0])) as KpiReport;
-const KPIS = contract(KpiReportSchema, { ...ZERO_KPIS, outstandingBalance: 8000, overdueReceivablesAmount: 1200, lowStockAlerts: 2, pendingOrders: 1 });
+const KPIS = contract(KpiReportSchema, { ...ZERO_KPIS, outstandingBalance: 8000, overdueReceivablesAmount: 1200, lowStockItems: 2, pendingOrders: 1 });
 const PERIOD = contract(PeriodKpisSchema, {
   period: 'today', dateFrom: '2026-10-20', dateTo: '2026-10-20', netSales: 3000, grossProfit: 2000, grossMarginPct: 66.7,
   previous: { dateFrom: '2026-10-19', dateTo: '2026-10-19', netSales: 2500, grossProfit: 1500, grossMarginPct: 60 },
@@ -56,7 +56,7 @@ const PERIOD = contract(PeriodKpisSchema, {
 });
 const INVENTORY = contract(InventoryReportSchema, {
   summary: { totalBooks: 1, totalStockUnits: 9, availableStock: 9, reservedStock: 0, lowStockItems: 2, outOfStockItems: 0 },
-  lowStockItems: [], topSellingBooks: [], stockMovement: [],
+  stockAlerts: [], topSellingBooks: [], stockMovement: [],
 });
 const LEDGER: PaymentsLedgerRow[] = ([
   ['IN', 'ORDER', 'ORD-20261020-0001', 14.99], ['IN', 'ORDER', 'ORD-20261020-0002', 14.99], ['IN', 'POS', 'POS-20261020-0001', 29.98],
