@@ -46,15 +46,11 @@ export const SalesReportSchema = z.object({
     averageOrderValue: z.number(),
     totalPosSales: z.number(),
     totalPosTransactions: z.number().int(),
-    /** Collected-cash view (Cash & Receivables cards). */
-    netProfit: z.number(),
-    purchaseCost: z.number(),
-    totalDiscounts: z.number(),
-    fulfilledRevenue: z.number(),
-    outstandingReceivables: z.number(),
-    cashSalesRevenue: z.number(),
-    creditSalesRevenue: z.number(),
-    /** Accrual view over the sales lines (Sales Performance cards, the export). */
+    /**
+     * The shop's one profit (#230, owner decision 1b): over the sales lines, by
+     * the day of the sale, as the Sales Performance cards and the export show
+     * it. Cash is reported by the Payments report (Money In & Out).
+     */
     netSales: z.number(),
     grossProfit: z.number(),
     grossMarginPct: z.number(),
@@ -140,22 +136,14 @@ export const KpiReportSchema = z.object({
   monthlyRevenue: z.number(),
   averageOrderValue: z.number(),
   totalActiveCustomers: z.number().int(),
-  lowStockAlerts: z.number().int(),
+  /** Books above 0 and at or below their reorder point (#230, 3a). */
+  lowStockItems: z.number().int(),
+  /** Books with none on hand (0 or less). */
+  outOfStockItems: z.number().int(),
   /** Confirmed orders not yet fulfilled. */
   pendingOrders: z.number().int(),
   totalExchangesToday: z.number().int(),
   outstandingBalance: z.number(),
-  netProfit: z.number(),
-  fulfilledRevenue: z.number(),
-  outstandingReceivables: z.number(),
-  cashSalesRevenue: z.number(),
-  creditSalesRevenue: z.number(),
-  collectedCreditRevenue: z.number(),
-  purchaseCost: z.number(),
-  totalDiscounts: z.number(),
-  grossProfit: z.number(),
-  dailyNetProfit: z.number(),
-  monthlyNetProfit: z.number(),
   dailyNetSalesRevenue: z.number(),
   monthlyNetSalesRevenue: z.number(),
   dailyNetProfitUnified: z.number(),
@@ -205,10 +193,13 @@ export const InventoryReportSchema = z.object({
     totalStockUnits: z.number().int(),
     availableStock: z.number().int(),
     reservedStock: z.number().int(),
+    /** Above 0 and at or below the reorder point (#230, 3a). */
     lowStockItems: z.number().int(),
+    /** None on hand: 0 or less. */
     outOfStockItems: z.number().int(),
   }),
-  lowStockItems: z.array(
+  /** The books needing stock, each low or out, fewest on hand first (at most 50). */
+  stockAlerts: z.array(
     z.object({
       bookId: z.number().int(),
       title: z.string(),
@@ -216,6 +207,7 @@ export const InventoryReportSchema = z.object({
       locationName: z.string(),
       quantity: z.number().int(),
       reorderPoint: z.number().int(),
+      status: z.enum(['low', 'out']),
     }),
   ),
   /** POS sales in the range. */

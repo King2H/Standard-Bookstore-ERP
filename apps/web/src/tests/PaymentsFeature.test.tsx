@@ -94,6 +94,7 @@ function stubApi() {
 }
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
+const navigate = vi.fn();
 const posted = (path: string) => calls.filter((c) => c.method === 'POST' && c.path === path).map((c) => c.body);
 const anyPost = () => calls.some((c) => c.method === 'POST');
 
@@ -101,7 +102,7 @@ async function openPage(initialContext: Record<string, string> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <ToastProvider><PaymentsPage initialContext={initialContext} /></ToastProvider>
+      <ToastProvider><PaymentsPage initialContext={initialContext} onNavigate={navigate} /></ToastProvider>
     </QueryClientProvider>,
   );
   await settle();
@@ -259,18 +260,29 @@ describe('payment history', () => {
   it('offers only the statuses a payment can have (was: also pending and failed, which nothing writes)', async () => {
     await openHistory();
     const options = within(screen.getByLabelText('Status')).getAllByRole('option').map((o) => (o as HTMLOptionElement).value);
-    expect(options).toEqual(['', 'success', 'refunded', 'partially_refunded']);
+    expect(options).toEqual(['', 'success', 'refunded', 'partially_refunded', 'voided']);
   });
 
   it('opens one row when an order payment and a POS collection share an id (was: both)', async () => {
     history = [
       payment({ transactionReference: 'ORDER-REF' }),
-      payment({ paymentReference: 'PAY-POS-11', sourceType: 'pos', entityNumber: 'TXN-20261018-0007', transactionReference: 'POS-REF', orderStatus: null }),
+      payment({ paymentReference: 'POS-20261018-0007', sourceType: 'pos', entityNumber: 'POS-20261018-0007', transactionReference: 'POS-REF', orderStatus: null }),
     ];
     const user = await openHistory();
     await user.click(await screen.findByText('PAY-20261018-0011'));
     expect(screen.getByText('Tx Ref: ORDER-REF')).toBeInTheDocument();
     expect(screen.queryByText('Tx Ref: POS-REF')).not.toBeInTheDocument();
+  });
+
+  it("lists a POS payment under its sale's number, voided with its sale, and opens the sale (#230, M5; was: PAY-POS-, success, \"POS Returns only\")", async () => {
+    navigate.mockClear();
+    history = [payment({ id: '21', paymentReference: 'POS-20261018-0021', sourceType: 'pos', entityNumber: 'POS-20261018-0021', status: 'voided', orderStatus: null })];
+    const user = await openHistory();
+    const row = (await screen.findAllByText('POS-20261018-0021'))[0].closest('tr') as HTMLElement;
+    expect(within(row).getByText('voided')).toBeInTheDocument();
+    expect(screen.queryByText('POS Returns only')).not.toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: 'Open sale' }));
+    expect(navigate).toHaveBeenCalledWith('pos', { transactionNumber: 'POS-20261018-0021' });
   });
 
   it('offers Refund to the refunding roles on order payments only', async () => {
@@ -279,7 +291,7 @@ describe('payment history', () => {
       payment({ id: '12', paymentReference: 'PAY-FULFILLED', orderStatus: 'FULFILLED' }),
       // A part-delivered order's money comes back through a return or by cancelling its rest (#174).
       payment({ id: '14', paymentReference: 'PAY-PART', orderStatus: 'PART_DELIVERED' }),
-      payment({ id: '13', paymentReference: 'PAY-POS-13', sourceType: 'pos', orderStatus: null }),
+      payment({ id: '13', paymentReference: 'POS-20261018-0013', sourceType: 'pos', entityNumber: 'POS-20261018-0013', orderStatus: null }),
     ];
     await openHistory();
     await screen.findByText('PAY-20261018-0011');

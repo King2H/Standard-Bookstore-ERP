@@ -4,7 +4,7 @@ import { useCurrency } from '../../../lib/useCurrency.js';
 import type { ReportParams } from '../api.js';
 import { useGrossProfitTrend, useSalesReport } from '../queries.js';
 import { shortMoney } from './cards.js';
-import { CHART_TOOLTIP_PROPS, Empty, periodLabel, Section, sectionState, thousands } from './charts.js';
+import { CHART_TOOLTIP_PROPS, Empty, periodLabel, Section, sectionState, axisAmount } from './charts.js';
 
 const DISCOUNT_TYPES = ['Normal', 'Merchant', 'Special'] as const;
 
@@ -35,7 +35,7 @@ export function SalesTrend({ params }: { params: ReportParams }) {
             <LineChart data={sales.byPeriod.map(r => ({ ...r, period: periodLabel(r.period, params.groupBy) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={thousands} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={axisAmount} />
               <Tooltip formatter={(v: number) => formatCurrency(v, currency)} {...CHART_TOOLTIP_PROPS} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="totalSales" name={`Order Sales (${currency})`} stroke="#3b82f6" strokeWidth={2} dot={false} />
@@ -58,7 +58,7 @@ export function BranchSales({ params }: { params: ReportParams }) {
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={sales.byBranch} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={thousands} />
+            <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={axisAmount} />
             <YAxis type="category" dataKey="branchName" tick={{ fontSize: 10 }} width={80} />
             <Tooltip formatter={(v: number) => formatCurrency(v, currency)} {...CHART_TOOLTIP_PROPS} />
             <Bar dataKey="totalSales" name={`Order Sales (${currency})`} fill="#3b82f6" radius={[0, 4, 4, 0]} />
@@ -81,7 +81,7 @@ export function GrossProfitTrendSection({ params }: { params: ReportParams }) {
           <LineChart data={trend.map(r => ({ ...r, period: periodLabel(r.period, params.groupBy) }))}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} tickFormatter={thousands} />
+            <YAxis tick={{ fontSize: 10 }} tickFormatter={axisAmount} />
             <Tooltip formatter={(v: number) => formatCurrency(v, currency)} {...CHART_TOOLTIP_PROPS} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line type="monotone" dataKey="netSales" name="Net Sales" stroke="#3b82f6" strokeWidth={2} dot={false} />

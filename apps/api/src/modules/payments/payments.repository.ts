@@ -203,9 +203,10 @@ function whereAll(conditions: RawBuilder<unknown>[]): RawBuilder<unknown> {
 }
 
 /**
- * Payment history of a branch: order payments, collections on POS credit
- * sales, and collections on exchange differences (booked in the ledger),
- * newest first.
+ * Payment history of a branch: order payments, every POS payment (taken at
+ * the sale or collected later, under the sale's number, voided with its
+ * sale: #230, owner decision 2a), and collections on exchange differences
+ * (booked in the ledger), newest first.
  */
 export async function listHistory(q: Queryable, filter: PaymentFilter, page: Page): Promise<{ items: PaymentRecord[]; total: number }> {
   const conditions: RawBuilder<unknown>[] = [sql`u.branch_id = ${filter.branchId}`];
@@ -225,12 +226,11 @@ export async function listHistory(q: Queryable, filter: PaymentFilter, page: Pag
     FROM order_payments p
     JOIN orders o ON o.id = p.order_id
     UNION ALL
-    SELECT tp.id::text, 'PAY-POS-' || tp.id, t.id::text, t.transaction_number,
-           'pos', tp.amount, t.currency, tp.method, 'success', tp.reference,
-           tp.payer_bank, 'POS Credit Sale Collection', tp.created_at, tp.created_at, t.staff_id, NULL::integer, NULL::text, t.branch_id
+    SELECT tp.id::text, t.transaction_number, t.id::text, t.transaction_number,
+           'pos', tp.amount, t.currency, tp.method, CASE WHEN t.status = 'voided' THEN 'voided' ELSE 'success' END, tp.reference,
+           tp.payer_bank, NULL::text, tp.created_at, tp.created_at, t.staff_id, tp.bank_account_id, NULL::text, t.branch_id
     FROM transaction_payments tp
     JOIN transactions t ON t.id = tp.transaction_id
-    JOIN receivables r ON r.source_type = 'pos_credit_sale' AND r.source_entity_id = t.id
     UNION ALL
     SELECT ft.id::text, 'PAY-EXC-' || ft.id, e.id::text, e.exchange_reference,
            'exchange', ft.amount, ft.currency, ft.method, 'success', ft.meta->>'transactionReference',

@@ -120,3 +120,20 @@ describe('Sales History: the list', () => {
     expect(list?.path).not.toContain('branchId');
   });
 });
+
+describe('Sales History: one sale (#230, M5)', () => {
+  it('opens on the sale a payment belongs to, from Payment History', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ToastProvider><PosPage userRole="Manager" userPermissions={[]} initialContext={{ transactionNumber: 'POS-20261018-0001' }} /></ToastProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('POS-20261018-0001')).toBeInTheDocument();
+    expect(calls.some((c) => c.path.startsWith('/pos/transactions?') && c.path.includes('transactionNumber=POS-20261018-0001'))).toBe(true);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Show all sales' }));
+    await settle();
+    expect(calls.filter((c) => c.path.startsWith('/pos/transactions?')).pop()?.path).not.toContain('transactionNumber');
+  });
+});

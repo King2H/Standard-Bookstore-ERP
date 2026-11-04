@@ -34308,7 +34308,8 @@
                               "success",
                               "failed",
                               "refunded",
-                              "partially_refunded"
+                              "partially_refunded",
+                              "voided"
                             ]
                           },
                           "transactionReference": {
@@ -34680,7 +34681,8 @@
                         "success",
                         "failed",
                         "refunded",
-                        "partially_refunded"
+                        "partially_refunded",
+                        "voided"
                       ]
                     },
                     "transactionReference": {
@@ -34851,7 +34853,8 @@
                         "success",
                         "failed",
                         "refunded",
-                        "partially_refunded"
+                        "partially_refunded",
+                        "voided"
                       ]
                     },
                     "transactionReference": {
@@ -35112,7 +35115,8 @@
                 "success",
                 "failed",
                 "refunded",
-                "partially_refunded"
+                "partially_refunded",
+                "voided"
               ]
             }
           },
@@ -35181,7 +35185,8 @@
                               "success",
                               "failed",
                               "refunded",
-                              "partially_refunded"
+                              "partially_refunded",
+                              "voided"
                             ]
                           },
                           "transactionReference": {
@@ -35440,7 +35445,8 @@
                         "success",
                         "failed",
                         "refunded",
-                        "partially_refunded"
+                        "partially_refunded",
+                        "voided"
                       ]
                     },
                     "transactionReference": {
@@ -54515,7 +54521,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "lowStockItems": {
+                    "stockAlerts": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -54545,6 +54551,13 @@
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "low",
+                              "out"
+                            ]
                           }
                         },
                         "required": [
@@ -54553,7 +54566,8 @@
                           "locationId",
                           "locationName",
                           "quantity",
-                          "reorderPoint"
+                          "reorderPoint",
+                          "status"
                         ],
                         "additionalProperties": false
                       }
@@ -54619,7 +54633,7 @@
                   },
                   "required": [
                     "summary",
-                    "lowStockItems",
+                    "stockAlerts",
                     "topSellingBooks",
                     "stockMovement"
                   ],
@@ -54908,7 +54922,12 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
-                    "lowStockAlerts": {
+                    "lowStockItems": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "outOfStockItems": {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
@@ -54924,39 +54943,6 @@
                       "maximum": 9007199254740991
                     },
                     "outstandingBalance": {
-                      "type": "number"
-                    },
-                    "netProfit": {
-                      "type": "number"
-                    },
-                    "fulfilledRevenue": {
-                      "type": "number"
-                    },
-                    "outstandingReceivables": {
-                      "type": "number"
-                    },
-                    "cashSalesRevenue": {
-                      "type": "number"
-                    },
-                    "creditSalesRevenue": {
-                      "type": "number"
-                    },
-                    "collectedCreditRevenue": {
-                      "type": "number"
-                    },
-                    "purchaseCost": {
-                      "type": "number"
-                    },
-                    "totalDiscounts": {
-                      "type": "number"
-                    },
-                    "grossProfit": {
-                      "type": "number"
-                    },
-                    "dailyNetProfit": {
-                      "type": "number"
-                    },
-                    "monthlyNetProfit": {
                       "type": "number"
                     },
                     "dailyNetSalesRevenue": {
@@ -54997,21 +54983,11 @@
                     "monthlyRevenue",
                     "averageOrderValue",
                     "totalActiveCustomers",
-                    "lowStockAlerts",
+                    "lowStockItems",
+                    "outOfStockItems",
                     "pendingOrders",
                     "totalExchangesToday",
                     "outstandingBalance",
-                    "netProfit",
-                    "fulfilledRevenue",
-                    "outstandingReceivables",
-                    "cashSalesRevenue",
-                    "creditSalesRevenue",
-                    "collectedCreditRevenue",
-                    "purchaseCost",
-                    "totalDiscounts",
-                    "grossProfit",
-                    "dailyNetProfit",
-                    "monthlyNetProfit",
                     "dailyNetSalesRevenue",
                     "monthlyNetSalesRevenue",
                     "dailyNetProfitUnified",
@@ -58243,27 +58219,6 @@
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
                         },
-                        "netProfit": {
-                          "type": "number"
-                        },
-                        "purchaseCost": {
-                          "type": "number"
-                        },
-                        "totalDiscounts": {
-                          "type": "number"
-                        },
-                        "fulfilledRevenue": {
-                          "type": "number"
-                        },
-                        "outstandingReceivables": {
-                          "type": "number"
-                        },
-                        "cashSalesRevenue": {
-                          "type": "number"
-                        },
-                        "creditSalesRevenue": {
-                          "type": "number"
-                        },
                         "netSales": {
                           "type": "number"
                         },
@@ -58318,13 +58273,6 @@
                         "averageOrderValue",
                         "totalPosSales",
                         "totalPosTransactions",
-                        "netProfit",
-                        "purchaseCost",
-                        "totalDiscounts",
-                        "fulfilledRevenue",
-                        "outstandingReceivables",
-                        "cashSalesRevenue",
-                        "creditSalesRevenue",
                         "netSales",
                         "grossProfit",
                         "grossMarginPct",

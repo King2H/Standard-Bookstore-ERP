@@ -20,7 +20,7 @@ export default function PosPage({ userRole, userPermissions, initialContext = {}
   initialContext?: Record<string, string>;
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }) {
-  const [tab, setTab] = useState<Tab>(initialContext.dateFrom || initialContext.dateTo ? 'history' : 'pos');
+  const [tab, setTab] = useState<Tab>(initialContext.dateFrom || initialContext.dateTo || initialContext.transactionNumber ? 'history' : 'pos');
   const { data: cash, refetch } = useCurrentCashSession();
   const [refused, setRefused] = useState(false);
   const hasSession = !!cash?.session;
@@ -72,7 +72,7 @@ export default function PosPage({ userRole, userPermissions, initialContext = {}
       userPermissions={userPermissions}
       tabBar={tabBar}
       view={tab}
-      history={<SalesHistory initialDateFrom={initialContext.dateFrom} initialDateTo={initialContext.dateTo} onNavigate={onNavigate} />}
+      history={<SalesHistory initialDateFrom={initialContext.dateFrom} initialDateTo={initialContext.dateTo} initialTransactionNumber={initialContext.transactionNumber} onNavigate={onNavigate} />}
       cash={<CashTab />}
       onCashSessionRequired={() => { setRefused(true); void refetch(); }}
     />

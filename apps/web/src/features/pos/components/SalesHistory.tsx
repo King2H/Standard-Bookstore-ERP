@@ -18,9 +18,11 @@ const money = (n: number) => Number(n).toFixed(2);
  * nothing returned can be voided; a credit sale's balance is collected in
  * Payments.
  */
-export function SalesHistory({ initialDateFrom = '', initialDateTo = '', onNavigate }: {
+export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initialTransactionNumber = '', onNavigate }: {
   initialDateFrom?: string;
   initialDateTo?: string;
+  /** Opened on one sale, from a payment in Payment History (#230). */
+  initialTransactionNumber?: string;
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }) {
   const { showToast } = useToast();
@@ -28,12 +30,13 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', onNavig
   const { data: me } = useMyProfile();
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [dateTo, setDateTo] = useState(initialDateTo);
+  const [transactionNumber, setTransactionNumber] = useState(initialTransactionNumber);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [voiding, setVoiding] = useState<PosTransaction | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
-  const { data, isLoading } = useSales({ page, pageSize, dateFrom, dateTo });
+  const { data, isLoading } = useSales({ page, pageSize, dateFrom, dateTo, transactionNumber: transactionNumber || undefined });
   const voidSale = useVoidSale();
 
   function confirmVoid() {
@@ -60,6 +63,12 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', onNavig
           <button onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}
             className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             Clear
+          </button>
+        )}
+        {transactionNumber && (
+          <button onClick={() => { setTransactionNumber(''); setPage(1); }}
+            className="px-2 py-1 text-xs text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
+            Show all sales
           </button>
         )}
       </div>

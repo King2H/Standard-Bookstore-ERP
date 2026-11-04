@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import type { KpiPeriod } from '@bms/shared';
 import WelcomeBanner from '../../../components/WelcomeBanner.js';
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
@@ -37,6 +38,7 @@ export default function DashboardPage({ userRole, userRoles, userPermissions, on
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [refreshing, setRefreshing] = useState(false);
+  const [salesPeriod, setSalesPeriod] = useState<KpiPeriod>('today');
   const problem = rangeProblem(draft.dateFrom, draft.dateTo);
   // A range out of order is not sent: the sections keep the last one that was.
   const applied = useRef<ReportParams>(toParams(EMPTY_DRAFT));
@@ -83,9 +85,9 @@ export default function DashboardPage({ userRole, userRoles, userPermissions, on
       <Toolbar draft={draft} setDraft={setDraft} problem={problem} allBranches={me.isAllBranches}
         kpiUpdatedAt={kpiUpdatedAt} refreshing={refreshing} onRefresh={refreshAll} onExport={exportCsv} />
 
-      <Overview params={params} onNavigate={onNavigate} />
+      <Overview params={params} salesPeriod={salesPeriod} setSalesPeriod={setSalesPeriod} onNavigate={onNavigate} />
 
-      <ReportSections params={params} onNavigate={onNavigate} />
+      <ReportSections params={params} salesPeriod={salesPeriod} onNavigate={onNavigate} />
 
     </div>
     </div>

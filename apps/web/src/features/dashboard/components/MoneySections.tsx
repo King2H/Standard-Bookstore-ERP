@@ -1,11 +1,11 @@
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import type { AgingBucket } from '@bms/shared';
+import type { AgingBucket, KpiPeriod } from '@bms/shared';
 import { formatCurrency } from '../../../lib/currency.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import type { ReportParams } from '../api.js';
-import { useExchangeReport, usePaymentReport, useReceivablesAging, useTopReturnedBooks } from '../queries.js';
-import { shortMoney } from './cards.js';
-import { CHART_TOOLTIP_PROPS, Empty, methodName, periodLabel, PIE_COLORS, Section, sectionState, thousands } from './charts.js';
+import { useExchangeReport, usePaymentReport, usePeriodKpis, useReceivablesAging, useTopReturnedBooks } from '../queries.js';
+import { PERIOD_LABELS, shortMoney } from './cards.js';
+import { CHART_TOOLTIP_PROPS, Empty, methodName, periodLabel, PIE_COLORS, Section, sectionState, axisAmount } from './charts.js';
 
 const BUCKET_COLORS: Record<AgingBucket, string> = {
   Current: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300',
@@ -15,12 +15,17 @@ const BUCKET_COLORS: Record<AgingBucket, string> = {
   '90+':   'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300',
 };
 
-export function PaymentMethods({ params }: { params: ReportParams }) {
+/**
+ * Customer money by method over the Live Overview's period, as Cash Collected
+ * counts it (#230, owner decision 4a; was: every day, under "Today").
+ */
+export function PaymentMethods({ params, period }: { params: ReportParams; period: KpiPeriod }) {
   const currency = useCurrency();
-  const query = usePaymentReport(params);
+  const range = usePeriodKpis(period, params.branchId).data;
+  const query = usePaymentReport({ ...params, dateFrom: range?.dateFrom, dateTo: range?.dateTo }, range !== undefined);
   const payments = query.data;
   return (
-    <Section title="Payment Methods" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>} {...sectionState(query)}>
+    <Section title={`Payment Methods · ${PERIOD_LABELS[period]}`} icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>} {...sectionState(query)}>
       {payments && payments.byMethod.length > 0 ? (
         <>
           <div className="grid grid-cols-2 gap-2 mb-3 text-center">
@@ -61,7 +66,7 @@ export function PaymentTrend({ params }: { params: ReportParams }) {
           <BarChart data={payments.byPeriod.map(r => ({ ...r, period: periodLabel(r.period, params.groupBy) }))}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} tickFormatter={thousands} />
+            <YAxis tick={{ fontSize: 10 }} tickFormatter={axisAmount} />
             <Tooltip formatter={(v: number) => formatCurrency(v, currency)} {...CHART_TOOLTIP_PROPS} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="collected" name="Collected" fill="#3b82f6" radius={[4, 4, 0, 0]} />

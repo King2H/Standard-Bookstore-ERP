@@ -1,5 +1,5 @@
 import { Money, type SalesLine, type SalesTotals } from '@bms/shared';
-import type { NetProfitParts, NetProfitResult, ReportFilters, SalesLineRecord, SalesSummary } from './sales.types.js';
+import type { ReportFilters, SalesLineRecord, SalesSummary } from './sales.types.js';
 
 /** Pure rules of the sales reports (A5): what counts as a sale, and the arithmetic over sales lines. */
 
@@ -158,33 +158,6 @@ export function grossProfitTrend(
       const grossProfit = netSales.minus(v.cost.round(2));
       return { period, netSales: netSales.toNumber(), grossProfit: grossProfit.toNumber(), grossMarginPct: ratioPct(grossProfit, netSales) };
     });
-}
-
-/**
- * Collected-cash profit: cash orders, collected credit and cash POS, less
- * the cost of what was sold, less returns at their refund with their
- * original cost credited back, plus exchange cash. Revenue is already net of
- * discounts, so the discounts are reported, not subtracted again.
- */
-export function netProfit(p: NetProfitParts): NetProfitResult {
-  const cashSalesRevenue = Money.of(p.cashSalesRevenue);
-  const collectedCreditRevenue = Money.of(p.collectedCreditRevenue);
-  const fulfilledRevenue = cashSalesRevenue.plus(collectedCreditRevenue).plus(p.posRevenue);
-  const purchaseCost = Money.of(p.orderCost).plus(p.posCost);
-  const profit = fulfilledRevenue.minus(purchaseCost).minus(p.returnsValue).plus(p.returnsCost).plus(p.exchangeAdjustment);
-  return {
-    netProfit: profit.toNumber(),
-    fulfilledRevenue: fulfilledRevenue.toNumber(),
-    purchaseCost: purchaseCost.toNumber(),
-    totalDiscounts: Money.of(p.orderDiscounts).plus(p.posDiscounts).toNumber(),
-    returnsValue: Money.of(p.returnsValue).toNumber(),
-    returnsCost: Money.of(p.returnsCost).toNumber(),
-    exchangeAdjustment: Money.of(p.exchangeAdjustment).toNumber(),
-    cashSalesRevenue: cashSalesRevenue.toNumber(),
-    creditSalesRevenue: collectedCreditRevenue.toNumber(),
-    collectedCreditRevenue: collectedCreditRevenue.toNumber(),
-    outstandingReceivables: Money.of(p.outstandingReceivables).toNumber(),
-  };
 }
 
 /** Percent change against the previous period; null when that was 0. */

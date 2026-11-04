@@ -52,7 +52,11 @@ function stubApi() {
     if (u.pathname === '/inventory/low-stock') return json(contract(StockLevelListResponseSchema, list([])));
     if (u.pathname === '/inventory/history') return json(contract(StockMovementListResponseSchema, list([])));
     if (u.pathname === '/inventory') {
-      return json(contract(StockLevelListResponseSchema, list([level(1, 'Animal Farm', 10, 3, 12), level(2, 'Burmese Days', 0)])));
+      return json(contract(StockLevelListResponseSchema, list([
+        level(1, 'Animal Farm', 10, 3, 12), level(2, 'Burmese Days', 0),
+        { ...level(3, 'Coming Up for Air'), quantity: 0, available: 0, isLowStock: true },
+        { ...level(4, 'Down and Out'), quantity: 3, available: 3, isLowStock: true },
+      ])));
     }
     if (u.pathname.startsWith('/inventory/damaged/')) return json(contract(StockLevelSchema, level(1, 'Animal Farm', 10, 2, 8)));
     if (method === 'PUT') return json(contract(StockLevelSchema, level(1, 'Animal Farm')));
@@ -81,6 +85,15 @@ beforeEach(() => {
   stubApi();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+describe('Stock Levels: low and out (#230, S2)', () => {
+  it('marks a book with none on hand Out, not Low (was: "⚠ Low")', async () => {
+    await renderPage();
+    expect(within(rowOf('Coming Up for Air')).getByText('Out')).toBeInTheDocument();
+    expect(within(rowOf('Coming Up for Air')).queryByText(/Low/)).not.toBeInTheDocument();
+    expect(within(rowOf('Down and Out')).getByText('⚠ Low')).toBeInTheDocument();
+  });
+});
 
 describe('Inventory: who may change stock', () => {
   it('offers a Purchasor no stock changes, which the API refuses (was: Stock In, Stock Out, Adjust and Transfer)', async () => {

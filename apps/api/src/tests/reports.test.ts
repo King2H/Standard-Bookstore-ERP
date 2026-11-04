@@ -88,7 +88,7 @@ describe('Reports — Slice 16', () => {
 
   // ── 4. Inventory report ─────────────────────────────────────────────────────
 
-  it('4. GET /api/reports/inventory → returns summary + lowStockItems + topSellingBooks + stockMovement', async () => {
+  it('4. GET /api/reports/inventory → returns summary + stockAlerts + topSellingBooks + stockMovement', async () => {
     const res = await request(getTestApp())
       .get('/api/v1/reports/inventory')
       .set('Authorization', `Bearer ${managerToken}`)
@@ -100,7 +100,7 @@ describe('Reports — Slice 16', () => {
     expect(res.body.summary).toHaveProperty('totalStockUnits');
     expect(res.body.summary).toHaveProperty('lowStockItems');
     expect(res.body.summary).toHaveProperty('outOfStockItems');
-    expect(Array.isArray(res.body.lowStockItems)).toBe(true);
+    expect(Array.isArray(res.body.stockAlerts)).toBe(true);
     expect(Array.isArray(res.body.topSellingBooks)).toBe(true);
     expect(Array.isArray(res.body.stockMovement)).toBe(true);
   });
@@ -136,7 +136,8 @@ describe('Reports — Slice 16', () => {
     expect(res.body).toHaveProperty('monthlyRevenue');
     expect(res.body).toHaveProperty('averageOrderValue');
     expect(res.body).toHaveProperty('totalActiveCustomers');
-    expect(res.body).toHaveProperty('lowStockAlerts');
+    expect(res.body).toHaveProperty('lowStockItems');
+    expect(res.body).toHaveProperty('outOfStockItems');
     expect(res.body).toHaveProperty('pendingOrders');
     expect(res.body).toHaveProperty('totalExchangesToday');
     // All values must be numeric

@@ -11,6 +11,8 @@ import { api, toQuery } from '../../lib/api.js';
  * branch is the session's: the API takes it from there.
  */
 export type SalesParams = {
+  /** One sale, opened from Payment History (#230). */
+  transactionNumber?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;

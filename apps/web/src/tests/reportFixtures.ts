@@ -27,7 +27,7 @@ export const EMPTY_REPORTS = {
   }),
   inventory: contract(InventoryReportSchema, {
     summary: { totalBooks: 0, totalStockUnits: 0, availableStock: 0, reservedStock: 0, lowStockItems: 0, outOfStockItems: 0 },
-    lowStockItems: [], topSellingBooks: [], stockMovement: [],
+    stockAlerts: [], topSellingBooks: [], stockMovement: [],
   }),
   'receivables-aging': contract(ReceivablesAgingSchema, { rows: [], byBucket: [] }),
   'sales/gross-profit-trend': contract(GrossProfitTrendSchema, []),

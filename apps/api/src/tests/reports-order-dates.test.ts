@@ -51,6 +51,7 @@ describe('Order events count on the day they happen (#175)', () => {
       `DELETE FROM order_deliveries WHERE order_id IN (${ids})`,
       `DELETE FROM order_refunds WHERE order_id IN (${ids})`,
       `DELETE FROM order_payments WHERE order_id IN (${ids})`,
+      `DELETE FROM receivables WHERE source_type = 'order_credit_sale' AND source_entity_id IN (${ids})`,
       `DELETE FROM inventory_reservations WHERE order_id IN (${ids})`,
       `DELETE FROM cash_session_movements WHERE session_id IN (SELECT id FROM cash_sessions WHERE branch_id IN (${branches}))`,
       `DELETE FROM orders WHERE branch_id IN (${branches})`,
@@ -115,8 +116,25 @@ describe('Order events count on the day they happen (#175)', () => {
       .toMatchObject({ totalSpend: orders.A.total + orders.C.total, orderCount: 2 });
   });
 
-  it('counts revenue on the delivery day (was: the day the order was created)', async () => {
-    expect((await report(4)).summary.fulfilledRevenue).toBe(0);
-    expect((await report(0)).summary.fulfilledRevenue).toBeCloseTo(orders.C.total, 2);
+  it("keeps a past day's report as it was when a credit sale of that day is paid later (#230, K2; was: the payment moved its profit)", async () => {
+    const created = await as(t.sales).post('/api/v1/orders', { locationId: location, customerId, saleType: 'credit_sale', items: [{ bookId: book, quantity: 1 }] });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect((await as(t.sales).post(`/api/v1/orders/${created.body.id}/confirm`, { dueDate: '2099-12-31' })).status).toBe(200);
+    expect((await as(t.sales).post(`/api/v1/orders/${created.body.id}/fulfill`)).status).toBe(200);
+    await at(created.body.id, `created_at = now() - interval '2 days', confirmed_at = now() - interval '2 days', fulfilled_at = now() - interval '2 days'`);
+    await db.query(`UPDATE receivables SET created_at = now() - interval '2 days' WHERE source_type = 'order_credit_sale' AND source_entity_id = $1`, [created.body.id]);
+
+    const before = (await report(2)).summary;
+    const paid = await as(t.manager).post('/api/v1/payments', { orderId: Number(created.body.id), amount: created.body.total, paymentMethod: 'cash' });
+    expect(paid.status, JSON.stringify(paid.body)).toBe(201);
+    expect((await report(2)).summary).toEqual(before);
+    // One profit (1b): the collected-cash figures are gone from the report and the KPIs.
+    for (const gone of ['netProfit', 'fulfilledRevenue', 'cashSalesRevenue', 'creditSalesRevenue', 'purchaseCost', 'totalDiscounts', 'outstandingReceivables']) {
+      expect(before).not.toHaveProperty(gone);
+    }
+    const kpis = (await as(t.manager).get('/api/v1/reports/kpis')).body;
+    for (const gone of ['netProfit', 'fulfilledRevenue', 'collectedCreditRevenue', 'grossProfit', 'dailyNetProfit', 'monthlyNetProfit']) {
+      expect(kpis).not.toHaveProperty(gone);
+    }
   });
 });

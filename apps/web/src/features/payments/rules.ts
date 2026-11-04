@@ -53,7 +53,7 @@ export const COLLECT_METHODS: Record<UnpaidSource, PaymentMethodCode[]> = {
 };
 
 /** The statuses a payment can have (was: also pending and failed, which nothing writes). */
-export const HISTORY_STATUSES = ['success', 'refunded', 'partially_refunded'] as const;
+export const HISTORY_STATUSES = ['success', 'refunded', 'partially_refunded', 'voided'] as const;
 
 /**
  * Only an order payment is refunded here: a POS sale's goes back through a

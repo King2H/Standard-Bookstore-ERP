@@ -33,7 +33,7 @@ export interface StockExportRow {
 export async function getInventoryReport(filters: ReportFilters): Promise<InventoryReport> {
   const [s, low, top, movement] = await Promise.all([
     stock.stockSummary(reportDb, filters.branchId),
-    stock.lowStock(reportDb, filters.branchId),
+    stock.stockAlerts(reportDb, filters.branchId),
     stock.topSelling(reportDb, filters),
     stock.stockMovement(reportDb, filters),
   ]);
@@ -46,13 +46,14 @@ export async function getInventoryReport(filters: ReportFilters): Promise<Invent
       lowStockItems: s.low_stock,
       outOfStockItems: s.out_of_stock,
     },
-    lowStockItems: low.map((r) => ({
+    stockAlerts: low.map((r) => ({
       bookId: r.book_id,
       title: r.title,
       locationId: r.location_id,
       locationName: r.location_name,
       quantity: r.quantity,
       reorderPoint: r.reorder_point,
+      status: r.status,
     })),
     topSellingBooks: top.map((r) => ({ bookId: r.book_id, title: r.title, unitsSold: r.units_sold, revenue: num(r.revenue) })),
     stockMovement: movement.map((r) => ({ period: r.period, stockIn: r.stock_in, stockOut: r.stock_out })),

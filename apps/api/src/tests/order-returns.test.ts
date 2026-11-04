@@ -277,7 +277,7 @@ describe('Returning a delivered customer order', () => {
       const reports = async () => {
         const money = (await as(api().get(`/api/v1/reports/payments?dateFrom=${day}&dateTo=${day}`))).body.summary;
         const sales = (await as(api().get(`/api/v1/reports/sales?dateFrom=${day}&dateTo=${day}`))).body.summary;
-        return { refunded: money.totalRefunded as number, profit: sales.netProfit as number };
+        return { refunded: money.totalRefunded as number, profit: sales.grossProfit as number };
       };
       const before = await reports();
       const o = await order(2, { credit: true });
@@ -285,8 +285,9 @@ describe('Returning a delivered customer order', () => {
       expect(res.body.refundMethod).toBe('credit_note');
       const after = await reports();
       expect(after.refunded).toBeCloseTo(before.refunded, 2);
-      // Nothing collected yet: the two copies cost 4 each, the returned one's cost comes back.
-      expect(after.profit).toBeCloseTo(before.profit - 8 + 4, 2);
+      // The sale of two counts on its day (#230: one profit, by the sale), the return takes one back
+      // once: its price off, its cost (4) back.
+      expect(after.profit).toBeCloseTo(before.profit + 2 * price - 8 - (price - 4), 2);
     });
 
     it('lists the return under the order in Returns', async () => {

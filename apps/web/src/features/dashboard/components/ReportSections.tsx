@@ -1,18 +1,21 @@
+import type { KpiPeriod } from '@bms/shared';
 import type { ReportParams } from '../api.js';
 import { AgingSummary, ExchangeActivity, PaymentMethods, PaymentTrend, TopReturnedBooks } from './MoneySections.js';
 import { BranchSales, DiscountSummary, GrossProfitTrendSection, SalesTrend } from './SalesSections.js';
 import { CustomerInsights, InventoryInsights, StockMovement } from './StockCustomerSections.js';
 
 /** The report sections under the Live Overview, read with the Dashboard's filters. */
-export function ReportSections({ params, onNavigate }: {
+export function ReportSections({ params, salesPeriod, onNavigate }: {
   params: ReportParams;
+  /** The Live Overview's period, which Payment Methods follows (#230, K7). */
+  salesPeriod: KpiPeriod;
   onNavigate?: (page: string, context?: Record<string, string>) => void;
 }) {
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2"><SalesTrend params={params} /></div>
-        <PaymentMethods params={params} />
+        <PaymentMethods params={params} period={salesPeriod} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
