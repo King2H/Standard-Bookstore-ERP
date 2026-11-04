@@ -43,9 +43,9 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
   });
   const voidSale = useVoidSale();
 
-  function confirmVoid() {
-    if (!voiding) return;
-    voidSale.mutate(voiding.id, {
+  function confirmVoid(reason?: string) {
+    if (!voiding || !reason) return;
+    voidSale.mutate({ id: voiding.id, reason }, {
       onSuccess: () => { setVoiding(null); showToast('Transaction voided', 'success'); },
       onError: (e: Error) => showToast(e.message, 'error'),
     });
@@ -124,7 +124,8 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
                       <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${tx.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>{tx.status}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${tx.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : tx.paymentStatus === 'partial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>{tx.paymentStatus}</span>
+                      {/* A voided sale has no payment state: its money went back (#240, P9). */}
+                      {tx.status === 'voided' ? <span className="text-gray-400">—</span> : <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${tx.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : tx.paymentStatus === 'partial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>{tx.paymentStatus}</span>}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{new Date(tx.createdAt).toLocaleString()}</td>
                     <td className="px-4 py-3">
@@ -171,6 +172,7 @@ export function SalesHistory({ initialDateFrom = '', initialDateTo = '', initial
           title="Void Sale"
           message={`Void ${voiding.transactionNumber}? Its books go back to stock and its payments go back the way they came.`}
           confirmLabel="Void Sale"
+          reason={{ label: 'Why is it voided?', max: 1000 }}
           tone="red"
           busy={voidSale.isPending}
           onConfirm={confirmVoid}

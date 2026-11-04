@@ -26,8 +26,8 @@ export const listSales = (params: SalesParams) => api.get<PosTransactionListResp
 /** One sale with its lines, their bindings and jobs (#169). */
 export const getSale = (id: string) => api.get<PosTransaction>(`/pos/transactions/${id}`);
 
-/** Same-day void, with payments going back the way they came. */
-export const voidSale = (id: string) => api.post<PosTransaction>(`/pos/transactions/${id}/void`);
+/** Same-day void, with payments going back the way they came, and its reason kept in the audit log (#240). */
+export const voidSale = ({ id, reason }: { id: string; reason: string }) => api.post<PosTransaction>(`/pos/transactions/${id}/void`, { reason });
 
 /** A counter sale, as the terminal sends it; the branch is the session's. */
 export type NewSale = Omit<z.input<typeof CreatePosTransactionRequestSchema>, 'branchId'>;

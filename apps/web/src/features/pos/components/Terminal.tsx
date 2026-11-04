@@ -20,6 +20,7 @@ import { getEffectiveConfig } from '../../settings/api.js';
 import { useEffectiveSetting } from '../../settings/queries.js';
 import { bindingInput, bindingTotal, fitTo } from '../../services/binding.js';
 import { BindingDialog } from '../../services/components/BindingDialog.js';
+import { useServices } from '../../services/queries.js';
 import { useBooksForSale, useCreateSale, useCustomersForSale } from '../queries.js';
 import { maxDiscountPct } from '../rules.js';
 import {
@@ -124,6 +125,9 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
   const [payProof, setPayProof]                   = useState<PaymentProof>(EMPTY_PROOF);
   const [receipt, setReceipt]                     = useState<Receipt | null>(null);
   const [bindingFor, setBindingFor]               = useState<number | null>(null);
+  // A binding is offered once the shop has a binding service (#240, P3; was: always, with an empty list).
+  const { data: activeServices } = useServices({ status: 'active', pageSize: 1 });
+  const offersBinding = (activeServices?.total ?? 0) > 0;
   const [confirmClear, setConfirmClear]           = useState(false);
 
   // Discount state
@@ -754,7 +758,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                         <td className="px-3 py-2">
                           <p className="font-semibold text-gray-900 dark:text-white text-xs leading-tight truncate max-w-[180px]">{item.bookTitle}</p>
                           <p className="text-xs text-gray-400 mt-0.5 font-mono">{item.bookIsbn}</p>
-                          {!item.service && (
+                          {!item.service && offersBinding && (
                             <button type="button" onClick={() => setBindingFor(item.bookId)}
                               className="mt-0.5 text-xs text-blue-600 dark:text-blue-400 hover:underline">+ Binding</button>
                           )}
@@ -763,9 +767,9 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                         {/* Qty */}
                         <td className="px-2 py-2">
                           <div className="flex items-center justify-center gap-0.5">
-                            <button onClick={() => updateQty(item.bookId, -1)} className="w-6 h-6 flex items-center justify-center rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">−</button>
+                            <button aria-label={`One less ${item.bookTitle}`} onClick={() => updateQty(item.bookId, -1)} className="w-6 h-6 flex items-center justify-center rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">−</button>
                             <span className="w-7 text-center font-bold text-gray-900 dark:text-white tabular-nums text-xs">{item.quantity}</span>
-                            <button onClick={() => updateQty(item.bookId, 1)} className="w-6 h-6 flex items-center justify-center rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">＋</button>
+                            <button aria-label={`One more ${item.bookTitle}`} onClick={() => updateQty(item.bookId, 1)} className="w-6 h-6 flex items-center justify-center rounded-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold text-sm transition-colors">＋</button>
                           </div>
                         </td>
 
@@ -779,6 +783,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                           <div className="flex items-center gap-1">
                             {/* Type dropdown — auto-loads preset on change */}
                             <select
+                              aria-label={`Discount type for ${item.bookTitle}`}
                               value={item.discountType}
                               onChange={e => updateDiscountType(item.bookId, e.target.value)}
                               className="w-20 px-1 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
@@ -797,6 +802,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                                   : 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-400'
                               }`}
                               title={`Switch to ${item.discountMode === 'Percentage' ? 'Amount' : 'Percentage'}`}
+                              aria-label={`Discount as ${item.discountMode === 'Percentage' ? 'a percentage' : 'an amount'}; switch to ${item.discountMode === 'Percentage' ? 'an amount' : 'a percentage'}`}
                             >
                               {item.discountMode === 'Percentage' ? '%' : currency}
                             </button>
@@ -805,6 +811,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                             <div className="relative flex-1">
                               <input
                                 type="number"
+                                aria-label={`Discount for ${item.bookTitle}`}
                                 min="0"
                                 step="0.01"
                                 value={item.discountMode === 'Percentage' ? item.discountPct : item.discountAmount}

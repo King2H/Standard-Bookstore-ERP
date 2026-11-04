@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import { Money, type CreateBookRequest, type QuickRegisterBookRequest, type UpdateBookRequest } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { isUniqueViolation } from '../../db/errors.js';
@@ -22,7 +23,7 @@ function window(paging: Paging) {
   return { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize };
 }
 
-function audit(q: Queryable, actor: Actor, action: string, entityType: string, id: number, meta: Record<string, unknown>, branchId = actor.branchId) {
+function audit(q: Queryable, actor: Actor, action: string, entityType: AuditEntityType, id: number, meta: Record<string, unknown>, branchId = actor.branchId) {
   return insertAuditEntry(q, {
     staffId: actor.staffId,
     staffRole: actor.role,

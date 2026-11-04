@@ -218,9 +218,10 @@ describe('POS terminal: the cart', () => {
     const user = await openTerminal();
     await addBook(user, 'Oromay');
     const row = screen.getByText('Oromay').closest('tr')!;
-    await user.click(within(row).getByRole('button', { name: '%' }));
-    expect(within(row).getByRole('button', { name: 'USD' })).toBeInTheDocument();
-    expect(within(row).queryByRole('button', { name: 'ETB' })).not.toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: /^Discount as a percentage/ }));
+    // The toggle reads the shop's currency (its name is spoken, #240 P4).
+    expect(within(row).getByRole('button', { name: /^Discount as an amount/ })).toHaveTextContent('USD');
+    expect(within(row).getByRole('button', { name: /^Discount as an amount/ })).not.toHaveTextContent('ETB');
   });
 
   it('allows the discount of any role held in the branch', async () => {
@@ -234,6 +235,24 @@ describe('POS terminal: the cart', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
     await waitFor(() => expect(posted()).toHaveLength(1));
+  });
+});
+
+describe('POS terminal: line controls (#240)', () => {
+  it('offers no binding while the shop has no binding service (P3; was: "+ Binding" and an empty list)', async () => {
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    await settle();
+    expect(screen.queryByRole('button', { name: '+ Binding' })).not.toBeInTheDocument();
+  });
+
+  it("names each line's discount controls (P4; was: unlabelled)", async () => {
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    expect(screen.getByRole('combobox', { name: 'Discount type for Oromay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Discount as / })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'Discount for Oromay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'One more Oromay' })).toBeInTheDocument();
   });
 });
 

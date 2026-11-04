@@ -41,7 +41,7 @@ describe('Counter sales', () => {
     return { id: res.body.id, total: res.body.grandTotal, receivableId: String(rec.rows[0].id) };
   }
 
-  const voidSale = (id: string) => as(api().post(`/api/v1/pos/transactions/${id}/void`), manager);
+  const voidSale = (id: string) => as(api().post(`/api/v1/pos/transactions/${id}/void`), manager).send({ reason: 'Voided in test' });
   const collect = (id: string, amount: number) =>
     as(api().post(`/api/v1/pos/transactions/${id}/payment`)).send({ payments: [{ method: 'cash', amount }] });
 

@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import { createHash } from 'node:crypto';
 import type { CreateBankAccountRequest, UpdateBankAccountRequest } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
@@ -35,7 +36,7 @@ async function accountIn(q: Queryable, branchId: number, id: number, opts: { for
   return account;
 }
 
-function audit(tx: Queryable, actor: Actor, action: string, entityType: string, entityId: string | number, branchId: number, meta: Record<string, unknown>) {
+function audit(tx: Queryable, actor: Actor, action: string, entityType: AuditEntityType, entityId: string | number, branchId: number, meta: Record<string, unknown>) {
   return insertAuditEntry(tx, { staffId: actor.staffId, staffRole: actor.role, branchId, action, entityType, entityId, meta });
 }
 

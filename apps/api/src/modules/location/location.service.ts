@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import type { LocationAccessMode } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { isUniqueViolation } from '../../db/errors.js';
@@ -14,7 +15,7 @@ type Staff = Pick<Actor, 'staffId' | 'role' | 'branchId'> & { roles?: readonly s
 
 const rolesHeld = (s: Staff): readonly string[] => (s.roles?.length ? s.roles : [s.role]);
 
-function audit(q: Queryable, actor: Staff, action: string, entityType: string, entityId: number, branchId: number, meta: Record<string, unknown>) {
+function audit(q: Queryable, actor: Staff, action: string, entityType: AuditEntityType, entityId: number, branchId: number, meta: Record<string, unknown>) {
   return insertAuditEntry(q, { staffId: actor.staffId, staffRole: actor.role, branchId, action, entityType, entityId, meta });
 }
 

@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import { randomUUID } from 'node:crypto';
 import { Money, type MoneyInput } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
@@ -30,7 +31,7 @@ import type {
  * POS.
  */
 
-function audit(q: Queryable, actor: Actor, action: string, entityType: string, id: string, meta: Record<string, unknown>) {
+function audit(q: Queryable, actor: Actor, action: string, entityType: AuditEntityType, id: string, meta: Record<string, unknown>) {
   return insertAuditEntry(q, {
     staffId: actor.staffId,
     staffRole: actor.role,

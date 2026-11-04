@@ -15,7 +15,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   BookAvailabilityListResponseSchema, BookSchema, CustomerListResponseSchema, CustomerSchema, EffectiveConfigResponseSchema,
   LocationListResponseSchema, OrderListResponseSchema, OrderSchema, ProfileResponseSchema, PurchaseOrderListResponseSchema,
-  PurchaseOrderSchema, SpecialOrderListResponseSchema,
+  PurchaseOrderSchema, SpecialOrderListResponseSchema, StockLevelListResponseSchema,
   type Book, type Customer, type Order, type OrderLineItem, type ProfileResponse, type PurchaseOrder,
 } from '@bms/shared';
 import OrdersPage from '../features/orders/pages/OrdersPage.js';
@@ -87,6 +87,8 @@ type Call = { method: string; path: string; body?: unknown };
 let calls: Call[];
 let me: ProfileResponse;
 let current: Order;
+/** Copies of the special-order book on hand at the order's location. */
+let stockHere: number;
 
 function stubApi() {
   calls = [];
@@ -120,6 +122,13 @@ function stubApi() {
       return json(contract(OrderSchema, current));
     }
     if (u.pathname === '/orders/30') return json(contract(OrderSchema, current));
+    if (u.pathname === '/inventory') {
+      return json(contract(StockLevelListResponseSchema, { items: [{
+        bookId: 9, bookTitle: 'Yegna Tarik', bookIsbn: '9780306406109', bookIsActive: true, locationId: 7, locationName: 'Main Floor', branchId: 1,
+        quantity: stockHere, reserved: 0, available: stockHere, reorderPoint: 0, averageCost: null, damaged: 0, damagedValue: null, version: 1,
+        isLowStock: false, updatedAt: CREATED,
+      }], total: 1, page: 1, totalPages: 1 }));
+    }
     if (u.pathname === '/orders') {
       return json(contract(OrderListResponseSchema, { ...page([{ ...current, lineItems: undefined, deliveries: undefined }]), pageSize: 10 }));
     }
@@ -155,6 +164,7 @@ describe('Special orders on screen (#174)', () => {
     setAccessToken('t'); setCurrentBranchId(1);
     me = profile(['Manager']);
     current = order();
+    stockHere = 2;
     stubApi();
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -191,6 +201,15 @@ describe('Special orders on screen (#174)', () => {
     const text = screen.getByRole('row', { name: /^Yegna Tarik/ }).textContent;
     expect(text).toMatch(/On order 2 · PO-000012/);
     expect(text).toMatch(/To order 1/);
+  });
+
+  it('offers "Reserve from stock" only when the order\'s location has the book (#240, O6; was: always, failing)', async () => {
+    stockHere = 0;
+    renderPage('orders', { orderId: '30' });
+    await settle();
+    expect(await screen.findByText('Special order')).toBeTruthy();
+    await settle();
+    expect(screen.queryByRole('button', { name: 'Reserve Yegna Tarik from stock' })).toBeNull();
   });
 
   it('shows a special-order line with its copies on order, and reserves what was brought over', async () => {

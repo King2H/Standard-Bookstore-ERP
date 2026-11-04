@@ -75,7 +75,7 @@ describe('Cash Collected: money in less money out, as the Payments report counts
       locationId, items: [{ bookId, quantity: 2 }], payments: [{ method: 'cash', amount: price * 2 }],
     });
     expect(sale.status).toBe(201);
-    const returned = await as(api().post('/api/v1/returns')).send({
+    const returned = await as(api().post('/api/v1/returns')).send({ reason: 'Returned in test',
       transactionId: Number(sale.body.id), lines: [{ transactionLineItemId: Number(sale.body.lineItems[0].id), quantity: 1 }],
     });
     expect(returned.status).toBe(201);

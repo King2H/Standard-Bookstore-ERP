@@ -37,13 +37,23 @@ function auditJob(q: Queryable, actor: Actor, action: string, jobId: number, met
  * fee; null where a line has none. A service needs a named customer: they are
  * called when the work is ready (decision 5 of #169).
  */
+/** The customer of a service is called when it is ready: they need a phone (#240, B2; was: taken without one). */
+async function checkCanBeCalled(q: Queryable, customerId: number): Promise<void> {
+  if (!(await repo.customerHasPhone(q, customerId))) {
+    throw new BusinessError('SERVICE_REQUIRES_PHONE', "A service needs the customer's phone, to call them when it is ready. Add it to the customer first.");
+  }
+}
+
 export async function priceServices(
   q: Queryable,
   items: Array<{ quantity: number; service?: ServiceLineInput }>,
   sale: { branchId: number; customerId: number | null; maxDiscountPct: number },
 ): Promise<Array<PricedServiceLine | null>> {
-  if (items.some((i) => i.service) && sale.customerId === null) {
-    throw new BusinessError('SERVICE_REQUIRES_CUSTOMER', 'A sale with a service needs a customer, who is called when the work is ready');
+  if (items.some((i) => i.service)) {
+    if (sale.customerId === null) {
+      throw new BusinessError('SERVICE_REQUIRES_CUSTOMER', 'A sale with a service needs a customer, who is called when the work is ready');
+    }
+    await checkCanBeCalled(q, sale.customerId);
   }
   const priced: Array<PricedServiceLine | null> = [];
   for (const item of items) {
@@ -96,6 +106,7 @@ export async function openOrderJobs(q: Queryable, actor: Actor, order: { id: str
   if (order.customerId === null) {
     throw new BusinessError('SERVICE_REQUIRES_CUSTOMER', 'An order with a service needs a customer, who is called when the work is ready');
   }
+  await checkCanBeCalled(q, order.customerId);
   for (const line of lines) {
     await openJob(q, actor, line, { branchId: order.branchId, customerId: order.customerId, number: order.number });
   }

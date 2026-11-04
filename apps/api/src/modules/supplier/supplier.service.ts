@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import type {
   CreateSupplierRequest,
   LifecycleStatus,
@@ -16,7 +17,7 @@ import type { Actor, BookSupplierRecord, SupplierFilter, SupplierRecord } from '
 
 /** Use cases of the Suppliers module (A4): one function each, owning its transaction. */
 
-function audit(q: Queryable, actor: Actor, action: string, entityType: string, entityId: string | number, meta: Record<string, unknown>) {
+function audit(q: Queryable, actor: Actor, action: string, entityType: AuditEntityType, entityId: string | number, meta: Record<string, unknown>) {
   return insertAuditEntry(q, {
     staffId: actor.staffId,
     staffRole: actor.role,

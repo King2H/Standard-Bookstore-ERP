@@ -21,6 +21,16 @@ export function useBusinessToday() {
   return useQuery({ queryKey: businessDayKeys.today(), queryFn: getBusinessToday, refetchInterval: 60_000 });
 }
 
+/**
+ * Today in the shop's time zone, as the API counts it (#240, O3; was: the UTC
+ * day, yesterday late in the evening in Addis Ababa). The browser's own day
+ * until the API answers.
+ */
+export function useShopToday(): string {
+  const { data } = useBusinessToday();
+  return data?.day ?? new Date().toLocaleDateString('en-CA');
+}
+
 export function useBusinessDays(month: string | null) {
   return useQuery({ queryKey: businessDayKeys.days(month ?? ''), queryFn: () => listBusinessDays(month!), enabled: month !== null });
 }

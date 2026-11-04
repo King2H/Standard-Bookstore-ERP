@@ -1,9 +1,7 @@
 /**
- * In-memory rate limiter — no Redis required.
- * Uses a fixed window counter per key. Counters are per process, so with several
+ * In-memory sign-in limiter — no Redis required.
+ * A fixed window counter per key. Counters are per process, so with several
  * API instances each enforces its own limit (shared limits: #32).
- * Login limiter keys by IP:username to avoid blocking all users from the same IP
- * (important for localhost/office environments where everyone shares one IP).
  */
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../lib/errors.js';
@@ -30,63 +28,37 @@ function getIp(req: Request): string {
 }
 
 /**
- * Creates a rate limit middleware.
- * @param maxRequests - max requests allowed in the window
- * @param windowMs - window duration in milliseconds
- * @param keyPrefix - prefix to namespace different limiters
- * @param keyFn - optional function to derive the rate limit key from the request
+ * The sign-in limiter: failed attempts only, keyed by IP:username so one
+ * person's mistakes do not lock out others on the same IP (an office or a
+ * shared counter PC). Pre-login and login share the counter. A refused attempt
+ * (any 4xx) counts when its answer is sent; a successful sign-in never counts
+ * (#240, A1; was: every request counted, twice per sign-in, so five sign-ins in
+ * 15 minutes locked a staff member out).
+ * Limit: 10 failed attempts per username per IP per 15 minutes.
  */
-export function rateLimit(
-  maxRequests: number,
-  windowMs: number,
-  keyPrefix = 'rl',
-  keyFn?: (req: Request) => string,
-) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const keyPart = keyFn ? keyFn(req) : getIp(req);
-    const key = `${keyPrefix}:${keyPart}`;
-    const now = Date.now();
+const LOGIN_MAX_FAILURES = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
-    let entry = store.get(key);
-    if (!entry || entry.resetAt < now) {
-      entry = { count: 0, resetAt: now + windowMs };
-      store.set(key, entry);
+export function loginRateLimit(req: Request, res: Response, next: NextFunction): void {
+  const username = (req.body?.username as string | undefined)?.toLowerCase().trim() ?? 'unknown';
+  const key = `login:${getIp(req)}:${username}`;
+  const now = Date.now();
+  const entry = store.get(key);
+  if (entry && entry.resetAt >= now && entry.count >= LOGIN_MAX_FAILURES) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    res.setHeader('Retry-After', retryAfter);
+    next(new AppError('RATE_LIMIT_EXCEEDED', 'Too many failed sign-in attempts. Please try again later.', 429, { retryAfter }));
+    return;
+  }
+  res.on('finish', () => {
+    if (res.statusCode < 400 || res.statusCode >= 500 || res.statusCode === 429) return;
+    const at = Date.now();
+    let failures = store.get(key);
+    if (!failures || failures.resetAt < at) {
+      failures = { count: 0, resetAt: at + LOGIN_WINDOW_MS };
+      store.set(key, failures);
     }
-
-    entry.count++;
-
-    res.setHeader('X-RateLimit-Limit', maxRequests);
-    res.setHeader('X-RateLimit-Remaining', Math.max(0, maxRequests - entry.count));
-    res.setHeader('X-RateLimit-Reset', Math.ceil(entry.resetAt / 1000));
-
-    if (entry.count > maxRequests) {
-      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-      res.setHeader('Retry-After', retryAfter);
-      next(
-        new AppError('RATE_LIMIT_EXCEEDED', 'Too many login attempts. Please try again later.', 429, { retryAfter }),
-      );
-      return;
-    }
-
-    next();
-  };
+    failures.count++;
+  });
+  next();
 }
-
-/**
- * Login rate limiter — keyed by IP:username.
- * This prevents one user's failed attempts from locking out other users
- * on the same IP (e.g. office/localhost environments).
- * Limit: 10 attempts per username per IP per 15 minutes.
- */
-export const loginRateLimit = rateLimit(
-  10,
-  15 * 60 * 1000,
-  'login',
-  (req: Request) => {
-    const ip = getIp(req);
-    const username = (req.body?.username as string | undefined)?.toLowerCase().trim() ?? 'unknown';
-    return `${ip}:${username}`;
-  },
-);
-
-export const apiRateLimit = rateLimit(200, 60 * 1000, 'api'); // 200 per minute per IP

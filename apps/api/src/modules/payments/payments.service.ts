@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
@@ -32,7 +33,7 @@ import type {
  * 2026-10-10); their endpoints answer 410.
  */
 
-function audit(q: Queryable, actor: Actor, entityType: string, id: string, meta: Record<string, unknown>) {
+function audit(q: Queryable, actor: Actor, entityType: AuditEntityType, id: string, meta: Record<string, unknown>) {
   return insertAuditEntry(q, {
     staffId: actor.staffId,
     staffRole: actor.role,

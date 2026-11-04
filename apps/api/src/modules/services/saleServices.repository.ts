@@ -10,6 +10,12 @@ import type {
 // out (PR 4); its job is the branch's.
 
 /** A service as a sale in `branchId` charges it: the branch's own fee, else the shop's. */
+/** Whether the customer has a phone on record (stored encrypted). */
+export async function customerHasPhone(q: Queryable, customerId: number): Promise<boolean> {
+  const row = await q.selectFrom('customers').select('phone_encrypted').where('id', '=', customerId).executeTakeFirst();
+  return !!row?.phone_encrypted;
+}
+
 export async function findServiceForSale(q: Queryable, serviceId: number, branchId: number): Promise<ServiceForSale | undefined> {
   const row = await q
     .selectFrom('services as s')

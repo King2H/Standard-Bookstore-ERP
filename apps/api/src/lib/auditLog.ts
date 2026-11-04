@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import { kysely } from '../db/kysely.js';
 import { insertAuditEntry } from '../modules/audit/audit.repository.js';
 
@@ -19,7 +20,7 @@ export interface AuditLogStaffCtx {
 export async function insertAuditLog(
   staffCtx: AuditLogStaffCtx,
   action: LifecycleAction | string,
-  entityType: string,
+  entityType: AuditEntityType,
   entityId: string | number,
   meta: Record<string, unknown> = {},
 ): Promise<void> {

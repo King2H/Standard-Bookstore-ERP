@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import type { CreateCustomerRequest, MoneyInput, UpdateCustomerRequest } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
@@ -31,7 +32,7 @@ function paged<T>(result: { items: T[]; total: number }, page: number, pageSize:
   return { ...result, page, totalPages: Math.ceil(result.total / pageSize) };
 }
 
-function audit(q: Queryable, actor: Actor, action: string, entityType: string, entityId: number, meta: Record<string, unknown>) {
+function audit(q: Queryable, actor: Actor, action: string, entityType: AuditEntityType, entityId: number, meta: Record<string, unknown>) {
   return insertAuditEntry(q, {
     staffId: actor.staffId,
     staffRole: actor.role,

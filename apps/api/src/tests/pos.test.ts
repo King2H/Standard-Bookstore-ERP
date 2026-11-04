@@ -405,7 +405,8 @@ describe('POS — Transactions', () => {
     const voidRes = await request(getTestApp())
       .post(`/api/v1/pos/transactions/${txId}/void`)
       .set('Authorization', `Bearer ${managerToken}`)
-      .set('X-Branch-Id', String(branchId));
+      .set('X-Branch-Id', String(branchId))
+      .send({ reason: 'Voided in test' });
 
     expect(voidRes.status).toBe(200);
     expect(voidRes.body.status).toBe('voided');

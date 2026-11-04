@@ -8,13 +8,14 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  OrderListResponseSchema, OrderSchema, PosTransactionListResponseSchema, PosTransactionSchema, ProfileResponseSchema,
+  EffectiveConfigResponseSchema, OrderListResponseSchema, OrderSchema, PosTransactionListResponseSchema, PosTransactionSchema, ProfileResponseSchema,
   ReturnListResponseSchema, ReturnSchema, type Order, type PosTransaction, type ProfileResponse, type Return,
 } from '@bms/shared';
 import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-18T07:00:00.000Z';
 
@@ -74,6 +75,10 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
+    if (u.pathname === '/config/effective') {
+      return json(contract(EffectiveConfigResponseSchema, { items: [{ key: 'max_return_value_without_auth', value: 500, source: 'system' }] }));
+    }
     if (u.pathname === '/pos/transactions') {
       return json(contract(PosTransactionListResponseSchema, { items: [{ ...sale, lineItems: undefined }], total: 1, page: 1, totalPages: 1 }));
     }
@@ -141,11 +146,26 @@ describe('New Return', () => {
     await user.type(qty, '3');
     expect(screen.getAllByText(/29\.00/).length).toBeGreaterThan(0);
 
+    // Why they come back (#240, R1; was: optional).
+    await user.click(screen.getByRole('button', { name: 'Process Return' }));
+    expect(await screen.findByText(/Say why the books come back/)).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    await user.type(screen.getByRole('textbox', { name: 'Reason for return' }), 'Duplicate gift');
     await user.click(screen.getByRole('button', { name: 'Process Return' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
     const post = calls.find((c) => c.method === 'POST');
     expect(post?.path).toBe('/returns');
-    expect(post?.body).toEqual({ transactionId: 41, lines: [{ transactionLineItemId: 7, quantity: 3, disposition: 'SELLABLE' }] });
+    expect(post?.body).toEqual({ transactionId: 41, reason: 'Duplicate gift', lines: [{ transactionLineItemId: 7, quantity: 3, disposition: 'SELLABLE' }] });
+    // A slip to hand to the customer (#240, R2; was: none).
+    const slip = await screen.findByRole('dialog', { name: /^Return RET-/ });
+    expect(slip).toHaveTextContent('Fikir Eske Mekabir');
+    expect(within(slip).getByRole('button', { name: /Print/ })).toBeInTheDocument();
+  });
+
+  it('names the approval limit (#240, R1; was: "above the approval limit")', async () => {
+    await openPage();
+    await pickSale();
+    expect(await screen.findByText(/above ETB 500\.00 must be processed by a Manager or Admin/)).toBeInTheDocument();
   });
 
   it('keeps a book marked damaged apart from the stock for sale (was: always back on the shelf)', async () => {
@@ -156,10 +176,11 @@ describe('New Return', () => {
     await user.type(qty, '1');
     await user.click(screen.getByRole('checkbox', { name: 'Damaged' }));
 
+    await user.type(screen.getByRole('textbox', { name: 'Reason for return' }), 'Not wanted');
     await user.click(screen.getByRole('button', { name: 'Process Return' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
-      transactionId: 41, lines: [{ transactionLineItemId: 7, quantity: 1, disposition: 'DAMAGED' }],
+      transactionId: 41, reason: 'Not wanted', lines: [{ transactionLineItemId: 7, quantity: 1, disposition: 'DAMAGED' }],
     });
   });
 
@@ -168,7 +189,7 @@ describe('New Return', () => {
     await openPage();
     await pickSale();
     expect(screen.getByText('✓ Manager/Admin Approval')).toBeInTheDocument();
-    expect(screen.getByText(/As Manager, you can process returns above the approval limit/)).toBeInTheDocument();
+    expect(await screen.findByText(/As Manager, you can process returns above ETB 500\.00/)).toBeInTheDocument();
     expect(screen.queryByText('⚠ Approval Policy')).not.toBeInTheDocument();
   });
 
@@ -198,10 +219,11 @@ describe('Returning a customer order (#166)', () => {
     await user.type(qty, '2');
     expect(screen.getAllByText(/50\.00/).length).toBeGreaterThan(0);
 
+    await user.type(screen.getByRole('textbox', { name: 'Reason for return' }), 'Not wanted');
     await user.click(screen.getByRole('button', { name: 'Process Return' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
-      orderId: 30, lines: [{ orderLineItemId: 8, quantity: 2, disposition: 'SELLABLE' }],
+      orderId: 30, reason: 'Not wanted', lines: [{ orderLineItemId: 8, quantity: 2, disposition: 'SELLABLE' }],
     });
   });
 

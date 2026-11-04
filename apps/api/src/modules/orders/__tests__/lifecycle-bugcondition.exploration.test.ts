@@ -416,7 +416,7 @@ describe('Bug Condition Exploration: Order–Payment–Inventory Lifecycle', () 
       .post('/api/v1/returns')
       .set('Authorization', `Bearer ${managerToken}`)
       .set('X-Branch-Id', String(branchId))
-      .send({
+      .send({ reason: 'Returned in test',
         transactionId: txId,
         lines: [{ transactionLineItemId: lineItemId, quantity: 1, disposition: 'DAMAGED' }],
       });

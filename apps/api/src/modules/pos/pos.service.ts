@@ -301,7 +301,7 @@ export async function recordPayment(actor: Actor, txId: string, payments: Paymen
  * receivable is cancelled. The sale is locked, so two voids cannot both
  * restore its stock.
  */
-export async function voidTransaction(actor: Actor, txId: string): Promise<PosTransactionRecord> {
+export async function voidTransaction(actor: Actor, txId: string, reason: string): Promise<PosTransactionRecord> {
   await withTransaction({}, async (tx) => {
     const t = found(await pos.findTransaction(tx, txId, { forUpdate: true }));
     policy.checkCanVoid(t);
@@ -365,7 +365,7 @@ export async function voidTransaction(actor: Actor, txId: string): Promise<PosTr
     await pos.setVoided(tx, t.id);
     const handedBack: Record<string, number> = {};
     for (const p of payments) handedBack[p.method] = Money.of(handedBack[p.method] ?? 0).plus(p.amount).toNumber();
-    await audit(tx, actor, 'UPDATE', t.id, { action: 'void', transactionNumber: t.transactionNumber, paymentsReturned: handedBack });
+    await audit(tx, actor, 'UPDATE', t.id, { action: 'void', transactionNumber: t.transactionNumber, reason, paymentsReturned: handedBack });
     await insertOutboxEvent(tx, 'pos.transaction_voided', {
       txId: t.id,
       txNumber: t.transactionNumber,

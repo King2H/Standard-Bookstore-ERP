@@ -307,6 +307,18 @@ describe('Audit log', () => {
     await waitFor(() => expect(calls.some(c => c.path === '/audit-logs?page=1&pageSize=25&entityType=system_config')).toBe(true));
   });
 
+  it('filters by the records written since (#240, G2; was: 13 of them under "All" only)', async () => {
+    me = profile(['Admin'], true);
+    renderPage(<AuditLogPage />);
+    const filter = await screen.findByRole('combobox');
+    for (const type of [
+      'cash_session', 'business_day', 'business_month', 'stock_count', 'branch_transfer', 'supplier_return', 'supplier_payment',
+      'supplier_credit_note', 'payment', 'payment_refund', 'service', 'service_job', 'demo_data',
+    ]) {
+      expect(within(filter).getByRole('option', { name: type })).toBeInTheDocument();
+    }
+  });
+
   it('shows details that are not named values', async () => {
     me = profile(['Admin'], true);
     renderPage(<AuditLogPage />);

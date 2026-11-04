@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import type { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
@@ -21,7 +22,7 @@ import * as payables from './supplierPayables.repository.js';
  * turns and cannot together pay more than it is worth.
  */
 
-function audit(q: Queryable, actor: Actor, entityType: string, entityId: string, meta: Record<string, unknown>, action = 'CREATE') {
+function audit(q: Queryable, actor: Actor, entityType: AuditEntityType, entityId: string, meta: Record<string, unknown>, action = 'CREATE') {
   return insertAuditEntry(q, { staffId: actor.staffId, staffRole: actor.role, branchId: actor.branchId, action, entityType, entityId, meta });
 }
 

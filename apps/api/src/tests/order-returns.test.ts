@@ -165,14 +165,14 @@ describe('Returning a delivered customer order', () => {
 
     it('takes an order of its own branch only', async () => {
       const o = await order(1);
-      const fromOther = await as(api().post('/api/v1/returns'), otherManager, otherBranch).send({ orderId: Number(o.id), lines: [{ orderLineItemId: o.lineId, quantity: 1 }] });
+      const fromOther = await as(api().post('/api/v1/returns'), otherManager, otherBranch).send({ reason: 'Returned in test', orderId: Number(o.id), lines: [{ orderLineItemId: o.lineId, quantity: 1 }] });
       expect(fromOther.status).toBe(404);
     });
 
     it('refuses a line of another sale', async () => {
       const a = await order(1);
       const b = await order(1);
-      const res = await as(api().post('/api/v1/returns')).send({ orderId: Number(a.id), lines: [{ orderLineItemId: b.lineId, quantity: 1 }] });
+      const res = await as(api().post('/api/v1/returns')).send({ reason: 'Returned in test', orderId: Number(a.id), lines: [{ orderLineItemId: b.lineId, quantity: 1 }] });
       expect(res.status).toBe(404);
     });
   });
@@ -207,7 +207,7 @@ describe('Returning a delivered customer order', () => {
     it('keeps damaged books apart, not for sale', async () => {
       const o = await order(1);
       const before = await onHand();
-      const res = await as(api().post('/api/v1/returns')).send({ orderId: Number(o.id), lines: [{ orderLineItemId: o.lineId, quantity: 1, disposition: 'DAMAGED' }] });
+      const res = await as(api().post('/api/v1/returns')).send({ reason: 'Returned in test', orderId: Number(o.id), lines: [{ orderLineItemId: o.lineId, quantity: 1, disposition: 'DAMAGED' }] });
       expect(res.status).toBe(201);
       const after = await onHand();
       expect(after.quantity).toBe(before.quantity);

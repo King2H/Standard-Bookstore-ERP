@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import {
   Money,
   type ReorderPointRequest,
@@ -50,7 +51,7 @@ function paged<T>(result: { items: T[]; total: number }, paging: Paging): Paged<
   return { ...result, page: paging.page, totalPages: Math.ceil(result.total / paging.pageSize) };
 }
 
-function audit(q: Queryable, actor: Actor, entityType: string, level: { bookId: number; locationId: number }, meta: Record<string, unknown>) {
+function audit(q: Queryable, actor: Actor, entityType: AuditEntityType, level: { bookId: number; locationId: number }, meta: Record<string, unknown>) {
   return insertAuditEntry(q, {
     staffId: actor.staffId,
     staffRole: actor.role,

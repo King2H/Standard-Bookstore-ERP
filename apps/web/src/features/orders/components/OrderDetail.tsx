@@ -8,6 +8,7 @@ import { useMyProfile } from '../../account/queries.js';
 import { ServiceJobLine } from '../../services/components/ServiceJobLine.js';
 import { useToast } from '../../../components/Toast.js';
 import { orderKeys, useOrder, useReserveOrderLine } from '../queries.js';
+import { useStockLevel } from '../../inventory/queries.js';
 import { canCreateOrder } from '../rules.js';
 import { DeliveryNote } from './DeliveryNote.js';
 
@@ -22,6 +23,12 @@ function stageOf(status: string): 'DRAFT' | 'CONFIRMED' | 'PART' | 'FULFILLED' |
 }
 
 /** An order's lines, with where their stock stands at the order's stage. */
+/** Shows its children only while the location has the book on hand (#240, O6; was: a button that could only fail). */
+function InStock({ bookId, locationId, children }: { bookId: number; locationId: number | null; children: ReactNode }) {
+  const { data } = useStockLevel(bookId, locationId);
+  return (data?.quantity ?? 0) > 0 ? <>{children}</> : null;
+}
+
 export function OrderDetail({ orderId }: { orderId: string }) {
   const currency = useCurrency();
   const { data } = useOrder(orderId);
@@ -94,6 +101,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                   {li.purchaseOrders.map((p) => <span key={p.poId} className="block">On order {p.quantity} · {p.poNumber}</span>)}
                   {li.qtyToOrder > 0 && <span className="block">To order {li.qtyToOrder}</span>}
                   {canCreateOrder(me) && (
+                    <InStock bookId={li.bookId} locationId={data.locationId}>
                     <button type="button" aria-label={`Reserve ${li.bookTitle} from stock`} disabled={reserve.isPending}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -105,6 +113,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                       className="ml-2 px-1.5 rounded-sm bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 hover:bg-amber-200 disabled:opacity-50">
                       Reserve from stock
                     </button>
+                    </InStock>
                   )}
                 </span>
               );

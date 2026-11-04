@@ -90,7 +90,7 @@ describe('Payment History: POS payments (#230)', () => {
 
   it("shows a voided sale's payments as voided: the money went back (was: success)", async () => {
     const sale = await sell({ customerId, allowCredit: true, payments: [{ method: 'cash', amount: 1 }] });
-    expect((await as(manager).post(`/api/v1/pos/transactions/${sale.id}/void`)).status).toBe(200);
+    expect((await as(manager).post(`/api/v1/pos/transactions/${sale.id}/void`, { reason: 'Voided in test' })).status).toBe(200);
     const rows = (await history()).filter((p) => p.entityNumber === sale.transactionNumber);
     expect(rows.map((p) => p.status)).toEqual(['voided']);
     expect((await as(manager).get('/api/v1/payments?status=voided&pageSize=100')).body.items.map((p: { entityNumber: string }) => p.entityNumber))
