@@ -8,7 +8,7 @@ import * as procurement from './procurementReports.controller.js';
 // (report.ts) and listed in src/openapi/operations.ts.
 
 const router = Router();
-const reportAccess = [authenticate, requirePermission('VIEW_REPORTS'), validate(procurement.schemas.report)];
+const reportAccess = [authenticate, requirePermission('VIEW_STOCK_REPORTS'), validate(procurement.schemas.report)];
 
 router.get('/reports/procurement/export', ...reportAccess, procurement.exportLines);
 router.get('/reports/procurement/open-pos', ...reportAccess, procurement.openPurchaseOrders);

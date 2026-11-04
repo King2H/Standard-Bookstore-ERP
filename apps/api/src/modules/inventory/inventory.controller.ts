@@ -20,11 +20,12 @@ import {
 } from '@bms/shared';
 import { AppError } from '../../lib/errors.js';
 import { assertLocationInBranch, assertLocationUsable, scopedBranch } from '../../lib/scope.js';
+import { holdsPermission } from '../../middleware/rbac.js';
 import { valid } from '../../middleware/validate.js';
 import { toLocationStockResponse, toStockLevelResponse, toStockMovementResponse } from './inventory.mapper.js';
 import * as policy from './inventory.policy.js';
 import * as service from './inventory.service.js';
-import type { Actor } from './inventory.types.js';
+import type { Actor, StockLevelRecord } from './inventory.types.js';
 
 /**
  * HTTP side of the Inventory module (A3): validated request -> service ->
@@ -44,6 +45,12 @@ export const schemas = {
   damaged: { body: DamagedStockRequestSchema },
   bookStock: { params: BookStockParamsSchema, query: BookStockQuerySchema },
 };
+
+/** Stock levels as the caller may read them: cost and value only with VIEW_COST (#234, decision 2a). */
+function stockLevel(req: Request) {
+  const showCost = holdsPermission(req, 'VIEW_COST');
+  return (r: StockLevelRecord): StockLevel => toStockLevelResponse(r, showCost);
+}
 
 /** The signed-in staff member; authenticate() runs before every controller. */
 function actor(req: Request): Actor {
@@ -67,14 +74,14 @@ export async function list(req: Request, res: Response): Promise<void> {
     },
     { page: query.page, pageSize: query.pageSize },
   );
-  const body: StockLevelListResponse = { ...result, items: result.items.map(toStockLevelResponse) };
+  const body: StockLevelListResponse = { ...result, items: result.items.map(stockLevel(req)) };
   res.json(body);
 }
 
 export async function lowStock(req: Request, res: Response): Promise<void> {
   const { query } = valid(req, schemas.lowStock);
   const result = await service.listLowStock(scopedBranch(req), { page: query.page, pageSize: query.pageSize });
-  const body: StockLevelListResponse = { ...result, items: result.items.map(toStockLevelResponse) };
+  const body: StockLevelListResponse = { ...result, items: result.items.map(stockLevel(req)) };
   res.json(body);
 }
 
@@ -102,7 +109,7 @@ export async function history(req: Request, res: Response): Promise<void> {
 export async function adjust(req: Request, res: Response): Promise<void> {
   const { body: adjustment } = valid(req, schemas.adjust);
   await assertLocationUsable(req, adjustment.locationId);
-  const body: StockLevel = toStockLevelResponse(await service.adjustStock(actor(req), adjustment));
+  const body: StockLevel = stockLevel(req)(await service.adjustStock(actor(req), adjustment));
   res.json(body);
 }
 
@@ -111,35 +118,35 @@ export async function transfer(req: Request, res: Response): Promise<void> {
   await assertLocationUsable(req, transfer.fromLocationId);
   await assertLocationInBranch(req, transfer.toLocationId);
   const result = await service.transferStock(actor(req), transfer);
-  const body: TransferStockResponse = { from: toStockLevelResponse(result.from), to: toStockLevelResponse(result.to) };
+  const body: TransferStockResponse = { from: stockLevel(req)(result.from), to: stockLevel(req)(result.to) };
   res.json(body);
 }
 
 export async function reorderPoint(req: Request, res: Response): Promise<void> {
   const { body: change } = valid(req, schemas.reorderPoint);
   await assertLocationInBranch(req, change.locationId);
-  const body: StockLevel = toStockLevelResponse(await service.setReorderPoint(actor(req), change));
+  const body: StockLevel = stockLevel(req)(await service.setReorderPoint(actor(req), change));
   res.json(body);
 }
 
 export async function revalue(req: Request, res: Response): Promise<void> {
   const { body: change } = valid(req, schemas.revalue);
   await assertLocationInBranch(req, change.locationId);
-  const body: StockLevel = toStockLevelResponse(await service.revalue(actor(req), change));
+  const body: StockLevel = stockLevel(req)(await service.revalue(actor(req), change));
   res.json(body);
 }
 
 export async function stockIn(req: Request, res: Response): Promise<void> {
   const { body: receipt } = valid(req, schemas.stockIn);
   await assertLocationUsable(req, receipt.locationId);
-  const body: StockLevel = toStockLevelResponse(await service.stockIn(actor(req), receipt));
+  const body: StockLevel = stockLevel(req)(await service.stockIn(actor(req), receipt));
   res.json(body);
 }
 
 export async function stockOut(req: Request, res: Response): Promise<void> {
   const { body: issue } = valid(req, schemas.stockOut);
   await assertLocationUsable(req, issue.locationId);
-  const body: StockLevel = toStockLevelResponse(await service.stockOut(actor(req), issue));
+  const body: StockLevel = stockLevel(req)(await service.stockOut(actor(req), issue));
   res.json(body);
 }
 
@@ -147,7 +154,7 @@ export async function stockOut(req: Request, res: Response): Promise<void> {
 export async function writeOffDamaged(req: Request, res: Response): Promise<void> {
   const { body: change } = valid(req, schemas.damaged);
   await assertLocationUsable(req, change.locationId);
-  const body: StockLevel = toStockLevelResponse(await service.writeOffDamaged(actor(req), change));
+  const body: StockLevel = stockLevel(req)(await service.writeOffDamaged(actor(req), change));
   res.json(body);
 }
 
@@ -155,7 +162,7 @@ export async function writeOffDamaged(req: Request, res: Response): Promise<void
 export async function repairDamaged(req: Request, res: Response): Promise<void> {
   const { body: change } = valid(req, schemas.damaged);
   await assertLocationUsable(req, change.locationId);
-  const body: StockLevel = toStockLevelResponse(await service.repairDamaged(actor(req), change));
+  const body: StockLevel = stockLevel(req)(await service.repairDamaged(actor(req), change));
   res.json(body);
 }
 

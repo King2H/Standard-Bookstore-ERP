@@ -5,7 +5,13 @@ export type Permission =
   | 'PROCESS_REFUND'
   | 'ADJUST_PRICE'
   | 'MANAGE_INVENTORY'
+  // Sales and money reports: sales, payments, receivables, customers, returns,
+  // exchanges, KPIs, day and month figures, the ledger (#234, decision 1a).
   | 'VIEW_REPORTS'
+  // Stock and procurement reports: stock, valuation, purchases, suppliers (#234, 1a).
+  | 'VIEW_STOCK_REPORTS'
+  // What stock cost: average cost and the value of damaged copies (#234, 2a).
+  | 'VIEW_COST'
   | 'MANAGE_STAFF'
   | 'MANAGE_BRANCH'
   // Approving and closing purchase orders (owner decision 3a, 2026-10-23).
@@ -32,6 +38,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   // so the sidebar correctly shows only Dashboard, Organization, and System.
   Super_Admin: [
     'VIEW_REPORTS',
+    'VIEW_STOCK_REPORTS',
     'MANAGE_STAFF',
     'MANAGE_BRANCH',
   ],
@@ -43,6 +50,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'ADJUST_PRICE',
     'MANAGE_INVENTORY',
     'VIEW_REPORTS',
+    'VIEW_STOCK_REPORTS',
+    'VIEW_COST',
     'MANAGE_STAFF',
     'MANAGE_BRANCH',
     'APPROVE_PURCHASE_ORDER',
@@ -64,6 +73,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'ADJUST_PRICE',
     'MANAGE_INVENTORY',
     'VIEW_REPORTS',
+    'VIEW_STOCK_REPORTS',
+    'VIEW_COST',
     'MANAGE_STAFF',
     'APPROVE_PURCHASE_ORDER',
     'SEND_TRANSFER',
@@ -74,10 +85,11 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'SEND_SUPPLIER_RETURN',
     'CLOSE_DAY',
   ],
-  Finance_Officer: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS', 'CLOSE_DAY', 'CLOSE_MONTH'],
+  Finance_Officer: ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS', 'VIEW_STOCK_REPORTS', 'VIEW_COST', 'CLOSE_DAY', 'CLOSE_MONTH'],
   Stock_Clerk: ['MANAGE_INVENTORY', 'SEND_TRANSFER', 'RECEIVE_TRANSFER'],
   Sales: ['CREATE_SALE', 'PROCESS_PAYMENT'],
-  Purchasor: ['MANAGE_INVENTORY', 'VIEW_REPORTS'],
+  // Stock and procurement only; no sales or money reports (#234, decision 1a).
+  Purchasor: ['MANAGE_INVENTORY', 'VIEW_STOCK_REPORTS', 'VIEW_COST'],
 };
 
 /**

@@ -80,9 +80,14 @@ export async function getById(ctx: ActorContext, id: number) {
 
 // ── Changing ──────────────────────────────────────────────────────────────────
 
-/** Creates the account with its roles and all-branch access, in one step (owner decision 5a). */
+/**
+ * Creates the account with its roles and all-branch access, in one step (owner
+ * decision 5a). The password is the one who added it chose, so it is changed
+ * at the first sign-in (#234, decision 4a).
+ */
 export async function create(ctx: ActorContext, input: NewStaff): Promise<number> {
   const actor = await actorOf(ctx);
+  policy.checkCanCreate(actor, input.roles);
   policy.checkRoleChanges(actor, input.roles);
   if (input.isAllBranches) policy.checkCanSetAllBranches(actor);
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
@@ -90,9 +95,9 @@ export async function create(ctx: ActorContext, input: NewStaff): Promise<number
   try {
     return await withTransaction({}, async (tx) => {
       await checkBranchesExist(tx, input.roles);
-      const id = await repo.insert(tx, { username: input.username, passwordHash, fullName: input.fullName, isAllBranches: input.isAllBranches });
+      const id = await repo.insert(tx, { username: input.username, passwordHash, fullName: input.fullName, isAllBranches: input.isAllBranches, mustChangePassword: true });
       await repo.addRoles(tx, id, input.roles);
-      await audit(tx, actor, 'CREATE', 'staff', id, { username: input.username, roles: input.roles, isAllBranches: input.isAllBranches });
+      await audit(tx, actor, 'CREATE', 'staff', id, { username: input.username, roles: input.roles, isAllBranches: input.isAllBranches, mustChangePassword: true });
       return id;
     });
   } catch (err) {

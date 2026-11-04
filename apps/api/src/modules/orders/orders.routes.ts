@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole, requirePermission } from '../../middleware/rbac.js';
+import { requireAnyPermission, requireRole, requirePermission } from '../../middleware/rbac.js';
 import { recordInBranch } from '../../middleware/recordScope.js';
 import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../lib/errors.js';
@@ -12,10 +12,12 @@ import * as orders from './orders.controller.js';
 const router = Router();
 const { schemas } = orders;
 const inBranch = recordInBranch('order');
+// Customer orders are read by whoever sells or takes payments (#234, decision 3a).
+const canRead = requireAnyPermission('CREATE_SALE', 'PROCESS_PAYMENT');
 
-router.get('/orders', authenticate, validate(schemas.list), orders.list);
+router.get('/orders', authenticate, canRead, validate(schemas.list), orders.list);
 router.post('/orders', authenticate, requirePermission('CREATE_SALE'), validate(schemas.create), orders.create);
-router.get('/orders/:id', authenticate, inBranch, validate(schemas.byId), orders.get);
+router.get('/orders/:id', authenticate, canRead, inBranch, validate(schemas.byId), orders.get);
 // A draft is edited until it is confirmed, by whoever sells (#174, decision 1a).
 router.put('/orders/:id', authenticate, inBranch, requirePermission('CREATE_SALE'), validate(schemas.update), orders.update);
 // Admin-only cleanup of Draft and Cancelled orders without history.

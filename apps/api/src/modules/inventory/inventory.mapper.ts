@@ -80,7 +80,8 @@ export function toStockMovementRecord(row: StockMovementRow): StockMovementRecor
   };
 }
 
-export function toStockLevelResponse(r: StockLevelRecord): StockLevel {
+/** `showCost` false leaves cost and value out, as null (#234, decision 2a). */
+export function toStockLevelResponse(r: StockLevelRecord, showCost: boolean): StockLevel {
   return {
     bookId: r.bookId,
     bookTitle: r.bookTitle,
@@ -95,9 +96,9 @@ export function toStockLevelResponse(r: StockLevelRecord): StockLevel {
     // the reservation is bookkeeping, not a second hold.
     available: r.quantity,
     reorderPoint: r.reorderPoint,
-    averageCost: r.averageCost.toNumber(4),
+    averageCost: showCost ? r.averageCost.toNumber(4) : null,
     damaged: r.damaged,
-    damagedValue: r.damagedValue.toNumber(),
+    damagedValue: showCost ? r.damagedValue.toNumber() : null,
     version: r.version,
     isLowStock: r.quantity <= r.reorderPoint,
     updatedAt: r.updatedAt.toISOString(),

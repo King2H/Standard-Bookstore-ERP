@@ -80,3 +80,30 @@ export function requirePermission(...required: Permission[]) {
     next();
   };
 }
+
+/**
+ * Passes when the caller holds at least one of the permissions; for reads that
+ * several kinds of work need (#234: customers, for whoever sells or takes payments).
+ */
+export function requireAnyPermission(...anyOf: Permission[]) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.staff) {
+      return next(new ForbiddenError('Authentication required'));
+    }
+    if (!holdsPermission(req, ...anyOf)) {
+      return next(
+        new AppError('PERMISSION_DENIED', `Permission denied. Needs one of: ${anyOf.join(', ')}`, 403, { missing: anyOf }),
+      );
+    }
+    next();
+  };
+}
+
+/** Whether the caller holds any of the permissions, read as requirePermission reads them. */
+export function holdsPermission(req: Request, ...anyOf: Permission[]): boolean {
+  if (!req.staff) return false;
+  const effective: Permission[] = req.staff.permissions?.length
+    ? (req.staff.permissions as Permission[])
+    : (ROLE_PERMISSIONS[req.staff.role] ?? []);
+  return anyOf.some((p) => effective.includes(p));
+}

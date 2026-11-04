@@ -52,13 +52,18 @@ All access control is **permission-based** (not role-name checks). Permissions a
 
 | Role | Permissions |
 |------|-------------|
-| Super_Admin | All 9 permissions |
-| Admin | All 9 permissions + `is_all_branches = true` by default |
-| Manager | All except `MANAGE_BRANCH` |
-| Finance_Officer | `PROCESS_PAYMENT`, `PROCESS_REFUND`, `VIEW_REPORTS` |
-| Stock_Clerk | `MANAGE_INVENTORY` |
+| Super_Admin | `VIEW_REPORTS`, `VIEW_STOCK_REPORTS`, `MANAGE_STAFF`, `MANAGE_BRANCH` (governance only) |
+| Admin | All permissions |
+| Manager | All except `MANAGE_BRANCH`, `CLOSE_MONTH`, `REOPEN_PERIOD` |
+| Finance_Officer | `PROCESS_PAYMENT`, `PROCESS_REFUND`, `VIEW_REPORTS`, `VIEW_STOCK_REPORTS`, `VIEW_COST`, `CLOSE_DAY`, `CLOSE_MONTH` |
+| Stock_Clerk | `MANAGE_INVENTORY`, `SEND_TRANSFER`, `RECEIVE_TRANSFER` |
 | Sales | `CREATE_SALE`, `PROCESS_PAYMENT` |
-| Purchasor | `MANAGE_INVENTORY`, `VIEW_REPORTS` |
+| Purchasor | `MANAGE_INVENTORY`, `VIEW_STOCK_REPORTS`, `VIEW_COST` |
+
+`VIEW_REPORTS` covers the sales and money reports and `VIEW_STOCK_REPORTS` the stock and procurement reports.
+Without `VIEW_COST`, stock levels come back without their cost and value. Customers and customer orders are read with
+`CREATE_SALE` or `PROCESS_PAYMENT`. A Manager adds staff to their own branch with the roles below Manager (#234).
+The full list is `apps/api/src/lib/permissions.ts`.
 
 **Multi-Role Support**: A staff member can hold multiple roles per branch. Their effective permissions are the union of all assigned roles. No profile switching required.
 

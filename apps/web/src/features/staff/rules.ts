@@ -13,7 +13,10 @@ const roles = (me: Account | undefined) => me?.currentRoles ?? [];
 /** The roles the signed-in staff member may grant: those below their own; a Super_Admin grants any. */
 export const rolesToGrant = (me: Account | undefined) => grantableRoles(roles(me));
 
-/** Creating accounts, resetting passwords, unlocking, deactivating: Admin and Super_Admin. */
+/** Adding staff, with the roles one may grant in the branches one manages: Manager and above (#234, decision 4a). */
+export const canAddStaff = (me: Account | undefined) => rankOf(roles(me)) >= 1;
+
+/** Resetting passwords, unlocking, deactivating: Admin and Super_Admin. */
 export const canAdministerAccounts = (me: Account | undefined) => rankOf(roles(me)) >= 2;
 
 /** Access to all branches is granted and removed by a Super_Admin only. */

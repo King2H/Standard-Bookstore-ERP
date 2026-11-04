@@ -18,7 +18,8 @@ export function RevalueDialog({ row, onClose }: { row: StockLevel; onClose: () =
   const { showToast } = useToast();
   const currency = useCurrency();
   const save = useRevalueStock();
-  const current = Money.of(row.averageCost);
+  // Offered only to those who may revalue, who also see cost (#234); 0 otherwise.
+  const current = Money.of(row.averageCost ?? 0);
   const Schema = z.object({
     unitCost: z.string().trim()
       .refine(isUnitCost, 'Enter an amount above 0, e.g. 12.50')

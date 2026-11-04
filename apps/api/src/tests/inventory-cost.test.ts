@@ -139,7 +139,8 @@ describe('Inventory cost (#163)', () => {
       const bookId = await newBook();
       const res = await stockIn({ bookId, locationId: shelfA, quantity: 5, referenceType: 'initial_stock', unitCost: '12.50' });
       expect(res.status).toBe(200);
-      expect(res.body.averageCost).toBe(12.5);
+      // The Stock_Clerk who brought it in does not see cost (#234, decision 2a); the stock level is valued all the same.
+      expect(res.body.averageCost).toBeNull();
       expect(await row(bookId, shelfA)).toMatchObject({ quantity: 5, cost: '12.5000', value: '62.50' });
       expect(await lastMovement(bookId, shelfA)).toMatchObject({ reason_code: 'initial', unit_cost: '12.50' });
     });
@@ -435,10 +436,10 @@ describe('Inventory cost (#163)', () => {
       expect({ quoteOnly: lastCost(quoteTitle), delivered: lastCost(deliveredTitle) }).toEqual({ quoteOnly: [0], delivered: [12] });
     });
 
-    it('shows each stock level\'s average cost', async () => {
+    it('shows each stock level\'s average cost, to staff with VIEW_COST (#234)', async () => {
       const bookId = await newBook();
       expect((await stockIn({ bookId, locationId: shelfA, quantity: 2, unitCost: '3.75' })).status).toBe(200);
-      const res = await as(api().get('/api/v1/inventory'), clerk).query({ bookId, locationId: shelfA });
+      const res = await as(api().get('/api/v1/inventory'), manager).query({ bookId, locationId: shelfA });
       expect(res.status).toBe(200);
       expect(res.body.items).toEqual([expect.objectContaining({ bookId, averageCost: 3.75 })]);
     });

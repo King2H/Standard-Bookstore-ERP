@@ -18201,7 +18201,7 @@
     "/customers": {
       "get": {
         "operationId": "listCustomers",
-        "summary": "Search customers by name, phone, email or code (shared by every branch; ?status=active by default when given)",
+        "summary": "Search customers by name, phone, email or code (shared by every branch; ?status=active by default when given; CREATE_SALE or PROCESS_PAYMENT, #234)",
         "tags": [
           "Customers"
         ],
@@ -23909,7 +23909,7 @@
     "/inventory": {
       "get": {
         "operationId": "listStockLevels",
-        "summary": "Stock per book and location in the session branch, active books by default (?branchId= another branch needs access to all branches)",
+        "summary": "Stock per book and location in the session branch, active books by default; cost and value only with VIEW_COST, else null (#234; ?branchId= another branch needs access to all branches)",
         "tags": [
           "Inventory"
         ],
@@ -24099,7 +24099,10 @@
                             "maximum": 9007199254740991
                           },
                           "averageCost": {
-                            "type": "number"
+                            "type": [
+                              "number",
+                              "null"
+                            ]
                           },
                           "damaged": {
                             "type": "integer",
@@ -24107,7 +24110,10 @@
                             "maximum": 9007199254740991
                           },
                           "damagedValue": {
-                            "type": "number"
+                            "type": [
+                              "number",
+                              "null"
+                            ]
                           },
                           "version": {
                             "type": "integer",
@@ -24357,7 +24363,10 @@
                       "maximum": 9007199254740991
                     },
                     "averageCost": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "damaged": {
                       "type": "integer",
@@ -24365,7 +24374,10 @@
                       "maximum": 9007199254740991
                     },
                     "damagedValue": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "version": {
                       "type": "integer",
@@ -24729,7 +24741,10 @@
                       "maximum": 9007199254740991
                     },
                     "averageCost": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "damaged": {
                       "type": "integer",
@@ -24737,7 +24752,10 @@
                       "maximum": 9007199254740991
                     },
                     "damagedValue": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "version": {
                       "type": "integer",
@@ -24955,7 +24973,10 @@
                       "maximum": 9007199254740991
                     },
                     "averageCost": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "damaged": {
                       "type": "integer",
@@ -24963,7 +24984,10 @@
                       "maximum": 9007199254740991
                     },
                     "damagedValue": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "version": {
                       "type": "integer",
@@ -25500,7 +25524,10 @@
                             "maximum": 9007199254740991
                           },
                           "averageCost": {
-                            "type": "number"
+                            "type": [
+                              "number",
+                              "null"
+                            ]
                           },
                           "damaged": {
                             "type": "integer",
@@ -25508,7 +25535,10 @@
                             "maximum": 9007199254740991
                           },
                           "damagedValue": {
-                            "type": "number"
+                            "type": [
+                              "number",
+                              "null"
+                            ]
                           },
                           "version": {
                             "type": "integer",
@@ -25710,7 +25740,10 @@
                       "maximum": 9007199254740991
                     },
                     "averageCost": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "damaged": {
                       "type": "integer",
@@ -25718,7 +25751,10 @@
                       "maximum": 9007199254740991
                     },
                     "damagedValue": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "version": {
                       "type": "integer",
@@ -25923,7 +25959,10 @@
                       "maximum": 9007199254740991
                     },
                     "averageCost": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "damaged": {
                       "type": "integer",
@@ -25931,7 +25970,10 @@
                       "maximum": 9007199254740991
                     },
                     "damagedValue": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "version": {
                       "type": "integer",
@@ -26174,7 +26216,10 @@
                       "maximum": 9007199254740991
                     },
                     "averageCost": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "damaged": {
                       "type": "integer",
@@ -26182,7 +26227,10 @@
                       "maximum": 9007199254740991
                     },
                     "damagedValue": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "version": {
                       "type": "integer",
@@ -26427,7 +26475,10 @@
                       "maximum": 9007199254740991
                     },
                     "averageCost": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "damaged": {
                       "type": "integer",
@@ -26435,7 +26486,10 @@
                       "maximum": 9007199254740991
                     },
                     "damagedValue": {
-                      "type": "number"
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     },
                     "version": {
                       "type": "integer",
@@ -26657,7 +26711,10 @@
                           "maximum": 9007199254740991
                         },
                         "averageCost": {
-                          "type": "number"
+                          "type": [
+                            "number",
+                            "null"
+                          ]
                         },
                         "damaged": {
                           "type": "integer",
@@ -26665,7 +26722,10 @@
                           "maximum": 9007199254740991
                         },
                         "damagedValue": {
-                          "type": "number"
+                          "type": [
+                            "number",
+                            "null"
+                          ]
                         },
                         "version": {
                           "type": "integer",
@@ -26751,7 +26811,10 @@
                           "maximum": 9007199254740991
                         },
                         "averageCost": {
-                          "type": "number"
+                          "type": [
+                            "number",
+                            "null"
+                          ]
                         },
                         "damaged": {
                           "type": "integer",
@@ -26759,7 +26822,10 @@
                           "maximum": 9007199254740991
                         },
                         "damagedValue": {
-                          "type": "number"
+                          "type": [
+                            "number",
+                            "null"
+                          ]
                         },
                         "version": {
                           "type": "integer",
@@ -27317,7 +27383,7 @@
     "/orders": {
       "get": {
         "operationId": "listOrders",
-        "summary": "List the session branch's orders, newest first (?branchId= another branch needs access to all branches)",
+        "summary": "List the session branch's orders, newest first (CREATE_SALE or PROCESS_PAYMENT, #234; ?branchId= another branch needs access to all branches)",
         "tags": [
           "Orders"
         ],
@@ -54421,7 +54487,7 @@
     "/reports/inventory": {
       "get": {
         "operationId": "getInventoryReport",
-        "summary": "Stock now, low stock, POS best sellers and stock movement in the range (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Stock now, low stock, POS best sellers and stock movement in the range (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -54688,7 +54754,7 @@
     "/reports/inventory-valuation/export": {
       "get": {
         "operationId": "exportInventoryValuation",
-        "summary": "Stock valued at each location's average cost, as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Stock valued at each location's average cost, as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -54783,7 +54849,7 @@
     "/reports/inventory/export": {
       "get": {
         "operationId": "exportInventory",
-        "summary": "Stock per book and location as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Stock per book and location as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -55784,7 +55850,7 @@
     "/reports/procurement/ap-aging": {
       "get": {
         "operationId": "getApAging",
-        "summary": "What is owed per PO by days since its last goods receipt, now (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "What is owed per PO by days since its last goods receipt, now (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -55966,7 +56032,7 @@
     "/reports/procurement/ap-aging/export": {
       "get": {
         "operationId": "exportApAging",
-        "summary": "The payables by age as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "The payables by age as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56061,7 +56127,7 @@
     "/reports/procurement/export": {
       "get": {
         "operationId": "exportProcurement",
-        "summary": "One row per line of the POs created in the range, as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "One row per line of the POs created in the range, as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56156,7 +56222,7 @@
     "/reports/procurement/open-pos": {
       "get": {
         "operationId": "getOpenPurchaseOrders",
-        "summary": "POs not yet closed or cancelled, with what is still owed, now (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "POs not yet closed or cancelled, with what is still owed, now (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56313,7 +56379,7 @@
     "/reports/procurement/open-pos/export": {
       "get": {
         "operationId": "exportOpenPurchaseOrders",
-        "summary": "The open POs as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "The open POs as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56408,7 +56474,7 @@
     "/reports/procurement/purchases-by-book": {
       "get": {
         "operationId": "getPurchasesByBook",
-        "summary": "Ordered and received quantities per book, POs created in the range (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Ordered and received quantities per book, POs created in the range (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56551,7 +56617,7 @@
     "/reports/procurement/purchases-by-book/export": {
       "get": {
         "operationId": "exportPurchasesByBook",
-        "summary": "Purchases per book as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Purchases per book as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56646,7 +56712,7 @@
     "/reports/procurement/purchases-by-supplier": {
       "get": {
         "operationId": "getPurchasesBySupplier",
-        "summary": "Ordered and received value per supplier, POs created in the range (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Ordered and received value per supplier, POs created in the range (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56783,7 +56849,7 @@
     "/reports/procurement/purchases-by-supplier/export": {
       "get": {
         "operationId": "exportPurchasesBySupplier",
-        "summary": "Purchases per supplier as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Purchases per supplier as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -56878,7 +56944,7 @@
     "/reports/procurement/supplier-balances": {
       "get": {
         "operationId": "getSupplierBalances",
-        "summary": "Received, paid, credited and owed per supplier, now (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Received, paid, credited and owed per supplier, now (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -57023,7 +57089,7 @@
     "/reports/procurement/supplier-balances/export": {
       "get": {
         "operationId": "exportSupplierBalances",
-        "summary": "The supplier balances as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "The supplier balances as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -57118,7 +57184,7 @@
     "/reports/procurement/supplier-payment-history": {
       "get": {
         "operationId": "getSupplierPaymentHistory",
-        "summary": "Payments to suppliers in the range; reversed payments left out (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Payments to suppliers in the range; reversed payments left out (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -57259,7 +57325,7 @@
     "/reports/procurement/supplier-payment-history/export": {
       "get": {
         "operationId": "exportSupplierPaymentHistory",
-        "summary": "Payments to suppliers as CSV (staff with VIEW_REPORTS; the session branch, or any or all branches with access to all branches)",
+        "summary": "Payments to suppliers as CSV (staff with VIEW_STOCK_REPORTS; the session branch, or any or all branches with access to all branches)",
         "tags": [
           "Reports"
         ],
@@ -63132,7 +63198,7 @@
       },
       "post": {
         "operationId": "createStaff",
-        "summary": "Create an account with its roles in one step (Super_Admin, Admin). Roles granted are below the creator's own; all-branch access: Super_Admin only. Usernames are unique ignoring case",
+        "summary": "Create an account with its roles in one step (Super_Admin, Admin; Managers: with a role below their own in their session branch, #234). Roles granted are below the creator's own; all-branch access: Super_Admin only. The new account changes its password at the first sign-in. Usernames are unique ignoring case",
         "tags": [
           "Staff"
         ],

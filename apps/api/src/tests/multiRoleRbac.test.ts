@@ -38,9 +38,10 @@ describe('getPermissionsForRoles — multi-role aggregation', () => {
     // From Sales
     expect(perms).toContain('CREATE_SALE');
     expect(perms).toContain('PROCESS_PAYMENT');
-    // From Purchasor
+    // From Purchasor: stock and procurement reports, not sales and money (#234)
     expect(perms).toContain('MANAGE_INVENTORY');
-    expect(perms).toContain('VIEW_REPORTS');
+    expect(perms).toContain('VIEW_STOCK_REPORTS');
+    expect(perms).not.toContain('VIEW_REPORTS');
     // Not from either
     expect(perms).not.toContain('PROCESS_REFUND');
     expect(perms).not.toContain('MANAGE_STAFF');
