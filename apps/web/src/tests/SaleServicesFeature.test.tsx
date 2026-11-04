@@ -131,7 +131,7 @@ function sale(over: Partial<PosTransaction> = {}): PosTransaction {
       id: '5', transactionId: '77', bookId: 2, bookTitle: 'Oromay', bookIsbn: '1', quantity: 3, unitPrice: 100, discountPct: 0,
       discountAmount: 0, lineTotal: 300, unitCost: 40, service: bound('REQUESTED'),
     }],
-    payments: [{ id: '1', transactionId: '77', method: 'cash', amount: 860, reference: null, payerBank: null, bankAccountId: null, createdAt: CREATED }],
+    payments: [{ id: '1', transactionId: '77', method: 'cash', amount: 860, reference: null, payerBank: null, bankAccountId: null, tendered: null, createdAt: CREATED }],
     ...over,
   });
 }

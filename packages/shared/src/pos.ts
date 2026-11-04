@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, ListPagingQuerySchema, MoneyInputSchema } from './common.js';
+import { Money } from './money.js';
 import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './paymentProof.js';
 import { SaleServiceLineSchema, ServiceLineInputSchema } from './service.js';
 
@@ -39,6 +40,8 @@ export const PosPaymentSchema = z.object({
   payerBank: z.string().nullable(),
   /** The bank account a bank payment went to (#21). */
   bankAccountId: z.number().int().nullable(),
+  /** Cash handed over, when more than the payment; the change is the difference (#226). */
+  tendered: z.number().nullable(),
   createdAt: z.string(),
 });
 
@@ -111,8 +114,15 @@ export const PosPaymentInputSchema = z
     payerBank: PayerBankSchema.optional(),
     /** A bank payment's account; required while bank accounts are on (#21). */
     bankAccountId: z.number().int().positive().optional(),
+    /** Cash only: what the customer handed over, at least the amount; the change is the difference (#226). */
+    tendered: MoneyInputSchema.optional(),
   })
-  .superRefine(checkPaymentProof({ method: 'method', reference: 'reference' }));
+  .superRefine(checkPaymentProof({ method: 'method', reference: 'reference' }))
+  .superRefine((p, ctx) => {
+    if (p.tendered === undefined) return;
+    if (p.method !== 'cash') ctx.addIssue({ code: 'custom', path: ['tendered'], message: 'Only cash is handed over' });
+    else if (Money.of(p.tendered).lessThan(Money.of(p.amount))) ctx.addIssue({ code: 'custom', path: ['tendered'], message: 'At least the amount paid' });
+  });
 export type PosPaymentInput = z.infer<typeof PosPaymentInputSchema>;
 
 export const PosLineInputSchema = z.object({

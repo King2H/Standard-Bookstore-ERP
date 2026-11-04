@@ -40,6 +40,7 @@ function paymentLines(payments: PosPaymentInput[]): PaymentLine[] {
     reference: p.reference || null,
     payerBank: p.payerBank || null,
     bankAccountId: p.bankAccountId ?? null,
+    tendered: p.tendered === undefined ? null : Money.of(p.tendered),
   }));
 }
 

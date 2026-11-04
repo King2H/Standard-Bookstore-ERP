@@ -296,6 +296,20 @@ describe('steps on an order', () => {
     expect(print).toHaveBeenCalledTimes(1);
     print.mockRestore();
   });
+
+  it('shows the subtotal before discount on the slip, then the discount and the total (#226, P5; was: the subtotal after discount)', async () => {
+    orders = [order({ status: 'COMPLETED', allowedActions: ['print'], subtotal: 45, discountTotal: 5, total: 45 })];
+    line = { ...LINE, discountAmount: 5, totalPrice: 45 };
+    const { user } = await openPage();
+    await user.click(within(await rowOf()).getByRole('button', { name: /Print/ }));
+    const slip = screen.getByRole('dialog', { name: 'Order ORD-20261018-0001' });
+    await within(slip).findByText('Fikir Eske Mekabir');
+    const row = (label: string) => within(slip).getAllByText(label).slice(-1)[0].parentElement!; // the last: the column header is "Total" too
+    expect(row('Subtotal')).toHaveTextContent('ETB 50.00');
+    expect(row('Discount')).toHaveTextContent('ETB 5.00');
+    expect(row('Total')).toHaveTextContent('ETB 45.00');
+    line = LINE;
+  });
 });
 
 describe('deleting an order', () => {

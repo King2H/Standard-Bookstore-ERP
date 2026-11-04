@@ -48,7 +48,7 @@ function sale(over: Partial<PosTransaction> = {}): PosTransaction {
     id: '77', branchId: 1, locationId: 7, customerId: null, staffId: 9, transactionNumber: 'POS-20261018-0001',
     subtotal: 10, discountTotal: 0, taxTotal: 0, grandTotal: 10, amountPaid: 10, amountDue: 0, paymentStatus: 'paid',
     currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: true, lineItems: [],
-    payments: [{ id: '1', transactionId: '77', method: 'cash', amount: 10, reference: null, payerBank: null, bankAccountId: null, createdAt: CREATED }],
+    payments: [{ id: '1', transactionId: '77', method: 'cash', amount: 10, reference: null, payerBank: null, bankAccountId: null, tendered: null, createdAt: CREATED }],
     ...over,
   });
 }
@@ -162,9 +162,50 @@ describe('POS terminal: the cart', () => {
     await user.clear(discount);
     await user.type(discount, '20');
     await user.click(screen.getByRole('button', { name: 'Add' }));
-    await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
-    expect(await screen.findByText('The discount on "Oromay" is more than your limit of 10%')).toBeInTheDocument();
+    expect(within(row).getByText('Over your 10% limit')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Complete Sale/ })).toBeDisabled();
     expect(posted()).toEqual([]);
+  });
+
+  it('says a discount is over the limit as it is typed, and keeps the sale from completing (#226, P7; was: only when Complete Sale was pressed)', async () => {
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    const row = screen.getByText('Oromay').closest('tr')!;
+    const discount = within(row).getByRole('spinbutton');
+    await user.clear(discount);
+    await user.type(discount, '15');
+    expect(within(row).getByText('Over your 10% limit')).toBeInTheDocument();
+    await user.clear(discount);
+    await user.type(discount, '10');
+    expect(within(row).queryByText(/Over your/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByRole('button', { name: /Complete Sale/ })).toBeEnabled();
+  });
+
+  it('clears the whole sale: items, payments and customer (#226, P8; was: the items only)', async () => {
+    const user = await openTerminal();
+    await user.type(screen.getByPlaceholderText('Search customer… (F9)'), 'Abe');
+    await user.click(await screen.findByText('Abebe Kebede'));
+    await addBook(user, 'Oromay');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getByText('Cart is empty')).toBeInTheDocument();
+    expect(screen.queryByText('Abebe Kebede')).not.toBeInTheDocument();
+  });
+
+  it('asks before clearing a sale that has payments, then clears them too (#226, P8; was: payments left behind)', async () => {
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('Oromay')).toBeInTheDocument();
+    expect(screen.getByLabelText('Remove payment')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Clear Sale' }));
+    expect(screen.getByText('Cart is empty')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Remove payment')).not.toBeInTheDocument();
   });
 
   it("offers an amount discount in the shop's currency (#181; was: always ETB)", async () => {
@@ -248,6 +289,7 @@ describe('POS terminal: payments', () => {
   });
 
   it('takes more cash than is due and gives change (owner decision 1a; was: "Over", sale blocked)', async () => {
+    saleAnswer = sale({ payments: [{ ...sale().payments![0], tendered: 50 }] });
     const user = await openTerminal();
     await addBook(user, 'Oromay');
     await user.type(screen.getByPlaceholderText('10.00'), '50');
@@ -256,9 +298,22 @@ describe('POS terminal: payments', () => {
     await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
 
     await waitFor(() => expect(posted()).toHaveLength(1));
-    expect(posted()[0].payments).toEqual([{ method: 'cash', amount: 10 }]);
-    const change = (await screen.findByText('Change')).closest('div')!;
-    expect(within(change).getByText(/40\.00/)).toBeInTheDocument();
+    expect(posted()[0].payments).toEqual([{ method: 'cash', amount: 10, tendered: 50 }]);
+    const receipt = await screen.findByText('POS-20261018-0001').then(() => document.getElementById('pos-receipt')!);
+    expect(within(receipt).getByText('Cash given ETB 50.00 · Change ETB 40.00')).toBeInTheDocument();
+  });
+
+  it('starts the next sale with nothing of the last: the tender is cash again (#226, P8; was: the last method and its fields)', async () => {
+    saleAnswer = sale({ payments: [{ ...sale().payments![0], method: 'mobile', reference: 'TB123' }] });
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    await user.click(screen.getByRole('button', { name: /Telebirr/ }));
+    await user.type(screen.getByLabelText('Telebirr transaction number'), 'TB123');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
+    await user.click(await screen.findByRole('button', { name: /New Sale/ }));
+    expect(screen.getByText('Cart is empty')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Telebirr transaction number')).not.toBeInTheDocument();
   });
 });
 
@@ -285,6 +340,24 @@ describe('POS terminal: the sale and its receipt', () => {
     await addBook(user, 'Oromay');
     await user.click(screen.getByRole('button', { name: /Credit Sale/ }));
     expect(await screen.findByText(`Due Date: ${new Date(2026, 9, 20).toLocaleDateString()}`)).toBeInTheDocument();
+  });
+
+  it('shows the subtotal before discount, then the discount, then the total (#226, P5; was: the subtotal after discount)', async () => {
+    me = profile(['Manager']);
+    saleAnswer = sale({ subtotal: 8, discountTotal: 2, grandTotal: 8, amountPaid: 8 });
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    const discount = within(screen.getByText('Oromay').closest('tr')!).getByRole('spinbutton');
+    await user.clear(discount);
+    await user.type(discount, '20');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
+    await screen.findByText('POS-20261018-0001');
+    const receipt = document.getElementById('pos-receipt')!;
+    const row = (label: string) => within(receipt).getAllByText(label).slice(-1)[0].closest('div')!; // the last: the column header is "Total" too
+    expect(row('Subtotal')).toHaveTextContent('ETB 10.00');
+    expect(row('Discount')).toHaveTextContent('-ETB 2.00');
+    expect(row('Total')).toHaveTextContent('ETB 8.00');
   });
 
   it('prints only the receipt (owner decision 2a; was: the whole page)', async () => {

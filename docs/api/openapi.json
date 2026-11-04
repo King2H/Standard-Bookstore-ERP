@@ -36256,6 +36256,17 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
+                        },
+                        "tendered": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -36596,6 +36607,12 @@
                               }
                             ]
                           },
+                          "tendered": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -36608,6 +36625,7 @@
                           "reference",
                           "payerBank",
                           "bankAccountId",
+                          "tendered",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -37125,6 +37143,12 @@
                                     }
                                   ]
                                 },
+                                "tendered": {
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
                                 "createdAt": {
                                   "type": "string"
                                 }
@@ -37137,6 +37161,7 @@
                                 "reference",
                                 "payerBank",
                                 "bankAccountId",
+                                "tendered",
                                 "createdAt"
                               ],
                               "additionalProperties": false
@@ -37563,6 +37588,12 @@
                               }
                             ]
                           },
+                          "tendered": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -37575,6 +37606,7 @@
                           "reference",
                           "payerBank",
                           "bankAccountId",
+                          "tendered",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -37724,6 +37756,17 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
+                        },
+                        "tendered": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^-?\\d+(\\.\\d{1,4})?$"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -38048,6 +38091,12 @@
                               }
                             ]
                           },
+                          "tendered": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -38060,6 +38109,7 @@
                           "reference",
                           "payerBank",
                           "bankAccountId",
+                          "tendered",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -38491,6 +38541,12 @@
                               }
                             ]
                           },
+                          "tendered": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           }
@@ -38503,6 +38559,7 @@
                           "reference",
                           "payerBank",
                           "bankAccountId",
+                          "tendered",
                           "createdAt"
                         ],
                         "additionalProperties": false
