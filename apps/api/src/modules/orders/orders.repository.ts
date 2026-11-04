@@ -64,8 +64,8 @@ export async function listLineItems(q: Queryable, orderId: string): Promise<Orde
         - COALESCE((SELECT SUM(rli.quantity) FROM return_line_items rli JOIN returns r ON r.id = rli.return_id
                     WHERE rli.order_line_item_id = oli.id AND r.status = 'completed' AND r.undelivered), 0)) ELSE 0 END`.as('qty_on_order'),
       // The purchase orders holding its copies, with what each still brings (#236).
-      sql<Array<{ poId: string; quantity: number }>>`COALESCE((
-        SELECT json_agg(json_build_object('poId', l.po_id::text, 'quantity', l.quantity - l.reserved_quantity) ORDER BY l.id)
+      sql<Array<{ poId: string; poNumber: string; quantity: number }>>`COALESCE((
+        SELECT json_agg(json_build_object('poId', l.po_id::text, 'poNumber', (SELECT p.po_number FROM purchase_orders p WHERE p.id = l.po_id), 'quantity', l.quantity - l.reserved_quantity) ORDER BY l.id)
         FROM special_order_links l
         WHERE l.order_line_item_id = oli.id AND l.released_at IS NULL AND l.quantity > l.reserved_quantity), '[]')`.as('purchase_orders'),
     ])

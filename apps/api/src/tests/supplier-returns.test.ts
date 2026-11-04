@@ -25,6 +25,7 @@ const SUPPLIER_PREFIX = 'Supplier Returns Supplier';
 
 interface Po {
   id: string;
+  poNumber: string;
   outstandingAmount: number;
   refundDue: number;
   refundsTotal: number;
@@ -301,7 +302,7 @@ describe('Returns to supplier (#173)', () => {
       expect((await refund(order.id, { amount: 1, method: 'cash' })).body.error).toBe('REFUND_EXCEEDS_DUE');
 
       const ledger = await as(t.finance).get(`/api/v1/suppliers/${supplierId}/ledger`);
-      const types = ledger.body.entries.filter((e: { reference: string }) => e.reference.startsWith(`PO-${order.id.padStart(6, '0')}`))
+      const types = ledger.body.entries.filter((e: { reference: string }) => e.reference.startsWith(order.poNumber))
         .map((e: { type: string; amount: number }) => [e.type, e.amount]);
       expect(types).toEqual(expect.arrayContaining([['CREDIT_NOTE', -30], ['SUPPLIER_REFUND', 30]]));
     });

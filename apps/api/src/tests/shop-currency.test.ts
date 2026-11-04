@@ -255,7 +255,7 @@ describe("Records carry the shop's currency", () => {
       const owner = ownerDb();
       const supplier = (await owner.query(`INSERT INTO suppliers (tenant_id, name, contact_info) VALUES ($1, 'Quote Supplier', '{}') RETURNING id`, [tenant])).rows[0].id;
       const draft = (await owner.query(
-        `INSERT INTO purchase_orders (tenant_id, branch_id, supplier_id, created_by, currency) VALUES ($1, $2, $3, $4, 'ETB') RETURNING id`,
+        `INSERT INTO purchase_orders (po_number, tenant_id, branch_id, supplier_id, created_by, currency) VALUES ('PO-T-' || md5(random()::text), $1, $2, $3, $4, 'ETB') RETURNING id`,
         [tenant, tenantBranch, supplier, staff],
       )).rows[0].id;
       const refused = await setCurrency('USD');
@@ -300,8 +300,8 @@ describe("Records carry the shop's currency", () => {
         const book = (await client.query(`INSERT INTO books (tenant_id, isbn, title) VALUES ($1, '9780000000002', 'B') RETURNING id`, [t])).rows[0].id;
         const po = async (notes: string, status = 'draft') => {
           const id = (await client.query(
-            `INSERT INTO purchase_orders (tenant_id, branch_id, supplier_id, created_by, status, total_amount, currency, notes)
-             VALUES ($1, $2, $3, $4, $5, 250, 'ETB', $6) RETURNING id`,
+            `INSERT INTO purchase_orders (po_number, tenant_id, branch_id, supplier_id, created_by, status, total_amount, currency, notes)
+             VALUES ('PO-T-' || md5(random()::text), $1, $2, $3, $4, $5, 250, 'ETB', $6) RETURNING id`,
             [t, b, sup, s, status, notes],
           )).rows[0].id as string;
           await client.query(`INSERT INTO po_line_items (tenant_id, po_id, book_id, quantity, unit_cost) VALUES ($1, $2, $3, 10, 25)`, [t, id, book]);

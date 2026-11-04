@@ -1,11 +1,9 @@
 import type { SupplierReturn, SupplierReturnDetail } from '@bms/shared';
-import { poNumber } from '../procurement/procurement.mapper.js';
 import type { SupplierReturnRecord, SupplierReturnView } from './supplierReturns.types.js';
 
 export function toSupplierReturn(r: SupplierReturnRecord): SupplierReturn {
   return {
     ...r,
-    poNumber: poNumber(r.poId),
     createdAt: r.createdAt.toISOString(),
     sentAt: r.sentAt?.toISOString() ?? null,
     cancelledAt: r.cancelledAt?.toISOString() ?? null,

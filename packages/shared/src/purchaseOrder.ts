@@ -39,6 +39,8 @@ export const PurchaseOrderLineSchema = z.object({
 
 export const PurchaseOrderReceiptSchema = z.object({
   id: z.string(),
+  /** GRN-YYYYMMDD-NNNN; receipts made before #238 keep GRN-<id>. */
+  receiptNumber: z.string(),
   poId: z.string(),
   locationId: z.number().int(),
   locationName: z.string(),

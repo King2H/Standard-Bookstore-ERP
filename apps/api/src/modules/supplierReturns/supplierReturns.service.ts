@@ -4,7 +4,6 @@ import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BranchAccessError, NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
-import { poNumber } from '../procurement/procurement.mapper.js';
 import * as orders from '../procurement/procurement.repository.js';
 import type { PurchaseOrderRecord } from '../procurement/procurement.types.js';
 import { creditForReturn } from '../procurement/supplierPayables.service.js';
@@ -76,7 +75,7 @@ export async function create(actor: Actor, input: { poId: string; notes: string 
       returnNumber, poId: po.id, branchId: po.receivingBranchId, supplierId: po.supplierId, notes: input.notes, createdBy: actor.staffId,
     });
     await returns.replaceLines(tx, id, input.lines, orderLines);
-    await audit(tx, actor, id, { action: 'draft', returnNumber, poNumber: poNumber(po.id), lines: input.lines }, 'CREATE');
+    await audit(tx, actor, id, { action: 'draft', returnNumber, poNumber: po.poNumber, lines: input.lines }, 'CREATE');
     return view(tx, id);
   });
 }
@@ -125,7 +124,7 @@ export async function send(actor: Actor, id: number): Promise<SupplierReturnView
     const note = credit.greaterThan(0) ? await creditForReturn(tx, actor, po, { amount: credit, returnNumber: r.returnNumber }) : null;
     await returns.setSent(tx, id, actor.staffId, note?.id ?? null);
     await audit(tx, actor, id, {
-      action: 'send', returnNumber: r.returnNumber, poNumber: poNumber(po.id), creditValue: credit.toFixed(2), costValue: cost.toFixed(2),
+      action: 'send', returnNumber: r.returnNumber, poNumber: po.poNumber, creditValue: credit.toFixed(2), costValue: cost.toFixed(2),
       creditNoteNumber: note?.creditNoteNumber ?? null,
     });
     return view(tx, id);

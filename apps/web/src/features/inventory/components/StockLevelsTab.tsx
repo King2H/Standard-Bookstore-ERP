@@ -13,10 +13,9 @@ type Status = 'active' | 'inactive' | 'all';
 const TH = 'px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide';
 
 /** Stock per book and location in the session's branch, with each row's quick actions. */
-export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }: {
+export function StockLevelsTab({ onStockIn, initialLowOnly = false }: {
   /** Opens Stock In or Stock Out with this row chosen. */
   onStockIn: (row: StockLevel) => void;
-  onStockOut: (row: StockLevel) => void;
   initialLowOnly?: boolean;
 }) {
   const { showToast } = useToast();
@@ -183,8 +182,6 @@ export function StockLevelsTab({ onStockIn, onStockOut, initialLowOnly = false }
                           <>
                             <button type="button" title="Stock In" onClick={() => onStockIn(row)}
                               className="text-xs px-1.5 py-0.5 rounded font-medium transition-colors text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950">+ In</button>
-                            <button type="button" title="Stock Out" onClick={() => onStockOut(row)}
-                              className="text-xs px-1.5 py-0.5 rounded font-medium transition-colors text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950">− Out</button>
                           </>
                         )}
                         {canRevalue(me, row) && (

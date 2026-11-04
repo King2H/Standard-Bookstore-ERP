@@ -4,7 +4,6 @@ import { scopedBranch } from '../../lib/scope.js';
 import { valid } from '../../middleware/validate.js';
 import * as service from './specialOrders.service.js';
 import type { OpenLineRecord } from './specialOrders.types.js';
-import { poNumber } from '../procurement/procurement.mapper.js';
 
 /** HTTP side of special orders (#174): validated request -> service -> response. */
 
@@ -16,7 +15,6 @@ const toResponse = (r: OpenLineRecord) => ({
   ...r,
   orderedAt: r.orderedAt.toISOString(),
   toOrder: Math.max(0, r.onOrder - r.linked),
-  purchaseOrders: r.purchaseOrders.map((p) => ({ ...p, poNumber: poNumber(p.poId) })),
 });
 
 /** The session branch's special-order lines with copies on order, oldest order first. */

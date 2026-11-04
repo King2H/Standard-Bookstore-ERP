@@ -1,6 +1,6 @@
 import type {
   AdjustStockRequest, DamagedStockRequest, ReorderPointRequest, RevalueStockRequest, StockInRequest, StockLevel, StockLevelListResponse, StockMovementListResponse,
-  StockOutRequest, TransferStockRequest, TransferStockResponse,
+  TransferStockRequest, TransferStockResponse,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
 
@@ -51,9 +51,6 @@ export const repairDamaged = (body: DamagedStockRequest) => api.post<StockLevel>
 
 /** Stock received by hand; purchase orders are received in Procurement. */
 export const stockIn = (body: StockInRequest) => api.post<StockLevel>('/inventory/stock-in', body);
-
-/** Stock removed by hand; sales take stock out through POS and orders. */
-export const stockOut = (body: StockOutRequest) => api.post<StockLevel>('/inventory/stock-out', body);
 
 /** One book's stock at one location, as it is now; null when it has none. */
 export const findStockLevel = async (bookId: number, locationId: number) =>

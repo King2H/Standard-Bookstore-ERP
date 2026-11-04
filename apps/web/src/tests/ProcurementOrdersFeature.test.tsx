@@ -105,6 +105,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe('Procurement: goods receipts (#238, S10)', () => {
+  it('names each receipt by its GRN number (was: "Receipt #<row id>")', async () => {
+    po = order({
+      status: 'partially_received',
+      receipts: [{ id: '5', receiptNumber: 'GRN-20261104-0001', poId: '42', locationId: 7, locationName: 'Main Floor', receivedBy: 3, receivedAt: CREATED, notes: null, items: [] }],
+    });
+    await openOrder();
+    expect(screen.getByText('GRN-20261104-0001')).toBeInTheDocument();
+    expect(screen.queryByText(/Receipt #5/)).not.toBeInTheDocument();
+  });
+});
+
 describe('Procurement: who may take each step', () => {
   it('offers a Stock Clerk no buying steps, which the API refuses (was: New PO, Edit, Submit and Cancel)', async () => {
     me = profile(['Stock_Clerk']);

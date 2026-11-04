@@ -13,7 +13,6 @@ import * as inventoryService from '../inventory/inventory.service.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 import * as specialOrders from '../specialOrders/specialOrders.service.js';
 import { validateSupplierForProcurement } from '../supplier/supplier.service.js';
-import { poNumber } from './procurement.mapper.js';
 import * as policy from './procurement.policy.js';
 import * as orders from './procurement.repository.js';
 import type {
@@ -134,7 +133,10 @@ export async function createPurchaseOrder(actor: Actor, input: NewPurchaseOrder)
     const locationId = await receivingLocation(tx, receivingBranchId, input.receivingLocationId);
     const total = policy.orderTotal(input.lineItems);
 
+    // Counted like every other document (#238, decision 4a; was: the row id).
+    const poNumber = await nextDailyNumber(tx, 'PO');
     const id = await orders.insertOrder(tx, {
+      poNumber,
       branchId: input.branchId,
       supplierId: input.supplierId,
       total,
@@ -153,7 +155,7 @@ export async function createPurchaseOrder(actor: Actor, input: NewPurchaseOrder)
     }, 'CREATE');
     await insertOutboxEvent(tx, 'po.created', {
       poId: id,
-      poNumber: poNumber(id),
+      poNumber,
       supplierName: await orders.supplierName(tx, input.supplierId),
       total: (await orders.findOrder(tx, id))!.totalAmount.toNumber(),
       branchId: input.branchId,
@@ -249,7 +251,7 @@ export async function submitForApproval(actor: Actor, id: string): Promise<Purch
     });
     if (status === 'pending_approval') {
       await insertOutboxEvent(tx, 'po.approval_required', {
-        poId: id, poNumber: poNumber(id), supplierName: po.supplierName, total: po.totalAmount.toNumber(), branchId: po.branchId,
+        poId: id, poNumber: po.poNumber, supplierName: po.supplierName, total: po.totalAmount.toNumber(), branchId: po.branchId,
       });
     }
   });
@@ -266,7 +268,7 @@ export async function approve(actor: Actor, id: string, reason: string | null): 
     await orders.setStatus(tx, id, 'approved', { approval: { by: actor.staffId, kind, reason } });
     await audit(tx, actor, id, { action: 'approve', approvalKind: kind, ...(reason && { reason }) });
     await insertOutboxEvent(tx, 'po.approved', {
-      poId: id, poNumber: poNumber(id), branchId: po.branchId, approvalKind: kind, reason,
+      poId: id, poNumber: po.poNumber, branchId: po.branchId, approvalKind: kind, reason,
     });
   });
   return getById(id);
@@ -280,7 +282,7 @@ export async function markAsOrdered(actor: Actor, id: string): Promise<PurchaseO
     await validateSupplierForProcurement(po.supplierId, tx);
     await orders.setStatus(tx, id, 'ordered');
     await audit(tx, actor, id, { action: 'mark_as_ordered' });
-    await insertOutboxEvent(tx, 'po.ordered', { poId: id, poNumber: poNumber(id), supplierName: po.supplierName, branchId: po.branchId });
+    await insertOutboxEvent(tx, 'po.ordered', { poId: id, poNumber: po.poNumber, supplierName: po.supplierName, branchId: po.branchId });
   });
   return getById(id);
 }
@@ -296,7 +298,7 @@ export async function cancel(actor: Actor, id: string): Promise<PurchaseOrderVie
     // Its special orders go back to be bought (#174).
     await specialOrders.release(tx, id);
     await audit(tx, actor, id, { action: 'cancel', previousStatus: po.status });
-    await insertOutboxEvent(tx, 'po.cancelled', { poId: id, poNumber: poNumber(id), branchId: po.branchId });
+    await insertOutboxEvent(tx, 'po.cancelled', { poId: id, poNumber: po.poNumber, branchId: po.branchId });
   });
   return getById(id);
 }
@@ -354,7 +356,8 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
         costMayBeZero: line.unitCost.isZero(),
         referenceType: 'purchase_order',
         referenceId: id,
-        reasonCode: 'initial',
+        // Bought, not opening stock (#238, decision 3a).
+        reasonCode: 'purchase',
         notes: receipt.notes ?? undefined,
         staffCtx: actor,
       });
@@ -365,8 +368,9 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
       });
     }
 
-    const receiptId = await orders.insertReceipt(tx, {
-      poId: id, locationId, receivedBy: actor.staffId, notes: receipt.notes, items: receipt.items,
+    const receiptNumber = await nextDailyNumber(tx, 'GRN');
+    await orders.insertReceipt(tx, {
+      poId: id, receiptNumber, locationId, receivedBy: actor.staffId, notes: receipt.notes, items: receipt.items,
     });
     const quantities = await orders.lineQuantities(tx, id);
     const status = policy.statusAfterReceipt(quantities);
@@ -382,7 +386,7 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
         amount: value.round(2),
         paymentMethod: 'cash',
         source: 'auto_on_receipt',
-        notes: `Auto-settled on receipt #${receiptId}`,
+        notes: `Auto-settled on receipt ${receiptNumber}`,
         createdBy: actor.staffId,
       });
       await refreshFinancialStatus(tx, id);
@@ -390,11 +394,11 @@ export async function receive(actor: Actor, id: string, receipt: Receipt): Promi
 
     await audit(tx, actor, id, { action: 'receive', locationId, itemCount: receipt.items.length, newStatus: status });
     if (status === 'received') {
-      await insertOutboxEvent(tx, 'po.fully_received', { poId: id, poNumber: poNumber(id), branchId: po.receivingBranchId });
+      await insertOutboxEvent(tx, 'po.fully_received', { poId: id, poNumber: po.poNumber, branchId: po.receivingBranchId });
     } else {
       await insertOutboxEvent(tx, 'po.partially_received', {
         poId: id,
-        poNumber: poNumber(id),
+        poNumber: po.poNumber,
         qtyReceived: receipt.items.reduce((s, i) => s + i.quantityReceived, 0),
         qtyOrdered: quantities.reduce((s, l) => s + l.quantity, 0),
         branchId: po.receivingBranchId,

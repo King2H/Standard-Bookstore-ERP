@@ -67,8 +67,8 @@ describe('Branch scope for single records', () => {
     const supplierId = (await db.query(`SELECT id FROM suppliers ORDER BY id LIMIT 1`)).rows[0].id as number;
     const po = async (branchId: number, receivingBranchId: number | null) =>
       (await db.query(
-        `INSERT INTO purchase_orders (branch_id, receiving_branch_id, supplier_id, status, total_amount, created_by, currency)
-         VALUES ($1, $2, $3, 'draft', 0, $4, 'ETB') RETURNING id`,
+        `INSERT INTO purchase_orders (po_number, branch_id, receiving_branch_id, supplier_id, status, total_amount, created_by, currency)
+         VALUES ('PO-T-' || md5(random()::text), $1, $2, $3, 'draft', 0, $4, 'ETB') RETURNING id`,
         [branchId, receivingBranchId, supplierId, a.staffId],
       )).rows[0].id as number;
     poB = await po(branchB, null);

@@ -9,7 +9,7 @@ export const METHOD_LABELS: Record<string, string> = {
 };
 
 export const STOCK_REASON_LABELS: Record<string, string> = {
-  sale: 'Sale', return: 'Return', initial: 'Stock in', correction: 'Correction', count: 'Stock count', damage: 'Damaged',
+  sale: 'Sale', return: 'Return', initial: 'Stock in', purchase: 'Purchase receipt', correction: 'Correction', count: 'Stock count', damage: 'Damaged',
   damage_repaired: 'Repaired', damage_write_off: 'Damage written off', loss: 'Loss', supplier_return: 'Returned to supplier',
   transfer_in: 'Transfer in', transfer_out: 'Transfer out', transfer_returned: 'Transfer returned', revaluation: 'Revaluation',
 };

@@ -1,4 +1,3 @@
-import { poNumber } from '../procurement/procurement.mapper.js';
 import type { OrderLineItemRow, OrderRow, SaleType } from './orders.types.js';
 
 /** The orders columns the repository selects, plus the two derived fields. */
@@ -52,7 +51,7 @@ export interface LineItemDbRow {
   qty_cancelled: string | number;
   special_order: boolean;
   qty_on_order: string | number;
-  purchase_orders: Array<{ poId: string; quantity: number }>;
+  purchase_orders: Array<{ poId: string; poNumber: string; quantity: number }>;
 }
 
 // Numeric columns arrive as exact decimal strings; the API returns them as
@@ -79,9 +78,9 @@ export function toOrderRow(row: OrderDbRow): OrderRow {
 }
 
 /** Copies on order: those a purchase order holds, by order, and the rest still to order (#236, decision 2a). */
-function onPurchaseOrders(onOrder: number, held: Array<{ poId: string; quantity: number }>) {
+function onPurchaseOrders(onOrder: number, held: Array<{ poId: string; poNumber: string; quantity: number }>) {
   if (onOrder <= 0) return { qtyToOrder: 0, purchaseOrders: [] };
-  const purchaseOrders = held.map((h) => ({ poId: h.poId, poNumber: poNumber(h.poId), quantity: Number(h.quantity) }));
+  const purchaseOrders = held.map((h) => ({ poId: h.poId, poNumber: h.poNumber, quantity: Number(h.quantity) }));
   return { qtyToOrder: Math.max(0, onOrder - purchaseOrders.reduce((n, p) => n + p.quantity, 0)), purchaseOrders };
 }
 

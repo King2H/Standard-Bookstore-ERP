@@ -45,11 +45,6 @@ describe('checkAdjustmentDirection', () => {
     }
   });
 
-  it('lets a return only add stock', () => {
-    expect(() => checkAdjustmentDirection('return', 1)).not.toThrow();
-    expect(() => checkAdjustmentDirection('return', -1)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
-  });
-
   it('lets a correction go either way', () => {
     expect(() => checkAdjustmentDirection('correction', 1)).not.toThrow();
     expect(() => checkAdjustmentDirection('correction', -1)).not.toThrow();

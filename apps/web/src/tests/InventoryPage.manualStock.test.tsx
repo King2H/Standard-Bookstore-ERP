@@ -44,11 +44,26 @@ describe('Inventory manual stock changes', () => {
     expect(screen.queryByRole('button', { name: /Stock Out/ })).toBeNull();
   });
 
-  it('offers it to a Stock_Clerk', async () => {
+  it('offers no Stock Out tab to anyone: Adjust → Loss / Theft does the same, with its reason (#238, S12)', async () => {
+    renderPage('Stock_Clerk');
+    expect(await screen.findByRole('button', { name: /Adjust/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Stock Out/ })).toBeNull();
+  });
+
+  it('takes no customer return: Returns does, with its refund (#238, S12; was: "Customer Return" here)', async () => {
     const user = userEvent.setup();
     renderPage('Stock_Clerk');
-    await user.click(await screen.findByRole('button', { name: /Stock Out/ }));
-    expect(screen.queryByText('Access restricted')).toBeNull();
+    await user.click(await screen.findByRole('button', { name: /Adjust/ }));
+    const options = screen.getAllByRole('option').map((o) => (o as HTMLOptionElement).value);
+    expect(options).toEqual(['correction', 'damage', 'loss']);
+  });
+
+  it('says a damaged copy is set aside in damaged stock, not lost (#238, S14)', async () => {
+    const user = userEvent.setup();
+    renderPage('Stock_Clerk');
+    await user.click(await screen.findByRole('button', { name: /Adjust/ }));
+    await user.selectOptions(screen.getByRole('combobox'), 'damage');
+    expect(screen.getByText(/moves to damaged stock at its cost/)).toBeInTheDocument();
   });
 
   it('sets the direction from the adjustment reason (was: free for every reason)', async () => {
@@ -60,9 +75,6 @@ describe('Inventory manual stock changes', () => {
     await user.selectOptions(reason, 'damage');
     const toggle = screen.getByRole('button', { name: /Remove/ });
     expect((toggle as HTMLButtonElement).disabled).toBe(true);
-
-    await user.selectOptions(reason, 'return');
-    expect((screen.getByRole('button', { name: /Add/ }) as HTMLButtonElement).disabled).toBe(true);
 
     await user.selectOptions(reason, 'correction');
     expect((screen.getByRole('button', { name: /Add/ }) as HTMLButtonElement).disabled).toBe(false);

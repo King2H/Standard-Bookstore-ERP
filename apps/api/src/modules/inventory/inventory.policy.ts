@@ -28,12 +28,11 @@ export function checkVersion(current: number, provided: number): void {
   }
 }
 
-// Damage and loss are shrinkage, a return puts stock back; a correction of a
-// count discrepancy may go either way (owner decision, #21).
+// Damage and loss take copies off the shelf; a correction of a count
+// discrepancy may go either way (owner decision, #21).
 const DIRECTION: Record<AdjustmentReason, 'in' | 'out' | 'either'> = {
   damage: 'out',
   loss: 'out',
-  return: 'in',
   correction: 'either',
 };
 

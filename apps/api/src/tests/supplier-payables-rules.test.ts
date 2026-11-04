@@ -14,6 +14,7 @@ const SUPPLIER_PREFIX = 'Pay Rule Supplier';
 
 interface Po {
   id: string;
+  poNumber: string;
   status: string;
   amountPaid: number;
   outstandingAmount: number;
@@ -205,8 +206,8 @@ describe('Supplier payables', () => {
       const res = await ledger(supplier);
       expect(res.status).toBe(200);
       const refs = res.body.entries.map((e: { reference: string }) => e.reference).join(' ');
-      expect(refs).toContain(`PO-${own.id.padStart(6, '0')}`);
-      expect(refs).not.toContain(`PO-${String(other.body.id).padStart(6, '0')}`);
+      expect(refs).toContain(own.poNumber);
+      expect(refs).not.toContain(other.body.poNumber);
       expect(res.body.currentBalance).toBe(40);
     });
 
