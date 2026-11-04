@@ -10,6 +10,7 @@ import {
   type CurrencyResponse,
   type EffectiveConfigResponse,
   type MessageResponse,
+  type ShopIdentity,
   type SystemConfigListResponse,
 } from '@bms/shared';
 import { valid } from '../../middleware/validate.js';
@@ -44,6 +45,11 @@ export async function listSystem(_req: Request, res: Response): Promise<void> {
 
 export async function currency(_req: Request, res: Response): Promise<void> {
   const body: CurrencyResponse = { currency: await service.getBaseCurrency() };
+  res.json(body);
+}
+
+export async function shop(req: Request, res: Response): Promise<void> {
+  const body: ShopIdentity = await service.getShopIdentity(actor(req).branchId);
   res.json(body);
 }
 

@@ -1,6 +1,10 @@
 /**
- * WelcomeBanner — top-of-dashboard banner with branding, Amharic subtitle,
+ * WelcomeBanner — top-of-dashboard banner with the shop's name and motto,
  * subtle slide-in animation, and a dismiss button.
+ *
+ * The name and motto are the shop's own settings (#228, owner decision 3a;
+ * was: one shop's name for every shop). With no name set it says "Welcome",
+ * and shows Super_Admin, who sets it, where.
  *
  * Behavior:
  * - Dismissed state is stored in sessionStorage so it doesn't re-trigger on
@@ -9,10 +13,16 @@
  *   arbitrary value). No aggressive looping.
  */
 import { useState } from 'react';
+import { Link } from 'react-router';
+import { useMyProfile } from '../features/account/queries.js';
+import { useShopIdentity } from '../features/settings/queries.js';
 
 const SESSION_KEY = 'bms_banner_dismissed';
 
 export default function WelcomeBanner() {
+  const { data: shop } = useShopIdentity();
+  const { data: me } = useMyProfile();
+  const canSetName = me?.currentRoles.includes('Super_Admin') ?? false;
   const [dismissed, setDismissed] = useState<boolean>(() => {
     try { return sessionStorage.getItem(SESSION_KEY) === '1'; } catch { return false; }
   });
@@ -45,12 +55,19 @@ export default function WelcomeBanner() {
       {/* Text */}
       <div className="flex-1 min-w-0 flex items-center gap-3">
         <h2 className="text-sm font-bold text-gray-900 dark:text-white leading-tight whitespace-nowrap">
-          Welcome to Bakos Bookstore
+          {shop?.name ? `Welcome to ${shop.name}` : 'Welcome'}
         </h2>
-        <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">·</span>
-        <p className="text-sm text-blue-700 dark:text-blue-300 font-medium hidden sm:block" lang="am">
-          መፅሐፍ እንዳላነብ የሚከለክለኝ ማነው?
-        </p>
+        {shop?.motto && (
+          <>
+            <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">·</span>
+            <p className="text-sm text-blue-700 dark:text-blue-300 font-medium hidden sm:block">{shop.motto}</p>
+          </>
+        )}
+        {shop && !shop.name && canSetName && (
+          <Link to="/settings" className="text-xs font-semibold text-blue-700 dark:text-blue-300 hover:underline">
+            Set your shop's name in Settings → Shop
+          </Link>
+        )}
       </div>
 
       {/* Dismiss */}

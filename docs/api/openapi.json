@@ -17686,6 +17686,102 @@
         }
       }
     },
+    "/config/shop": {
+      "get": {
+        "operationId": "getShopIdentity",
+        "summary": "What heads receipts and slips: the shop's name, motto and TIN, and the session branch's name, address and phone (#228)",
+        "tags": [
+          "Configuration"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The shop and the session branch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "motto": {
+                      "type": "string"
+                    },
+                    "tin": {
+                      "type": "string"
+                    },
+                    "branch": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "address": {
+                          "type": "string"
+                        },
+                        "phone": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "address",
+                        "phone"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "motto",
+                    "tin",
+                    "branch"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/config/system": {
       "get": {
         "operationId": "listSystemConfig",

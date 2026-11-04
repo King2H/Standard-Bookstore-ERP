@@ -201,6 +201,7 @@ import {
   ConfigEntrySchema,
   ConfigKeyParamsSchema,
   CurrencyResponseSchema,
+  ShopIdentitySchema,
   EffectiveConfigQuerySchema,
   EffectiveConfigResponseSchema,
   SetConfigValueRequestSchema,
@@ -823,6 +824,15 @@ function configOperations(): ApiOperation[] {
       tag,
       responses: { 200: { description: 'The currency code', schema: CurrencyResponseSchema } },
       errors: [401, 403, 500],
+    },
+    {
+      operationId: 'getShopIdentity',
+      method: 'get',
+      path: '/config/shop',
+      summary: 'What heads receipts and slips: the shop\'s name, motto and TIN, and the session branch\'s name, address and phone (#228)',
+      tag,
+      responses: { 200: { description: 'The shop and the session branch', schema: ShopIdentitySchema } },
+      errors: [401, 404, 500],
     },
     {
       operationId: 'getEffectiveConfig',

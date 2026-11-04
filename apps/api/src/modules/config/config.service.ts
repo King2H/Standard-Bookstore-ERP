@@ -1,4 +1,4 @@
-import type { ConfigSource } from '@bms/shared';
+import type { ConfigSource, ShopIdentity } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { isForeignKeyViolation } from '../../db/errors.js';
 import { withTransaction } from '../../db/tx.js';
@@ -70,6 +70,14 @@ export async function getBaseCurrency(): Promise<string> {
   } catch {
     return 'ETB';
   }
+}
+
+/** What heads receipts and slips, and the welcome banner (#228): the shop, and the session branch. */
+export async function getShopIdentity(branchId: number): Promise<ShopIdentity> {
+  const row = await config.findShopIdentity(kysely, branchId);
+  if (!row) throw new NotFoundError('Branch');
+  const { branchName, address, phone, ...shop } = row;
+  return { ...shop, branch: { id: branchId, name: branchName, address, phone } };
 }
 
 // ── System settings ───────────────────────────────────────────────────────────

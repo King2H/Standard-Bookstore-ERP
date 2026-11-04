@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getEffectiveConfig, listBranchConfig, listSystemConfig, removeBranchOverride, setBranchConfig, setSystemConfig } from './api.js';
+import { getCurrentBranchId } from '../../lib/api.js';
+import { getEffectiveConfig, getShopIdentity, listBranchConfig, listSystemConfig, removeBranchOverride, setBranchConfig, setSystemConfig } from './api.js';
 
 /** Every key starts with `settingsKeys.all`; a change refreshes only the settings it touched. */
 export const settingsKeys = {
@@ -7,7 +8,13 @@ export const settingsKeys = {
   system: () => [...settingsKeys.all, 'system'] as const,
   branch: (branchId: number) => [...settingsKeys.all, 'branch', branchId] as const,
   effective: (key: string) => [...settingsKeys.all, 'effective', key] as const,
+  shop: (branchId: number | null) => [...settingsKeys.all, 'shop', branchId] as const,
 };
+
+/** The shop's name, motto and TIN, and the session branch (#228); refreshed when a setting changes or the branch does. */
+export function useShopIdentity() {
+  return useQuery({ queryKey: settingsKeys.shop(getCurrentBranchId()), queryFn: getShopIdentity, staleTime: 5 * 60_000 });
+}
 
 /** One setting as it applies in the session's branch; undefined while loading. */
 export function useEffectiveSetting(key: string) {

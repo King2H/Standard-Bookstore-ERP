@@ -22,6 +22,7 @@ import NotificationBell from '../features/notifications/components/NotificationB
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const AT = '2026-10-30T07:00:00.000Z';
 const SHELF = { id: 1, name: 'Shop Floor', isDefaultFulfillment: true };
@@ -70,6 +71,7 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/branches/1/locations') {
       return json(contract(LocationListResponseSchema, { items: [{ ...SHELF, branchId: 1, createdAt: AT }], total: 1, accessMode: 'full' }));
     }

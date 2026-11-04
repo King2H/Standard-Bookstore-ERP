@@ -135,3 +135,26 @@ export async function findShopCurrency(q: Queryable): Promise<string> {
   const { rows } = await sql<{ currency: string }>`SELECT ${SHOP_CURRENCY} AS currency`.execute(q);
   return rows[0].currency;
 }
+
+/**
+ * The shop's name, motto and TIN, and the branch's name, address and phone:
+ * what heads receipts and slips (#228). A setting not stored reads as empty.
+ */
+export async function findShopIdentity(
+  q: Queryable,
+  branchId: number,
+): Promise<{ name: string; motto: string; tin: string; branchName: string; address: string; phone: string } | undefined> {
+  const setting = (key: string) => sql<string>`COALESCE((SELECT value #>> '{}' FROM system_config WHERE key = ${key}), '')`;
+  return q
+    .selectFrom('branches')
+    .select([
+      setting('shop_name').as('name'),
+      setting('shop_motto').as('motto'),
+      setting('shop_tin').as('tin'),
+      'name as branchName',
+      'address',
+      sql<string>`COALESCE(contact_info->>'phone', '')`.as('phone'),
+    ])
+    .where('id', '=', branchId)
+    .executeTakeFirst();
+}

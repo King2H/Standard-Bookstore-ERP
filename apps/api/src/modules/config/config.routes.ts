@@ -18,6 +18,7 @@ router.put('/config/system/:key', authenticate, requireRole('Super_Admin'), vali
 
 // Any signed-in staff member, for their session branch (POS, Orders, ...).
 router.get('/config/currency', authenticate, config.currency);
+router.get('/config/shop', authenticate, config.shop);
 router.get('/config/effective', authenticate, validate(schemas.effective), config.effective);
 
 // A branch's settings: the session branch, or any branch with access to all branches (#77).

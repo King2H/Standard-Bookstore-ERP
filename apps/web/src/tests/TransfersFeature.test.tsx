@@ -25,6 +25,7 @@ import { KpiCard } from '../features/dashboard/components/cards.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-27T07:00:00.000Z';
 const SHOP = { id: 1, name: 'Shop Floor', isDefaultFulfillment: true };
@@ -91,6 +92,7 @@ function stubApi() {
     const u = new URL(path, 'http://x');
     const list = <T,>(items: T[]) => ({ items, total: items.length, page: 1, totalPages: 1 });
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/branches') {
       return json(contract(BranchListResponseSchema, { items: [branch(1, 'Home'), branch(2, 'Piassa')], total: 2, page: 1, pageSize: 100, totalPages: 1 }));
     }
