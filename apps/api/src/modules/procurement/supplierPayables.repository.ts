@@ -98,7 +98,7 @@ export async function ledgerEvents(q: Queryable, supplierId: number, branchId: n
   const inBranch = branchId === undefined ? sql`TRUE` : sql`po.branch_id = ${branchId}`;
   const { rows } = await sql<{ day: string; type: LedgerEvent['type']; reference: string; description: string; amount: string }>`
     WITH orders AS (
-      SELECT po.id, po.created_at, po.total_amount, 'PO-' || LPAD(po.id::text, 6, '0') AS po_number
+      SELECT po.id, po.created_at, po.total_amount, po.po_number
       FROM purchase_orders po
       WHERE po.supplier_id = ${supplierId}
         AND po.status NOT IN ('draft', 'pending_approval', 'cancelled')
@@ -110,13 +110,13 @@ export async function ledgerEvents(q: Queryable, supplierId: number, branchId: n
              0::numeric AS amount
       FROM orders o
       UNION ALL
-      SELECT r.received_at, 2, r.id, 'GOODS_RECEIPT', o.po_number || ' / GRN-' || r.id,
+      SELECT r.received_at, 2, r.id, 'GOODS_RECEIPT', o.po_number || ' / ' || r.receipt_number,
              'Goods received', SUM(ri.quantity_received * li.unit_cost)
       FROM po_receipts r
       JOIN orders o ON o.id = r.po_id
       JOIN po_receipt_items ri ON ri.receipt_id = r.id
       JOIN po_line_items li ON li.id = ri.po_line_item_id
-      GROUP BY r.id, r.received_at, o.po_number
+      GROUP BY r.id, r.received_at, r.receipt_number, o.po_number
       UNION ALL
       SELECT sp.created_at, 3, sp.id, 'PAYMENT', o.po_number || ' / ' || COALESCE(sp.payment_number, 'SPAY-' || sp.id),
              'Payment (' || sp.payment_method || ')', -sp.amount

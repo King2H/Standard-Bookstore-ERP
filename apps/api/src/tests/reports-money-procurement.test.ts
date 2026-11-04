@@ -26,6 +26,7 @@ describe('Payment, exchange, return and procurement reports', () => {
   let token: string;
   let today: string;
   let poId: number;
+  const poNumberOf = async (id: number) => (await db.query(`SELECT po_number FROM purchase_orders WHERE id = $1`, [id])).rows[0].po_number as string;
   const api = () => request(getTestApp());
   const get = (path: string) => api().get(path).set('Authorization', `Bearer ${token}`).set('X-Branch-Id', String(branchId));
   const insert = async (text: string, params: unknown[]): Promise<number> => Number((await db.query(text, params)).rows[0].id);
@@ -131,12 +132,12 @@ describe('Payment, exchange, return and procurement reports', () => {
     // A PO: 4 of 10 received at 5 (20 owed), 8 paid, goods received 40 days ago.
     const supplierId = await insert(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [`${REF}Supplier`]);
     poId = await insert(
-      `INSERT INTO purchase_orders (supplier_id, branch_id, created_by, status, total_amount, currency) VALUES ($1, $2, $3, 'partially_received', 50, 'ETB') RETURNING id`,
+      `INSERT INTO purchase_orders (po_number, supplier_id, branch_id, created_by, status, total_amount, currency) VALUES ('PO-T-' || md5(random()::text), $1, $2, $3, 'partially_received', 50, 'ETB') RETURNING id`,
       [supplierId, branchId, staffId],
     );
     await db.query(`INSERT INTO po_line_items (po_id, book_id, quantity, received_quantity, unit_cost) VALUES ($1, $2, 10, 4, 5)`, [poId, bookId]);
     await db.query(
-      `INSERT INTO po_receipts (po_id, location_id, received_by, received_at) VALUES ($1, $2, $3, now() - INTERVAL '40 days')`,
+      `INSERT INTO po_receipts (receipt_number, po_id, location_id, received_by, received_at) VALUES ('GRN-T-' || md5(random()::text), $1, $2, $3, now() - INTERVAL '40 days')`,
       [poId, locationId, staffId],
     );
     await db.query(
@@ -193,12 +194,12 @@ describe('Payment, exchange, return and procurement reports', () => {
   it('the procurement export names each PO by its reference (was: the bare id)', async () => {
     const res = await get(`/api/v1/reports/procurement/export?dateFrom=${today}&dateTo=${today}`);
     expect(res.status).toBe(200);
-    expect(res.text).toContain(`PO-${String(poId).padStart(6, '0')}`);
+    expect(res.text).toContain(await poNumberOf(poId));
   });
 
   it('ages what is owed to a supplier by days since the goods arrived', async () => {
     const res = await get('/api/v1/reports/procurement/ap-aging');
-    expect(res.body.rows).toEqual([expect.objectContaining({ poReference: `PO-${String(poId).padStart(6, '0')}`, outstandingAmount: 12, agingBucket: '31-60' })]);
+    expect(res.body.rows).toEqual([expect.objectContaining({ poReference: await poNumberOf(poId), outstandingAmount: 12, agingBucket: '31-60' })]);
     expect(res.body.byBucket).toContainEqual({ bucket: '31-60', count: 1, totalOutstanding: 12 });
   });
 

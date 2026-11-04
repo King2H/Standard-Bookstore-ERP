@@ -28,11 +28,11 @@ export async function openLines(
   const { rows } = await sql<{
     id: string; order_id: string; order_number: string; created_at: Date; customer_id: number | null; customer_name: string | null;
     book_id: number; title: string; isbn: string | null; quantity: number; on_order: number; linked: number;
-    pos: Array<{ poId: string; quantity: number; reserved: number }>;
+    pos: Array<{ poId: string; poNumber: string; quantity: number; reserved: number }>;
   }>`
     SELECT oli.id::text, o.id::text AS order_id, o.order_number, o.created_at, o.customer_id, c.full_name AS customer_name,
            oli.book_id, b.title, b.isbn, oli.quantity, ${ON_ORDER}::int AS on_order, ${LINKED}::int AS linked,
-           COALESCE((SELECT json_agg(json_build_object('poId', l.po_id::text, 'quantity', l.quantity, 'reserved', l.reserved_quantity) ORDER BY l.id)
+           COALESCE((SELECT json_agg(json_build_object('poId', l.po_id::text, 'poNumber', (SELECT p.po_number FROM purchase_orders p WHERE p.id = l.po_id), 'quantity', l.quantity, 'reserved', l.reserved_quantity) ORDER BY l.id)
                      FROM special_order_links l WHERE l.order_line_item_id = oli.id AND l.released_at IS NULL), '[]') AS pos
     FROM order_line_items oli
     JOIN orders o ON o.id = oli.order_id

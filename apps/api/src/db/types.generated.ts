@@ -761,6 +761,7 @@ export interface PoReceipts {
   location_id: number;
   notes: string | null;
   po_id: Int8;
+  receipt_number: string;
   received_at: Generated<Timestamp>;
   received_by: number;
   tenant_id: Generated<number>;
@@ -795,6 +796,7 @@ export interface PurchaseOrders {
   id: Generated<Int8>;
   notes: string | null;
   payment_terms: Generated<string>;
+  po_number: string;
   receiving_branch_id: number | null;
   receiving_location_id: number | null;
   status: Generated<string>;

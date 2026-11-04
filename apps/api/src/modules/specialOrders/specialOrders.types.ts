@@ -26,7 +26,7 @@ export interface OpenLineRecord {
   quantity: number;
   onOrder: number;
   linked: number;
-  purchaseOrders: Array<{ poId: string; quantity: number; reserved: number }>;
+  purchaseOrders: Array<{ poId: string; poNumber: string; quantity: number; reserved: number }>;
 }
 
 /** An order line being linked or reserved for, locked, with its order. */

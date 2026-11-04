@@ -1,4 +1,4 @@
-import type { AdjustmentReason, ProfileResponse, StockInRequest, StockLevel, StockOutRequest } from '@bms/shared';
+import type { AdjustmentReason, ProfileResponse, StockInRequest, StockLevel } from '@bms/shared';
 
 /**
  * Who may change stock: the API's rules (inventory.routes.ts), so the page
@@ -42,25 +42,17 @@ export const STOCK_IN_REFERENCES: { value: NonNullable<StockInRequest['reference
 ];
 
 /**
- * What a stock-out by hand may name: it is recorded as a loss; sales go
- * through POS and orders, damage through Adjust (owner decision 2a, #23).
- */
-export const STOCK_OUT_REFERENCES: { value: NonNullable<StockOutRequest['referenceType']>; label: string }[] = [
-  { value: 'manual', label: 'Manual Removal' },
-];
-
-/**
  * The way each adjustment reason moves stock, as the API checks it: damage and
- * loss remove, a return adds, a correction goes either way (#21).
+ * loss remove, a correction goes either way (#21); a return goes through Returns (#238).
  */
 export const ADJUSTMENT_DIRECTION: Record<AdjustmentReason, 'add' | 'remove' | null> = {
-  correction: null, damage: 'remove', loss: 'remove', return: 'add',
+  correction: null, damage: 'remove', loss: 'remove',
 };
 
 /** The reason codes stock movements are recorded with, as History shows and filters them. */
 export const REASON_LABELS: Record<string, string> = {
   correction: 'Correction', count: 'Count', damage: 'Damage', damage_repaired: 'Repaired', damage_write_off: 'Written Off', initial: 'Initial', loss: 'Loss',
-  return: 'Return', revaluation: 'Revalued', sale: 'Sale',
+  purchase: 'Purchase receipt', return: 'Return', revaluation: 'Revalued', sale: 'Sale',
   stock_in: 'Stock In', supplier_return: 'Return to Supplier', transfer_in: 'Transfer In', transfer_out: 'Transfer Out', transfer_returned: 'Transfer Returned',
 };
 

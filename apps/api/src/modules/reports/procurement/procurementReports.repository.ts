@@ -6,7 +6,8 @@ import { scopeConditions, where, type ReportScope } from '../reportScope.js';
 // what was paid (a reversed payment never was) and credited: the same basis
 // as the PO's own financial status and the supplier ledger.
 
-const PO_REFERENCE = (column: string) => `('PO-' || LPAD(${column}::text, 6, '0'))`;
+// The number printed on the order (#238): stored with it, no longer made from its id.
+const PO_REFERENCE = (column: string) => `(SELECT p.po_number FROM purchase_orders p WHERE p.id = ${column})`;
 
 const RECEIVED_VALUE = `COALESCE((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id), 0)`;
 const PAID = `COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id AND sp.reversed_at IS NULL), 0)`;

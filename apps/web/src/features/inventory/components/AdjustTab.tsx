@@ -12,7 +12,7 @@ import { INPUT, LABEL, Messages, isPositiveWhole, useStockChange } from './stock
 /** The form's fields, checked with the rules of the API's adjustment contract. */
 const AdjustFormSchema = z.object({
   amount: z.string().trim().refine(isPositiveWhole, 'Enter a non-zero quantity'),
-  reasonCode: z.enum(['correction', 'damage', 'loss', 'return']),
+  reasonCode: z.enum(['correction', 'damage', 'loss']),
   notes: z.string().max(500, 'Notes can be at most 500 characters'),
 });
 type AdjustFormValues = z.infer<typeof AdjustFormSchema>;
@@ -109,8 +109,13 @@ export function AdjustTab() {
                 <option value="correction">Correction (count discrepancy)</option>
                 <option value="damage">Damage</option>
                 <option value="loss">Loss / Theft</option>
-                <option value="return">Customer Return</option>
               </select>
+              {/* A customer's return goes through Returns, with its refund (#238, S12). */}
+              {reasonCode === 'damage' && (
+                <p className="text-xs mt-1 text-gray-400">
+                  The copy moves to damaged stock at its cost, to be repaired, written off or sent back to the supplier.
+                </p>
+              )}
             </div>
 
             <div>

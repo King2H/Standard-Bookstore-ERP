@@ -337,17 +337,22 @@ export async function issueStock(tx: Queryable, issue: StockIssue): Promise<{ un
 /**
  * A manual correction, valued at the average cost so a write-off shows in
  * inventory value; the average itself does not change (owner decision, #21).
+ * Damaged copies are set aside, not lost: they move to damaged stock with their
+ * cost, to be written off, repaired or sent back (#238, decision 1a; was: a loss).
  */
 async function adjustLevel(tx: Queryable, actor: Actor, adjustment: Adjustment): Promise<{ before: number; after: number }> {
   const { bookId, locationId, delta, reasonCode } = adjustment;
   policy.checkAdjustmentDirection(reasonCode, delta);
-  const allowNegative = await negativeStockAllowedAt(tx, locationId);
+  const damaged = reasonCode === 'damage';
+  // Only copies on hand can be damaged, whatever the negative-stock setting.
+  const allowNegative = !damaged && await negativeStockAllowedAt(tx, locationId);
 
   const before = await lockOrThrow(tx, bookId, locationId);
   policy.checkVersion(before.version, adjustment.version);
   const after = policy.quantityAfterAdjustment(before.quantity, delta, allowNegative);
 
   await stock.updateLevel(tx, bookId, locationId, { quantity: after });
+  if (damaged) await stock.addDamaged(tx, bookId, locationId, -delta, before.averageCost.times(-delta).round(2));
   await stock.insertMovement(tx, {
     bookId,
     locationId,
@@ -563,7 +568,7 @@ export function bookStock(bookId: number, branchId: number | undefined): Promise
 
 // ── Manual changes from the inventory screens ────────────────────────────────
 
-/** A manual correction: damage, loss, a return to the shelf, or a count discrepancy. */
+/** A manual correction: copies damaged (set aside) or lost, or a count discrepancy. */
 export async function adjustStock(actor: Actor, adjustment: Adjustment): Promise<StockLevelRecord> {
   return withTransaction({}, async (tx) => {
     const { before, after } = await adjustLevel(tx, actor, adjustment);

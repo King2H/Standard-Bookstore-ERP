@@ -134,7 +134,7 @@ describe('Data consistency check', () => {
     // Purchase orders: "ordered" with copies received; paid beyond its total.
     const supplierId = await one(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [`${MARK} Supplier`]);
     const poId = await one(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, created_by, status, total_amount, currency) VALUES ($1, $2, $3, 'ordered', 50, 'ETB') RETURNING id`,
+      `INSERT INTO purchase_orders (po_number, branch_id, supplier_id, created_by, status, total_amount, currency) VALUES ('PO-T-' || md5(random()::text), $1, $2, $3, 'ordered', 50, 'ETB') RETURNING id`,
       [branchId, supplierId, staffId],
     );
     await client.query(`INSERT INTO po_line_items (po_id, book_id, quantity, unit_cost, received_quantity) VALUES ($1, $2, 5, 10, 2)`, [poId, book1]);
@@ -164,7 +164,7 @@ describe('Data consistency check', () => {
       [rtsId, poLine, book1, loc],
     );
     const refundedPo = await one(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, created_by, status, total_amount, currency) VALUES ($1, $2, $3, 'ordered', 50, 'ETB') RETURNING id`,
+      `INSERT INTO purchase_orders (po_number, branch_id, supplier_id, created_by, status, total_amount, currency) VALUES ('PO-T-' || md5(random()::text), $1, $2, $3, 'ordered', 50, 'ETB') RETURNING id`,
       [branchId, supplierId, staffId],
     );
     await client.query(

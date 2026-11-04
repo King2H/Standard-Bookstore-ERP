@@ -21,7 +21,7 @@ function selectReturns(q: Queryable) {
     .leftJoin('staff as ss', 'ss.id', 'r.sent_by')
     .leftJoin('supplier_credit_notes as cn', 'cn.id', 'r.credit_note_id')
     .select([
-      'r.id', 'r.return_number', 'r.po_id', 'r.branch_id', 'r.supplier_id', 's.name as supplier_name', 'r.status', 'r.notes',
+      'r.id', 'r.return_number', 'r.po_id', 'po.po_number', 'r.branch_id', 'r.supplier_id', 's.name as supplier_name', 'r.status', 'r.notes',
       'r.created_by', 'cs.full_name as created_by_name', 'r.created_at', 'r.sent_by', 'ss.full_name as sent_by_name', 'r.sent_at',
       'r.cancelled_at', 'r.cancel_reason', 'cn.credit_note_number',
       sql<string>`(SELECT count(*) FROM supplier_return_lines x WHERE x.return_id = r.id)`.as('line_count'),
@@ -39,6 +39,7 @@ function toRecord(r: ReturnRow): SupplierReturnRecord {
     id: r.id,
     returnNumber: r.return_number,
     poId: String(r.po_id),
+    poNumber: r.po_number,
     branchId: r.branch_id,
     supplierId: r.supplier_id,
     supplierName: r.supplier_name,

@@ -158,7 +158,7 @@ describe('The migration on a shop that has the demo rows (2a, 4a)', () => {
       const supplier = (name: string) => one(`INSERT INTO suppliers (name, contact_info) VALUES ($1, '{}') RETURNING id`, [name]);
       await supplier('Book Distributors Inc');
       const ordered = await supplier('Oxford University Press Direct');
-      await client.query(`INSERT INTO purchase_orders (branch_id, supplier_id, created_by, currency) VALUES ($1, $2, $3, 'ETB')`, [real, ordered, staff]);
+      await client.query(`INSERT INTO purchase_orders (po_number, branch_id, supplier_id, created_by, currency) VALUES ('PO-T-' || md5(random()::text), $1, $2, $3, 'ETB')`, [real, ordered, staff]);
       const customer = async (code: string, name: string, credit: number, points: number) => {
         const id = await one(`INSERT INTO customers (branch_id, customer_code, full_name) VALUES ($1, $2, $3) RETURNING id`, [placeholder, code, name]);
         await client.query(`INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, $2)`, [id, credit]);

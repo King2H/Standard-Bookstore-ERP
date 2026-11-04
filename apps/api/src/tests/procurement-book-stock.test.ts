@@ -36,7 +36,7 @@ describe('Books to order: stock by location, on hand and on order', () => {
     await db.query(`DELETE FROM refresh_tokens WHERE session_id IN (SELECT id FROM staff_sessions WHERE tenant_id IN (${tenants}))`);
     for (const table of [
       'audit_logs', 'outbox', 'notification_reads', 'notifications', 'inventory_history', 'inventory', 'po_receipt_items', 'po_receipts', 'po_line_items',
-      'purchase_orders', 'books', 'suppliers', 'system_config', 'staff_branch_roles', 'staff_sessions', 'staff', 'locations', 'branches',
+      'purchase_orders', 'document_counters', 'books', 'suppliers', 'system_config', 'staff_branch_roles', 'staff_sessions', 'staff', 'locations', 'branches',
     ]) {
       await db.query(`DELETE FROM ${table} WHERE tenant_id IN (${tenants})`);
     }

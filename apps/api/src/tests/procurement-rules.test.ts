@@ -237,10 +237,11 @@ describe('Purchase orders', () => {
       expect(res.body.items.map((p: Po) => p.id)).toContain(po.id);
     });
 
-    it('names the order PO-000123 in the created notification (was: its bare id)', async () => {
+    it('names the order by its number in the created notification (was: its bare id; counted since #238)', async () => {
       const po = await create();
       const event = await one(`SELECT payload FROM outbox WHERE event_type = 'po.created' AND payload->>'poId' = $1`, [po.id]);
-      expect(event.payload.poNumber).toBe(`PO-${po.id.padStart(6, '0')}`);
+      expect(event.payload.poNumber).toMatch(/^PO-\d{8}-\d{4}$/);
+      expect(event.payload.poNumber).toBe((await one(`SELECT po_number FROM purchase_orders WHERE id = $1`, [po.id])).po_number);
     });
   });
 });

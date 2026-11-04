@@ -1,7 +1,6 @@
-// #23 (M6, step 4): Stock In and Stock Out move to features/inventory. A
-// manual stock-in names no purchase order (owner decision 1a) and sends the
-// reference types the API accepts; a manual stock-out names only a manual
-// removal (2a) and may go below zero when the shop allows it (4a); staff
+// #23 (M6, step 4): Stock In moves to features/inventory. A manual stock-in
+// names no purchase order (owner decision 1a) and sends the reference types
+// the API accepts (Stock Out left the screens in #238: Adjust does it); staff
 // limited to certain locations are offered only those; a conflict reads the
 // row again; and the search waits for typing to pause. Every mocked answer
 // is checked against its contract.
@@ -80,7 +79,7 @@ function stubApi() {
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
-async function openTab(name: 'Stock In' | 'Stock Out') {
+async function openTab(name: 'Stock In') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={qc}><ToastProvider><InventoryPage /></ToastProvider></QueryClientProvider>);
   await screen.findByText('Animal Farm');
@@ -182,31 +181,6 @@ describe('Inventory: Stock In', () => {
     await settle();
     const searches = calls.filter((c) => c.method === 'GET' && new URL(c.path, 'http://x').searchParams.get('q'));
     expect(searches.map((c) => new URL(c.path, 'http://x').searchParams.get('q'))).toEqual(['Animal']);
-  });
-});
-
-describe('Inventory: Stock Out', () => {
-  it('names only a manual removal (was: Sale, Order, and a Damage the API refuses)', async () => {
-    await openTab('Stock Out');
-    expect(optionValues()).toEqual(['', 'manual']);
-  });
-
-  it('lets stock go below zero when the shop allows negative stock (was: always blocked)', async () => {
-    allowNegative = true;
-    const user = await openTab('Stock Out');
-    await choose(user, 'Animal Farm');
-    await user.type(screen.getByPlaceholderText('Units to remove'), '15');
-    await user.click(screen.getByRole('button', { name: /Record Stock Out/ }));
-    await waitFor(() => expect(posted('/inventory/stock-out')).toHaveLength(1));
-    expect(posted('/inventory/stock-out')[0]).toMatchObject({ quantity: 15, version: 3 });
-  });
-
-  it('still blocks it when the shop does not', async () => {
-    const user = await openTab('Stock Out');
-    await choose(user, 'Animal Farm');
-    await user.type(screen.getByPlaceholderText('Units to remove'), '15');
-    expect(screen.getByText(/Exceeds available stock/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Record Stock Out/ })).toBeDisabled();
   });
 });
 

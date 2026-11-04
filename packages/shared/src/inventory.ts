@@ -134,7 +134,11 @@ export const StockReferenceTypeSchema = z.enum([
  * Why stock was adjusted by hand. Damage and loss take stock away, a return
  * puts it back, and a correction (a count discrepancy) goes either way.
  */
-export const AdjustmentReasonSchema = z.enum(['damage', 'loss', 'return', 'correction']);
+/**
+ * Why stock is adjusted by hand. A customer's return goes through Returns, with
+ * its refund (#238, decision 2a; was: 'return' here too, with no document).
+ */
+export const AdjustmentReasonSchema = z.enum(['damage', 'loss', 'correction']);
 export type AdjustmentReason = z.infer<typeof AdjustmentReasonSchema>;
 
 export const AdjustStockRequestSchema = z.object({

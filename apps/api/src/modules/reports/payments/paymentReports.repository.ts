@@ -210,7 +210,7 @@ export async function ledgerSources(q: Queryable, scope: ReportScope): Promise<R
     reportRows<LedgerRow>(
       q,
       `SELECT COALESCE(sp.payment_number, 'SUP-' || sp.id) AS receipt_no, s2.name AS party,
-              ('PO-' || LPAD(sp.po_id::text, 6, '0')) AS reference_no, sp.payment_method,
+              (SELECT p.po_number FROM purchase_orders p WHERE p.id = sp.po_id) AS reference_no, sp.payment_method,
               NULL::text AS payer_bank, NULL::text AS payment_ref,
               sp.amount, TO_CHAR(sp.created_at, 'YYYY-MM-DD') AS date_str, s.username AS staff_username
        FROM supplier_payments sp

@@ -32,6 +32,7 @@ function selectOrders(q: Queryable) {
     .leftJoin('locations as rl', 'rl.id', 'po.receiving_location_id')
     .select([
       'po.id',
+      'po.po_number',
       'po.branch_id',
       'po.supplier_id',
       's.name as supplier_name',
@@ -137,7 +138,7 @@ export async function receipts(q: Queryable, poId: string): Promise<ReceiptRecor
     q
       .selectFrom('po_receipts as r')
       .innerJoin('locations as l', 'l.id', 'r.location_id')
-      .select(['r.id', 'r.po_id', 'r.location_id', 'l.name', 'r.received_by', 'r.received_at', 'r.notes'])
+      .select(['r.id', 'r.receipt_number', 'r.po_id', 'r.location_id', 'l.name', 'r.received_by', 'r.received_at', 'r.notes'])
       .where('r.po_id', '=', poId)
       .orderBy('r.received_at')
       .orderBy('r.id')
@@ -154,6 +155,7 @@ export async function receipts(q: Queryable, poId: string): Promise<ReceiptRecor
   ]);
   return heads.map((h) => ({
     id: String(h.id),
+    receiptNumber: h.receipt_number,
     poId: String(h.po_id),
     locationId: h.location_id,
     locationName: h.name,
@@ -306,11 +308,14 @@ export async function insertOrder(
     receivingBranchId: number;
     receivingLocationId: number | null;
     paymentTerms: PaymentTerms;
+    /** PO-YYYYMMDD-NNNN (#238). */
+    poNumber: string;
   },
 ): Promise<string> {
   const row = await q
     .insertInto('purchase_orders')
     .values({
+      po_number: po.poNumber,
       branch_id: po.branchId,
       supplier_id: po.supplierId,
       status: 'draft',
@@ -429,11 +434,14 @@ export async function addReceived(q: Queryable, lineId: number, quantity: number
 
 export async function insertReceipt(
   q: Queryable,
-  r: { poId: string; locationId: number; receivedBy: number; notes: string | null; items: Array<{ poLineItemId: number; quantityReceived: number }> },
+  r: {
+    poId: string; receiptNumber: string; locationId: number; receivedBy: number; notes: string | null;
+    items: Array<{ poLineItemId: number; quantityReceived: number }>;
+  },
 ): Promise<string> {
   const row = await q
     .insertInto('po_receipts')
-    .values({ po_id: r.poId, location_id: r.locationId, received_by: r.receivedBy, notes: r.notes })
+    .values({ po_id: r.poId, receipt_number: r.receiptNumber, location_id: r.locationId, received_by: r.receivedBy, notes: r.notes })
     .returning('id')
     .executeTakeFirstOrThrow();
   await q

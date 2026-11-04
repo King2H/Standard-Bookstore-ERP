@@ -16,6 +16,8 @@ export type FinancialStatus = 'unpaid' | 'partial' | 'paid';
 
 export interface PurchaseOrderRecord {
   id: string;
+  /** PO-YYYYMMDD-NNNN; orders made before #238 keep PO-000123. */
+  poNumber: string;
   branchId: number;
   supplierId: number;
   supplierName: string;
@@ -75,6 +77,8 @@ export interface LineRecord {
 
 export interface ReceiptRecord {
   id: string;
+  /** GRN-YYYYMMDD-NNNN; receipts made before #238 keep GRN-<id>. */
+  receiptNumber: string;
   poId: string;
   locationId: number;
   locationName: string;

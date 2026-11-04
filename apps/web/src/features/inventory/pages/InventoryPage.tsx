@@ -4,7 +4,6 @@ import { useMyProfile } from '../../account/queries.js';
 import { canMoveStock } from '../rules.js';
 import { StockLevelsTab } from '../components/StockLevelsTab.js';
 import { StockInTab } from '../components/StockInTab.js';
-import { StockOutTab } from '../components/StockOutTab.js';
 import { AdjustTab } from '../components/AdjustTab.js';
 import { TransferTab } from '../components/TransferTab.js';
 import { HistoryTab } from '../components/HistoryTab.js';
@@ -14,7 +13,7 @@ import { canTransfer } from '../../transfers/rules.js';
 import { CountsTab } from '../../stockCounts/components/CountsTab.js';
 import { canCount } from '../../stockCounts/rules.js';
 
-type Tab = 'stock' | 'stock-in' | 'stock-out' | 'adjust' | 'move' | 'outgoing' | 'incoming' | 'counts' | 'history' | 'alerts';
+type Tab = 'stock' | 'stock-in' | 'adjust' | 'move' | 'outgoing' | 'incoming' | 'counts' | 'history' | 'alerts';
 
 // Transfer notes (#170, decision 5a) and counts (#172) open on their tab from a link or a notification.
 const opensOn = (tab: string | undefined): Tab => (tab === 'outgoing' || tab === 'incoming' || tab === 'counts' ? tab : 'stock');
@@ -34,7 +33,6 @@ export default function InventoryPage({ initialContext = {}, onNavigate }: {
   const tabs = [
     { id: 'stock' as Tab, label: 'Stock Levels', icon: '📦', show: true },
     { id: 'stock-in' as Tab, label: 'Stock In', icon: '⬇️', show: moves },
-    { id: 'stock-out' as Tab, label: 'Stock Out', icon: '⬆️', show: moves },
     { id: 'adjust' as Tab, label: 'Adjust', icon: '✏️', show: moves },
     // Within the branch; notes between branches are Outgoing and Incoming (#170, decision 1a).
     { id: 'move' as Tab, label: 'Move', icon: '↔️', show: moves },
@@ -58,9 +56,8 @@ export default function InventoryPage({ initialContext = {}, onNavigate }: {
         ))}
       </div>
       <div className="flex-1 min-h-0">
-        {tab === 'stock'     && <StockLevelsTab onStockIn={row => open('stock-in', row)} onStockOut={row => open('stock-out', row)} initialLowOnly={initialContext.lowStockOnly === 'true'} />}
+        {tab === 'stock'     && <StockLevelsTab onStockIn={row => open('stock-in', row)} initialLowOnly={initialContext.lowStockOnly === 'true'} />}
         {tab === 'stock-in'  && moves && <StockInTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} />}
-        {tab === 'stock-out' && moves && <StockOutTab key={chosen ? `${chosen.bookId}-${chosen.locationId}` : 'none'} initialRow={chosen} />}
         {tab === 'adjust'    && moves && <AdjustTab />}
         {tab === 'move'      && moves && <TransferTab />}
         {tab === 'outgoing'  && canTransfer(me) && <TransfersTab key="outgoing" direction="outgoing" initialTransferId={opensOn(initialContext.tab) === 'outgoing' ? transferId : null} />}

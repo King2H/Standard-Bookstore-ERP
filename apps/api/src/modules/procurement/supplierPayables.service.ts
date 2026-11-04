@@ -6,7 +6,7 @@ import { NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertChangeable } from '../businessDays/businessDays.service.js';
 import { accountForPayment, cancelMovement, recordMovement } from '../bankAccount/bankAccount.service.js';
-import { poNumber, refundDueOf } from './procurement.mapper.js';
+import { refundDueOf } from './procurement.mapper.js';
 import * as orderPolicy from './procurement.policy.js';
 import * as orders from './procurement.repository.js';
 import { getById, refreshFinancialStatus } from './procurement.service.js';
@@ -69,7 +69,7 @@ export async function recordPayment(
     }
     await refreshFinancialStatus(tx, poId);
     await audit(tx, actor, 'supplier_payment', id, {
-      paymentNumber, poNumber: poNumber(poId), amount: payment.amount.toNumber(), paymentMethod: payment.paymentMethod,
+      paymentNumber, poNumber: po.poNumber, amount: payment.amount.toNumber(), paymentMethod: payment.paymentMethod,
     });
   });
   return getById(poId);
@@ -78,7 +78,7 @@ export async function recordPayment(
 /** A payment recorded by mistake stops counting; it stays on record as reversed (owner decision 1a). */
 export async function reversePayment(actor: Actor, poId: string, paymentId: number, reason: string): Promise<PurchaseOrderView> {
   await withTransaction({}, async (tx) => {
-    await lockOwnOrder(tx, actor, poId);
+    const po = await lockOwnOrder(tx, actor, poId);
     const payment = await payables.lockPayment(tx, poId, paymentId);
     if (!payment) throw new NotFoundError('Supplier payment');
     policy.checkCanReverse(payment);
@@ -92,7 +92,7 @@ export async function reversePayment(actor: Actor, poId: string, paymentId: numb
       actor,
       'supplier_payment',
       payment.id,
-      { action: 'reverse', paymentNumber: payment.paymentNumber, poNumber: poNumber(poId), amount: payment.amount.toNumber(), reason },
+      { action: 'reverse', paymentNumber: payment.paymentNumber, poNumber: po.poNumber, amount: payment.amount.toNumber(), reason },
       'UPDATE',
     );
   });
@@ -117,7 +117,7 @@ export async function recordCreditNote(actor: Actor, poId: string, credit: { amo
     });
     await refreshFinancialStatus(tx, poId);
     await audit(tx, actor, 'supplier_credit_note', id, {
-      creditNoteNumber, poNumber: poNumber(poId), amount: credit.amount.toNumber(), reason: credit.reason,
+      creditNoteNumber, poNumber: po.poNumber, amount: credit.amount.toNumber(), reason: credit.reason,
     });
   });
   return getById(poId);
@@ -150,7 +150,7 @@ export async function recordRefund(
     }
     await refreshFinancialStatus(tx, poId);
     await audit(tx, actor, 'supplier_refund', String(id), {
-      refundNumber, poNumber: poNumber(poId), amount: refund.amount.toFixed(2), method: refund.method, reference: refund.reference,
+      refundNumber, poNumber: po.poNumber, amount: refund.amount.toFixed(2), method: refund.method, reference: refund.reference,
     });
   });
   return getById(poId);
@@ -174,7 +174,7 @@ export async function creditForReturn(
     creditNoteNumber, poId: po.id, supplierId: po.supplierId, branchId: po.branchId, amount: credit.amount, reason, createdBy: actor.staffId,
   });
   await refreshFinancialStatus(tx, po.id);
-  await audit(tx, actor, 'supplier_credit_note', id, { creditNoteNumber, poNumber: poNumber(po.id), amount: credit.amount.toNumber(), reason });
+  await audit(tx, actor, 'supplier_credit_note', id, { creditNoteNumber, poNumber: po.poNumber, amount: credit.amount.toNumber(), reason });
   return { id: Number(id), creditNoteNumber };
 }
 

@@ -109,8 +109,8 @@ describe('Export Integrity (Module 7)', () => {
     // to look up (most-recent po_line_items row for the book) — the PO
     // itself doesn't need to be received for this lookup.
     const poRes = await db.query(
-      `INSERT INTO purchase_orders (branch_id, supplier_id, status, total_amount, created_by, notes, currency)
-       VALUES ($1, $2, 'draft', $3, $4, 'exp_test cost basis PO', 'ETB')
+      `INSERT INTO purchase_orders (po_number, branch_id, supplier_id, status, total_amount, created_by, notes, currency)
+       VALUES ('PO-T-' || md5(random()::text), $1, $2, 'draft', $3, $4, 'exp_test cost basis PO', 'ETB')
        RETURNING id`,
       [branchId, supplierId, PURCHASE_COST, staffId],
     );

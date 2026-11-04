@@ -16,6 +16,7 @@ import type {
 /** The columns procurement.repository selects for an order. */
 export interface PurchaseOrderRow {
   id: string | number | bigint;
+  po_number: string;
   branch_id: number;
   supplier_id: number;
   supplier_name: string;
@@ -51,6 +52,7 @@ export interface PurchaseOrderRow {
 export function toPurchaseOrderRecord(row: PurchaseOrderRow): PurchaseOrderRecord {
   return {
     id: String(row.id),
+    poNumber: row.po_number,
     branchId: row.branch_id,
     supplierId: row.supplier_id,
     supplierName: row.supplier_name,
@@ -103,10 +105,6 @@ export function refundDueOf(po: PurchaseOrderRecord): Money {
   return due.isNegative() ? Money.ZERO : due;
 }
 
-/** PO-000123: the number staff and suppliers see. */
-export function poNumber(id: string | number): string {
-  return `PO-${String(id).padStart(6, '0')}`;
-}
 
 /** Units still expected: none once the order is closed or cancelled. */
 export function remainingOf(status: PurchaseOrderStatus, line: Pick<LineRecord, 'quantity' | 'receivedQuantity'>): number {
@@ -118,7 +116,6 @@ export function toPurchaseOrderResponse(po: PurchaseOrderView): PurchaseOrder {
   const { lineItems, receipts, payments, creditNotes, supplierRefunds, ...head } = po;
   return {
     ...head,
-    poNumber: poNumber(po.id),
     totalAmount: po.totalAmount.toNumber(),
     approvedAt: po.approvedAt?.toISOString() ?? null,
     approvalThreshold: po.approvalThreshold.toNumber(),

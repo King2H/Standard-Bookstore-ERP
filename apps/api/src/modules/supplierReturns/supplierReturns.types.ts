@@ -14,6 +14,7 @@ export interface SupplierReturnRecord {
   id: number;
   returnNumber: string;
   poId: string;
+  poNumber: string;
   branchId: number;
   supplierId: number;
   supplierName: string;

@@ -24254,7 +24254,6 @@
                     "enum": [
                       "damage",
                       "loss",
-                      "return",
                       "correction"
                     ]
                   },
@@ -40805,6 +40804,9 @@
                                 "id": {
                                   "type": "string"
                                 },
+                                "receiptNumber": {
+                                  "type": "string"
+                                },
                                 "poId": {
                                   "type": "string"
                                 },
@@ -40866,6 +40868,7 @@
                               },
                               "required": [
                                 "id",
+                                "receiptNumber",
                                 "poId",
                                 "locationId",
                                 "locationName",
@@ -41726,6 +41729,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -41787,6 +41793,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -42489,6 +42496,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -42550,6 +42560,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -43363,6 +43374,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -43424,6 +43438,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -44144,6 +44159,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -44205,6 +44223,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -44907,6 +44926,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -44968,6 +44990,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -45688,6 +45711,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -45749,6 +45775,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -46483,6 +46510,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -46544,6 +46574,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -47246,6 +47277,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -47307,6 +47341,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -48068,6 +48103,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -48129,6 +48167,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -48861,6 +48900,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -48922,6 +48964,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -49685,6 +49728,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -49746,6 +49792,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -50497,6 +50544,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -50558,6 +50608,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -51260,6 +51311,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -51321,6 +51375,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",
@@ -52094,6 +52149,9 @@
                           "id": {
                             "type": "string"
                           },
+                          "receiptNumber": {
+                            "type": "string"
+                          },
                           "poId": {
                             "type": "string"
                           },
@@ -52155,6 +52213,7 @@
                         },
                         "required": [
                           "id",
+                          "receiptNumber",
                           "poId",
                           "locationId",
                           "locationName",

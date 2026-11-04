@@ -163,7 +163,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
             {(po.receipts ?? []).map(r => (
               <div key={r.id} className="p-4 space-y-2">
                 <div className="flex items-center gap-4 text-sm">
-                  <span className="font-medium text-gray-900 dark:text-white">Receipt #{r.id}</span>
+                  <span className="font-medium font-mono text-gray-900 dark:text-white">{r.receiptNumber}</span>
                   <span className="text-gray-500 dark:text-gray-400">{r.locationName}</span>
                   <span className="text-gray-500 dark:text-gray-400">{new Date(r.receivedAt).toLocaleString()}</span>
                   {r.notes && <span className="text-gray-500 dark:text-gray-400 italic">{r.notes}</span>}

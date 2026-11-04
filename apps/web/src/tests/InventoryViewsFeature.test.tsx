@@ -114,10 +114,9 @@ describe('Inventory: who may change stock', () => {
     expect(screen.getAllByText('Burmese Days').length).toBeGreaterThan(0);
   });
 
-  it('opens Stock Out with the row chosen from its "− Out" (was: an empty form)', async () => {
+  it('offers no "− Out" on a row: stock leaves by Adjust, with a reason (#238, S12)', async () => {
     await renderPage();
-    await userEvent.setup().click(within(rowOf('Animal Farm')).getByTitle('Stock Out'));
-    expect(await screen.findByText(/Available:/)).toBeInTheDocument();
+    expect(within(rowOf('Animal Farm')).queryByTitle('Stock Out')).not.toBeInTheDocument();
   });
 
   it('lets a row\'s actions brighten on hover (was: the row had no `group`, so they stayed faded)', async () => {
@@ -274,7 +273,9 @@ describe('Inventory: history and search', () => {
     await user.click(screen.getByRole('button', { name: /History/ }));
     const reasons = screen.getAllByRole('combobox').find((c) => within(c).queryByRole('option', { name: 'All Reasons' }))!;
     expect(within(reasons).getAllByRole('option').map((o) => (o as HTMLOptionElement).value).filter(Boolean))
-      .toEqual(['correction', 'count', 'damage', 'damage_repaired', 'damage_write_off', 'initial', 'loss', 'return', 'revaluation', 'sale', 'stock_in', 'supplier_return', 'transfer_in', 'transfer_out', 'transfer_returned']);
+      .toEqual(['correction', 'count', 'damage', 'damage_repaired', 'damage_write_off', 'initial', 'loss', 'purchase', 'return', 'revaluation', 'sale', 'stock_in', 'supplier_return', 'transfer_in', 'transfer_out', 'transfer_returned']);
+    // Goods received on a purchase order, apart from opening stock (#238, S7).
+    expect(within(reasons).getByRole('option', { name: 'Purchase receipt' })).toBeInTheDocument();
   });
 
   it('asks once typing pauses (was: a request for every key)', async () => {
