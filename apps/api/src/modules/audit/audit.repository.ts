@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import type { Queryable } from '../../db/tx.js';
 import type { AuditLogFilter, AuditLogRecord } from './audit.types.js';
 
@@ -8,7 +9,8 @@ export interface AuditEntry {
   branchId: number | null;
   /** CREATE, UPDATE, DELETE or a lifecycle action such as ARCHIVE. */
   action: string;
-  entityType: string;
+  /** One of AUDIT_ENTITY_TYPES, which the Audit Log filters by. */
+  entityType: AuditEntityType;
   entityId: string | number;
   meta?: Record<string, unknown>;
 }

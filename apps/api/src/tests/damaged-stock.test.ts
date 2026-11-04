@@ -45,7 +45,7 @@ describe('Damaged copies', () => {
       locationId, items: [{ bookId, quantity }], payments: [{ method: 'cash', amount: price * quantity }],
     });
     expect(sale.status).toBe(201);
-    const ret = await as(api().post('/api/v1/returns')).send({
+    const ret = await as(api().post('/api/v1/returns')).send({ reason: 'Returned in test',
       transactionId: Number(sale.body.id),
       lines: [{ transactionLineItemId: Number(sale.body.lineItems[0].id), quantity, disposition: 'DAMAGED' }],
     });

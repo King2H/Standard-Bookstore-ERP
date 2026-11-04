@@ -129,12 +129,13 @@ export function toTransactionResponse(t: PosTransactionRecord): PosTransaction {
     taxTotal: t.taxTotal.toNumber(),
     grandTotal: t.grandTotal.toNumber(),
     amountPaid: t.amountPaid.toNumber(),
-    amountDue: t.amountDue.toNumber(),
+    // A voided sale owes nothing: its debt was cancelled and its money handed back (#240, P9).
+    amountDue: t.status === 'voided' ? 0 : t.amountDue.toNumber(),
     paymentStatus: t.paymentStatus,
     currency: t.currency,
     status: t.status,
     createdAt: t.createdAt.toISOString(),
-    dueDate: t.dueDate,
+    dueDate: t.status === 'voided' ? null : t.dueDate,
     // A started binding job keeps the sale from being voided (#169).
     voidable: isVoidable(t) && !(t.lineItems ?? []).some((l) => l.service?.job && !['REQUESTED', 'CANCELLED'].includes(l.service.job.status)),
     ...(t.lineItems && {

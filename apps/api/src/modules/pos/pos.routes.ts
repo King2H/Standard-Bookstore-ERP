@@ -20,6 +20,6 @@ router.post('/pos/transactions', authenticate, requirePermission('CREATE_SALE'),
 router.get('/pos/transactions', authenticate, canSee, validate(schemas.list), pos.list);
 router.get('/pos/transactions/:id', authenticate, inBranch, canSee, validate(schemas.byId), pos.getById);
 router.post('/pos/transactions/:id/payment', authenticate, inBranch, canSee, validate(schemas.collect), pos.collect);
-router.post('/pos/transactions/:id/void', authenticate, inBranch, requireRole('Manager', 'Admin'), validate(schemas.byId), pos.voidTransaction);
+router.post('/pos/transactions/:id/void', authenticate, inBranch, requireRole('Manager', 'Admin'), validate(schemas.void), pos.voidTransaction);
 
 export default router;

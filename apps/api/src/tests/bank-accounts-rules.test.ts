@@ -124,7 +124,7 @@ describe('Bank accounts and reconciliation', () => {
       expect(sale.body.payments[0].bankAccountId).toBe(accountA);
       expect(await entriesOf(accountA)).toEqual([{ source_type: 'pos_payment', direction: 'in', amount: price, status: 'uncleared' }]);
 
-      const voided = await as(managerA).post(`/api/v1/pos/transactions/${sale.body.id}/void`);
+      const voided = await as(managerA).post(`/api/v1/pos/transactions/${sale.body.id}/void`, { reason: 'Voided in test' });
       expect(voided.status).toBe(200);
       expect((await entriesOf(accountA)).map((e) => [e.source_type, e.direction])).toEqual([
         ['pos_payment', 'in'],

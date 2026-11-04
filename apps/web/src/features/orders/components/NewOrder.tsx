@@ -20,6 +20,7 @@ import { BindingDialog } from '../../services/components/BindingDialog.js';
 import { discountProblem, lineInput, lineTotal, orderSubtotal, type OrderLine } from '../lines.js';
 import { useBooksForOrder, useConfirmOrder, useCreateOrder, useCustomersForOrder, useOrder, useUpdateOrder } from '../queries.js';
 import { canCreateOrder, cashConfirmBody, cashPaymentProblem } from '../rules.js';
+import { useShopToday } from '../../businessDays/queries.js';
 
 type Book = z.infer<typeof BookWithAvailabilitySchema>;
 type SaleType = 'cash_sale' | 'credit_sale';
@@ -55,6 +56,7 @@ function lineOf(l: NonNullable<Order['lineItems']>[number]): OrderLine {
 export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draftId?: string | null }) {
   const { showToast } = useToast();
   const currency = useCurrency();
+  const today = useShopToday();
   const { data: me } = useMyProfile();
   const branchId = getCurrentBranchId();
 
@@ -283,7 +285,7 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
         {saleType === 'credit_sale' && (
           <div className="pt-1 space-y-1">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Due Date</p>
-            <input type="date" aria-label="Due date" value={dueDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setDueDate(e.target.value)} className={INPUT} />
+            <input type="date" aria-label="Due date" value={dueDate} min={today} onChange={(e) => setDueDate(e.target.value)} className={INPUT} />
             {/* A deposit is paid now, the rest owed (#174, decision 2a). */}
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 pt-1">Deposit (optional)</p>
             <input type="text" inputMode="decimal" aria-label="Deposit (optional)" value={deposit} placeholder="0.00" onChange={(e) => setDeposit(e.target.value)} className={INPUT} />

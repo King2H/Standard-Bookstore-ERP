@@ -30,8 +30,13 @@ export const PENDING_FULFILLMENT = 'Confirmed,In_Progress,CONFIRMED,PAID,PART_DE
  */
 export const STATUS_FILTERS = ['DRAFT', 'CONFIRMED', 'PART_DELIVERED', 'COMPLETED', 'CANCELLED'] as const;
 
-/** How a status reads on screen. */
-export const statusLabel = (status: string) => (status === 'PART_DELIVERED' ? 'Part delivered' : status);
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft', CONFIRMED: 'Confirmed', PAID: 'Paid', PART_DELIVERED: 'Part delivered', FULFILLED: 'Fulfilled',
+  COMPLETED: 'Completed', CANCELLED: 'Cancelled',
+};
+
+/** How a status reads on screen: a label, not its code (#240, O2; was: codes and one label mixed). */
+export const statusLabel = (status: string) => STATUS_LABELS[status] ?? status;
 
 type WaitingLine = Pick<OrderLineItem, 'id' | 'bookTitle' | 'qtyReserved'>;
 

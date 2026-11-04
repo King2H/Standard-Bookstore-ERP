@@ -130,7 +130,8 @@ export const CreateReturnRequestSchema = z
     transactionId: IdSchema.optional(),
     orderId: IdSchema.optional(),
     exchangeId: IdSchema.optional(),
-    reason: z.string().max(1000).optional(),
+    /** Why the books come back, for the manager who reviews returns (#240, R1; was: optional, mostly empty). */
+    reason: z.string().trim().min(1, 'A reason is required').max(1000),
     lines: z.array(ReturnLineInputSchema).min(1, 'At least one line item is required'),
   })
   .superRefine((body, ctx) => {

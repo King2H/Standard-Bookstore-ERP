@@ -5,6 +5,7 @@ import {
   Money,
   PosCollectRequestSchema,
   PosTransactionListQuerySchema,
+  VoidPosTransactionRequestSchema,
   type PosPaymentInput,
   type PosTransaction,
   type PosTransactionListResponse,
@@ -25,6 +26,7 @@ export const schemas = {
   byId: { params: IdParamsSchema },
   create: { body: CreatePosTransactionRequestSchema },
   collect: { params: IdParamsSchema, body: PosCollectRequestSchema },
+  void: { params: IdParamsSchema, body: VoidPosTransactionRequestSchema },
 };
 
 /** The signed-in staff member; authenticate() runs before every controller. */
@@ -107,5 +109,6 @@ export async function collect(req: Request, res: Response): Promise<void> {
 }
 
 export async function voidTransaction(req: Request, res: Response): Promise<void> {
-  send(res, await service.voidTransaction(actor(req), String(valid(req, schemas.byId).params.id)));
+  const { params, body } = valid(req, schemas.void);
+  send(res, await service.voidTransaction(actor(req), String(params.id), body.reason));
 }

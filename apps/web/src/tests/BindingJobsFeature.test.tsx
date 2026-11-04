@@ -23,6 +23,7 @@ import { ToastProvider } from '../components/Toast.js';
 import { canOpenPage, NAV_SECTIONS } from '../app/navigation.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-26T07:00:00.000Z';
 
@@ -78,6 +79,7 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/service-jobs') {
       return json(contract(ServiceJobListResponseSchema, { items: BOARD, total: BOARD.length, page: 1, pageSize: 25, totalPages: 1 }));
     }
@@ -232,9 +234,10 @@ describe('a defective bound copy through Returns (4a)', () => {
     expect(qty).toHaveAttribute('max', '1');
     await user.clear(qty);
     await user.type(qty, '1');
+    await user.type(screen.getByRole('textbox', { name: 'Reason for return' }), 'Not wanted');
     await user.click(screen.getByRole('button', { name: 'Process Return' }));
     await waitFor(() => expect(posted('/returns')).toHaveLength(1));
-    expect(posted('/returns')[0]).toEqual({ transactionId: 77, lines: [{ transactionLineItemId: 5, quantity: 1, disposition: 'SELLABLE' }] });
+    expect(posted('/returns')[0]).toEqual({ transactionId: 77, reason: 'Not wanted', lines: [{ transactionLineItemId: 5, quantity: 1, disposition: 'SELLABLE' }] });
   });
 
   it('takes back a bound copy defective, by a Manager, with the reason: book and fee, kept apart as damaged', async () => {

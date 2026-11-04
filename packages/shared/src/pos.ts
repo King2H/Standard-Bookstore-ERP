@@ -87,6 +87,12 @@ const DateOnlySchema = z
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
   }, 'Not a calendar date');
 
+/** Why a sale is voided: kept in the audit log (#240, P11; was: not asked). */
+export const VoidPosTransactionRequestSchema = z.object({
+  reason: z.string().trim().min(1, 'A reason is required').max(1000),
+});
+export type VoidPosTransactionRequest = z.infer<typeof VoidPosTransactionRequestSchema>;
+
 export const PosTransactionListQuerySchema = ListPagingQuerySchema.extend({
   /** A sale number in part, a customer's name or code in part, or their phone (#236). */
   q: z.string().trim().max(100).optional(),

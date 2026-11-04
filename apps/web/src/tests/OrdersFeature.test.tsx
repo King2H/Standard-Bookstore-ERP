@@ -8,7 +8,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  CustomerSchema, OrderListResponseSchema, OrderSchema, ProfileResponseSchema, ReturnListResponseSchema,
+  CustomerSchema, OrderListResponseSchema, OrderSchema, ProfileResponseSchema, ReturnListResponseSchema, TodayStatusSchema,
   type Order, type ProfileResponse,
 } from '@bms/shared';
 import OrdersPage from '../features/orders/pages/OrdersPage.js';
@@ -60,6 +60,8 @@ function stubApi() {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
+    // The shop's day, in its time zone (#175); late in the evening it is not the UTC day.
+    if (u.pathname === '/business-days/today') return json(contract(TodayStatusSchema, { branchId: 1, day: '2030-01-02', status: 'open' }));
     if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
     if (u.pathname === '/orders' && method === 'GET') {
       const page = Number(u.searchParams.get('page') ?? 1);
@@ -158,6 +160,8 @@ describe('the list', () => {
     await rowOf();
     const select = screen.getByLabelText('Status');
     const options = within(select).getAllByRole('option').map((o) => (o as HTMLOptionElement).value);
+    // Read as labels, not codes (#240, O2; was: "DRAFT, CONFIRMED, Part delivered, COMPLETED, CANCELLED").
+    expect(within(select).getAllByRole('option').slice(2).map((o) => o.textContent)).toEqual(['Draft', 'Confirmed', 'Part delivered', 'Completed', 'Cancelled']);
     expect(options).toEqual(['', 'Confirmed,In_Progress,CONFIRMED,PAID,PART_DELIVERED', 'DRAFT', 'CONFIRMED', 'PART_DELIVERED', 'COMPLETED', 'CANCELLED']);
 
     await user.selectOptions(select, 'CANCELLED');
@@ -222,7 +226,8 @@ describe('steps on an order', () => {
     const { user } = await openPage();
     await user.click(within(await rowOf()).getByRole('button', { name: /Confirm \(set due date\)/i }));
     const due = screen.getByLabelText('Due date') as HTMLInputElement;
-    expect(due.min).toBe(new Date().toISOString().slice(0, 10));
+    // Today is the shop's day (#240, O3; was: the UTC day, yesterday late in the evening in Addis Ababa).
+    await waitFor(() => expect(due.min).toBe('2030-01-02'));
     await user.type(due, '2099-12-31');
     await user.click(within(await rowOf()).getByRole('button', { name: 'OK' }));
     await waitFor(() => expect(posted('/orders/10/confirm')).toEqual([{ dueDate: '2099-12-31' }]));

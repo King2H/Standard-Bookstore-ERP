@@ -5,6 +5,8 @@ import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import type { ReturnableLine, ReturnableSale } from '../api.js';
 import { useCreateReturn, useSaleByNumber } from '../queries.js';
+import { useEffectiveSetting } from '../../settings/queries.js';
+import { ReturnSlip } from './ReturnSlip.js';
 import { JOB_STATUS_LABEL } from '../../services/binding.js';
 import { approverRole, canProcessReturn, defectiveReturnable, feeValue, lineValue, returnableCopies } from '../rules.js';
 
@@ -29,6 +31,10 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
   const [damaged, setDamaged] = useState<Record<string, boolean>>({});
   const [defective, setDefective] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState('');
+  // The slip of the return just processed, to hand to the customer (#240, R2).
+  const [slipFor, setSlipFor] = useState<string | null>(null);
+  // The approval limit, named on the screen (#240, R1; was: "the approval limit").
+  const limit = useEffectiveSetting('max_return_value_without_auth');
 
   const { data: txData, isLoading: txLoading, error: txError } = useSaleByNumber(txSearch);
   const createReturn = useCreateReturn();
@@ -79,15 +85,17 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
       }));
     if (selectedLines.length === 0) { showToast('Select at least one item to return', 'error'); return; }
     if (anyDefective && !reason.trim()) { showToast('Say what is wrong with the bound copy', 'error'); return; }
+    // Why the books come back, for the manager who reviews returns (#240, R1; was: optional).
+    if (!reason.trim()) { showToast('Say why the books come back', 'error'); return; }
     createReturn.mutate(
       {
         ...(isOrder ? { orderId: Number(tx.id) } : isExchange ? { exchangeId: Number(tx.id) } : { transactionId: Number(tx.id) }),
-        reason: reason.trim() || undefined, lines: selectedLines,
+        reason: reason.trim(), lines: selectedLines,
       },
       {
         onSuccess: (ret) => {
           showToast(`Return ${ret.returnNumber} processed`, 'success');
-          clear(); setReason('');
+          clear(); setReason(''); setSlipFor(ret.id);
         },
         onError: (e: Error & { code?: string }) => {
           showToast(e.code === 'APPROVAL_REQUIRED' ? 'This refund requires a Manager or Admin to process it directly.' : e.message, 'error');
@@ -214,21 +222,22 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
             </p>
           )}
 
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={anyDefective ? 'What is wrong with the bound copy (required)' : 'Reason for return (optional)'}
+          <input value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Reason for return"
+            placeholder={anyDefective ? 'What is wrong with the bound copy (required)' : 'Why the books come back (required)'}
             className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
 
           {approver ? (
             <div className="rounded-lg p-3 border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30">
               <p className="text-sm font-medium text-green-800 dark:text-green-300">✓ Manager/Admin Approval</p>
               <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                As {approver}, you can process returns above the approval limit; you are recorded as approving them.
+                As {approver}, you can process returns above {limit === undefined ? 'the approval limit' : `${currency} ${Money.of(Number(limit)).toFixed(2)}`}; you are recorded as approving them.
               </p>
             </div>
           ) : (
             <div className="rounded-lg p-3 border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
               <p className="text-sm font-medium text-amber-800 dark:text-amber-300">⚠ Approval Policy</p>
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                Returns above the approval limit must be processed by a Manager or Admin. Ask them to log in and process this return directly.
+                Returns above {limit === undefined ? 'the approval limit' : `${currency} ${Money.of(Number(limit)).toFixed(2)}`} must be processed by a Manager or Admin. Ask them to log in and process this return directly.
               </p>
             </div>
           )}
@@ -248,6 +257,7 @@ export function NewReturn({ initialNumber = '' }: { initialNumber?: string }) {
           </div>
         </div>
       )}
+      {slipFor && <ReturnSlip returnId={slipFor} onClose={() => setSlipFor(null)} />}
     </div>
   );
 }

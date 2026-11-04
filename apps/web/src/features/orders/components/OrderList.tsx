@@ -23,6 +23,7 @@ import { DeliverDialog } from './DeliverDialog.js';
 import { DeliveryNote } from './DeliveryNote.js';
 import { OrderDetail } from './OrderDetail.js';
 import { OrderSlip } from './OrderSlip.js';
+import { useShopToday } from '../../businessDays/queries.js';
 
 // Lifecycle status colours — covers both legacy and new values
 const STATUS_COLORS: Record<string, string> = {
@@ -77,6 +78,7 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
 }) {
   const { showToast } = useToast();
   const currency = useCurrency();
+  const today = useShopToday();
   const { data: me } = useMyProfile();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -206,7 +208,7 @@ export function OrderList({ initialContext = {}, onNavigate, onEdit }: {
       if (action === 'confirm' && order.saleType === 'credit_sale') {
         return confirmingId === order.id ? (
           <div key="confirm-credit" className="flex gap-1" onClick={stop}>
-            <input type="date" aria-label="Due date" value={confirmDueDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setConfirmDueDate(e.target.value)} className={INLINE} />
+            <input type="date" aria-label="Due date" value={confirmDueDate} min={today} onChange={(e) => setConfirmDueDate(e.target.value)} className={INLINE} />
             <input type="text" inputMode="decimal" aria-label="Deposit (optional)" placeholder="Deposit" value={confirmDeposit}
               onChange={(e) => setConfirmDeposit(e.target.value)} className={`w-20 ${INLINE}`} />
             {confirmDeposit.trim() !== '' && (

@@ -49,6 +49,7 @@ describe('Returns', () => {
 
   function giveBack(sale: Sale, quantity: number, token = manager, extra: Record<string, unknown> = {}) {
     return as(api().post('/api/v1/returns'), token).send({
+      reason: 'Returned in test',
       transactionId: Number(sale.id),
       lines: [{ transactionLineItemId: Number(sale.lineItems[0].id), quantity }],
       ...extra,
@@ -328,7 +329,7 @@ describe('Returns', () => {
     it('keeps damaged books apart from the stock for sale', async () => {
       const sale = await sell();
       const before = await stock();
-      const res = await as(api().post('/api/v1/returns')).send({
+      const res = await as(api().post('/api/v1/returns')).send({ reason: 'Returned in test',
         transactionId: Number(sale.id),
         lines: [{ transactionLineItemId: Number(sale.lineItems[0].id), quantity: 1, disposition: 'DAMAGED' }],
       });

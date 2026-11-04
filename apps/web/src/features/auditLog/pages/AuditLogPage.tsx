@@ -1,14 +1,9 @@
 import { useState } from 'react';
+import { AUDIT_ENTITY_TYPES } from '@bms/shared';
 import { useAuditLog } from '../queries.js';
 
-/** Every kind of record the API writes to the audit log (was: 8 of them to filter by). */
-const ENTITY_TYPES = [
-  'author', 'bank_account', 'bank_statement', 'bank_statement_line', 'book', 'book_price', 'book_supplier', 'branch',
-  'branch_config', 'category', 'customer', 'customer_group', 'exchange', 'inventory', 'inventory_cost', 'inventory_reorder',
-  'inventory_stock_in', 'inventory_stock_out', 'location', 'order', 'publisher', 'purchase_order',
-  'receivable', 'receivable_payment', 'return', 'staff', 'staff_locations', 'staff_roles', 'staff_session', 'supplier',
-  'system_config', 'transaction',
-];
+/** Every kind of record the API writes, from the list the API is typed with (#240; was: a copy here, 13 behind). */
+const ENTITY_TYPES = [...AUDIT_ENTITY_TYPES].sort();
 
 const ACTION_COLORS: Record<string, string> = {
   CREATE:     'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-400',

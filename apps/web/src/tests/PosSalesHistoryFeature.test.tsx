@@ -36,21 +36,26 @@ function sale(over: Partial<PosTransaction> = {}): PosTransaction {
   });
 }
 
-type Call = { method: string; path: string };
+type Call = { method: string; path: string; body?: unknown };
 let calls: Call[];
 let me: ProfileResponse;
+/** The list holds one voided credit sale (#240). */
+let voidedList = false;
 
 function stubApi() {
   calls = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
     const path = url.replace(/^.*\/api\/v1/, '');
-    calls.push({ method, path });
+    calls.push({ method, path, ...(init.body ? { body: JSON.parse(String(init.body)) } : {}) });
     const json = (data: unknown) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/pos/transactions') {
-      return json(contract(PosTransactionListResponseSchema, { items: [sale()], total: 1, page: 1, totalPages: 1 }));
+      const listed = voidedList
+        ? sale({ status: 'voided', voidable: false, paymentStatus: 'partial', amountPaid: 1, amountDue: 0, dueDate: null })
+        : sale();
+      return json(contract(PosTransactionListResponseSchema, { items: [listed], total: 1, page: 1, totalPages: 1 }));
     }
     if (method === 'POST' && u.pathname === '/pos/transactions/77/void') return json(contract(PosTransactionSchema, sale({ status: 'voided', voidable: false })));
     return json({ items: [] });
@@ -74,6 +79,7 @@ async function openHistory(userRole: string) {
 beforeEach(() => {
   setAccessToken('x');
   setCurrentBranchId(1);
+  voidedList = false;
   stubApi();
 });
 
@@ -104,8 +110,13 @@ describe('Sales History: void', () => {
     expect(within(dialog).getByText(/Void POS-20261018-0001\?/)).toBeInTheDocument();
     expect(calls.some((c) => c.method === 'POST')).toBe(false);
 
+    // Why it is voided, kept in the audit log (#240, P11; was: not asked).
     await user.click(within(dialog).getByRole('button', { name: 'Void Sale' }));
-    await waitFor(() => expect(calls).toContainEqual({ method: 'POST', path: '/pos/transactions/77/void' }));
+    expect(await within(dialog).findByText('A reason is required')).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    await user.type(within(dialog).getByRole('textbox'), 'Rang up the wrong book');
+    await user.click(within(dialog).getByRole('button', { name: 'Void Sale' }));
+    await waitFor(() => expect(calls).toContainEqual({ method: 'POST', path: '/pos/transactions/77/void', body: { reason: 'Rang up the wrong book' } }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     confirmSpy.mockRestore();
   });
@@ -118,6 +129,17 @@ describe('Sales History: the list', () => {
     const list = calls.find((c) => c.path.startsWith('/pos/transactions?'));
     expect(list?.path).toContain('dateFrom=2026-10-18');
     expect(list?.path).not.toContain('branchId');
+  });
+});
+
+describe('Sales History: a voided sale (#240, P9)', () => {
+  it('shows no payment state or amount due: its debt was cancelled and its money handed back (was: "partial", due)', async () => {
+    me = profile(['Sales']);
+    voidedList = true;
+    const row = await openHistory('Sales');
+    expect(row).toHaveTextContent('voided');
+    expect(row).not.toHaveTextContent('partial');
+    expect(row).not.toHaveTextContent('Due:');
   });
 });
 

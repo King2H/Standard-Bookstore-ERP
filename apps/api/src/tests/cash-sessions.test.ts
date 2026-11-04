@@ -194,7 +194,7 @@ describe('Cash sessions (#171)', () => {
     });
 
     it("records a void on the session that took the money while it is open, whoever voids (was: nowhere)", async () => {
-      expect((await as(t.manager).post(`/api/v1/pos/transactions/${saleId}/void`)).status).toBe(200);
+      expect((await as(t.manager).post(`/api/v1/pos/transactions/${saleId}/void`, { reason: 'Voided in test' })).status).toBe(200);
       expect((await movements(session)).at(-1)).toEqual(['pos_void', 'cash', 'out', price.toFixed(2)]);
       expect(await movements(id.managerSession)).toEqual([]);
     });
@@ -227,7 +227,7 @@ describe('Cash sessions (#171)', () => {
     it('records a return refund', async () => {
       const sale = await sell(t.sales, [{ method: 'cash', amount: price }]);
       const line = (await as(t.sales).get(`/api/v1/pos/transactions/${sale.body.id}`)).body.lineItems[0].id;
-      const ret = await as(t.sales).post('/api/v1/returns', { transactionId: Number(sale.body.id), lines: [{ transactionLineItemId: Number(line), quantity: 1 }] });
+      const ret = await as(t.sales).post('/api/v1/returns', { reason: 'Returned in test', transactionId: Number(sale.body.id), lines: [{ transactionLineItemId: Number(line), quantity: 1 }] });
       expect(ret.status, JSON.stringify(ret.body)).toBe(201);
       expect((await movements(session)).slice(-2)).toEqual([
         ['pos_payment', 'cash', 'in', price.toFixed(2)],

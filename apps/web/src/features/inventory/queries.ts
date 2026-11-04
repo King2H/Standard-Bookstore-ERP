@@ -3,7 +3,7 @@ import type {
   AdjustStockRequest, DamagedStockRequest, ReorderPointRequest, RevalueStockRequest, StockInRequest, TransferStockRequest,
 } from '@bms/shared';
 import {
-  adjustStock, listLowStock, listStockLevels, listStockMovements, repairDamaged, revalueStock, setReorderPoint, stockIn,
+  adjustStock, findStockLevel, listLowStock, listStockLevels, listStockMovements, repairDamaged, revalueStock, setReorderPoint, stockIn,
   transferStock, writeOffDamaged,
   type StockLevelParams, type StockMovementParams,
 } from './api.js';
@@ -18,6 +18,15 @@ export const inventoryKeys = {
   lowStock: (params: { page?: number; pageSize?: number }) => [...inventoryKeys.all, 'low-stock', params] as const,
   history: (params: StockMovementParams) => [...inventoryKeys.all, 'history', params] as const,
 };
+
+/** One book's stock at one location; null when it has none there (#240). */
+export function useStockLevel(bookId: number, locationId: number | null) {
+  return useQuery({
+    queryKey: [...inventoryKeys.all, 'level', bookId, locationId] as const,
+    queryFn: () => findStockLevel(bookId, locationId as number),
+    enabled: locationId !== null,
+  });
+}
 
 export function useStockLevels(params: StockLevelParams) {
   return useQuery({

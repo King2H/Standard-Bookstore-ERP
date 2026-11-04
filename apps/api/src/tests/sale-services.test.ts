@@ -20,6 +20,7 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
 import { db } from '../db/index.js';
+import { encryptPii, piiLookupHash } from '../lib/piiEncryption.js';
 
 const STAFF_PREFIX = 'salesvc_test_';
 const BRANCH_PREFIX = 'Sale Services ';
@@ -115,7 +116,11 @@ describe('Services on a sale', () => {
     bookId = book.id;
     price = Number(book.default_price);
     await db.query(`INSERT INTO inventory (book_id, location_id, quantity, reorder_point, version, average_cost) VALUES ($1, $2, 100, 5, 0, 4)`, [bookId, locationId]);
-    customerId = (await one(`INSERT INTO customers (full_name, customer_code, is_active) VALUES ('Sale Services Customer', $1, true) RETURNING id`, [CUSTOMER_CODE])).id;
+    // A binding's customer is called when it is ready: they have a phone (#240, B2).
+    customerId = (await one(
+      `INSERT INTO customers (full_name, customer_code, is_active, phone_encrypted, phone_lookup) VALUES ('Sale Services Customer', $1, true, $2, $3) RETURNING id`,
+      [CUSTOMER_CODE, encryptPii('+251911169169'), piiLookupHash('+251911169169')],
+    )).id;
     await db.query(`INSERT INTO store_credit_accounts (customer_id, balance) VALUES ($1, 0)`, [customerId]);
     const formatId = (await one(`SELECT id FROM book_formats ORDER BY id LIMIT 1`)).id;
     const service = async (code: string, fee: number, cost: number, discountable: boolean) => {
@@ -199,13 +204,13 @@ describe('Services on a sale', () => {
 
     it('voids a sale whose job is still Requested: book and fee back, the job cancelled; refused once at the binder', async () => {
       const sale = await sell([posItem(1, { serviceId: cloth, quantity: 1 })], { amount: price + 100 });
-      const voided = await as(api().post(`/api/v1/pos/transactions/${sale.body.id}/void`));
+      const voided = await as(api().post(`/api/v1/pos/transactions/${sale.body.id}/void`)).send({ reason: 'Voided in test' });
       expect(voided.status, JSON.stringify(voided.body)).toBe(200);
       expect(voided.body.lineItems[0].service.job.status).toBe('CANCELLED');
 
       const sent = await sell([posItem(1, { serviceId: cloth, quantity: 1 })], { amount: price + 100 });
       await step(sent.body.lineItems[0].service.job.id, 'send');
-      const refused = await as(api().post(`/api/v1/pos/transactions/${sent.body.id}/void`));
+      const refused = await as(api().post(`/api/v1/pos/transactions/${sent.body.id}/void`)).send({ reason: 'Voided in test' });
       expect(refused.status).toBe(422);
       expect(refused.body.error).toBe('SERVICE_JOB_IN_PROGRESS');
     });

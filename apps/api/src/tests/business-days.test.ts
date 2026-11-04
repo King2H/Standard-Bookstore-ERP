@@ -220,7 +220,7 @@ describe('Day and month close (#175)', () => {
 
     it('keeps the day\'s sales as they were: a same-day void is refused (decision 3a)', async () => {
       const sale = await one(`SELECT id FROM transactions WHERE branch_id = $1`, [branchA]);
-      const voided = await as(t.manager).post(`/api/v1/pos/transactions/${sale.id}/void`);
+      const voided = await as(t.manager).post(`/api/v1/pos/transactions/${sale.id}/void`, { reason: 'Voided in test' });
       expect(voided.status).toBe(409);
       expect(voided.body.error).toBe('DAY_CLOSED');
       expect((await one(`SELECT status FROM transactions WHERE id = $1`, [sale.id])).status).toBe('completed');
@@ -356,7 +356,7 @@ describe('Day and month close (#175)', () => {
 
     it('refuses to change a closed day in place; corrections are new documents (decision 3a)', async () => {
       // Sales and exchanges are voided on their own day only; later they are returned.
-      expect((await as(t.managerC).post(`/api/v1/pos/transactions/${saleId}/void`)).body.error).toBe('VOID_WINDOW_CLOSED');
+      expect((await as(t.managerC).post(`/api/v1/pos/transactions/${saleId}/void`, { reason: 'Voided in test' })).body.error).toBe('VOID_WINDOW_CLOSED');
       expect((await as(t.managerC).post(`/api/v1/exchanges/${exchangeId}/void`, { reason: 'Wrong book' })).body.error).toBe('VOID_WINDOW_CLOSED');
       const reversed = await as(t.financeC).post(`/api/v1/purchase-orders/${poId}/payments/${paymentId}/reverse`, { reason: 'Wrong order' });
       expect(reversed.status).toBe(409);

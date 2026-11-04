@@ -15,6 +15,7 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
 import { db } from '../db/index.js';
+import { encryptPii } from '../lib/piiEncryption.js';
 
 const STAFF_PREFIX = 'odlv_test_';
 const BRANCH_PREFIX = 'Order Delivery ';
@@ -173,7 +174,7 @@ describe('Delivering an order in parts (#174)', () => {
       `INSERT INTO services (code, name, format_id, fee, standard_cost) VALUES ($1, 'Delivery binding', $2, 50, 20) RETURNING id`, [SERVICE_CODE, formatId],
     )).id;
     const customerId = (await one(
-      `INSERT INTO customers (branch_id, customer_code, full_name, is_active) VALUES ($1, $2, 'Binding Customer', true) RETURNING id`, [branchA, SERVICE_CODE],
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, phone_encrypted) VALUES ($1, $2, 'Binding Customer', true, $3) RETURNING id`, [branchA, SERVICE_CODE, encryptPii('+251911174174')],
     )).id;
     const created = await as(t.sales).post('/api/v1/orders', {
       locationId: location, saleType: 'cash_sale', customerId,

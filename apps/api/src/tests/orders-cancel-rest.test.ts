@@ -16,6 +16,7 @@ import { getTestApp } from './helpers/testApp.js';
 import { cleanTestBranches, cleanTestStaff } from './helpers/testDb.js';
 import { createTestBranch, createTestStaff } from './helpers/seed.js';
 import { db } from '../db/index.js';
+import { encryptPii } from '../lib/piiEncryption.js';
 
 const STAFF_PREFIX = 'ocrest_test_';
 const BRANCH_PREFIX = 'Order Cancel Rest ';
@@ -104,7 +105,7 @@ describe('Cancelling what a part-delivered order did not deliver (#174)', () => 
     books = (await db.query(`SELECT id, default_price::float AS price FROM books WHERE is_active = true AND default_price > 0 ORDER BY id LIMIT 2`)).rows;
     for (const b of books) await db.query(`INSERT INTO inventory (book_id, location_id, quantity, average_cost) VALUES ($1, $2, 30, 1)`, [b.id, location]);
     customerId = (await one(
-      `INSERT INTO customers (branch_id, customer_code, full_name, is_active) VALUES ($1, $2, 'Cancel Rest Customer', true) RETURNING id`, [branchA, CODE],
+      `INSERT INTO customers (branch_id, customer_code, full_name, is_active, phone_encrypted) VALUES ($1, $2, 'Cancel Rest Customer', true, $3) RETURNING id`, [branchA, CODE, encryptPii('+251911174175')],
     )).id;
   });
 

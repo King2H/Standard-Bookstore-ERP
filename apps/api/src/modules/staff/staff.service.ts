@@ -1,3 +1,4 @@
+import type { AuditEntityType } from '@bms/shared';
 import bcrypt from 'bcrypt';
 import { kysely } from '../../db/kysely.js';
 import { isUniqueViolation } from '../../db/errors.js';
@@ -38,7 +39,7 @@ async function manageable(tx: Queryable, actor: Actor, id: number): Promise<Staf
   return staff;
 }
 
-function audit(tx: Queryable, actor: Actor, action: string, entityType: string, staffId: number, meta: Record<string, unknown>) {
+function audit(tx: Queryable, actor: Actor, action: string, entityType: AuditEntityType, staffId: number, meta: Record<string, unknown>) {
   return insertAuditEntry(tx, {
     staffId: actor.staffId,
     staffRole: actor.role,

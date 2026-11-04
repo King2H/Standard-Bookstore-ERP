@@ -175,8 +175,8 @@ describe('binding at the counter (1a, 2a, 3a)', () => {
     await settle();
     await user.type(screen.getByPlaceholderText('Title, ISBN, Author…'), 'Orom');
     await user.click(await screen.findByText('Oromay'));
-    await user.click(screen.getByRole('button', { name: '＋' }));
-    await user.click(screen.getByRole('button', { name: '＋' }));
+    await user.click(screen.getByRole('button', { name: /^One more / }));
+    await user.click(screen.getByRole('button', { name: /^One more / }));
     return user;
   }
 
