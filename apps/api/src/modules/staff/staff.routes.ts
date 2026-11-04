@@ -13,12 +13,13 @@ import * as staff from './staff.controller.js';
 const router = Router();
 const { schemas } = staff;
 
-// Managers see their branch's staff and change roles there.
+// Managers see their branch's staff, change roles there, and add staff to it
+// with the roles they manage (#234, decision 4a).
 const canSee = requireRole('Super_Admin', 'Admin', 'Manager');
 const admins = requireRole('Super_Admin', 'Admin');
 
 router.get('/staff', authenticate, canSee, validate(schemas.list), staff.list);
-router.post('/staff', authenticate, admins, validate(schemas.create), staff.create);
+router.post('/staff', authenticate, canSee, validate(schemas.create), staff.create);
 router.get('/staff/:id', authenticate, canSee, validate(schemas.byId), staff.getById);
 router.put('/staff/:id', authenticate, admins, validate(schemas.update), staff.update);
 router.put('/staff/:id/roles', authenticate, canSee, validate(schemas.roles), staff.setRoles);

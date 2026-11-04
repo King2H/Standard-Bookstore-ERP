@@ -94,6 +94,17 @@ export function checkRoleChanges(actor: Actor, changes: RoleAssignment[]): void 
   }
 }
 
+/**
+ * Below Admin, a new account needs a role the actor gives it: an account with
+ * none would be out of the actor's sight (#234, decision 4a). The roles
+ * themselves are checked by checkRoleChanges.
+ */
+export function checkCanCreate(actor: Actor, roles: RoleAssignment[]): void {
+  if (rankOf(actor.roles) < ADMIN && roles.length === 0) {
+    throw new ForbiddenError('Give the new staff member a role in your branch');
+  }
+}
+
 /** All-branch access widens someone's reach to the whole company: Super_Admin only (owner decision 3a). */
 export function checkCanSetAllBranches(actor: Actor): void {
   if (!actor.roles.includes('Super_Admin')) {

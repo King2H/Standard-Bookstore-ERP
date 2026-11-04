@@ -81,11 +81,18 @@ export async function find(q: Queryable, id: number, opts: { forUpdate?: boolean
 
 export async function insert(
   q: Queryable,
-  s: { username: string; passwordHash: string; fullName: string; isAllBranches: boolean },
+  s: { username: string; passwordHash: string; fullName: string; isAllBranches: boolean; mustChangePassword: boolean },
 ): Promise<number> {
   const row = await q
     .insertInto('staff')
-    .values({ username: s.username, password_hash: s.passwordHash, full_name: s.fullName, is_active: true, is_all_branches: s.isAllBranches })
+    .values({
+      username: s.username,
+      password_hash: s.passwordHash,
+      full_name: s.fullName,
+      is_active: true,
+      is_all_branches: s.isAllBranches,
+      must_change_password: s.mustChangePassword,
+    })
     .returning('id')
     .executeTakeFirstOrThrow();
   return row.id;

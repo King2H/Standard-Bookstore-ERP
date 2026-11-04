@@ -7,7 +7,7 @@ import { useOpenBranches } from '../../branches/queries.js';
 import {
   useCreateStaff, useResetPassword, useSetAllBranches, useSetStaffLocations, useSetStaffRoles, useStaffAction, useStaffList,
 } from '../queries.js';
-import { canAdministerAccounts, canChangeLocationsIn, canSetAllBranches, roleBranches, rolesToGrant } from '../rules.js';
+import { canAddStaff, canAdministerAccounts, canChangeLocationsIn, canSetAllBranches, inBranches, roleBranches, rolesToGrant } from '../rules.js';
 import { StaffForm } from '../components/StaffForm.js';
 import { RoleEditor } from '../components/RoleEditor.js';
 import { LocationAccessPanel } from '../components/LocationAccessPanel.js';
@@ -19,8 +19,9 @@ const messageOf = (err: unknown, fallback: string) => (err as { message?: string
  * Staff administration (#21, auth part 2). The API decides who may change
  * whom; the page offers only what the signed-in staff member may do: roles
  * below their own in the branches they manage, all-branch access for a
- * Super_Admin, account actions (create, reset, unlock, deactivate) for Admins
- * and Super_Admins, and location access in the branches they manage.
+ * Super_Admin, account actions (reset, unlock, deactivate) for Admins and
+ * Super_Admins, adding staff to the branches they manage for Managers and
+ * above (#234), and location access in the branches they manage.
  */
 export default function StaffPage() {
   const { showToast } = useToast();
@@ -38,6 +39,7 @@ export default function StaffPage() {
   const grantable = rolesToGrant(me);
   const reach = roleBranches(me);
   const administers = canAdministerAccounts(me);
+  const adds = canAddStaff(me);
   const allBranchesToggle = canSetAllBranches(me);
 
   const createMutation = useCreateStaff();
@@ -56,7 +58,7 @@ export default function StaffPage() {
     // One request creates the account with its roles (#21): a failure part way
     // can no longer leave an account without roles.
     createMutation.mutate(body, {
-      onSuccess: () => { setShowForm(false); showToast('Staff account created successfully'); },
+      onSuccess: () => { setShowForm(false); showToast('Staff account created. They change the password at their first sign-in.'); },
       onError: (err) => { const msg = messageOf(err, 'Failed to create staff'); setApiError(msg); showToast(msg, 'error'); },
     });
   }
@@ -93,7 +95,7 @@ export default function StaffPage() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Staff</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Manage staff accounts and branch assignments</p>
         </div>
-        {administers && (
+        {adds && (
           <button type="button" onClick={() => { setShowForm(!showForm); setApiError(null); }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-xs">
             {showForm ? 'Cancel' : '+ New Staff'}
@@ -111,9 +113,9 @@ export default function StaffPage() {
         />
       )}
 
-      {showForm && administers && (
+      {showForm && adds && (
         <StaffForm
-          branches={branches}
+          branches={branches.filter((b) => inBranches(reach, b.id))}
           grantable={grantable}
           allowAllBranches={allBranchesToggle}
           busy={createMutation.isPending}

@@ -8,7 +8,7 @@ import * as stock from './inventoryReports.controller.js';
 // (report.ts) and listed in src/openapi/operations.ts.
 
 const router = Router();
-const reportAccess = [authenticate, requirePermission('VIEW_REPORTS'), validate(stock.schemas.report)];
+const reportAccess = [authenticate, requirePermission('VIEW_STOCK_REPORTS'), validate(stock.schemas.report)];
 
 router.get('/reports/inventory', ...reportAccess, stock.report);
 router.get('/reports/inventory/export', ...reportAccess, stock.exportCsv);

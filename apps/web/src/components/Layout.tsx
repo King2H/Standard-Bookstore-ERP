@@ -227,7 +227,7 @@ export default function Layout({
         {/* Nav */}
         <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
 
-          {/* Dashboard — standalone, visible to roles with VIEW_REPORTS or Admin/Manager */}
+          {/* Dashboard: standalone, by canSeeDashboard */}
           {canSeeDashboard(userRole, userRoles, userPermissions) && (
             <button
               onClick={() => onNavigate('dashboard')}

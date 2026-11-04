@@ -71,7 +71,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: 'binding-jobs', label: 'Binding Jobs', icon: '🧵', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE'] },
       { id: 'returns',   label: 'Returns',   icon: '↩',  roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_REFUND'] },
       { id: 'exchanges', label: 'Exchanges', icon: '🔁', roles: ['Admin', 'Manager', 'Sales'],                                    permissions: ['CREATE_SALE', 'APPROVE_EXCHANGE'] },
-      { id: 'customers', label: 'Customers', icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer', 'Stock_Clerk', 'Purchasor'], permissions: ['CREATE_SALE', 'PROCESS_PAYMENT', 'MANAGE_INVENTORY', 'VIEW_REPORTS'] },
+      // Whoever sells or takes payments (#234, decision 3a; was: the stockroom and the Purchasor too).
+      { id: 'customers', label: 'Customers', icon: '👤', roles: ['Admin', 'Manager', 'Sales', 'Finance_Officer'],                  permissions: ['CREATE_SALE', 'PROCESS_PAYMENT'] },
     ],
   },
   {
@@ -156,7 +157,7 @@ export function canSeeItem(item: NavLeaf, userRole: Role | null, userRoles: Role
   return held(userRole, userRoles).some(r => item.roles.includes(r));
 }
 
-/** Dashboard — standalone, visible to roles with VIEW_REPORTS or Admin/Manager. */
+/** Dashboard: sales and money reports (VIEW_REPORTS), or the shop's governance; not the Purchasor (#234, 1a). */
 export function canSeeDashboard(userRole: Role | null, userRoles: Role[], userPermissions: string[]): boolean {
   return userPermissions.some(p => ['VIEW_REPORTS', 'MANAGE_BRANCH'].includes(p)) ||
     held(userRole, userRoles).some(r => ['Admin', 'Manager', 'Finance_Officer', 'Super_Admin'].includes(r));

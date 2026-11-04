@@ -255,6 +255,16 @@ describe('The navigation rule', () => {
     }
   });
 
+  it('keeps customers from the stockroom and the Purchasor, and the Dashboard from the Purchasor (#234, 1a, 3a)', () => {
+    const as = (role: string, permissions: string[]) => (page: Parameters<typeof canOpenPage>[0]) => canOpenPage(page, role, [role], permissions);
+    const purchasor = as('Purchasor', ['MANAGE_INVENTORY', 'VIEW_STOCK_REPORTS', 'VIEW_COST']);
+    const clerk = as('Stock_Clerk', ['MANAGE_INVENTORY', 'SEND_TRANSFER', 'RECEIVE_TRANSFER']);
+    expect([purchasor('customers'), purchasor('dashboard'), clerk('customers')]).toEqual([false, false, false]);
+    expect([purchasor('procurement'), purchasor('inventory'), clerk('inventory')]).toEqual([true, true, true]);
+    expect(as('Sales', SALES)('customers')).toBe(true);
+    expect(as('Finance_Officer', ['PROCESS_PAYMENT', 'PROCESS_REFUND', 'VIEW_REPORTS'])('customers')).toBe(true);
+  });
+
   it('has a route for every menu entry', () => {
     for (const item of NAV_SECTIONS.flatMap(s => s.items)) expect(PAGES).toContain(item.id);
   });

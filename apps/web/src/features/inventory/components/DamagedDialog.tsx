@@ -8,8 +8,12 @@ import { useDamagedStock } from '../queries.js';
 
 const INPUT = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
-/** What `quantity` of the damaged copies are worth, as the API takes them: the last ones take what is left. */
-function shareOf(row: StockLevel, quantity: number): Money {
+/**
+ * What `quantity` of the damaged copies are worth, as the API takes them: the
+ * last ones take what is left. Null for staff who may not see cost (#234).
+ */
+function shareOf(row: StockLevel, quantity: number): Money | null {
+  if (row.damagedValue === null) return null;
   const value = Money.of(row.damagedValue);
   if (quantity >= row.damaged) return value;
   return value.times(quantity).dividedBy(row.damaged).round(2);
@@ -56,7 +60,8 @@ export function DamagedDialog({ row, onClose }: { row: StockLevel; onClose: () =
         className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6 max-w-sm w-full mx-4 shadow-xl space-y-3">
         <h3 id="damaged-dialog-title" className="text-base font-semibold text-gray-900 dark:text-white">Damaged: {row.bookTitle}</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {`${row.damaged} damaged ${row.damaged === 1 ? 'copy' : 'copies'} at ${row.locationName}, kept apart at ${currency} ${Money.of(row.damagedValue).toFixed(2)}.`}
+          {`${row.damaged} damaged ${row.damaged === 1 ? 'copy' : 'copies'} at ${row.locationName}, kept apart`
+            + (row.damagedValue === null ? '.' : ` at ${currency} ${Money.of(row.damagedValue).toFixed(2)}.`)}
         </p>
         <fieldset className="space-y-1">
           <legend className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">What happens to them</legend>

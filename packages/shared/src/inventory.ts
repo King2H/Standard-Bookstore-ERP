@@ -16,12 +16,15 @@ export const StockLevelSchema = z.object({
   reserved: z.number().int(),
   available: z.number().int(),
   reorderPoint: z.number().int(),
-  /** What one copy here cost, as a weighted average; 0 while no cost is known (#163). */
-  averageCost: z.number(),
+  /**
+   * What one copy here cost, as a weighted average; 0 while no cost is known (#163).
+   * Null for staff without VIEW_COST (#234).
+   */
+  averageCost: z.number().nullable(),
   /** Damaged copies here, counted apart from `quantity` and not for sale (#168). */
   damaged: z.number().int(),
-  /** What the damaged copies cost, kept apart from the value of the stock for sale. */
-  damagedValue: z.number(),
+  /** What the damaged copies cost, kept apart from the value of the stock for sale; null without VIEW_COST (#234). */
+  damagedValue: z.number().nullable(),
   /** Send it back with the next change to this row; a stale value gets 409 VERSION_CONFLICT. */
   version: z.number().int(),
   isLowStock: z.boolean(),

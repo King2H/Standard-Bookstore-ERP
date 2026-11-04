@@ -71,7 +71,9 @@ export function StaffForm({ branches, grantable, allowAllBranches, busy, error, 
         <div>
           <label htmlFor="staff-password" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Password <span className="text-red-500">*</span></label>
           <input id="staff-password" {...register('password')} type="password" placeholder="Min 10 chars" className={inputCls} />
-          {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
+          {errors.password
+            ? <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+            : <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">They change this password at their first sign-in.</p>}
         </div>
       </div>
 

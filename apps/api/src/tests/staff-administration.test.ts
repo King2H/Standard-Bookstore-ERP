@@ -148,7 +148,7 @@ describe('Staff administration', () => {
       expect((await as(managerA).get(`/api/v1/staff/${salesA.staffId}`)).status).toBe(200);
     });
 
-    it('a Manager cannot create, deactivate, reset or unlock', async () => {
+    it('a Manager cannot deactivate, reset or unlock, nor add an account without a role in their branch (#234)', async () => {
       expect((await as(managerA).post('/api/v1/staff', { username: `${STAFF_PREFIX}bymgr`, password: NEW_PASSWORD, fullName: 'X' })).status).toBe(403);
       expect((await as(managerA).post(`/api/v1/staff/${salesA.staffId}/deactivate`)).status).toBe(403);
       expect((await as(managerA).post(`/api/v1/staff/${salesA.staffId}/reset-password`, { temporaryPassword: NEW_PASSWORD })).status).toBe(403);

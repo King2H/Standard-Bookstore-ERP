@@ -111,7 +111,8 @@ describe('Damaged copies', () => {
   it('writes damaged copies off with a reason: count and value go, recorded and audited (was: no way out)', async () => {
     const res = await writeOff({ quantity: 1, reason: 'Water damage, pages stuck' }, clerk);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ quantity: 17, damaged: 2, damagedValue: 8 });
+    // The Stock_Clerk does not see what they cost (#234, decision 2a); the value still goes, below.
+    expect(res.body).toMatchObject({ quantity: 17, damaged: 2, damagedValue: null });
     expect(await level()).toMatchObject({ quantity: 17, damaged_quantity: 2, damaged_value: '8.00', inventory_value: '68.00' });
     const moved = await lastMovement();
     expect(moved).toMatchObject({ movement_type: 'stock_out', reason_code: 'damage_write_off', notes: 'Water damage, pages stuck', qty_before: 17, qty_after: 17 });

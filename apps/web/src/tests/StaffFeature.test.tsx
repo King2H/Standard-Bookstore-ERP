@@ -111,7 +111,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Staff: what each role is offered', () => {
-  it('gives a Manager role editing only, with roles below Manager, and no account actions', async () => {
+  it('gives a Manager role editing, with roles below Manager, and no account actions', async () => {
     me = profile(['Manager']);
     renderPage();
     expect(within(await row('boss')).queryByTitle('Edit branch & role assignments')).toBeNull();
@@ -120,7 +120,6 @@ describe('Staff: what each role is offered', () => {
     expect(within(clerk).queryByTitle('Deactivate staff')).toBeNull();
     expect(within(clerk).queryByTitle(/Reset password/)).toBeNull();
     expect(within(clerk).queryByTitle(/all-branch access/)).toBeNull();
-    expect(screen.queryByText('+ New Staff')).toBeNull();
 
     await userEvent.click(within(clerk).getByTitle('Edit branch & role assignments'));
     const roles = within(clerk).getAllByRole('option').map(o => o.textContent);
@@ -151,6 +150,27 @@ describe('Staff: what each role is offered', () => {
     expect(() => CreateStaffRequestSchema.parse(body)).not.toThrow();
   });
 
+  it('lets a Manager add staff to their own branch, with the roles they manage (#234, 4a; was: Admins only)', async () => {
+    me = profile(['Manager'], { branchId: 1 });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByText('+ New Staff'));
+    expect(screen.queryByText(/All Branches/)).toBeNull();
+    const form = screen.getByText('Create Staff Account').closest('form')!;
+    expect(form).toHaveTextContent('They change this password at their first sign-in.');
+    const [branchPick, rolePick] = within(form).getAllByRole('combobox');
+    expect(within(branchPick).getAllByRole('option').map(o => o.textContent)).toEqual(['Select branch...', 'Branch 01']);
+    expect(within(rolePick).getAllByRole('option').map(o => o.textContent).sort()).toEqual(['Finance_Officer', 'Purchasor', 'Sales', 'Stock_Clerk']);
+
+    await user.type(screen.getByPlaceholderText('e.g. john.doe'), 'new.clerk');
+    await user.type(screen.getByPlaceholderText('e.g. John Doe'), 'New Clerk');
+    await user.type(screen.getByPlaceholderText('Min 10 chars'), 'Temp#2026pass');
+    await user.selectOptions(branchPick, '1');
+    await user.selectOptions(rolePick, 'Stock_Clerk');
+    await user.click(screen.getByText('Create Staff'));
+    await waitFor(() => expect(sent('POST', '/staff')?.body).toMatchObject({ roles: [{ branchId: 1, role: 'Stock_Clerk' }], isAllBranches: false }));
+  });
+
   it('offers all-branch access to a Super_Admin', async () => {
     me = profile(['Super_Admin']);
     renderPage();
@@ -177,7 +197,8 @@ describe('Staff: the list and the pickers', () => {
   });
 
   it('offers every open branch to pick, up to the API\'s largest page (was: the first 25)', async () => {
-    me = profile(['Admin']);
+    // A Super_Admin manages every branch; others are offered only theirs (#234).
+    me = profile(['Super_Admin']);
     branches = Array.from({ length: 30 }, (_, i) => branch(i + 1));
     const user = userEvent.setup();
     renderPage();

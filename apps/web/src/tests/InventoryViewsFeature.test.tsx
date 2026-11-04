@@ -37,6 +37,9 @@ const level = (bookId: number, title: string, averageCost = 10, damaged = 0, dam
 type Call = { method: string; path: string; body: unknown };
 let calls: Call[];
 let me: ProfileResponse;
+/** As the API answers staff without VIEW_COST (#234): no cost, no value. */
+let costHidden = false;
+const asSeen = (row: StockLevel): StockLevel => (costHidden ? { ...row, averageCost: null, damagedValue: null } : row);
 
 function stubApi() {
   calls = [];
@@ -56,7 +59,7 @@ function stubApi() {
         level(1, 'Animal Farm', 10, 3, 12), level(2, 'Burmese Days', 0),
         { ...level(3, 'Coming Up for Air'), quantity: 0, available: 0, isLowStock: true },
         { ...level(4, 'Down and Out'), quantity: 3, available: 3, isLowStock: true },
-      ])));
+      ].map(asSeen))));
     }
     if (u.pathname.startsWith('/inventory/damaged/')) return json(contract(StockLevelSchema, level(1, 'Animal Farm', 10, 2, 8)));
     if (method === 'PUT') return json(contract(StockLevelSchema, level(1, 'Animal Farm')));
@@ -82,6 +85,7 @@ const asked = (prefix: string) => calls.filter((c) => c.method === 'GET' && c.pa
 beforeEach(() => {
   setAccessToken('x');
   me = profile(['Admin']);
+  costHidden = false;
   stubApi();
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -225,6 +229,22 @@ describe('Inventory: damaged copies (#168)', () => {
     const sent = calls.find((c) => c.method === 'POST');
     expect(sent?.path).toBe('/inventory/damaged/write-off');
     expect(sent?.body).toEqual({ bookId: 1, locationId: 1, quantity: 1, reason: 'Water damage', version: 3 });
+  });
+
+  it('handles damaged copies without their value for staff who may not see cost (#234, 2a)', async () => {
+    const user = userEvent.setup();
+    me = profile(['Stock_Clerk']);
+    costHidden = true;
+    await renderPage();
+    await user.click(within(rowOf('Animal Farm')).getByRole('button', { name: /3 damaged/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('3 damaged copies at Shop Floor, kept apart.');
+    await user.clear(within(dialog).getByLabelText('Copies'));
+    await user.type(within(dialog).getByLabelText('Copies'), '1');
+    expect(within(dialog).queryByText(/Loss:/)).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Reason'), 'Water damage');
+    await user.click(within(dialog).getByRole('button', { name: 'Write off' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST')?.path).toBe('/inventory/damaged/write-off'));
   });
 
   it('puts repaired copies back for sale (was: no way out)', async () => {
