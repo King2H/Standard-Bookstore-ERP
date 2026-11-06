@@ -47,6 +47,27 @@ services:
       FRONTEND_URL: ${BMS_ORIGINS:?run the installer first}
       # One proxy in front: Caddy.
       TRUST_PROXY: "1"
+      # The backup service below records its runs; Admin and Super_Admin see them (#244).
+      BMS_BACKUPS: "on"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # Nightly backups, and at start when the last good one is older than a day
+  # (#244). Each is one encrypted file: the database, .env and the
+  # certificate authority. Kept: 14 daily, 8 weekly.
+  backup:
+    build: { context: .., dockerfile: deploy/Dockerfile, target: backup, secrets: [extra_ca] }
+    image: bookstore-backup:${BMS_VERSION:-local}
+    environment:
+      MIGRATION_DATABASE_URL: postgres://bms:${BMS_DB_OWNER_PASSWORD}@postgres:5432/bms
+      BMS_BACKUP_PASSPHRASE: ${BMS_BACKUP_PASSPHRASE:?run the installer again, it asks for the backup passphrase}
+      BMS_BACKUP_TIME: ${BMS_BACKUP_TIME:-02:30}
+      BMS_TIMEZONE: ${BMS_TIMEZONE:-Africa/Addis_Ababa}
+    volumes:
+      - ./.env:/bundle/.env:ro
+      - caddy_data:/caddy-data:ro
+      - ${BMS_BACKUP_DIR:-./backups}:/backups
     depends_on:
       migrate: { condition: service_completed_successfully }
     restart: unless-stopped

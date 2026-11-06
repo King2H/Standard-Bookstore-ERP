@@ -19,6 +19,20 @@ docker info >/dev/null 2>&1 || fail 'Docker is not running, or this user may not
 random_hex() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 random_b64url() { head -c "$1" /dev/urandom | base64 | tr -d '\n=' | tr '+/' '-_'; }
 
+# Asks a secret twice, hidden; $2 is the least length.
+ask() {
+  local a b
+  while true; do
+    read -rsp "$1: " a || fail 'No password given.'; echo >&2
+    read -rsp 'Again: ' b || fail 'No password given.'; echo >&2
+    if [ "$a" != "$b" ] || [ -z "$a" ]; then echo 'They differ, or are empty. Try again.' >&2
+    elif [ "${#a}" -lt "${2:-1}" ]; then echo "At least $2 characters. Try again." >&2
+    elif [[ "$a" == *"'"* ]]; then echo "Without a ' (single quote). Try again." >&2
+    else printf '%s' "$a"; return
+    fi
+  done
+}
+
 first_install=false
 if [ ! -f .env ]; then
   first_install=true
@@ -44,6 +58,22 @@ EOF
   echo 'Wrote deploy/.env with new secrets (readable by this user only).'
 fi
 
+# Backups (#244): asked once, also on an install made before backups existed.
+if ! grep -q '^BMS_BACKUP_PASSPHRASE=' .env; then
+  say 'Backups'
+  echo 'Each night (and at start when the last one is older than a day) the bookstore writes an encrypted backup.'
+  echo 'Choose a folder on ANOTHER disk, a USB drive or a network share: a backup on the same disk is lost with it.'
+  read -rp 'Backup folder (Enter for deploy/backups, on this disk): ' backup_dir || backup_dir=''
+  backup_dir=${backup_dir:-./backups}
+  echo 'The backup passphrase opens the backups: without it they cannot be restored. Write it down and keep it apart from the PC.'
+  passphrase=$(ask 'Backup passphrase (at least 12 characters)' 12)
+  umask 077
+  printf "BMS_BACKUP_DIR=%s\nBMS_BACKUP_PASSPHRASE='%s'\n" "$backup_dir" "$passphrase" >> .env
+  unset passphrase
+fi
+backup_dir=$(grep '^BMS_BACKUP_DIR=' .env | cut -d= -f2-)
+mkdir -p "${backup_dir:-./backups}"
+
 say 'Building the images (a few minutes the first time)'
 docker compose build </dev/null
 
@@ -55,15 +85,6 @@ docker compose run --rm -T migrate </dev/null
 if [ "$first_install" = true ] || [ "${BMS_SET_PASSWORDS:-}" = 1 ]; then
   say 'The first accounts'
   echo 'Passwords: at least 10 characters, with upper- and lower-case letters, a digit and another character.'
-  ask() {
-    local a b
-    while true; do
-      read -rsp "$1: " a || fail 'No password given.'; echo >&2
-      read -rsp 'Again: ' b || fail 'No password given.'; echo >&2
-      [ "$a" = "$b" ] && [ -n "$a" ] && { printf '%s' "$a"; return; }
-      echo 'They differ, or are empty. Try again.' >&2
-    done
-  }
   BMS_SUPERADMIN_PASSWORD=$(ask 'Password for superadmin (the shop owner)')
   BMS_ADMIN_PASSWORD=$(ask 'Password for admin (day-to-day administration)')
   export BMS_SUPERADMIN_PASSWORD BMS_ADMIN_PASSWORD
@@ -101,5 +122,6 @@ Check that it shows this fingerprint:
   $fingerprint
 The certificate is also in deploy/bookstore-ca.crt.
 
-Keep a copy of deploy/.env somewhere safe and private.
+Backups go to: ${backup_dir:-./backups} (the first one runs now).
+Keep a copy of deploy/.env and the backup passphrase somewhere safe and private.
 EOF

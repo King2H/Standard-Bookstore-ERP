@@ -75,3 +75,4 @@ tmp_*.mjs
 deploy/.env
 deploy/*.crt
 deploy/extra-ca.pem
+deploy/backups/

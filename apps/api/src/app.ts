@@ -21,6 +21,7 @@ import stockCountsRouter from './modules/stockCounts/stockCounts.routes.js';
 import supplierReturnsRouter from './modules/supplierReturns/supplierReturns.routes.js';
 import specialOrdersRouter from './modules/specialOrders/specialOrders.routes.js';
 import businessDaysRouter from './modules/businessDays/businessDays.routes.js';
+import systemRouter from './modules/system/system.routes.js';
 import inventoryRouter from './modules/inventory/inventory.routes.js';
 import supplierRouter from './modules/supplier/supplier.routes.js';
 import procurementRouter from './modules/procurement/procurement.routes.js';
@@ -96,6 +97,7 @@ export function createApp() {
   api.use(supplierReturnsRouter);
   api.use(specialOrdersRouter);
   api.use(businessDaysRouter);
+  api.use(systemRouter);
   api.use(inventoryRouter);
   api.use(supplierRouter);
   api.use(procurementRouter);

@@ -25,14 +25,16 @@ function New-Secret([int]$bytes, [switch]$Hex) {
   return [Convert]::ToBase64String($buffer).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 }
 
-function Read-Password($prompt) {
+function Read-Password($prompt, [int]$min = 1) {
   while ($true) {
     $a = Read-Host -AsSecureString $prompt
     $b = Read-Host -AsSecureString 'Again'
     $pa = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($a))
     $pb = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($b))
-    if ($pa -ne '' -and $pa -ceq $pb) { return $pa }
-    Write-Host 'They differ, or are empty. Try again.'
+    if ($pa -eq '' -or $pa -cne $pb) { Write-Host 'They differ, or are empty. Try again.' }
+    elseif ($pa.Length -lt $min) { Write-Host "At least $min characters. Try again." }
+    elseif ($pa.Contains("'")) { Write-Host "Without a ' (single quote). Try again." }
+    else { return $pa }
   }
 }
 
@@ -64,6 +66,22 @@ if (-not (Test-Path .env)) {
   & icacls .env /inheritance:r /grant:r "${env:USERNAME}:F" '*S-1-5-32-544:F' *> $null
   Write-Host 'Wrote deploy\.env with new secrets.'
 }
+
+# Backups (#244): asked once, also on an install made before backups existed.
+if (-not (Select-String -Path .env -Pattern '^BMS_BACKUP_PASSPHRASE=' -Quiet)) {
+  Say 'Backups'
+  Write-Host 'Each night (and at start when the last one is older than a day) the bookstore writes an encrypted backup.'
+  Write-Host 'Choose a folder on ANOTHER disk, a USB drive or a network share (e.g. D:\BookstoreBackups): a backup on the same disk is lost with it.'
+  $backupDir = Read-Host 'Backup folder (Enter for deploy\backups, on this disk)'
+  if ([string]::IsNullOrWhiteSpace($backupDir)) { $backupDir = './backups' }
+  Write-Host 'The backup passphrase opens the backups: without it they cannot be restored. Write it down and keep it apart from the PC.'
+  $passphrase = Read-Password 'Backup passphrase (at least 12 characters)' 12
+  [IO.File]::AppendAllLines((Join-Path $PSScriptRoot '.env'), [string[]]@("BMS_BACKUP_DIR=$backupDir", "BMS_BACKUP_PASSPHRASE='$passphrase'"))
+  Remove-Variable passphrase
+}
+$backupDir = ((Get-Content .env | Where-Object { $_ -like 'BMS_BACKUP_DIR=*' }) -replace '^BMS_BACKUP_DIR=', '' | Select-Object -First 1)
+if ([string]::IsNullOrWhiteSpace($backupDir)) { $backupDir = './backups' }
+New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 
 Say 'Building the images (a few minutes the first time)'
 Invoke-Docker compose build
@@ -126,5 +144,6 @@ Check that it shows this fingerprint:
   $fingerprint
 The certificate is also in deploy\bookstore-ca.crt.
 
-Keep a copy of deploy\.env somewhere safe and private.
+Backups go to: $backupDir (the first one runs now).
+Keep a copy of deploy\.env and the backup passphrase somewhere safe and private.
 "@

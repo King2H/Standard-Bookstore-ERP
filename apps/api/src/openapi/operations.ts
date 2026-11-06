@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import {
+  BackupStatusSchema,
   UpdateOrderRequestSchema,
   CancelStockCountRequestSchema,
   CancelSupplierReturnRequestSchema,
@@ -333,6 +334,7 @@ export const operations: ApiOperation[] = [
   ...transferOperations(),
   ...cashSessionOperations(),
   ...businessDayOperations(),
+  ...systemOperations(),
   ...stockCountOperations(),
   ...supplierReturnOperations(),
   ...configOperations(),
@@ -3231,6 +3233,21 @@ function reportOperations(): ApiOperation[] {
       tag,
       request: query,
       responses: {},
+    },
+  ];
+}
+
+function systemOperations(): ApiOperation[] {
+  const tag = 'System';
+  return [
+    {
+      operationId: 'getBackupStatus',
+      method: 'get',
+      path: '/system/backup-status',
+      summary: 'The install\'s backups: the last good one, a failure since, and whether to warn (#244; Super_Admin, Admin)',
+      tag,
+      responses: { 200: { description: 'The backup status', schema: BackupStatusSchema } },
+      errors: [401, 403, 500],
     },
   ];
 }

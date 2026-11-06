@@ -27,7 +27,9 @@ ENV BANNER="import { createRequire as __bmsCreateRequire } from 'node:module'; c
 RUN npx tsc --noEmit -p apps/api \
  && npx esbuild apps/api/src/server.ts $BUNDLE --banner:js="$BANNER" --outfile=out/server.js \
  && npx esbuild apps/api/scripts/migrate.ts $BUNDLE --banner:js="$BANNER" --outfile=out/migrate.js \
- && npx esbuild apps/api/scripts/first-accounts.ts $BUNDLE --banner:js="$BANNER" --outfile=out/first-accounts.js
+ && npx esbuild apps/api/scripts/first-accounts.ts $BUNDLE --banner:js="$BANNER" --outfile=out/first-accounts.js \
+ && npx esbuild apps/api/scripts/db-check.ts $BUNDLE --banner:js="$BANNER" --outfile=out/db-check.js \
+ && npx esbuild apps/api/scripts/backup.ts $BUNDLE --banner:js="$BANNER" --outfile=backup/backup.js
 
 # ── Production packages only ────────────────────────────────────────────────
 FROM node:24-alpine AS api-deps
@@ -52,6 +54,16 @@ EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 CMD ["node", "server.js"]
+
+# ── Backup image: PostgreSQL's own pg_dump and pg_restore, and Node ────────
+# (#244). It reads the database, the install's .env and the certificate
+# authority, and writes encrypted backups to the folder chosen at install.
+FROM node:24-alpine AS node-runtime
+FROM postgres:18-alpine AS backup
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+WORKDIR /app
+COPY --from=api-build /src/backup/backup.js ./backup.js
+CMD ["node", "backup.js", "schedule"]
 
 # ── The screens, built ───────────────────────────────────────────────────────
 FROM deps AS web-build

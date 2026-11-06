@@ -53,6 +53,16 @@ export interface Authors {
   updated_by: number | null;
 }
 
+export interface BackupRuns {
+  bytes: Int8 | null;
+  error: string | null;
+  file_name: string | null;
+  finished_at: Timestamp;
+  id: Generated<Int8>;
+  ok: boolean;
+  started_at: Timestamp;
+}
+
 export interface BankAccounts {
   account_name: string;
   account_number: string;
@@ -1236,6 +1246,7 @@ export interface Transactions {
 export interface DB {
   audit_logs: AuditLogs;
   authors: Authors;
+  backup_runs: BackupRuns;
   bank_accounts: BankAccounts;
   bank_reconciliation: BankReconciliation;
   bank_statement_lines: BankStatementLines;
