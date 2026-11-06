@@ -89,7 +89,9 @@ describe('Binding on an exchange', () => {
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     return { id: res.body.id as string, reference: res.body.exchangeReference as string, job: res.body.outgoingItems[0].service?.job?.id as number, total, body: res.body };
   }
-  const step = (job: number, s: string, token = sales) => as(api().post(`/api/v1/service-jobs/${job}/${s}`), token);
+  const step = (job: number, s: string, token = sales) => as(api().post(`/api/v1/service-jobs/${job}/${s}`), token)
+    // Back and ready names the binder's cost (#249).
+    .send(s === 'ready' ? { actualCost: 40 } : {});
   const cancelBinding = (job: number, token = manager) =>
     as(api().post(`/api/v1/service-jobs/${job}/cancel`), token).send({ reason: 'Customer changed their mind' });
   const storeCredit = async () => Number((await one(`SELECT COALESCE((SELECT balance FROM store_credit_accounts WHERE customer_id = $1), 0) AS b`, [customerId])).b);

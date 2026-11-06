@@ -923,12 +923,14 @@ export interface ServiceBranchFees {
 }
 
 export interface ServiceJobs {
+  actual_cost: Numeric | null;
   branch_id: number;
   created_at: Generated<Timestamp>;
   created_by: number | null;
   customer_id: number;
   id: Generated<Int8>;
   job_number: string;
+  ready_at: Timestamp | null;
   ready_date: Timestamp;
   service_line_id: Int8;
   status: Generated<string>;

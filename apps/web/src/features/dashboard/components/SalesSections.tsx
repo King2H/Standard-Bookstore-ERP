@@ -31,6 +31,15 @@ export function SalesTrend({ params }: { params: ReportParams }) {
               <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Service Income</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.serviceIncome, currency)}</p></div>
             </div>
           )}
+          {/* The costs below gross profit and net profit (#249), once there are any. */}
+          {(sales.summary.bindingCostDifference !== 0 || sales.summary.cashOverShort !== 0) && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Gross Profit</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.grossProfit, currency)}</p></div>
+              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Binding cost difference</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.bindingCostDifference, currency)}</p></div>
+              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Cash over/short</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.cashOverShort, currency)}</p></div>
+              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Net Profit</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.netProfit, currency)}</p></div>
+            </div>
+          )}
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={sales.byPeriod.map(r => ({ ...r, period: periodLabel(r.period, params.groupBy) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -85,7 +94,7 @@ export function GrossProfitTrendSection({ params }: { params: ReportParams }) {
             <Tooltip formatter={(v: number) => formatCurrency(v, currency)} {...CHART_TOOLTIP_PROPS} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line type="monotone" dataKey="netSales" name="Net Sales" stroke="#3b82f6" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="grossProfit" name="Net Profit" stroke="#10b981" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="grossProfit" name="Gross Profit" stroke="#10b981" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       ) : <Empty />}

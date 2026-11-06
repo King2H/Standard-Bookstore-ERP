@@ -54,7 +54,8 @@ export const useBranchFee = () =>
 export function useJobStep(refresh: ReadonlyArray<readonly unknown[]>) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, step }: { id: number; step: ServiceJobStep }) => stepJob(id, step),
+    mutationFn: ({ id, step, actualCost }: { id: number; step: ServiceJobStep; actualCost?: string }) =>
+      stepJob(id, step, actualCost === undefined ? {} : { actualCost }),
     onSuccess: () => Promise.all(refresh.map((queryKey) => qc.invalidateQueries({ queryKey }))),
   });
 }

@@ -181,10 +181,14 @@ export async function findJob(q: Queryable, id: number, branchId: number, opts: 
   };
 }
 
-export async function setJobStatus(q: Queryable, id: number, status: ServiceJobStatus, staffId: number): Promise<void> {
+export async function setJobStatus(q: Queryable, id: number, status: ServiceJobStatus, staffId: number, actualCost?: Money): Promise<void> {
   await q
     .updateTable('service_jobs')
-    .set({ status, updated_by: staffId, updated_at: sql`now()` })
+    .set({
+      status, updated_by: staffId, updated_at: sql`now()`,
+      // Back and ready: what the binder charged, and when (#249).
+      ...(status === 'READY' && { ready_at: sql`now()`, actual_cost: actualCost?.toFixed(2) ?? null }),
+    })
     .where('id', '=', String(id))
     .execute();
 }
@@ -324,7 +328,7 @@ export async function listJobs(q: Queryable, f: JobFilter, page: { limit: number
         sql<boolean>`j.status IN ('REQUESTED', 'AT_BINDER') AND j.ready_date < CURRENT_DATE`.as('overdue'),
         's.name as service_name', 'sl.quantity', 'b.title as book_title', 'c.full_name as customer_name', 'c.phone_encrypted',
         't.id as transaction_id', 't.transaction_number', 'o.id as order_id', 'o.order_number',
-        'e.id as exchange_id', 'e.exchange_reference',
+        'e.id as exchange_id', 'e.exchange_reference', 'j.actual_cost',
       ])
       .orderBy('j.ready_date')
       .orderBy('j.id')
@@ -341,7 +345,7 @@ export type JobBoardRow = {
   ready_date: string; overdue: boolean; service_name: string; quantity: number; book_title: string; customer_name: string;
   phone_encrypted: string | null; transaction_id: string | number | bigint | null; transaction_number: string | null;
   order_id: string | number | bigint | null; order_number: string | null;
-  exchange_id: string | number | bigint | null; exchange_reference: string | null;
+  exchange_id: string | number | bigint | null; exchange_reference: string | null; actual_cost: string | null;
 };
 
 /** What the ready notice names: the customer to call and the binding. */

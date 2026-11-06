@@ -1,7 +1,7 @@
 # Bookstore ERP v2: roadmap
 
 Status: **accepted** by the owner on 2026-10-03 (issue #11); updated as work progresses
-Owner: King2H · Last updated: 2026-10-08
+Owner: King2H · Last updated: 2026-11-06
 
 This roadmap orders the v2 backlog (epics #2–#6) into milestones, from the completed
 Phase 0 to the `v2.0.0` release. Each milestone is a GitHub Milestone with the same name.
@@ -31,12 +31,12 @@ Day-to-day progress is tracked in issue #37.
 | M5 | Module migration | #21, #22, #66, #68, #69, #70, #72 | ~28 PRs | — |
 | M4 | Tenancy (after M5) | #13 | ~4 PRs | `v2.0.0-alpha.1` |
 | M6 | Web app | #23 | ~20 PRs (parallel from M3) | `v2.0.0-alpha.2` |
-| M7 | Productization | #24, #25, #26, #27, #28 | ~10 PRs | `v2.0.0-beta.1` |
-| M8 | Operations and release | #31, #32, #33 | ~6 PRs | `v2.0.0-rc.1` → `v2.0.0` |
+| M7 | On-premise release (owner decision a, 2026-11-06) | #31, #244, #245, #32, #33, #246, #247 | ~12 PRs + a pilot | `v2.0.0` |
+| M8 | Multi-tenant | #24, #27, #28, #248 | ~8 PRs | `v2.1.0` |
 
 ```mermaid
 flowchart LR
-  M0[M0 Phase 0 ✓] --> M1[M1 Quality gates] --> M2[M2 Core infrastructure] --> M3[M3 Reference modules + scope] --> M5[M5 Module migration] --> M4[M4 Tenancy] --> M7[M7 Productization] --> M8[M8 Operations + release]
+  M0[M0 Phase 0 ✓] --> M1[M1 Quality gates] --> M2[M2 Core infrastructure] --> M3[M3 Reference modules + scope] --> M5[M5 Module migration] --> M4[M4 Tenancy] --> M7[M7 On-premise release v2.0.0] --> M8[M8 Multi-tenant v2.1]
   M3 --> M6[M6 Web app] --> M7
 ```
 
@@ -140,29 +140,44 @@ even with an application filter removed.
 **Exit criteria:** every page reachable by URL; no `fetch` in pages; forms use the shared schemas.
 **Possible pre-release:** `v2.0.0-alpha.2`.
 
-## M7: Productization
+## M7: On-premise release (`v2.0.0`)
+
+Owner decision a, 2026-11-06, after an assessment of what a shop needs before it can run v2
+without a developer: the workflows were complete and consistent, but a shop could not be
+installed, backed up or upgraded. `v2.0.0` is the single-shop on-premise release; multi-tenant
+follows in M8. It starts once the UAT audit's owner decisions are done (#225: #249).
+
+| Issue | Outcome | Release gate |
+|---|---|---|
+| #31 | Install bundle: production image, the web app served, secrets generated at setup, HTTPS on the shop's network, an install guide for a clean Windows PC | A non-developer installs the shop in under an hour; a second PC signs in over HTTPS |
+| #244 | Backups and restore, with the encryption key | A backup restored on a second PC reads the same (`db:check` 0 errors) |
+| #245 | Upgrades and rollback; v1 → v2 | Upgrade and rollback with no data lost |
+| #32 | Structured logging with the request ID; liveness and readiness | |
+| #33 | E2E tests of the key journeys in CI; one version source; release process | The journeys pass in CI |
+| #246 | Bulk import and export: catalog, opening stock, customers | A shop's lists exported and imported give the same stock value and counts |
+| #247 | Tax: off by default, or a configured rate on receipts and reports | |
+
+**Exit criteria:** the release gates above, then a 2–4 week pilot in a real shop with no blocker
+and no data inconsistency.
+**Release:** **`v2.0.0`**.
+
+## M8: Multi-tenant (`v2.1`)
 
 | Issue | Outcome |
 |---|---|
 | #24 | Configuration hierarchy with a tenant level (ADR-0006) |
-| #25 | Payment method registry |
-| #26 | English and Amharic UI; ETB formatting; configurable tax, default 0% (ADR-0010) |
 | #27 | Module licensing and feature flags; bank accounts re-enabled behind a flag |
-| #28 | Webhooks, CSV/Excel import and export, onboarding of a new tenant |
+| #28 | Tenant provisioning for SaaS, webhooks, accounting export |
+| #248 | Several API instances: a locked job scheduler, a shared sign-in limit, metrics and tracing |
 
-**Exit criteria:** a new customer can be set up through configuration only.
-**Possible pre-release:** `v2.0.0-beta.1` (feature-complete) for a pilot customer.
+**Exit criteria:** a new tenant can be set up through configuration only, on a deployment with
+several API instances.
 
-## M8: Operations and release
+## When a customer needs it
 
-| Issue | Outcome |
-|---|---|
-| #31 | Multi-stage non-root production image; migrations as a separate step; on-premise bundle with backup and restore; v1 → v2 upgrade procedure, including PostgreSQL 16 → 18 |
-| #32 | Structured logging, metrics, tracing; job scheduler safe for several instances |
-| #33 | E2E tests for the critical journeys; release process |
-
-**Exit criteria:** the vision's success criteria are met (`vision.md` §7).
-**Release:** `v2.0.0-rc.1` if needed, then **`v2.0.0`**.
+#25 (payment method registry), #26 (currency per tenant, English and Amharic UI, configurable
+number series), #88 (manual ledger adjustments), #101 (payment terms), #106 (purchase orders
+in a foreign currency), #149 (transfer references on money going out).
 
 ---
 

@@ -81,20 +81,19 @@ export function Overview({ params, salesPeriod, setSalesPeriod, onNavigate }: {
                 >
                   <TrendBadge changePct={periodKpis?.netSalesChangePct ?? null} />
                 </HighlightKpiCard>
-                {/* "Net Profit" — the dashboard's single unambiguous profit KPI:
-                    actual economic profit after COGS, discounts, returns, and
-                    exchange/settlement adjustments (Prompt 2). Cash collection
-                    is never netted into this figure — see Cash & Receivables
-                    below for the independent cash-flow view. */}
+                {/* "Net Profit": gross profit (net sales less cost) less the
+                    costs below it, the binders' charges above standard and
+                    cash over/short (#249). Cash collection is never netted
+                    into it: see Cash & Receivables below. */}
                 <HighlightKpiCard
                   label="Net Profit"
-                  value={short(periodKpis?.grossProfit ?? 0)}
-                  sub={periodLoading ? 'Loading…' : `${PERIOD_LABELS[salesPeriod]} · Net Sales − COGS − Returns`}
+                  value={short(periodKpis?.netProfit ?? 0)}
+                  sub={periodLoading ? 'Loading…' : `${PERIOD_LABELS[salesPeriod]} · Gross profit − binding cost difference ± cash over/short`}
                   accent="emerald"
-                  negative={(periodKpis?.grossProfit ?? 0) < 0}
+                  negative={(periodKpis?.netProfit ?? 0) < 0}
                   icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                 >
-                  <TrendBadge changePct={periodKpis?.grossProfitChangePct ?? null} />
+                  <TrendBadge changePct={periodKpis?.netProfitChangePct ?? null} />
                 </HighlightKpiCard>
                 <HighlightKpiCard
                   label="Gross Margin %"

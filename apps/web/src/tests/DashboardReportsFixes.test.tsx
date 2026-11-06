@@ -47,9 +47,9 @@ const RANGES: Record<KpiPeriod, [string, string]> = {
   today: ['2026-11-04', '2026-11-04'], week: ['2026-11-02', '2026-11-04'], month: ['2026-11-01', '2026-11-04'], year: ['2026-01-01', '2026-11-04'],
 };
 const period = (p: KpiPeriod) => contract(PeriodKpisSchema, {
-  period: p, dateFrom: RANGES[p][0], dateTo: RANGES[p][1], netSales: 0, grossProfit: 0, grossMarginPct: 0,
-  previous: { dateFrom: '2026-01-01', dateTo: '2026-01-01', netSales: 0, grossProfit: 0, grossMarginPct: 0 },
-  netSalesChangePct: null, grossProfitChangePct: null, cashIn: 0, cashOut: 0, cashCollected: 0, previousCashCollected: 0,
+  period: p, dateFrom: RANGES[p][0], dateTo: RANGES[p][1], netSales: 0, grossProfit: 0, grossMarginPct: 0, netProfit: 0,
+  previous: { dateFrom: '2026-01-01', dateTo: '2026-01-01', netSales: 0, grossProfit: 0, grossMarginPct: 0, netProfit: 0 },
+  netSalesChangePct: null, grossProfitChangePct: null, netProfitChangePct: null, cashIn: 0, cashOut: 0, cashCollected: 0, previousCashCollected: 0,
 });
 
 const INVENTORY = contract(InventoryReportSchema, {

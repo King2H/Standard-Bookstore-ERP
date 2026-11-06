@@ -134,6 +134,13 @@ export const ServiceJobStepParamsSchema = z.object({
   step: ServiceJobStepSchema,
 });
 
+/**
+ * Back and ready asks what the binder charged for the job (#249, #225 B1): the
+ * sale keeps its standard cost, the difference is a cost of the day it is back.
+ */
+export const ServiceJobStepRequestSchema = z.object({ actualCost: CostSchema.optional() });
+export type ServiceJobStepRequest = z.infer<typeof ServiceJobStepRequestSchema>;
+
 // ── After the sale (#169 PR 3) ───────────────────────────────────────────────
 
 /** The jobs board (owner decision 1a): the branch's jobs, the oldest ready date first. */
@@ -159,6 +166,8 @@ export const ServiceJobBoardItemSchema = ServiceJobSchema.extend({
   saleNumber: z.string(),
   /** Requested or at the binder past the ready date. */
   overdue: z.boolean(),
+  /** What the binder charged, once back (#249); null to those without VIEW_COST. */
+  actualCost: z.number().nullable(),
 });
 export type ServiceJobBoardItem = z.infer<typeof ServiceJobBoardItemSchema>;
 

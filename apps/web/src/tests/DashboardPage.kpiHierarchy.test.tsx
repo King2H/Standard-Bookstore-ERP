@@ -62,9 +62,9 @@ const KPIS = {
 const PERIOD_KPIS = {
   period: 'today',
   dateFrom: '2026-08-12', dateTo: '2026-08-12',
-  netSales: 3000, grossProfit: 2000, grossMarginPct: 66.7,
-  previous: { dateFrom: '2026-08-11', dateTo: '2026-08-11', netSales: 2500, grossProfit: 1500, grossMarginPct: 60 },
-  netSalesChangePct: 20, grossProfitChangePct: 33.3,
+  netSales: 3000, grossProfit: 2000, grossMarginPct: 66.7, netProfit: 2000,
+  previous: { dateFrom: '2026-08-11', dateTo: '2026-08-11', netSales: 2500, grossProfit: 1500, grossMarginPct: 60, netProfit: 1500 },
+  netSalesChangePct: 20, grossProfitChangePct: 33.3, netProfitChangePct: 33.3,
   cashIn: 4500, cashOut: 500, cashCollected: 4000, previousCashCollected: 3500,
 };
 
@@ -107,7 +107,7 @@ describe('DashboardPage — KPI hierarchy (Prompt 2)', () => {
     expect(screen.getByText('ETB 3.0K')).toBeInTheDocument(); // periodKpis.netSales
 
     expect(screen.getByText('Net Profit')).toBeInTheDocument();
-    expect(screen.getByText('ETB 2.0K')).toBeInTheDocument(); // periodKpis.grossProfit
+    expect(screen.getByText('ETB 2.0K')).toBeInTheDocument(); // periodKpis.netProfit (no costs below gross profit here)
 
     expect(screen.getByText('Gross Margin %')).toBeInTheDocument();
     expect(screen.getByText('66.7%')).toBeInTheDocument();

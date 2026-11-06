@@ -39,13 +39,13 @@ function profile(roles: string[]): ProfileResponse {
 const boardItem = (over: Partial<ServiceJobBoardItem>): ServiceJobBoardItem => ({
   id: 31, jobNumber: 'SVC-20261026-0001', status: 'REQUESTED', readyDate: '2026-10-31', customerId: 1, branchId: 1, updatedAt: CREATED,
   serviceName: 'Leather binding', quantity: 2, bookTitle: 'Oromay', customerName: 'Abebe Kebede', customerPhone: '0911000000',
-  source: 'POS', saleId: '77', saleNumber: 'POS-20261026-0001', overdue: false, ...over,
+  source: 'POS', saleId: '77', saleNumber: 'POS-20261026-0001', overdue: false, actualCost: null, ...over,
 });
 const BOARD = [
   boardItem({}),
   boardItem({ id: 32, jobNumber: 'SVC-20261020-0004', status: 'AT_BINDER', readyDate: '2026-10-25', overdue: true, customerName: 'Tigist Alemu', customerPhone: null }),
   boardItem({ id: 33, jobNumber: 'SVC-20261019-0002', status: 'READY', source: 'ORDER', saleId: '10', saleNumber: 'ORD-20261019-0002' }),
-  boardItem({ id: 34, jobNumber: 'SVC-20261018-0001', status: 'READY', bookTitle: 'Fikir Eske Mekabir' }),
+  boardItem({ id: 34, jobNumber: 'SVC-20261018-0001', status: 'READY', bookTitle: 'Fikir Eske Mekabir', actualCost: 85.5 }),
 ];
 
 const bound = (status: ServiceJobStatus): SaleServiceLine => ({
@@ -179,7 +179,14 @@ describe('the Binding Jobs page (1a)', () => {
     await user.click(within(await row('SVC-20261026-0001')).getByRole('button', { name: 'Sent to binder' }));
     await waitFor(() => expect(posted('/service-jobs/31/send')).toHaveLength(1));
     await user.click(within(await row('SVC-20261020-0004')).getByRole('button', { name: 'Back and ready' }));
-    await waitFor(() => expect(posted('/service-jobs/32/ready')).toHaveLength(1));
+    // What the binder charged is asked first (#249, B1).
+    const dialog = screen.getByRole('dialog', { name: 'SVC-20261020-0004 back and ready' });
+    await user.click(within(dialog).getByRole('button', { name: 'Back and ready' }));
+    expect(within(dialog).getByText("Enter the binder's cost for the job")).toBeInTheDocument();
+    expect(posted('/service-jobs/32/ready')).toHaveLength(0);
+    await user.type(within(dialog).getByLabelText("Binder's cost (ETB)"), '85.50');
+    await user.click(within(dialog).getByRole('button', { name: 'Back and ready' }));
+    await waitFor(() => expect(posted('/service-jobs/32/ready')).toEqual([{ actualCost: '85.50' }]));
     await user.click(within(await row('SVC-20261018-0001')).getByRole('button', { name: 'Collected' }));
     await waitFor(() => expect(posted('/service-jobs/34/collect')).toHaveLength(1));
 
@@ -187,6 +194,12 @@ describe('the Binding Jobs page (1a)', () => {
     expect(within(onOrder).queryByRole('button', { name: 'Collected' })).not.toBeInTheDocument();
     expect(within(onOrder).getByText('goes with the order')).toBeInTheDocument();
   });
+});
+
+it("shows what the binder charged, when the API gives it (#249: to those who see costs)", async () => {
+  renderWith(<BindingJobsPage />);
+  expect(within(await row('SVC-20261018-0001')).getByText("Binder's cost ETB 85.50")).toBeInTheDocument();
+  expect(within(await row('SVC-20261019-0002')).queryByText(/Binder's cost/)).not.toBeInTheDocument();
 });
 
 describe('cancelling a binding (3a)', () => {

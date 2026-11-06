@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ServiceJobStatusSchema, type ServiceJobBoardItem, type ServiceJobStatus } from '@bms/shared';
+import { Money, ServiceJobStatusSchema, type ServiceJobBoardItem, type ServiceJobStatus } from '@bms/shared';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import Pagination, { makePageSizeHandler } from '../../../components/Pagination.js';
 import { useToast } from '../../../components/Toast.js';
+import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { JOB_STATUS_LABEL, nextStep } from '../binding.js';
 import { STATUS_CLASS } from '../components/ServiceJobLine.js';
+import { BackAndReadyDialog } from '../components/BackAndReadyDialog.js';
 import { serviceJobKeys, useCancelBinding, useJobStep, useServiceJobs } from '../queries.js';
 import { canCancelBinding } from '../rules.js';
 
@@ -37,19 +39,23 @@ export default function BindingJobsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [cancelling, setCancelling] = useState<ServiceJobBoardItem | null>(null);
+  const [readying, setReadying] = useState<ServiceJobBoardItem | null>(null);
   useEffect(() => setPage(1), [q, status, overdue]);
 
   const { data, isLoading } = useServiceJobs({
     status: status || undefined, overdue: overdue ? 'true' : undefined, q: q || undefined, page, pageSize,
   });
+  const currency = useCurrency();
   const move = useJobStep(REFRESH);
   const cancel = useCancelBinding(REFRESH);
 
-  function step(job: ServiceJobBoardItem) {
+  function step(job: ServiceJobBoardItem, actualCost?: string) {
     const next = nextStep(job.status);
     if (!next) return;
-    move.mutate({ id: job.id, step: next.step }, {
-      onSuccess: () => showToast(`${job.jobNumber}: ${next.label.toLowerCase()}`, 'success'),
+    // Back and ready asks the binder's cost first (#249).
+    if (next.step === 'ready' && actualCost === undefined) { setReadying(job); return; }
+    move.mutate({ id: job.id, step: next.step, actualCost }, {
+      onSuccess: () => { showToast(`${job.jobNumber}: ${next.label.toLowerCase()}`, 'success'); setReadying(null); },
       onError: (e: Error) => showToast(e.message, 'error'),
     });
   }
@@ -125,6 +131,9 @@ export default function BindingJobsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-1.5 py-0.5 rounded-sm text-xs font-medium ${STATUS_CLASS[job.status]}`}>{JOB_STATUS_LABEL[job.status]}</span>
+                    {job.actualCost !== null && (
+                      <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400 tabular-nums">Binder's cost {currency} {Money.of(job.actualCost).toFixed(2)}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex gap-3 justify-end items-center">
@@ -148,6 +157,10 @@ export default function BindingJobsPage() {
       {data && (
         <Pagination page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
           onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)} itemLabel="job" />
+      )}
+      {readying && (
+        <BackAndReadyDialog jobNumber={readying.jobNumber} busy={move.isPending}
+          onConfirm={(cost) => step(readying, cost)} onCancel={() => setReadying(null)} />
       )}
       {cancelling && (
         <ActionDialog

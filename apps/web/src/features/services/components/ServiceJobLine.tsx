@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Money, type SaleServiceLine, type ServiceJobStatus } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { JOB_STATUS_LABEL, nextStep } from '../binding.js';
 import { useJobStep } from '../queries.js';
+import { BackAndReadyDialog } from './BackAndReadyDialog.js';
 
 export const STATUS_CLASS: Record<ServiceJobStatus, string> = {
   REQUESTED: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -31,6 +33,14 @@ export function ServiceJobLine({ line, canStep, onOrder = false, refresh }: {
   const job = line.job;
   const next = job ? nextStep(job.status) : null;
   const offer = canStep && next && !(onOrder && next.step === 'collect');
+  const [readying, setReadying] = useState(false);
+  const run = (actualCost?: string) => {
+    if (!job || !next) return;
+    move.mutate({ id: job.id, step: next.step, actualCost }, {
+      onSuccess: () => { showToast(`${job.jobNumber}: ${next.label.toLowerCase()}`, 'success'); setReadying(false); },
+      onError: (e: Error) => showToast(e.message, 'error'),
+    });
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
@@ -43,13 +53,14 @@ export function ServiceJobLine({ line, canStep, onOrder = false, refresh }: {
           {!['COLLECTED', 'CANCELLED', 'RETURNED'].includes(job.status) && <span>ready {job.readyDate}</span>}
           {offer && (
             <button type="button" disabled={move.isPending}
-              onClick={() => move.mutate({ id: job.id, step: next.step }, {
-                onSuccess: () => showToast(`${job.jobNumber}: ${next.label.toLowerCase()}`, 'success'),
-                onError: (e: Error) => showToast(e.message, 'error'),
-              })}
+              // Back and ready asks the binder's cost first (#249).
+              onClick={() => (next.step === 'ready' ? setReadying(true) : run())}
               className="px-2 py-0.5 rounded-sm border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50">
               {next.label}
             </button>
+          )}
+          {readying && (
+            <BackAndReadyDialog jobNumber={job.jobNumber} busy={move.isPending} onConfirm={run} onCancel={() => setReadying(false)} />
           )}
         </>
       ) : (

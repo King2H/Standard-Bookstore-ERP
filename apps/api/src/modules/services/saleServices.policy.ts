@@ -1,5 +1,5 @@
 import { Money, type ServiceJobStatus, type ServiceJobStep, type ServiceLineInput } from '@bms/shared';
-import { BusinessError } from '../../lib/errors.js';
+import { BusinessError, ValidationError } from '../../lib/errors.js';
 import type { PricedServiceLine, ServiceForSale } from './services.types.js';
 
 /**
@@ -68,6 +68,16 @@ export function nextJobStatus(current: ServiceJobStatus, step: ServiceJobStep): 
     throw new BusinessError('INVALID_JOB_STEP', `A job that is ${current} cannot be moved to ${to}`, { status: current, step });
   }
   return to;
+}
+
+/** Back and ready names what the binder charged (#249, #225 B1); no other step does. */
+export function checkActualCost(step: ServiceJobStep, actualCost: Money | undefined): void {
+  if (step === 'ready' && actualCost === undefined) {
+    throw new ValidationError("Enter the binder's cost for the job", { field: 'actualCost' });
+  }
+  if (step !== 'ready' && actualCost !== undefined) {
+    throw new ValidationError("The binder's cost is entered when the job is back and ready", { field: 'actualCost' });
+  }
 }
 
 /**

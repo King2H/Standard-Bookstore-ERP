@@ -53,6 +53,17 @@ export interface SalesSummary {
   grossProfit: number;          // netSalesRevenue − costAmount
   grossMarginPct: number;       // grossProfit / netSalesRevenue × 100 (0 when netSalesRevenue is 0)
   rowCount: number;
+  /** Below gross profit (#249): what binders charged above the standard cost, on the day the job is back. */
+  bindingCostDifference: number;
+  /** Below gross profit (#249): closed cash sessions' variance on the session's day; a shortage is negative. */
+  cashOverShort: number;
+  netProfit: number;            // grossProfit − bindingCostDifference + cashOverShort
+}
+
+/** The figures below gross profit, as the database sums them. */
+export interface OtherCostsRow {
+  binding_cost_difference: string;
+  cash_over_short: string;
 }
 
 export interface OrderTotalsRow {

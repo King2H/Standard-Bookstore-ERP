@@ -129,7 +129,8 @@ describe('Order events count on the day they happen (#175)', () => {
     expect(paid.status, JSON.stringify(paid.body)).toBe(201);
     expect((await report(2)).summary).toEqual(before);
     // One profit (1b): the collected-cash figures are gone from the report and the KPIs.
-    for (const gone of ['netProfit', 'fulfilledRevenue', 'cashSalesRevenue', 'creditSalesRevenue', 'purchaseCost', 'totalDiscounts', 'outstandingReceivables']) {
+    // netProfit is back since #249, as gross profit less the costs below it, by day too.
+    for (const gone of ['fulfilledRevenue', 'cashSalesRevenue', 'creditSalesRevenue', 'purchaseCost', 'totalDiscounts', 'outstandingReceivables']) {
       expect(before).not.toHaveProperty(gone);
     }
     const kpis = (await as(t.manager).get('/api/v1/reports/kpis')).body;

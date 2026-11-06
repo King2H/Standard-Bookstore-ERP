@@ -64,6 +64,15 @@ export const SalesReportSchema = z.object({
     bookSales: z.number(),
     /** Service fees of orders, counter sales and exchanges (PR 4), after discount (#169). */
     serviceIncome: z.number(),
+    /**
+     * Below gross profit (#249): what binders charged above the standard cost
+     * the sales kept, on the day each job came back (negative when below).
+     */
+    bindingCostDifference: z.number(),
+    /** Below gross profit (#249): closed cash sessions' counted less expected, on the session's day. */
+    cashOverShort: z.number(),
+    /** grossProfit − bindingCostDifference + cashOverShort. */
+    netProfit: z.number(),
   }),
   byPeriod: z.array(
     z.object({ period: z.string(), totalSales: z.number(), totalOrders: z.number().int(), averageOrderValue: z.number() }),
@@ -164,6 +173,8 @@ const PeriodFiguresSchema = z.object({
   netSales: z.number(),
   grossProfit: z.number(),
   grossMarginPct: z.number(),
+  /** Gross profit less the binding cost difference, plus cash over/short (#249). */
+  netProfit: z.number(),
 });
 
 export const PeriodKpisSchema = PeriodFiguresSchema.extend({
@@ -172,6 +183,7 @@ export const PeriodKpisSchema = PeriodFiguresSchema.extend({
   /** Change against the previous equivalent period; null when that was 0. */
   netSalesChangePct: z.number().nullable(),
   grossProfitChangePct: z.number().nullable(),
+  netProfitChangePct: z.number().nullable(),
   /**
    * Customer money for the period, as the Payments report counts it: money
    * in (payments), money out (refunds), and what is left (in less out).

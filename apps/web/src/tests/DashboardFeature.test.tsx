@@ -50,9 +50,9 @@ function profile(roles: string[], isAllBranches = false): ProfileResponse {
 const ZERO_KPIS = Object.fromEntries(Object.keys(KpiReportSchema.shape).map((k) => [k, 0])) as KpiReport;
 const KPIS = contract(KpiReportSchema, { ...ZERO_KPIS, outstandingBalance: 8000, overdueReceivablesAmount: 1200, lowStockItems: 2, pendingOrders: 1 });
 const PERIOD = contract(PeriodKpisSchema, {
-  period: 'today', dateFrom: '2026-10-20', dateTo: '2026-10-20', netSales: 3000, grossProfit: 2000, grossMarginPct: 66.7,
-  previous: { dateFrom: '2026-10-19', dateTo: '2026-10-19', netSales: 2500, grossProfit: 1500, grossMarginPct: 60 },
-  netSalesChangePct: 20, grossProfitChangePct: 33.3, cashIn: 4500, cashOut: 500, cashCollected: 4000, previousCashCollected: 3500,
+  period: 'today', dateFrom: '2026-10-20', dateTo: '2026-10-20', netSales: 3000, grossProfit: 2000, grossMarginPct: 66.7, netProfit: 1800,
+  previous: { dateFrom: '2026-10-19', dateTo: '2026-10-19', netSales: 2500, grossProfit: 1500, grossMarginPct: 60, netProfit: 1500 },
+  netSalesChangePct: 20, grossProfitChangePct: 33.3, netProfitChangePct: 20, cashIn: 4500, cashOut: 500, cashCollected: 4000, previousCashCollected: 3500,
 });
 const INVENTORY = contract(InventoryReportSchema, {
   summary: { totalBooks: 1, totalStockUnits: 9, availableStock: 9, reservedStock: 0, lowStockItems: 2, outOfStockItems: 0 },
@@ -223,6 +223,15 @@ describe('filters and actions', () => {
   });
 });
 
+describe('Net Profit (#249)', () => {
+  it('is gross profit less the costs below it: binding cost difference and cash over/short (was: gross profit under that name)', async () => {
+    await openDashboard();
+    const card = (await screen.findByText(/^Net Profit/)).closest('div')!.parentElement!;
+    expect(within(card).getByText('ETB 1.8K')).toBeInTheDocument();
+    expect(within(card).getByText(/Gross profit − binding cost difference ± cash over\/short/)).toBeInTheDocument();
+  });
+});
+
 describe('Cash Collected', () => {
   it('shows what is left after refunds, with the money in and out under it (owner decision; was: payments as taken, refunds never taken off)', async () => {
     await openDashboard();
@@ -314,6 +323,17 @@ describe('report sections', () => {
     expect(discounts.getByText('60.0%')).toBeInTheDocument();
     expect(discounts.getByText('30.0%')).toBeInTheDocument();
     expect(discounts.getByText('10.0%')).toBeInTheDocument();
+  });
+
+  it('show the costs below gross profit and net profit once there are any (#249)', async () => {
+    sales = contract(SalesReportSchema, {
+      ...SALES, summary: { ...SALES.summary, grossProfit: 2000, bindingCostDifference: 150, cashOverShort: -50, netProfit: 1800 },
+      byPeriod: [{ period: '2026-10-20 00:00:00+00', totalSales: 1000, totalOrders: 2, averageOrderValue: 500 }],
+    });
+    await openDashboard();
+    expect((await screen.findByText('Binding cost difference')).nextSibling).toHaveTextContent('ETB 150');
+    expect(screen.getByText('Cash over/short').nextSibling).toHaveTextContent('ETB -50');
+    expect(screen.getByText('Gross Profit').nextSibling).toHaveTextContent('ETB 2.0K');
   });
 
   it('show amounts and chart legends in the shop\'s currency (was: always ETB)', async () => {

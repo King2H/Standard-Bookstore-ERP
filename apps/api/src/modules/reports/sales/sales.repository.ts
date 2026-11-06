@@ -1,7 +1,7 @@
 import type { Queryable } from '../../../db/tx.js';
 import { reportRows } from '../../../db/reportDb.js';
 import { scopeConditions } from '../reportScope.js';
-import type { OrderTotalsRow, ReportFilters, ReportScope } from './sales.types.js';
+import type { OrderTotalsRow, OtherCostsRow, ReportFilters, ReportScope } from './sales.types.js';
 
 // Order and POS totals of the Sales Report. Report SQL runs on the report
 // connection (db/reportDb.ts); values always go in as parameters.
@@ -76,4 +76,26 @@ export async function posTotals(q: Queryable, scope: ReportScope): Promise<{ tot
     params,
   );
   return row;
+}
+
+/**
+ * The figures below gross profit (#249, #225 B1, M7). A binding's sale keeps
+ * its standard cost, so a closed day does not move (#230); what the binder
+ * charged above it (or below) is a cost of the day the job came back. A closed
+ * cash session's variance counts on the session's day, the day it was opened
+ * (#242); a count waiting for review counts once it is accepted.
+ */
+export async function otherCosts(q: Queryable, scope: ReportScope): Promise<OtherCostsRow> {
+  const jobs = scopeConditions(scope, 'j', { column: 'ready_at' });
+  const cash = scopeConditions(scope, 'cs', { column: 'opened_at', params: [...jobs.params] });
+  const res = await reportRows(q, `
+    SELECT
+      (SELECT COALESCE(SUM(j.actual_cost - sl.standard_cost * sl.quantity), 0)::text
+         FROM service_jobs j JOIN sale_service_lines sl ON sl.id = j.service_line_id
+        WHERE ${['j.actual_cost IS NOT NULL', ...jobs.conditions].join(' AND ')}) AS binding_cost_difference,
+      (SELECT COALESCE(SUM(cs.variance), 0)::text
+         FROM cash_sessions cs
+        WHERE ${["cs.status = 'closed'", 'cs.variance IS NOT NULL', ...cash.conditions].join(' AND ')}) AS cash_over_short`,
+    cash.params);
+  return res[0] as unknown as OtherCostsRow;
 }

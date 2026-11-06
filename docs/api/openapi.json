@@ -55736,6 +55736,9 @@
                     "grossMarginPct": {
                       "type": "number"
                     },
+                    "netProfit": {
+                      "type": "number"
+                    },
                     "period": {
                       "type": "string",
                       "enum": [
@@ -55762,6 +55765,9 @@
                         },
                         "grossMarginPct": {
                           "type": "number"
+                        },
+                        "netProfit": {
+                          "type": "number"
                         }
                       },
                       "required": [
@@ -55769,7 +55775,8 @@
                         "dateTo",
                         "netSales",
                         "grossProfit",
-                        "grossMarginPct"
+                        "grossMarginPct",
+                        "netProfit"
                       ],
                       "additionalProperties": false
                     },
@@ -55780,6 +55787,12 @@
                       ]
                     },
                     "grossProfitChangePct": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "netProfitChangePct": {
                       "type": [
                         "number",
                         "null"
@@ -55804,10 +55817,12 @@
                     "netSales",
                     "grossProfit",
                     "grossMarginPct",
+                    "netProfit",
                     "period",
                     "previous",
                     "netSalesChangePct",
                     "grossProfitChangePct",
+                    "netProfitChangePct",
                     "cashIn",
                     "cashOut",
                     "cashCollected",
@@ -58897,6 +58912,15 @@
                         },
                         "serviceIncome": {
                           "type": "number"
+                        },
+                        "bindingCostDifference": {
+                          "type": "number"
+                        },
+                        "cashOverShort": {
+                          "type": "number"
+                        },
+                        "netProfit": {
+                          "type": "number"
                         }
                       },
                       "required": [
@@ -58914,7 +58938,10 @@
                         "discountsByType",
                         "returnsValue",
                         "bookSales",
-                        "serviceIncome"
+                        "serviceIncome",
+                        "bindingCostDifference",
+                        "cashOverShort",
+                        "netProfit"
                       ],
                       "additionalProperties": false
                     },
@@ -60872,6 +60899,12 @@
                           },
                           "overdue": {
                             "type": "boolean"
+                          },
+                          "actualCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -60890,7 +60923,8 @@
                           "source",
                           "saleId",
                           "saleNumber",
-                          "overdue"
+                          "overdue",
+                          "actualCost"
                         ],
                         "additionalProperties": false
                       }

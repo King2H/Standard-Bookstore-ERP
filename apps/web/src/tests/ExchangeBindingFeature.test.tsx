@@ -114,7 +114,7 @@ function stubApi() {
       return json(contract(ServiceJobListResponseSchema, {
         items: [{
           ...job('REQUESTED'), serviceName: 'Cloth binding', quantity: 1, bookTitle: 'Oromay', customerName: 'Jane Trader', customerPhone: null,
-          source: 'EXCHANGE', saleId: '7', saleNumber: 'EXC-20261026-0001', overdue: false,
+          source: 'EXCHANGE', saleId: '7', saleNumber: 'EXC-20261026-0001', overdue: false, actualCost: null,
         }],
         total: 1, page: 1, pageSize: 25, totalPages: 1,
       }));
