@@ -71,6 +71,7 @@ export function toSaleServiceLineResponse(l: SaleServiceLineRecord): SaleService
   };
 }
 
-export function toBoardItemResponse(j: JobBoardRecord): ServiceJobBoardItem {
-  return { ...j, updatedAt: j.updatedAt.toISOString() };
+/** The binder's cost only to those who see costs (#234, #249). */
+export function toBoardItemResponse(j: JobBoardRecord, seesCost: boolean): ServiceJobBoardItem {
+  return { ...j, updatedAt: j.updatedAt.toISOString(), actualCost: seesCost && j.actualCost ? j.actualCost.toNumber() : null };
 }

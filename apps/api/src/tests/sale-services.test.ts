@@ -93,7 +93,9 @@ describe('Services on a sale', () => {
     if (opts.amount !== undefined) body.payments = [{ method: 'cash', amount: opts.amount }];
     return as(api().post('/api/v1/pos/transactions'), opts.token ?? sales).send(body);
   }
-  const step = (jobId: number, action: string, token = sales) => as(api().post(`/api/v1/service-jobs/${jobId}/${action}`), token);
+  const step = (jobId: number, action: string, token = sales) => as(api().post(`/api/v1/service-jobs/${jobId}/${action}`), token)
+    // Back and ready names the binder's cost (#249).
+    .send(action === 'ready' ? { actualCost: 40 } : {});
 
   async function newOrder(items: object[], opts: { confirm?: boolean } = {}) {
     const created = await as(api().post('/api/v1/orders'), sales).send({ locationId, customerId, saleType: 'cash_sale', items });

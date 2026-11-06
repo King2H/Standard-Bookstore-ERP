@@ -1,5 +1,5 @@
 import type { ServiceJobStep, ServiceLineInput } from '@bms/shared';
-import type { Money } from '@bms/shared';
+import { Money } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
@@ -159,13 +159,17 @@ export function ordersWaitingOnJobs(q: Queryable, orderIds: string[]): Promise<S
 }
 
 /** Moves a job of the session branch one step on (4a), audited. */
-export async function stepJob(actor: Actor, id: number, step: ServiceJobStep): Promise<ServiceJobRecord> {
+export async function stepJob(actor: Actor, id: number, step: ServiceJobStep, actualCost?: Money): Promise<ServiceJobRecord> {
+  policy.checkActualCost(step, actualCost);
   return withTransaction({}, async (tx) => {
     const job = await repo.lockJob(tx, id, actor.branchId);
     if (!job) throw new NotFoundError('Service job');
     const status = policy.nextJobStatus(job.status, step);
-    await repo.setJobStatus(tx, id, status, actor.staffId);
-    await auditJob(tx, actor, 'UPDATE', id, { jobNumber: job.jobNumber, fromStatus: job.status, toStatus: status });
+    await repo.setJobStatus(tx, id, status, actor.staffId, actualCost);
+    await auditJob(tx, actor, 'UPDATE', id, {
+      jobNumber: job.jobNumber, fromStatus: job.status, toStatus: status,
+      ...(status === 'READY' && { actualCost: actualCost?.toFixed(2) }),
+    });
     if (status === 'READY') {
       // The selling roles of the branch are told, to call the customer (#169 PR 3, 2a). The
       // phone stays out of the notification: it is kept encrypted (#90); the board shows it.
@@ -241,6 +245,7 @@ export async function listJobs(f: JobFilter, paging: { page: number; pageSize: n
       source: r.transaction_id !== null ? 'POS' : r.order_id !== null ? 'ORDER' : 'EXCHANGE',
       saleId: String(r.transaction_id ?? r.order_id ?? r.exchange_id),
       saleNumber: (r.transaction_number ?? r.order_number ?? r.exchange_reference) as string,
+      actualCost: r.actual_cost === null ? null : Money.of(r.actual_cost),
     })),
   };
 }

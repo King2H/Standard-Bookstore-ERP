@@ -96,7 +96,9 @@ describe('Binding jobs after the sale', () => {
     const line = res.body.lineItems[0];
     return { id: String(res.body.id), number: res.body.transactionNumber as string, lineId: Number(line.id), job: line.service?.job?.id as number, total };
   }
-  const step = (job: number, s: string, token = sales) => as(api().post(`/api/v1/service-jobs/${job}/${s}`), token);
+  const step = (job: number, s: string, token = sales) => as(api().post(`/api/v1/service-jobs/${job}/${s}`), token)
+    // Back and ready names the binder's cost (#249).
+    .send(s === 'ready' ? { actualCost: 40 } : {});
   const collect = async (job: number) => { for (const s of ['send', 'ready', 'collect']) expect((await step(job, s)).status).toBe(200); };
   const cancelBinding = (job: number, body: object = { reason: 'Customer changed their mind' }, token = manager) =>
     as(api().post(`/api/v1/service-jobs/${job}/cancel`), token).send(body);

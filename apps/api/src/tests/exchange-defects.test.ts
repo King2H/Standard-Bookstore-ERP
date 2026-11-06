@@ -85,7 +85,9 @@ describe('A defective bound copy from an exchange', () => {
     const line = res.body.outgoingItems[0];
     return { id: res.body.id as string, reference: res.body.exchangeReference as string, lineId: Number(line.id), job: line.service?.job?.id as number };
   }
-  const step = (job: number, s: string) => as(api().post(`/api/v1/service-jobs/${job}/${s}`), sales);
+  const step = (job: number, s: string) => as(api().post(`/api/v1/service-jobs/${job}/${s}`), sales)
+    // Back and ready names the binder's cost (#249).
+    .send(s === 'ready' ? { actualCost: 40 } : {});
   const collect = async (job: number) => { for (const s of ['send', 'ready', 'collect']) expect((await step(job, s)).status).toBe(200); };
   const giveBack = (e: { id: string; lineId: number }, quantity: number, extra: object = {}, token = manager, reason: string | null = 'Spine came loose') =>
     as(api().post('/api/v1/returns'), token).send({

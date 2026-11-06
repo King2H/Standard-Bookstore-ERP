@@ -14,7 +14,8 @@ const num = (v: string | number): number => Money.of(v).toNumber();
 
 /** The accrual figures for a scope (also the KPIs' Sales Performance figures). */
 export async function salesSummary(scope: ReportScope): Promise<SalesSummary> {
-  return policy.summarizeLines(await salesLines(reportDb, scope));
+  const [lines, other] = await Promise.all([salesLines(reportDb, scope), sales.otherCosts(reportDb, scope)]);
+  return policy.withOtherCosts(policy.summarizeLines(lines), other);
 }
 
 export async function getSalesReport(filters: ReportFilters): Promise<SalesReport> {
@@ -43,6 +44,9 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
       returnsValue: summary.returnsValue,
       bookSales: summary.bookSales,
       serviceIncome: summary.serviceIncome,
+      bindingCostDifference: summary.bindingCostDifference,
+      cashOverShort: summary.cashOverShort,
+      netProfit: summary.netProfit,
     },
     byPeriod: byPeriod.map((r) => ({
       period: r.period,

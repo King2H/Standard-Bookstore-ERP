@@ -1,5 +1,5 @@
 import { Money, type SalesLine, type SalesTotals } from '@bms/shared';
-import type { ReportFilters, SalesLineRecord, SalesSummary } from './sales.types.js';
+import type { OtherCostsRow, ReportFilters, SalesLineRecord, SalesSummary } from './sales.types.js';
 
 /** Pure rules of the sales reports (A5): what counts as a sale, and the arithmetic over sales lines. */
 
@@ -21,7 +21,7 @@ const ratioPct = (part: Money, whole: Money): number =>
  * The accrual figures, summed over the same lines the Sales Report export
  * lists, so the cards and the export always agree for the same range.
  */
-export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
+export function summarizeLines(rows: SalesLineRecord[]): LinesSummary {
   let grossSales = Money.ZERO;
   let discounts = Money.ZERO;
   const byType = { Normal: Money.ZERO, Merchant: Money.ZERO, Special: Money.ZERO };
@@ -63,6 +63,21 @@ export function summarizeLines(rows: SalesLineRecord[]): SalesSummary {
     grossProfit: grossProfit.toNumber(),
     grossMarginPct: ratioPct(grossProfit, netSalesRevenue),
     rowCount: rows.length,
+  };
+}
+
+/** The summary of the sales lines alone, before the costs below gross profit. */
+export type LinesSummary = Omit<SalesSummary, 'bindingCostDifference' | 'cashOverShort' | 'netProfit'>;
+
+/** Net profit (#249): gross profit less the binding cost difference, plus cash over/short. */
+export function withOtherCosts(lines: LinesSummary, other: OtherCostsRow): SalesSummary {
+  const binding = Money.of(other.binding_cost_difference).round(2);
+  const overShort = Money.of(other.cash_over_short).round(2);
+  return {
+    ...lines,
+    bindingCostDifference: binding.toNumber(),
+    cashOverShort: overShort.toNumber(),
+    netProfit: Money.of(lines.grossProfit).minus(binding).plus(overShort).toNumber(),
   };
 }
 

@@ -1,5 +1,5 @@
 import type {
-  CancelBindingRequest, Service, ServiceBranchFeeRequest, ServiceJob, ServiceJobListResponse, ServiceJobStatus, ServiceJobStep,
+  CancelBindingRequest, Service, ServiceBranchFeeRequest, ServiceJob, ServiceJobListResponse, ServiceJobStatus, ServiceJobStep, ServiceJobStepRequest,
   ServiceListResponse, ServiceRequest,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
@@ -30,7 +30,9 @@ export const setBranchFee = (id: number, body: ServiceBranchFeeRequest) => api.p
 export const removeBranchFee = (id: number) => api.delete<Service>(`/services/${id}/branch-fee`);
 
 /** Moves a binding job of the session branch one step on (#169 PR 2). */
-export const stepJob = (id: number, step: ServiceJobStep) => api.post<ServiceJob>(`/service-jobs/${id}/${step}`);
+/** Back and ready names the binder's cost (#249). */
+export const stepJob = (id: number, step: ServiceJobStep, body: ServiceJobStepRequest = {}) =>
+  api.post<ServiceJob>(`/service-jobs/${id}/${step}`, body);
 
 /** The jobs board (#169 PR 3, 1a): the session branch's jobs, the oldest ready date first. */
 export type ServiceJobParams = {

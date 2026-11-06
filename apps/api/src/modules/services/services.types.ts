@@ -152,6 +152,8 @@ export interface JobBoardRecord extends ServiceJobRecord {
   saleId: string;
   saleNumber: string;
   overdue: boolean;
+  /** What the binder charged, once back (#249). */
+  actualCost: Money | null;
 }
 
 export interface JobFilter {

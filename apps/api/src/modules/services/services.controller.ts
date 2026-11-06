@@ -1,17 +1,20 @@
 import type { Request, Response } from 'express';
 import {
   CancelBindingRequestSchema,
+  Money,
   IdParamsSchema,
   ServiceBranchFeeRequestSchema,
   ServiceListQuerySchema,
   ServiceJobListQuerySchema,
   ServiceJobStepParamsSchema,
+  ServiceJobStepRequestSchema,
   ServiceRequestSchema,
   type Service,
   type ServiceJob,
   type ServiceJobListResponse,
   type ServiceListResponse,
 } from '@bms/shared';
+import { holdsPermission } from '../../middleware/rbac.js';
 import { valid } from '../../middleware/validate.js';
 import * as returnsService from '../returns/returns.service.js';
 import { toBoardItemResponse, toJobResponse, toServiceResponse } from './services.mapper.js';
@@ -31,7 +34,7 @@ export const schemas = {
   create: { body: ServiceRequestSchema },
   update: { params: IdParamsSchema, body: ServiceRequestSchema },
   branchFee: { params: IdParamsSchema, body: ServiceBranchFeeRequestSchema },
-  jobStep: { params: ServiceJobStepParamsSchema },
+  jobStep: { params: ServiceJobStepParamsSchema, body: ServiceJobStepRequestSchema },
   jobs: { query: ServiceJobListQuerySchema },
   cancelBinding: { params: IdParamsSchema, body: CancelBindingRequestSchema },
 };
@@ -100,8 +103,9 @@ export async function removeBranchFee(req: Request, res: Response): Promise<void
 
 /** Moves a job of the session branch one step on: send, ready, collect (#169 PR 2). */
 export async function stepJob(req: Request, res: Response): Promise<void> {
-  const { params } = valid(req, schemas.jobStep);
-  const body: ServiceJob = toJobResponse(await saleServices.stepJob(actor(req), params.id, params.step));
+  const { params, body: request } = valid(req, schemas.jobStep);
+  const actualCost = request.actualCost === undefined ? undefined : Money.of(request.actualCost);
+  const body: ServiceJob = toJobResponse(await saleServices.stepJob(actor(req), params.id, params.step, actualCost));
   res.json(body);
 }
 
@@ -113,7 +117,7 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
     { page: query.page, pageSize: query.pageSize },
   );
   const body: ServiceJobListResponse = {
-    items: result.items.map(toBoardItemResponse),
+    items: result.items.map((j) => toBoardItemResponse(j, holdsPermission(req, 'VIEW_COST'))),
     total: result.total,
     page: query.page,
     pageSize: query.pageSize,
