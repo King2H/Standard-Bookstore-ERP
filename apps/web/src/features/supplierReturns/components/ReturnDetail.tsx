@@ -117,7 +117,7 @@ export function ReturnDetail({ id, onBack, onEdit, onOpenOrder }: {
 
       {confirm === 'send' && (
         <ActionDialog title={`Send ${r.returnNumber}?`} confirmLabel="Send" busy={send.isPending}
-          message={`${r.totalQuantity} copies leave; the order is credited ${money(r.creditValue)}. A sent return cannot be undone.`}
+          message={`${r.totalQuantity === 1 ? '1 copy leaves' : `${r.totalQuantity} copies leave`}; the order is credited ${money(r.creditValue)}. A sent return cannot be undone.`}
           onConfirm={() => send.mutate(r.id, { onSuccess: () => { showToast('Return sent', 'success'); setConfirm(null); }, onError: failed })}
           onCancel={() => setConfirm(null)} />
       )}

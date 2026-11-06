@@ -73,7 +73,7 @@ export const BusinessDaySchema = z.object({
   branchName: z.string(),
   day: z.string(),
   status: z.enum(['closed', 'reopened']),
-  /** DAY-YYYYMMDD-NNNN, from the date it was (last) closed. */
+  /** DAY-YYYYMMDD-NNNN, numbered by the day itself (#242; was: the date it was closed). */
   dayNumber: z.string(),
   ...closing,
 });

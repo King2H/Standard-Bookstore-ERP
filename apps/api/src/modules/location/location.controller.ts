@@ -4,6 +4,7 @@ import {
   BranchLocationsParamsSchema,
   IdParamsSchema,
   LocationListQuerySchema,
+  CreateLocationRequestSchema,
   LocationNameRequestSchema,
   SetStaffLocationsRequestSchema,
   type Location,
@@ -25,7 +26,7 @@ import type { Actor } from './location.types.js';
 export const schemas = {
   branch: { params: BranchLocationsParamsSchema },
   list: { params: BranchLocationsParamsSchema, query: LocationListQuerySchema },
-  create: { params: BranchLocationsParamsSchema, body: LocationNameRequestSchema },
+  create: { params: BranchLocationsParamsSchema, body: CreateLocationRequestSchema },
   byId: { params: BranchLocationParamsSchema },
   rename: { params: BranchLocationParamsSchema, body: LocationNameRequestSchema },
   staff: { params: IdParamsSchema },
@@ -47,7 +48,7 @@ export async function list(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const { params, body: dto } = valid(req, schemas.create);
-  const body: Location = toLocationResponse(await service.createLocation(actor(req), params.branchId, dto.name));
+  const body: Location = toLocationResponse(await service.createLocation(actor(req), params.branchId, dto.name, dto.isDefaultFulfillment ?? false));
   res.status(201).json(body);
 }
 

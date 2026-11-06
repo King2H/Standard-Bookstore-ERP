@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   BookAvailabilityListResponseSchema, BookSchema, CurrencyResponseSchema, CustomerListResponseSchema, CustomerSchema, EffectiveConfigResponseSchema,
-  CurrentCashSessionResponseSchema, LocationListResponseSchema, PosTransactionSchema, ProfileResponseSchema, ShopIdentitySchema,
+  CashSessionDetailSchema, CurrentCashSessionResponseSchema, LocationListResponseSchema, PosTransactionSchema, ProfileResponseSchema, ShopIdentitySchema,
   type Book, type Customer, type PosTransaction, type ProfileResponse,
 } from '@bms/shared';
 import PosPage from '../features/pos/pages/PosPage.js';
@@ -60,6 +60,8 @@ let allowNegative: boolean;
 let saleAnswer: PosTransaction;
 let shopCurrency: string;
 let cashRequired: boolean;
+/** The cashier's open session was opened on an earlier day (#242, M2); null: no session. */
+let staleSession: boolean | null;
 
 function stubApi() {
   calls = [];
@@ -99,7 +101,15 @@ function stubApi() {
     if (u.pathname === '/customers') {
       return json(contract(CustomerListResponseSchema, { items: [customer()], total: 1, page: 1, totalPages: 1 }));
     }
-    if (u.pathname === '/cash-sessions/current') return json(contract(CurrentCashSessionResponseSchema, { required: cashRequired, session: null }));
+    if (u.pathname === '/cash-sessions/current') {
+      const session = staleSession === null ? null : contract(CashSessionDetailSchema, {
+        id: 3, branchId: 1, branchName: 'Home', staffId: 9, staffName: 'Sara', status: 'open', currency: 'ETB', openingFloat: 0,
+        openedAt: '2026-11-04T06:00:00.000Z', expectedCash: null, countedCash: null, variance: null, closeNote: null, closedBy: null,
+        closedByName: null, closedAt: null, reviewedBy: null, reviewedByName: null, reviewedAt: null, reviewReason: null, zNumber: null,
+        totals: null, movements: [],
+      });
+      return json(contract(CurrentCashSessionResponseSchema, { required: cashRequired, session, fromEarlierDay: staleSession === true }));
+    }
     if (method === 'POST' && u.pathname === '/pos/transactions' && cashRequired) {
       return new Response(JSON.stringify({ error: 'CASH_SESSION_REQUIRED', message: 'This branch takes cash only with an open cash session; open one first' }),
         { status: 422, headers: { 'Content-Type': 'application/json' } });
@@ -139,6 +149,7 @@ beforeEach(() => {
   saleAnswer = sale();
   shopCurrency = 'ETB';
   cashRequired = false;
+  staleSession = null;
   stubApi();
 });
 
@@ -274,6 +285,21 @@ describe('POS terminal: cash sessions (#171, 1a, 5a)', () => {
     await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
     await user.click(await screen.findByRole('button', { name: 'Open cash session' }));
     expect(await screen.findByLabelText('Opening float')).toBeInTheDocument();
+  });
+});
+
+describe('POS terminal: a cash session left open from an earlier day (#242, M2)', () => {
+  it('says so, to count and close it (was: "Cash session open", as if today\'s)', async () => {
+    staleSession = true;
+    await openTerminal();
+    expect(await screen.findByText('Cash session from an earlier day')).toBeInTheDocument();
+    expect(screen.queryByText('Cash session open')).toBeNull();
+  });
+
+  it("shows today's session as open", async () => {
+    staleSession = false;
+    await openTerminal();
+    expect(await screen.findByText('Cash session open')).toBeInTheDocument();
   });
 });
 

@@ -113,6 +113,13 @@ export async function orderLines(q: Queryable, poId: string): Promise<Map<string
   return new Map(rows.map((r) => [String(r.id), { id: String(r.id), bookId: r.book_id, unitCost: Money.of(r.unit_cost), receivedQuantity: r.received_quantity }]));
 }
 
+/** Copies of a book at a location, for sale and damaged; 0 where it has none. */
+export async function onHand(q: Queryable, bookId: number, locationId: number): Promise<{ stock: number; damaged: number }> {
+  const row = await q.selectFrom('inventory').select(['quantity', 'damaged_quantity'])
+    .where('book_id', '=', bookId).where('location_id', '=', locationId).executeTakeFirst();
+  return { stock: row?.quantity ?? 0, damaged: row?.damaged_quantity ?? 0 };
+}
+
 /** Copies of each order line already sent back. */
 export async function sentQuantities(q: Queryable, poId: string): Promise<Map<string, number>> {
   const rows = await q

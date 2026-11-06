@@ -16,6 +16,14 @@ type Choice = { quantity: string; unitCost: string };
  * decision 3a): ticked, they go on a draft purchase order of the branch, or
  * start one for a supplier at the unit costs entered.
  */
+/** Shown as the copies are typed: a customer's order caps what is bought for it (#242, S5). */
+function copiesProblem(quantity: string, toOrder: number): string | null {
+  const q = quantity.trim();
+  if (q === '') return null;
+  if (!/^\d+$/.test(q) || Number(q) < 1) return 'At least 1';
+  return Number(q) > toOrder ? `At most ${toOrder}` : null;
+}
+
 export function SpecialOrdersTab({ onOpenOrder }: { onOpenOrder: (poId: string) => void }) {
   const { showToast } = useToast();
   const { data, isLoading } = useSpecialOrders({ toOrder: true, pageSize: 100 });
@@ -92,7 +100,11 @@ export function SpecialOrdersTab({ onOpenOrder }: { onOpenOrder: (poId: string) 
                     <td className="px-3 py-2 tabular-nums">{l.toOrder}</td>
                     <td className="px-3 py-2">
                       {c && <input type="text" inputMode="numeric" aria-label={`Copies of ${l.bookTitle} for ${l.orderNumber}`} value={c.quantity}
+                        aria-invalid={copiesProblem(c.quantity, l.toOrder) ? true : undefined}
                         onChange={(e) => change(l.orderLineId, { quantity: e.target.value })} className={`w-16 text-right ${FIELD}`} />}
+                      {c && copiesProblem(c.quantity, l.toOrder) && (
+                        <span className="block text-xs text-red-600 dark:text-red-400 mt-0.5">{copiesProblem(c.quantity, l.toOrder)}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       {c && <input type="text" inputMode="decimal" aria-label={`Unit cost of ${l.bookTitle}`} value={c.unitCost}

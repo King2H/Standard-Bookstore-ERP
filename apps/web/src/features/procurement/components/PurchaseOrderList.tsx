@@ -55,7 +55,7 @@ export function PurchaseOrderList({ initialContext, onOpen, onCreate, onEdit, on
           </button>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} orders</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{data?.total ?? 0} {data?.total === 1 ? 'order' : 'orders'}</span>
           {canBuy(me) && (
             <button onClick={onCreate} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
               + New PO

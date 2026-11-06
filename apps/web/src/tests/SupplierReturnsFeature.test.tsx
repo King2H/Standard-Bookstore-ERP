@@ -244,6 +244,15 @@ describe('a draft (3a)', () => {
     await waitFor(() => expect(sent('POST', '/supplier-returns/8/send')).toHaveLength(1));
   });
 
+  it('counts one copy as one (#242, S11; was: "1 copies leave")', async () => {
+    me = profile(['Manager']);
+    theReturn = { ...theReturn, lineCount: 1, totalQuantity: 1, creditValue: 10, lines: theReturn.lines.slice(0, 1).map((l) => ({ ...l, quantity: 1, creditValue: 10 })) };
+    const user = renderPage();
+    await openReturn(user);
+    await user.click(screen.getByRole('button', { name: 'Send to Supplier' }));
+    expect(within(screen.getByRole('dialog')).getByText(/^1 copy leaves; the order is credited ETB 10\.00/)).toBeInTheDocument();
+  });
+
   it('is not sent by a Purchasor, who edits and cancels it with a reason', async () => {
     const user = renderPage();
     await openReturn(user);

@@ -1,7 +1,7 @@
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
-import { BranchAccessError, NotFoundError } from '../../lib/errors.js';
+import { BranchAccessError, BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import * as orders from '../procurement/procurement.repository.js';
@@ -48,7 +48,33 @@ async function checkLines(q: Queryable, po: PurchaseOrderRecord, lines: ReturnLi
   const orderLines = await returns.orderLines(q, po.id);
   for (const l of lines) found(orderLines.get(String(l.poLineItemId)), 'Purchase order line');
   policy.checkWithinReceived(lines, orderLines, await returns.sentQuantities(q, po.id));
+  await checkThere(q, lines, orderLines);
   return orderLines;
+}
+
+/**
+ * Only copies still at the location go back: drafted for copies already sold
+ * or moved, a return could not be sent (#242, S11). Sending checks again.
+ */
+async function checkThere(q: Queryable, lines: ReturnLineInput[], orderLines: Map<string, { bookId: number }>) {
+  const wanted = new Map<string, { bookId: number; locationId: number; source: 'stock' | 'damaged'; quantity: number }>();
+  for (const l of lines) {
+    const bookId = orderLines.get(String(l.poLineItemId))!.bookId;
+    const key = `${bookId}:${l.locationId}:${l.source}`;
+    const w = wanted.get(key) ?? { bookId, locationId: l.locationId, source: l.source, quantity: 0 };
+    wanted.set(key, { ...w, quantity: w.quantity + l.quantity });
+  }
+  for (const w of wanted.values()) {
+    const here = await returns.onHand(q, w.bookId, w.locationId);
+    const available = w.source === 'stock' ? here.stock : here.damaged;
+    if (w.quantity > available) {
+      throw new BusinessError(
+        'INSUFFICIENT_STOCK',
+        `Only ${Math.max(available, 0)} ${w.source === 'stock' ? '' : 'damaged '}${available === 1 ? 'copy is' : 'copies are'} there to send back; ${w.quantity} asked`,
+        { bookId: w.bookId, locationId: w.locationId, source: w.source, available: Math.max(available, 0), requested: w.quantity },
+      );
+    }
+  }
 }
 
 async function view(q: Queryable, id: number): Promise<SupplierReturnView> {

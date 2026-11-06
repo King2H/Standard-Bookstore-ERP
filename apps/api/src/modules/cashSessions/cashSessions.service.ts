@@ -3,6 +3,7 @@ import { kysely } from '../../db/kysely.js';
 import { isUniqueViolation } from '../../db/errors.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
+import { localToday } from '../../lib/localDate.js';
 import { BusinessError, ConflictError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
@@ -65,12 +66,14 @@ export async function getById(viewer: Actor, id: number): Promise<CashSessionVie
 }
 
 /** The viewer's open session in the session branch, and whether the branch needs one for cash. */
-export async function current(viewer: Actor): Promise<{ required: boolean; session: CashSessionView | null }> {
-  const [required, s] = await Promise.all([
+export async function current(viewer: Actor): Promise<{ required: boolean; session: CashSessionView | null; fromEarlierDay: boolean }> {
+  const [required, s, today] = await Promise.all([
     isCashSessionRequired(viewer.branchId),
     sessions.findOpenSession(kysely, viewer.staffId, viewer.branchId),
+    localToday(kysely),
   ]);
-  return { required, session: s ? await view(kysely, s, viewer) : null };
+  // Left open overnight: its count belongs to the day it was opened (#242, M2; was: no warning).
+  return { required, session: s ? await view(kysely, s, viewer) : null, fromEarlierDay: s !== undefined && s !== null && s.openedOn < today };
 }
 
 /** The branch's sessions; a staff member who may not see others' sees their own. */
@@ -173,7 +176,8 @@ export async function close(actor: Actor, id: number, counted: Money, note: stri
     policy.checkOpen(s.status);
     const expected = await sessions.expectedCash(tx, id);
     const { variance, status } = policy.closeOutcome(expected, counted, Money.of(await getCashVarianceLimit(s.branchId)));
-    const zNumber = await nextDailyNumber(tx, 'Z');
+    // Numbered by the day it was opened (#242, M4; was: the day it was closed).
+    const zNumber = await nextDailyNumber(tx, 'Z', s.openedOn);
     await sessions.close(tx, id, { status, expected, counted, variance, note, closedBy: actor.staffId, zNumber });
     await audit(tx, actor, id, {
       action: 'close', zNumber, status, expectedCash: expected.toFixed(2), countedCash: counted.toFixed(2), variance: variance.toFixed(2), note,

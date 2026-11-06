@@ -24,6 +24,8 @@ export default function PosPage({ userRole, userPermissions, initialContext = {}
   const { data: cash, refetch } = useCurrentCashSession();
   const [refused, setRefused] = useState(false);
   const hasSession = !!cash?.session;
+  // Left open overnight: the cashier counts and closes it on the Cash tab (#242, M2).
+  const stale = hasSession && cash?.fromEarlierDay === true;
   // Shown on the terminal while cash needs a session the cashier has not opened (decision 5a).
   const needsSession = !hasSession && (cash?.required === true || refused);
 
@@ -45,8 +47,8 @@ export default function PosPage({ userRole, userPermissions, initialContext = {}
           </button>
         ))}
         {cash && (
-          <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${hasSession ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
-            {hasSession ? 'Cash session open' : 'No cash session'}
+          <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${!hasSession ? 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' : stale ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
+            {!hasSession ? 'No cash session' : stale ? 'Cash session from an earlier day' : 'Cash session open'}
           </span>
         )}
         <div className="ml-auto flex items-center gap-2 pb-1 text-xs text-gray-400 dark:text-gray-600 font-mono">

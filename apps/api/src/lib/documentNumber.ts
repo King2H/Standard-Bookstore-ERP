@@ -3,14 +3,17 @@ import type { Queryable } from '../db/tx.js';
 
 /**
  * The next number of a daily document series, e.g. PAY-20261010-0007, in the
- * database's calendar. The counter row stays locked until `q`'s transaction
+ * database's calendar: today's, or `day` (YYYY-MM-DD) for a document that
+ * counts an earlier day, such as a day close or a cash session left open
+ * overnight (#242, M4). The counter row stays locked until `q`'s transaction
  * ends, so concurrent documents never share a number; a rolled-back
  * transaction leaves a gap.
  */
-export async function nextDailyNumber(q: Queryable, series: string): Promise<string> {
+export async function nextDailyNumber(q: Queryable, series: string, day?: string): Promise<string> {
+  const period = day === undefined ? sql`TO_CHAR(CURRENT_DATE, 'YYYYMMDD')` : sql`TO_CHAR(${day}::date, 'YYYYMMDD')`;
   const { rows } = await sql<{ period: string; last_value: number }>`
     INSERT INTO document_counters (series, period, last_value)
-    VALUES (${series}, TO_CHAR(CURRENT_DATE, 'YYYYMMDD'), 1)
+    VALUES (${series}, ${period}, 1)
     ON CONFLICT (tenant_id, series, period) DO UPDATE SET last_value = document_counters.last_value + 1
     RETURNING period, last_value`.execute(q);
   return `${series}-${rows[0].period}-${String(rows[0].last_value).padStart(4, '0')}`;

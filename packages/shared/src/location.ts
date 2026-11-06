@@ -39,6 +39,15 @@ export const BranchLocationParamsSchema = z.object({ branchId: IdSchema, id: IdS
 export const LocationNameRequestSchema = z.object({ name: z.string().min(1).max(100) });
 export type LocationNameRequest = z.infer<typeof LocationNameRequestSchema>;
 
+/**
+ * A new location. A branch's first is its default; `isDefaultFulfillment`
+ * makes a later one the default (#242, S1; was: always stored as not the default).
+ */
+export const CreateLocationRequestSchema = LocationNameRequestSchema.extend({
+  isDefaultFulfillment: z.boolean().optional(),
+});
+export type CreateLocationRequest = z.infer<typeof CreateLocationRequestSchema>;
+
 export const StaffLocationSchema = z.object({
   locationId: z.number().int(),
   locationName: z.string(),

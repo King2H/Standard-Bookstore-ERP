@@ -54,12 +54,15 @@ export async function listLocations(
   return { items: await locations.listByBranch(kysely, branchId), accessMode: 'full' };
 }
 
-export async function createLocation(actor: Staff, branchId: number, name: string): Promise<LocationRecord> {
+/** A new location; the branch's default when it has none yet, or when asked (#242, S1). */
+export async function createLocation(actor: Staff, branchId: number, name: string, asDefault = false): Promise<LocationRecord> {
   if (!(await locations.isBranchActive(kysely, branchId))) throw new NotFoundError('Branch');
 
   return withTransaction({}, async (tx) => {
-    const location = await locations.insert(tx, branchId, name).catch((err) => duplicateName(err, name));
-    await audit(tx, actor, 'CREATE', 'location', location.id, branchId, { name });
+    const created = await locations.insert(tx, branchId, name).catch((err) => duplicateName(err, name));
+    const isDefault = asDefault || (await locations.findDefaultId(tx, branchId)) === undefined;
+    const location = isDefault ? await locations.makeDefault(tx, branchId, created.id) : created;
+    await audit(tx, actor, 'CREATE', 'location', location.id, branchId, { name, isDefaultFulfillment: location.isDefaultFulfillment });
     return location;
   });
 }

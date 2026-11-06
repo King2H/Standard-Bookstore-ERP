@@ -80,6 +80,11 @@ export function CashTab() {
                 <button type="button" className={BUTTON} onClick={() => setDialog('close')}>Close session</button>
               </div>
             </div>
+            {data?.fromEarlierDay && (
+              <p role="alert" className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                This session was opened on an earlier day. Count the cash and close it, then open one for today.
+              </p>
+            )}
             <CashReport session={session} />
           </section>
         )}

@@ -169,6 +169,8 @@ describe('Returns to supplier (#173)', () => {
     it('edits and cancels a draft with a reason; another branch neither reads nor changes it', async () => {
       const created = await draft(t.purchasor, { poId: order.id, lines: [{ poLineItemId: lineOf(order, books[0]), locationId: shelf, source: 'stock', quantity: 1 }] });
       const rts = created.body.id as number;
+      // Two copies in the back room, so the edit takes them from there (#242: only copies there go back).
+      await db.query(`INSERT INTO inventory (book_id, location_id, quantity, average_cost) VALUES ($1, $2, 2, 4)`, [books[1], back]);
       const edited = await as(t.purchasor).put(`/api/v1/supplier-returns/${rts}`, {
         notes: 'Two', lines: [{ poLineItemId: lineOf(order, books[1]), locationId: back, source: 'stock', quantity: 2 }],
       });
@@ -258,10 +260,13 @@ describe('Returns to supplier (#173)', () => {
     });
 
     it('refuses to send more than the location holds, and changes nothing', async () => {
+      // Drafted while a copy is in the back room; it leaves before the return is sent.
+      await db.query(`INSERT INTO inventory (book_id, location_id, quantity, average_cost) VALUES ($1, $2, 1, 4)`, [books[0], back]);
       const short = (await draft(t.purchasor, { poId: order.id, lines: [
         { poLineItemId: lineOf(order, books[0]), locationId: shelf, source: 'stock', quantity: 1 },
         { poLineItemId: lineOf(order, books[0]), locationId: back, source: 'stock', quantity: 1 },
       ] })).body.id;
+      await db.query(`UPDATE inventory SET quantity = 0 WHERE book_id = $1 AND location_id = $2`, [books[0], back]);
       const res = await send(t.manager, short);
       expect(res.status).toBe(422);
       expect(res.body.error).toBe('INSUFFICIENT_STOCK');

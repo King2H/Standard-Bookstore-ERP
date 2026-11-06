@@ -21,6 +21,8 @@ export interface CashSessionRecord {
   currency: string;
   openingFloat: Money;
   openedAt: Date;
+  /** The shop's day it was opened, YYYY-MM-DD. */
+  openedOn: string;
   expectedCash: Money | null;
   countedCash: Money | null;
   variance: Money | null;

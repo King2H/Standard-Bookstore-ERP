@@ -43,8 +43,8 @@ function send(res: Response, session: CashSessionView, status = 200): void {
 }
 
 export async function current(req: Request, res: Response): Promise<void> {
-  const { required, session } = await service.current(actor(req));
-  const body: CurrentCashSessionResponse = { required, session: session && toCashSessionDetail(session) };
+  const { required, session, fromEarlierDay } = await service.current(actor(req));
+  const body: CurrentCashSessionResponse = { required, session: session && toCashSessionDetail(session), fromEarlierDay };
   res.json(body);
 }
 

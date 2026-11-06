@@ -227,6 +227,23 @@ describe('Special orders on screen (#174)', () => {
     expect(sent('POST', '/orders/30/lines/51/reserve')).toEqual([undefined]);
   });
 
+  it('says at once that more copies than the customer ordered cannot be bought for them (#242, S5; was: no message)', async () => {
+    renderPage('procurement');
+    await settle();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Special Orders' }));
+    const row = (await screen.findByText('ORD-20261031-0030')).closest('tr') as HTMLElement;
+    await user.click(within(row).getByLabelText('Buy Yegna Tarik for ORD-20261031-0030'));
+    const copies = within(row).getByLabelText('Copies of Yegna Tarik for ORD-20261031-0030');
+    await user.clear(copies);
+    await user.type(copies, '3');
+    expect(within(row).getByText('At most 2')).toBeInTheDocument();
+    expect(copies).toHaveAttribute('aria-invalid', 'true');
+    await user.clear(copies);
+    await user.type(copies, '2');
+    expect(within(row).queryByText('At most 2')).toBeNull();
+  });
+
   it('adds the copies still to buy to a draft purchase order, or starts one, which shows them for the customer\'s order', async () => {
     renderPage('procurement');
     await settle();

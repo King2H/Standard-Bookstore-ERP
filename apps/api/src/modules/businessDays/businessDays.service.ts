@@ -98,7 +98,8 @@ export async function closeDay(actor: Actor, branchId: number, day: string): Pro
     ]);
     policy.checkDayClosable(day, today, { closed: kept?.status === 'closed', monthClosed: closedMonth, openCashSessions });
     const report = policy.dayReport(await days.dayFigures(tx, branchId, day));
-    const dayNumber = await nextDailyNumber(tx, 'DAY');
+    // Numbered by the day it counts (#242, M4; was: the day it was closed).
+    const dayNumber = await nextDailyNumber(tx, 'DAY', day);
     const id = await days.upsertClosedDay(tx, { branchId, day, dayNumber, report, closedBy: actor.staffId });
     await audit(tx, actor, 'business_day', id, { action: 'close', branchId, day, dayNumber, report }, kept ? 'UPDATE' : 'CREATE');
     return foundDay(await days.findDay(tx, id));
