@@ -70,3 +70,8 @@ apps/api/test-final*.txt
 apps/api/test_results*.txt
 tmp_*.py
 tmp_*.mjs
+
+# The on-premise install (#31): its secrets and its certificate authority.
+deploy/.env
+deploy/*.crt
+deploy/extra-ca.pem

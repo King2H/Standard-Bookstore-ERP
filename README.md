@@ -556,6 +556,11 @@ Both fixed: conditions now use `$${p++}` and LIMIT/OFFSET use `$${limitParam}`/`
 
 ---
 
+## Installing in a Shop
+
+On-premise install on one PC, with HTTPS for the counters on the shop's network (Windows or Linux, Docker):
+[`docs/install.md`](docs/install.md).
+
 ## Running Locally
 
 Step-by-step guide (Windows, including `.env` and secrets): [`docs/development.md`](docs/development.md).
@@ -916,7 +921,7 @@ The authoritative contract is the OpenAPI document: `docs/api/openapi.json`, als
 | superadmin | Admin@1234 | Super_Admin | Dashboard | Dashboard, Branches, Staff, Settings, Audit Log |
 | admin | Admin@1234 | Admin | Dashboard | All operational pages |
 
-Both must change the password at first login. Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page after logging in as admin.
+Both must change the password at first login. These are for development: a shop installed from the bundle ([`docs/install.md`](docs/install.md)) sets both passwords at install and never has these. Create Manager/Stock_Clerk/Sales/Purchasor/Finance_Officer via the Staff page after logging in as admin.
 
 **Role landing pages after login:**
 - Super_Admin / Admin / Manager / Finance_Officer → Dashboard

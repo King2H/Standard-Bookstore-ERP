@@ -1,0 +1,14 @@
+# Build context of deploy/Dockerfile (#31): only what the images are built from.
+**/node_modules
+**/dist
+.git
+.github
+.claude
+**/.env
+**/.env.*
+!.env.example
+deploy/.env
+deploy/*.crt
+docs
+*.log
+coverage
