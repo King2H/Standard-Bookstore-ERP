@@ -72676,6 +72676,99 @@
         }
       }
     },
+    "/system/backup-status": {
+      "get": {
+        "operationId": "getBackupStatus",
+        "summary": "The install's backups: the last good one, a failure since, and whether to warn (#244; Super_Admin, Admin)",
+        "tags": [
+          "System"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The backup status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "lastSuccessAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastFile": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastFailureAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "stale": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "lastSuccessAt",
+                    "lastFile",
+                    "lastFailureAt",
+                    "lastError",
+                    "stale"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/transfers": {
       "get": {
         "operationId": "listTransfers",

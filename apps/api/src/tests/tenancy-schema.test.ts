@@ -5,8 +5,12 @@ import { ownerDb } from './helpers/ownerDb.js';
 // decisions 1a and 2a). These tests keep it that way as tables are added.
 // They look across tenants, so they work as the owner.
 
-/** Tables that belong to no tenant: the tenants themselves, the migration log, and refresh tokens (their session has the tenant). */
-const GLOBAL_TABLES = ['pgmigrations', 'refresh_tokens', 'tenants'];
+/**
+ * Tables that belong to no tenant: the tenants themselves, the migration log,
+ * refresh tokens (their session has the tenant), and the install's backup
+ * runs (#244: a backup is of every tenant).
+ */
+const GLOBAL_TABLES = ['backup_runs', 'pgmigrations', 'refresh_tokens', 'tenants'];
 
 /**
  * Unique keys on tenant tables that neither lead with tenant_id nor rest on an
