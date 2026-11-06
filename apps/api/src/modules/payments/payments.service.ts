@@ -9,6 +9,7 @@ import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, bankAccountsEnabled, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
+import { earnIfDone } from '../orders/orderPoints.js';
 import { checkNotWrittenOff, reopenOnRefund, updateReceivableOnPayment } from '../receivables/receivables.service.js';
 import * as policy from './payments.policy.js';
 import * as payments from './payments.repository.js';
@@ -62,6 +63,8 @@ async function settleOrder(q: Queryable, order: OrderForPayment, total: Money, c
   const takings = await payments.takings(q, order.id);
   const status = policy.orderPaymentStatus(order, total, takings);
   await payments.setOrderPaymentStatus(q, order.id, status);
+  // Paid in full: a delivered order earns its points (#249).
+  if (change === 'payment' && status === 'paid') await earnIfDone(q, order.id);
   if (order.saleType === 'credit_sale') {
     const owed = policy.outstanding(total, takings);
     const receivable = { sourceType: 'order_credit_sale' as const, sourceEntityId: Number(order.id), newOutstandingAmount: owed };

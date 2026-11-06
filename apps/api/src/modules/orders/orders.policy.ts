@@ -370,3 +370,20 @@ export function amountToInvoice(total: number, alreadyPaid: string): Money | nul
   const outstanding = Money.of(total).minus(alreadyPaid).round(2);
   return outstanding.greaterThan('0.01') ? outstanding : null;
 }
+
+// ── Loyalty points on an order (#249, #225 M6) ───────────────────────────────
+
+/**
+ * The points a customer order earns: none until every copy is delivered or
+ * the rest cancelled (COMPLETED) and it is paid in full; then, at the
+ * counter's rate, on what the customer kept: its total less what came back.
+ * Earned once.
+ */
+export function orderPointsToEarn(o: {
+  status: string; paymentStatus: string; earned: number; total: Money; returned: Money; rate: number; minAmount: number;
+}): number {
+  if (o.status !== 'COMPLETED' || o.paymentStatus !== 'paid' || o.earned > 0) return 0;
+  const kept = o.total.minus(o.returned);
+  if (!kept.greaterThan(0) || kept.lessThan(o.minAmount)) return 0;
+  return Math.floor(kept.times(o.rate).toNumber(4));
+}

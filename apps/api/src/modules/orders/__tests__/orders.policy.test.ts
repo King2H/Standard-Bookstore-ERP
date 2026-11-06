@@ -10,6 +10,7 @@ import {
   checkCanDeliver,
   checkCanFulfill,
   deliveryLines,
+  orderPointsToEarn,
   cancelRestLines,
   checkDueDate,
   checkNewOrder,
@@ -225,3 +226,20 @@ describe('special orders (#174)', () => {
   });
 });
 
+
+describe('orderPointsToEarn (#249, #225 M6)', () => {
+  const base = { status: 'COMPLETED', paymentStatus: 'paid', earned: 0, total: Money.of('250.50'), returned: Money.ZERO, rate: 0.01, minAmount: 0 };
+
+  it('earns at the rate on what was kept, rounded down, once completed and paid in full', () => {
+    expect(orderPointsToEarn(base)).toBe(2);
+    expect(orderPointsToEarn({ ...base, returned: Money.of('100') })).toBe(1);
+  });
+
+  it('earns nothing before both, a second time, or below the minimum', () => {
+    expect(orderPointsToEarn({ ...base, status: 'PART_DELIVERED' })).toBe(0);
+    expect(orderPointsToEarn({ ...base, paymentStatus: 'partial' })).toBe(0);
+    expect(orderPointsToEarn({ ...base, earned: 2 })).toBe(0);
+    expect(orderPointsToEarn({ ...base, minAmount: 300 })).toBe(0);
+    expect(orderPointsToEarn({ ...base, returned: Money.of('250.50') })).toBe(0);
+  });
+});

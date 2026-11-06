@@ -9,6 +9,7 @@ import { recordMovement } from '../bankAccount/bankAccount.service.js';
 import { getMaxReturnValueWithoutAuth, getRefundMethodAfterWindow, getReturnWindowDays } from '../config/config.service.js';
 import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
+import { takeBackOnReturn as takeBackOrderPoints } from '../orders/orderPoints.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import { assertAssignedLocation } from '../location/location.service.js';
 import { creditReturn } from '../receivables/receivables.service.js';
@@ -329,7 +330,8 @@ async function settleSale(
  * A return's money on a customer order, by the same rules (#166): a credit
  * order's debt takes the value first, as a credit note; the rest goes back
  * through the order's own payments, newest first, so Payments and the
- * reports count each refund once. Orders earn no points.
+ * reports count each refund once. The points the returned books earned go
+ * back, as for a counter sale (#249).
  */
 async function settleOrder(
   tx: Queryable,
@@ -380,6 +382,7 @@ async function settleOrder(
       })).map((p) => ({ method: p.method as RefundMethod, amount: p.amount }))
     : [];
   await settleReturnedOrder(tx, order.id);
+  await takeBackOrderPoints(tx, order.id);
   const parts: RefundPart[] = credited.greaterThan(0) ? [{ method: 'credit_note', amount: credited }, ...refunded] : refunded;
   const refundMethod = policy.refundMethodOf(parts);
   await returns.setRefundMethod(tx, returnId, refundMethod);
