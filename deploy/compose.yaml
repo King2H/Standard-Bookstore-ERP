@@ -1,0 +1,79 @@
+# The shop's install (#31): run by deploy/install.ps1 or deploy/install.sh,
+# which write .env beside this file. Nothing here holds a secret.
+name: bookstore
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: bms
+      POSTGRES_USER: bms
+      POSTGRES_PASSWORD: ${BMS_DB_OWNER_PASSWORD:?run the installer first}
+    # Not published on the network: only the other services reach it.
+    volumes:
+      - pgdata18:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bms -d bms"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Applies the migrations and makes sure the API's database user works, once,
+  # before the API starts (owner decision 4a). The installer also runs the
+  # first-accounts step with this image.
+  migrate:
+    build: { context: .., dockerfile: deploy/Dockerfile, target: api, secrets: [extra_ca] }
+    image: bookstore-api:${BMS_VERSION:-local}
+    command: ["node", "migrate.js"]
+    environment:
+      MIGRATION_DATABASE_URL: postgres://bms:${BMS_DB_OWNER_PASSWORD}@postgres:5432/bms
+      DATABASE_URL: postgres://bms_api:${BMS_DB_API_PASSWORD:?run the installer first}@postgres:5432/bms
+      # Migration 52 encrypts customer contacts with the API's key.
+      COLUMN_ENCRYPTION_KEY: ${BMS_COLUMN_ENCRYPTION_KEY:?run the installer first}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: bookstore-api:${BMS_VERSION:-local}
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://bms_api:${BMS_DB_API_PASSWORD}@postgres:5432/bms
+      JWT_SECRET: ${BMS_JWT_SECRET:?run the installer first}
+      COLUMN_ENCRYPTION_KEY: ${BMS_COLUMN_ENCRYPTION_KEY}
+      # The screens are served from the same addresses as the API.
+      FRONTEND_URL: ${BMS_ORIGINS:?run the installer first}
+      # One proxy in front: Caddy.
+      TRUST_PROXY: "1"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  web:
+    build: { context: .., dockerfile: deploy/Dockerfile, target: web, secrets: [extra_ca] }
+    image: bookstore-web:${BMS_VERSION:-local}
+    environment:
+      BMS_SITE_ADDRESSES: ${BMS_SITE_ADDRESSES:?run the installer first}
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      # The shop's certificate authority and certificates: back it up with the data.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+# Behind a proxy that inspects HTTPS: its certificate authority, for the build only
+# (copy it to deploy/extra-ca.pem and set BMS_EXTRA_CA_FILE=./extra-ca.pem in .env).
+secrets:
+  extra_ca:
+    file: ${BMS_EXTRA_CA_FILE:-./no-extra-ca.pem}
+
+volumes:
+  pgdata18:
+  caddy_data:
+  caddy_config:
