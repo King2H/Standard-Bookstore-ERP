@@ -110,6 +110,8 @@ export type CashSessionDetail = z.infer<typeof CashSessionDetailSchema>;
 export const CurrentCashSessionResponseSchema = z.object({
   required: z.boolean(),
   session: CashSessionDetailSchema.nullable(),
+  /** The open session was opened on an earlier day: count and close it (#242, M2). */
+  fromEarlierDay: z.boolean().default(false),
 });
 export type CurrentCashSessionResponse = z.infer<typeof CurrentCashSessionResponseSchema>;
 

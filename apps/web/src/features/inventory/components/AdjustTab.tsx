@@ -11,7 +11,10 @@ import { INPUT, LABEL, Messages, isPositiveWhole, useStockChange } from './stock
 
 /** The form's fields, checked with the rules of the API's adjustment contract. */
 const AdjustFormSchema = z.object({
-  amount: z.string().trim().refine(isPositiveWhole, 'Enter a non-zero quantity'),
+  // The direction is the − Remove / + Add button, so a minus here is a mistake to explain (#242, S15).
+  amount: z.string().trim()
+    .refine((v) => !v.startsWith('-'), 'Enter how many copies; to take copies away, choose − Remove')
+    .refine((v) => v.startsWith('-') || isPositiveWhole(v), 'Enter a whole number of copies, at least 1'),
   reasonCode: z.enum(['correction', 'damage', 'loss']),
   notes: z.string().max(500, 'Notes can be at most 500 characters'),
 });

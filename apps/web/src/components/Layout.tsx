@@ -143,12 +143,14 @@ interface LayoutProps {
   userPermissions?: string[];
   activeBranchId?: number | null;
   onSwitchBranch?: (branchId: number) => void;
+  /** Only the profile is open (the password must be changed): no menu, no notifications, no branch list (#242, G1). */
+  restricted?: boolean;
   children: React.ReactNode;
 }
 
 export default function Layout({
   currentPage, onNavigate, onLogout, userRole, userRoles = [],
-  userPermissions = [], activeBranchId, onSwitchBranch, children,
+  userPermissions = [], activeBranchId, onSwitchBranch, restricted = false, children,
 }: LayoutProps) {
   const { theme, toggleTheme } = useTheme();
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
@@ -162,7 +164,7 @@ export default function Layout({
     queryKey: ['auth-branches'],
     queryFn: () => api.get('/auth/branches'),
     staleTime: 5 * 60_000,
-    enabled: !!onSwitchBranch,
+    enabled: !!onSwitchBranch && !restricted,
   });
   const availableBranches = branchesData?.branches ?? [];
   const activeBranch = availableBranches.find(b => b.branchId === activeBranchId);
@@ -228,7 +230,7 @@ export default function Layout({
         <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
 
           {/* Dashboard: standalone, by canSeeDashboard */}
-          {canSeeDashboard(userRole, userRoles, userPermissions) && (
+          {!restricted && canSeeDashboard(userRole, userRoles, userPermissions) && (
             <button
               onClick={() => onNavigate('dashboard')}
               title={!sidebarExpanded ? 'Dashboard' : undefined}
@@ -250,7 +252,7 @@ export default function Layout({
           {sidebarExpanded && <div className="h-px bg-gray-100 dark:bg-gray-800 mx-1" />}
 
           {/* Grouped sections */}
-          {NAV_SECTIONS.map(section => (
+          {!restricted && NAV_SECTIONS.map(section => (
             <SidebarSection
               key={section.id}
               section={section}
@@ -393,7 +395,7 @@ export default function Layout({
           </div>
 
           {/* Notification bell */}
-          <NotificationBell onNavigate={(page, context) => onNavigate(page as Page, context)} />
+          {!restricted && <NotificationBell onNavigate={(page, context) => onNavigate(page as Page, context)} />}
 
           {/* Theme toggle */}
           <button

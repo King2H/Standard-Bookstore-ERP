@@ -15369,11 +15369,16 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "fromEarlierDay": {
+                      "default": false,
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "required",
-                    "session"
+                    "session",
+                    "fromEarlierDay"
                   ],
                   "additionalProperties": false
                 }

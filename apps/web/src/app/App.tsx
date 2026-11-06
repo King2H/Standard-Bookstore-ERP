@@ -54,6 +54,7 @@ function AppShell() {
       userPermissions={session.userPermissions}
       activeBranchId={session.activeBranchId}
       onSwitchBranch={session.switchBranch}
+      restricted={session.mustChangePassword}
     >
       {session.mustChangePassword && (
         <div className="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
@@ -61,7 +62,7 @@ function AppShell() {
           <span>Your password must be changed before continuing. Please update it in your profile.</span>
         </div>
       )}
-      <ClosedDayBanner />
+      {!session.mustChangePassword && <ClosedDayBanner />}
       <AppRoutes session={session} onNavigate={handleNavigate} />
 
       {/* Inactivity warning overlay */}

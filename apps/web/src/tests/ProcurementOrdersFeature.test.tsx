@@ -117,6 +117,33 @@ describe('Procurement: goods receipts (#238, S10)', () => {
   });
 });
 
+describe('Procurement: money and counts (#242)', () => {
+  it('measures payment against the order until goods arrive (S4; was: "0.00 / 0.00")', async () => {
+    po = order({ status: 'approved', amountPaid: 50 });
+    await openOrder();
+    expect(screen.getByText('ETB 50.00 / 200.00 ordered')).toBeInTheDocument();
+    expect(screen.queryByText(/0\.00 \/ 0\.00/)).toBeNull();
+  });
+
+  it('measures payment against what arrived once goods arrive', async () => {
+    po = order({ status: 'partially_received', receivedValue: 100, amountPaid: 40, receivedQuantityTotal: 5 });
+    await openOrder();
+    expect(screen.getByText('ETB 40.00 / 100.00 received')).toBeInTheDocument();
+  });
+
+  it('says a refund is due when the supplier owes the shop (S13; was: "paid")', async () => {
+    po = order({ status: 'received', receivedValue: 120, amountPaid: 120, creditNotesTotal: 6, outstandingAmount: -6, refundDue: 6, financialStatus: 'paid' });
+    await openOrder();
+    expect(screen.getByText('refund due')).toBeInTheDocument();
+    expect(screen.queryByText('paid')).toBeNull();
+  });
+
+  it('counts one order as one (S9; was: "1 orders")', async () => {
+    await renderList();
+    expect(screen.getByText(/^1 order$/)).toBeInTheDocument();
+  });
+});
+
 describe('Procurement: who may take each step', () => {
   it('offers a Stock Clerk no buying steps, which the API refuses (was: New PO, Edit, Submit and Cancel)', async () => {
     me = profile(['Stock_Clerk']);

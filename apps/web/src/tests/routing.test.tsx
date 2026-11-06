@@ -220,13 +220,20 @@ describe('Route guards', () => {
     await page('ProfilePage');
     expect(url()).toBe('/profile');
 
-    if (!screen.queryByRole('button', { name: /^\W*Orders$/ })) await userEvent.click(menu('Sales'));
-    await userEvent.click(menu('Orders'));
-    expect(url()).toBe('/profile');
-
     await userEvent.click(screen.getByRole('button', { name: 'Password changed' }));
     await page('POSPage');
     expect(url()).toBe('/pos');
+  });
+
+  it('asks the API for nothing behind the profile while the password must be changed (#242, G1; was: about 40 refused requests)', async () => {
+    vi.mocked(api.get).mockClear();
+    signedInAs('Sales', SALES, true);
+    open('/profile');
+    await page('ProfilePage');
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    const asked = vi.mocked(api.get).mock.calls.map(([path]) => String(path));
+    expect(asked.filter((path) => !path.startsWith('/staff/me'))).toEqual([]);
+    expect(screen.queryByRole('button', { name: /^\W*Sales$/ })).toBeNull();
   });
 
   it('moves to the profile when the API first asks for a password change (#38)', async () => {

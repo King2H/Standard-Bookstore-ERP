@@ -80,7 +80,8 @@ describe('Locations', () => {
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Test Floor A');
     expect(res.body.branchId).toBe(branchId);
-    expect(res.body.isDefaultFulfillment).toBe(false);
+    // The branch's first location is its default (#242, S1).
+    expect(res.body.isDefaultFulfillment).toBe(true);
   });
 
   it('Manager can create a location', async () => {

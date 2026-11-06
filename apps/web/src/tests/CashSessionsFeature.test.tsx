@@ -72,7 +72,7 @@ const closed = (over: Partial<CashSessionDetail> = {}) => session({
 type Call = { method: string; path: string; body: Record<string, unknown> };
 let calls: Call[];
 let me: ProfileResponse;
-let current: { required: boolean; session: CashSessionDetail | null };
+let current: { required: boolean; session: CashSessionDetail | null; fromEarlierDay?: boolean };
 let sessions: CashSessionDetail[];
 let answer: CashSessionDetail;
 
@@ -158,6 +158,12 @@ describe("the cashier's Cash tab (1a)", () => {
     expect(screen.getByText(/ETB 200\.00/)).toBeInTheDocument();
     expect(screen.queryByText(/Expected/)).toBeNull();
     expect(screen.getByText('Deposit at CBE')).toBeInTheDocument();
+  });
+
+  it('asks to count and close a session opened on an earlier day (#242, M2; was: no warning)', async () => {
+    current = { required: false, session: session({}, 'own'), fromEarlierDay: true };
+    show(<CashTab />);
+    expect(await screen.findByText(/opened on an earlier day\. Count the cash and close it/)).toBeInTheDocument();
   });
 
   it('puts cash in or takes it out with a type that fits the direction and a reason', async () => {

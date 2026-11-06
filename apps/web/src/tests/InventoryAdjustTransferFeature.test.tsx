@@ -153,6 +153,24 @@ describe('Inventory: Adjust', () => {
     expect(posted('/inventory/adjust')[0]).toEqual({ bookId: 1, locationId: 1, delta: -15, reasonCode: 'loss', version: 3 });
   });
 
+  it('says to use Remove when a minus is typed (#242, S15; was: "Enter a non-zero quantity" for -1)', async () => {
+    const user = await openTab('Adjust');
+    await choose(user, 'Animal Farm');
+    await user.type(screen.getByPlaceholderText('0'), '-1');
+    await user.click(screen.getByRole('button', { name: /Record Adjustment/ }));
+    expect(await screen.findByText('Enter how many copies; to take copies away, choose − Remove')).toBeInTheDocument();
+    await settle();
+    expect(posted('/inventory/adjust')).toEqual([]);
+  });
+
+  it('asks for a whole number of copies when none is given', async () => {
+    const user = await openTab('Adjust');
+    await choose(user, 'Animal Farm');
+    await user.type(screen.getByPlaceholderText('0'), '0');
+    await user.click(screen.getByRole('button', { name: /Record Adjustment/ }));
+    expect(await screen.findByText('Enter a whole number of copies, at least 1')).toBeInTheDocument();
+  });
+
   it('checks the notes are at most 500 characters before sending (was: sent and refused)', async () => {
     const user = await openTab('Adjust');
     await choose(user, 'Animal Farm');

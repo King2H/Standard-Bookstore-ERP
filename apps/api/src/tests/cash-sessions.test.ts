@@ -141,7 +141,7 @@ describe('Cash sessions (#171)', () => {
     it('starts with no session, not required', async () => {
       const res = await current(t.sales);
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ required: false, session: null });
+      expect(res.body).toEqual({ required: false, session: null, fromEarlierDay: false });
     });
 
     it('is opened by those who take payments, with a float; not by a Stock_Clerk', async () => {
@@ -377,7 +377,7 @@ describe('Cash sessions (#171)', () => {
   describe('a branch that requires a session for cash (decision 6a)', () => {
     it('refuses cash at the counter without one, and takes other methods', async () => {
       expect((await setBranch('require_cash_session', true)).status).toBe(200);
-      expect((await current(t.sales2)).body).toEqual({ required: true, session: null });
+      expect((await current(t.sales2)).body).toEqual({ required: true, session: null, fromEarlierDay: false });
       const before = Number((await one(`SELECT count(*) FROM transactions WHERE branch_id = $1`, [branchId])).count);
       const refused = await sell(t.sales2, [{ method: 'cash', amount: price }]);
       expect(refused.status).toBe(422);

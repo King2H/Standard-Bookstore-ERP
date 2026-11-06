@@ -49,7 +49,12 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
   const note = approvalNote(po);
   const receivingPct = safePct(po.receivedQuantityTotal, po.orderedQuantityTotal);
   const settled = Money.of(po.amountPaid).plus(po.creditNotesTotal);
-  const paymentPct = safePct(settled.toNumber(), po.receivedValue);
+  // A supplier is owed for what arrived; before anything arrives, measure against the order (#242, S4).
+  const nothingReceived = Money.of(po.receivedValue).isZero();
+  const payBasis = nothingReceived ? po.totalAmount : po.receivedValue;
+  const paymentPct = safePct(settled.toNumber(), payBasis);
+  // Paid, but the supplier owes money back after a return (#242, S13).
+  const payStatus = po.refundDue > 0 ? 'refund due' : po.financialStatus;
 
   return (
     <div className="p-6 space-y-5 max-w-4xl mx-auto">
@@ -79,8 +84,8 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
         )}
         <div>
           <span className="text-gray-500 dark:text-gray-400">Payment Status:</span>
-          <span className={`ml-1 text-xs font-medium px-2 py-0.5 rounded-full ${po.financialStatus === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : po.financialStatus === 'partial' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
-            {po.financialStatus}
+          <span className={`ml-1 text-xs font-medium px-2 py-0.5 rounded-full ${payStatus === 'refund due' ? 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300' : po.financialStatus === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : po.financialStatus === 'partial' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+            {payStatus}
           </span>
           <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">({po.paymentTerms === 'cash' ? 'Cash — settles on receipt' : 'Credit'})</span>
         </div>
@@ -90,7 +95,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <ProgressBar label="Receiving Progress" pct={receivingPct} tone="blue" caption={`${po.receivedQuantityTotal} / ${po.orderedQuantityTotal} units`} />
-          <ProgressBar label="Payment Progress" pct={paymentPct} tone="green" caption={`${po.currency} ${amount(settled)} / ${amount(po.receivedValue)}`} />
+          <ProgressBar label="Payment Progress" pct={paymentPct} tone="green" caption={`${po.currency} ${amount(settled)} / ${amount(payBasis)} ${nothingReceived ? 'ordered' : 'received'}`} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-gray-100 dark:border-gray-800">
           <div className="pt-3"><div className="text-gray-500 dark:text-gray-400">Received Value</div><div className="font-semibold text-gray-900 dark:text-white">{po.currency} {amount(po.receivedValue)}</div></div>
