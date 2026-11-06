@@ -536,3 +536,39 @@ export async function deleteBlockers(q: Queryable, orderId: string): Promise<str
     history && 'inventory movement history',
   ].filter((b): b is string => typeof b === 'string');
 }
+
+/**
+ * What an order's loyalty points are worked out from (#249, #225 M6): its
+ * state, its total, the points already earned and taken back on it, and the
+ * value of its returns made up to the moment the points were earned (or all
+ * of them, before) and after it.
+ */
+export async function pointsBasis(q: Queryable, orderId: string): Promise<{
+  orderNumber: string; customerId: number | null; branchId: number; status: string; paymentStatus: string; total: string;
+  earned: number; reversed: number; returnedBefore: string; returnedAfter: string;
+} | undefined> {
+  const res = await sql<{
+    order_number: string; customer_id: number | null; branch_id: number; status: string; payment_status: string; total: string;
+    earned: string; reversed: string; returned_before: string; returned_after: string;
+  }>`
+    SELECT o.order_number, o.customer_id, o.branch_id, o.status, o.payment_status, o.total::text,
+           COALESCE(lh.earned, 0)::text AS earned, COALESCE(lh.reversed, 0)::text AS reversed,
+           COALESCE(SUM(r.total_refund_amount) FILTER (WHERE lh.earned_at IS NULL OR r.created_at <= lh.earned_at), 0)::text AS returned_before,
+           COALESCE(SUM(r.total_refund_amount) FILTER (WHERE r.created_at > lh.earned_at), 0)::text AS returned_after
+    FROM orders o
+    LEFT JOIN LATERAL (
+      SELECT SUM(h.points_delta) FILTER (WHERE h.reason = 'ACCRUAL') AS earned,
+             -SUM(h.points_delta) FILTER (WHERE h.reason = 'RETURN_REVERSAL') AS reversed,
+             MIN(h.created_at) FILTER (WHERE h.reason = 'ACCRUAL') AS earned_at
+      FROM loyalty_history h WHERE h.customer_id = o.customer_id AND h.transaction_ref = o.order_number
+    ) lh ON true
+    LEFT JOIN returns r ON r.order_id = o.id
+    WHERE o.id = ${orderId}
+    GROUP BY o.id, lh.earned, lh.reversed, lh.earned_at`.execute(q);
+  const row = res.rows[0];
+  return row && {
+    orderNumber: row.order_number, customerId: row.customer_id, branchId: row.branch_id, status: row.status,
+    paymentStatus: row.payment_status, total: row.total, earned: Number(row.earned), reversed: Number(row.reversed),
+    returnedBefore: row.returned_before, returnedAfter: row.returned_after,
+  };
+}

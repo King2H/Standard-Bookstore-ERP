@@ -19,6 +19,7 @@ import * as specialOrders from '../specialOrders/specialOrders.repository.js';
 import { toSaleServiceLineResponse } from '../services/services.mapper.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { assertAssignedLocation } from '../location/location.service.js';
+import * as orderPoints from './orderPoints.js';
 import * as policy from './orders.policy.js';
 import * as orders from './orders.repository.js';
 import type { ConfirmPayment, OrderLineInput, OrderPaymentStatus, OrderRow, PricedLine, SaleType, StaffCtx } from './orders.types.js';
@@ -394,6 +395,8 @@ export async function deliver(
       await publish(client, 'order.fulfilled', ref, staffCtx);
       await orders.setStatus(tx, order.id, 'COMPLETED');
       await publish(client, 'order.completed', ref, staffCtx);
+      // Delivered in full: a paid order earns its points (#249).
+      await orderPoints.earnIfDone(tx, order.id);
     }
   });
   return getById(orderId);
@@ -432,6 +435,7 @@ export async function fulfill(orderId: string | number, staffCtx: StaffCtx): Pro
     await publish(client, 'order.fulfilled', ref, staffCtx);
     await orders.setStatus(tx, order.id, 'COMPLETED');
     await publish(client, 'order.completed', ref, staffCtx);
+    await orderPoints.earnIfDone(tx, order.id);
   });
   return getById(orderId);
 }
@@ -553,6 +557,8 @@ export async function cancelRest(
       ...(opts.refundTo && { refundTo: opts.refundTo }),
     });
     await publish(client, 'order.completed', { ...order, id: String(orderId) }, staffCtx, { restCancelled: true });
+    // On what was delivered: the undelivered rest came back before (#249).
+    await orderPoints.earnIfDone(tx, order.id);
   });
   return getById(orderId);
 }
