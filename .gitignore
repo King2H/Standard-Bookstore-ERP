@@ -76,3 +76,4 @@ deploy/.env
 deploy/*.crt
 deploy/extra-ca.pem
 deploy/backups/
+deploy/.upgrade-state

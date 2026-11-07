@@ -24,12 +24,16 @@ COPY packages/shared packages/shared
 COPY apps/api apps/api
 ENV BUNDLE="--bundle --platform=node --format=esm --target=node24 --external:bcrypt --external:pg-native"
 ENV BANNER="import { createRequire as __bmsCreateRequire } from 'node:module'; const require = __bmsCreateRequire(import.meta.url);"
-RUN npx tsc --noEmit -p apps/api \
- && npx esbuild apps/api/src/server.ts $BUNDLE --banner:js="$BANNER" --outfile=out/server.js \
+# The version (#245) is the root package.json's: built into the API, and in
+# /app/VERSION for the upgrade script to read from an image.
+RUN VERSION=$(node -p "require('./package.json').version") \
+ && npx tsc --noEmit -p apps/api \
+ && npx esbuild apps/api/src/server.ts $BUNDLE --banner:js="$BANNER" --define:__BMS_VERSION__="\"$VERSION\"" --outfile=out/server.js \
  && npx esbuild apps/api/scripts/migrate.ts $BUNDLE --banner:js="$BANNER" --outfile=out/migrate.js \
  && npx esbuild apps/api/scripts/first-accounts.ts $BUNDLE --banner:js="$BANNER" --outfile=out/first-accounts.js \
  && npx esbuild apps/api/scripts/db-check.ts $BUNDLE --banner:js="$BANNER" --outfile=out/db-check.js \
- && npx esbuild apps/api/scripts/backup.ts $BUNDLE --banner:js="$BANNER" --outfile=backup/backup.js
+ && npx esbuild apps/api/scripts/backup.ts $BUNDLE --banner:js="$BANNER" --outfile=backup/backup.js \
+ && echo "$VERSION" > out/VERSION
 
 # ── Production packages only ────────────────────────────────────────────────
 FROM node:24-alpine AS api-deps

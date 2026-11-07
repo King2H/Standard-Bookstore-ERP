@@ -11,6 +11,8 @@ import { backupFileName, backupsToDelete, nextRunAt, shouldRunAtStart } from '..
 //   node backup.js schedule  nightly at BMS_BACKUP_TIME in BMS_TIMEZONE, and at
 //                            start when the last good backup is older than a day
 //   node backup.js unpack <file> <dir>   decrypt and extract a backup (restore)
+//   node backup.js replace-database <file>   put the backup's database in place
+//                            of the install's (a rollback after an upgrade, #245)
 // A backup holds the database, the install's .env and the shop's certificate
 // authority, encrypted with BMS_BACKUP_PASSPHRASE. Each run is recorded in
 // backup_runs, which Admin and Super_Admin see.
@@ -132,12 +134,52 @@ async function unpack(file: string | undefined, dir: string | undefined): Promis
   console.log(`Unpacked into ${dir}: manifest.json, db.dump, install.env, caddy-data.tar`);
 }
 
+/**
+ * Puts the database of a backup in place of the install's (#245, owner
+ * decision 2a: the rollback after an upgrade). It is restored beside the
+ * live one first, and swapped in only once complete: a backup that cannot
+ * be read or restored leaves the install's database as it was.
+ */
+async function replaceDatabase(file: string | undefined): Promise<void> {
+  if (!file) throw new Error('Usage: node backup.js replace-database <backup file>');
+  const url = new URL(process.env.MIGRATION_DATABASE_URL ?? '');
+  const name = decodeURIComponent(url.pathname.slice(1));
+  const incoming = `${name}_rollback`;
+  const admin = new URL(url); admin.pathname = '/postgres';
+  const pgEnv = (database: string): NodeJS.ProcessEnv => ({
+    ...process.env, PGHOST: url.hostname, PGPORT: url.port || '5432', PGUSER: decodeURIComponent(url.username),
+    PGPASSWORD: decodeURIComponent(url.password), PGDATABASE: database,
+  });
+  const work = await mkdtemp(join(tmpdir(), 'bms-replace-'));
+  const client = new pg.Client({ connectionString: admin.toString() });
+  await client.connect();
+  try {
+    await decryptFile(file, join(work, 'backup.tar'), passphrase());
+    await exec('tar', ['-C', work, '-xf', join(work, 'backup.tar'), 'db.dump']);
+    await client.query(`DROP DATABASE IF EXISTS ${client.escapeIdentifier(incoming)} WITH (FORCE)`);
+    await client.query(`CREATE DATABASE ${client.escapeIdentifier(incoming)}`);
+    try {
+      await exec('pg_restore', ['--exit-on-error', '--dbname', incoming, join(work, 'db.dump')], pgEnv(incoming));
+    } catch (err) {
+      await client.query(`DROP DATABASE IF EXISTS ${client.escapeIdentifier(incoming)} WITH (FORCE)`);
+      throw err;
+    }
+    await client.query(`DROP DATABASE ${client.escapeIdentifier(name)} WITH (FORCE)`);
+    await client.query(`ALTER DATABASE ${client.escapeIdentifier(incoming)} RENAME TO ${client.escapeIdentifier(name)}`);
+    console.log(`The database is now the one of ${file.split('/').pop()}.`);
+  } finally {
+    await client.end();
+    await rm(work, { recursive: true, force: true });
+  }
+}
+
 const [command, ...args] = process.argv.slice(2);
 try {
   if (command === 'run') await runBackup();
   else if (command === 'schedule') await schedule();
   else if (command === 'unpack') await unpack(args[0], args[1]);
-  else throw new Error('Usage: node backup.js run | schedule | unpack <file> <folder>');
+  else if (command === 'replace-database') await replaceDatabase(args[0]);
+  else throw new Error('Usage: node backup.js run | schedule | unpack <file> <folder> | replace-database <file>');
 } catch (err) {
   console.error((err as Error).message);
   process.exit(1);

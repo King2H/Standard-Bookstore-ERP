@@ -1,11 +1,16 @@
 import { defineConfig } from 'vitest/config';
+import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 
 // Frontend UI test harness (Pagination & Layout Standardization initiative,
 // Part 4). Component-level tests only — no dev server, no backend, no DB.
 // Kept as a separate config from vite.config.ts so the test-only deps
 // (jsdom, @testing-library/*) never affect the production build.
+// The bookstore's one version (#245): the root package.json's.
+const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [react()],
   test: {
     globals: true,

@@ -12,14 +12,17 @@ Set-Location -Path $PSScriptRoot
 function Say($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
 function Fail($text) { Write-Host "Error: $text" -ForegroundColor Red; exit 1 }
 function Invoke-Docker { & docker @args; if ($LASTEXITCODE -ne 0) { Fail "docker $($args -join ' ') failed" } }
+# Runs docker and returns what it wrote, with its exit code in $script:Code.
+# Windows PowerShell stops at a redirected native error line under 'Stop'.
+function Get-Docker { $ErrorActionPreference = 'Continue'; $lines = & docker @args 2>&1 | ForEach-Object { "$_" }; $script:Code = $LASTEXITCODE; $lines }
 
 if (-not (Test-Path $Backup)) { Fail "No such file: $Backup" }
 $Backup = (Resolve-Path $Backup).Path
-& docker info *> $null; if ($LASTEXITCODE -ne 0) { Fail 'Docker Desktop is not running: start it and wait until it says it is running.' }
+$null = Get-Docker info; if ($script:Code -ne 0) { Fail 'Docker Desktop is not running: start it and wait until it says it is running.' }
 if (Test-Path .env) { Fail 'deploy\.env exists: this PC already has an install. Restore onto a clean PC, or remove the install first (docker compose down -v, then delete deploy\.env).' }
 $project = if ($env:COMPOSE_PROJECT_NAME) { $env:COMPOSE_PROJECT_NAME } else { 'bookstore' }
-& docker volume inspect "${project}_pgdata18" *> $null
-if ($LASTEXITCODE -eq 0) { Fail "A bookstore database already exists on this PC (volume ${project}_pgdata18). Remove it first: docker compose down -v." }
+$null = Get-Docker volume inspect "${project}_pgdata18"
+if ($script:Code -eq 0) { Fail "A bookstore database already exists on this PC (volume ${project}_pgdata18). Remove it first: docker compose down -v." }
 
 $secure = Read-Host -AsSecureString 'Backup passphrase'
 $env:BMS_BACKUP_PASSPHRASE = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))

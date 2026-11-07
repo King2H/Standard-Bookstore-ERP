@@ -345,6 +345,8 @@ export default function ProfilePage({ onPasswordChanged }: { onPasswordChanged?:
           </div>
         )}
       </div>
+
+      <p className="mt-6 text-xs text-gray-400 dark:text-gray-500">Bookstore version {__APP_VERSION__}</p>
     </div>
   );
 }

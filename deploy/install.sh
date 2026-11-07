@@ -33,6 +33,17 @@ ask() {
   done
 }
 
+# A new version in this folder goes in with upgrade.sh (#245): a backup first,
+# and the running version kept to go back to.
+if [ -f .env ]; then
+  api_image=$(docker compose config --images </dev/null | grep '^bookstore-api:' | head -1 || true)
+  if [ -n "$api_image" ] && docker image inspect "$api_image" >/dev/null 2>&1; then
+    installed=$(docker run --rm --entrypoint cat "$api_image" /app/VERSION 2>/dev/null || echo 'unknown')
+    available=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' ../package.json | head -1)
+    [ "$installed" = "$available" ] || fail "This PC runs version $installed and this folder holds $available: upgrade with bash deploy/upgrade.sh."
+  fi
+fi
+
 first_install=false
 if [ ! -f .env ]; then
   first_install=true
