@@ -13,19 +13,19 @@
  *     (Bank Accounts is not an active module for this version: hidden
  *      from the nav, route/page left intact.)
  *   Organization → Branches, Locations, Staff
- *   System     → Settings, Audit Log
+ *   System     → Settings, Audit Log, Import / Export
  */
 
 export type Page =
   | 'dashboard' | 'branches' | 'staff' | 'audit-log' | 'settings'
   | 'bank-accounts' | 'locations' | 'catalog' | 'inventory' | 'suppliers'
   | 'procurement' | 'customers' | 'pos' | 'returns' | 'orders' | 'payments'
-  | 'exchanges' | 'profile' | 'receivables' | 'binding-jobs' | 'cash-sessions' | 'day-close';
+  | 'exchanges' | 'profile' | 'receivables' | 'binding-jobs' | 'cash-sessions' | 'day-close' | 'data-import';
 
 export const PAGES: readonly Page[] = [
   'dashboard', 'branches', 'staff', 'audit-log', 'settings', 'bank-accounts', 'locations', 'catalog',
   'inventory', 'suppliers', 'procurement', 'customers', 'pos', 'returns', 'orders', 'payments',
-  'exchanges', 'profile', 'receivables', 'binding-jobs', 'cash-sessions', 'day-close',
+  'exchanges', 'profile', 'receivables', 'binding-jobs', 'cash-sessions', 'day-close', 'data-import',
 ];
 
 export const isPage = (value: string): value is Page => (PAGES as readonly string[]).includes(value);
@@ -113,14 +113,22 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     id: 'system', label: 'System', icon: '⚙️',
-    roles: ['Super_Admin', 'Admin', 'Manager'],
-    permissions: ['MANAGE_BRANCH', 'MANAGE_STAFF'],
+    roles: ['Super_Admin', 'Admin', 'Manager', 'Stock_Clerk', 'Purchasor'],
+    permissions: ['MANAGE_BRANCH', 'MANAGE_STAFF', 'MANAGE_INVENTORY'],
     items: [
       { id: 'settings',  label: 'Settings',  icon: '⚙️', roles: ['Super_Admin', 'Admin', 'Manager'], permissions: ['MANAGE_BRANCH'] },
       { id: 'audit-log', label: 'Audit Log', icon: '📋', roles: ['Super_Admin', 'Admin'],             permissions: ['MANAGE_STAFF', 'MANAGE_BRANCH'] },
+      // The lists a shop starts with (#246): Admin and Manager every list, who books stock opening stock.
+      { id: 'data-import', label: 'Import / Export', icon: '⇅', roles: ['Admin', 'Manager', 'Stock_Clerk', 'Purchasor'], permissions: ['MANAGE_INVENTORY'] },
     ],
   },
 ];
+
+/** A page's title in the top bar: its menu label (Import / Export, #246), else its prettified name. */
+export function titleOf(page: string): string {
+  return NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.id === page)?.label
+    ?? page.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
 
 /** Returns the section id that contains the given page, or null. */
 export function findSectionForPage(page: Page): string | null {

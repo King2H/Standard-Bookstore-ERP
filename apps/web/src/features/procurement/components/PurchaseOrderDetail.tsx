@@ -98,7 +98,8 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ProgressBar label="Receiving Progress" pct={receivingPct} tone="blue" caption={`${po.receivedQuantityTotal} / ${po.orderedQuantityTotal} units`} />
+          {/* An opening balance (#246) has no books to receive. */}
+          {po.kind !== 'opening_balance' && <ProgressBar label="Receiving Progress" pct={receivingPct} tone="blue" caption={`${po.receivedQuantityTotal} / ${po.orderedQuantityTotal} units`} />}
           <ProgressBar label="Payment Progress" pct={paymentPct} tone="green" caption={`${po.currency} ${amount(settled)} / ${amount(payBasis)} ${nothingReceived ? 'ordered' : 'received'}`} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-gray-100 dark:border-gray-800">
@@ -128,7 +129,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
         {steps.cancel && <button onClick={() => setAsking('cancel')} disabled={step.isPending} className={`${BTN} bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800`}>Cancel</button>}
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+      {po.kind !== 'opening_balance' && <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Line Items</h3>
         </div>
@@ -161,7 +162,7 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
 
       {(po.receipts ?? []).length > 0 && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">

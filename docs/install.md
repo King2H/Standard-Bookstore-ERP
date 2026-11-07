@@ -72,6 +72,26 @@ Windows use the Windows list; Firefox and Chrome on Linux may need the certifica
 
 Then open `https://<server name or address>`.
 
+## The shop's lists
+
+A new install has no books, stock or customers. Admin and Manager bring them in from CSV files
+on **System → Import / Export**, in this order (#246):
+
+1. **Catalog**: books by ISBN (or SKU for a book without one), with authors, publisher,
+   categories, format, language and price.
+2. **Opening stock**: the first stock of each book at a location of the branch, and what one
+   copy cost (0 if unknown: such books are listed to revalue). Stock staff can also do this, in
+   their own locations.
+3. **Customers**: found again by code, phone or email.
+4. **Customer balances** and 5. **Supplier balances**: what customers owed, their store credit
+   and loyalty points, and what the shop owed each supplier. Only before the first sale.
+
+Each starts from its **Template**. In Excel, save the file as "CSV UTF-8" so Amharic text is
+kept. A file is checked before anything is saved: each wrong row is listed with its line and the
+reason. Fix the file and choose it again, or import only the valid rows. Importing the same file
+again creates nothing twice. **Export** gives the catalog, stock and customers in the same
+columns, for example to bring them into another install.
+
 ## What the install keeps, and where
 
 | What | Where | |

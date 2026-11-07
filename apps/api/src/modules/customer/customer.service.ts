@@ -3,7 +3,7 @@ import type { CreateCustomerRequest, MoneyInput, UpdateCustomerRequest } from '@
 import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
-import { nextRunningNumber } from '../../lib/documentNumber.js';
+import { nextRunningNumber, raiseRunningNumber } from '../../lib/documentNumber.js';
 import { nextStatus, type LifecycleAction } from '../../lib/lifecycle.js';
 import { insertOutbox, insertOutboxEvent } from '../../lib/outbox.js';
 import { encryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
@@ -95,12 +95,26 @@ export function createCustomer(actor: Actor, dto: CreateCustomerRequest): Promis
 }
 
 /** A new customer, in the caller's transaction: the customer import (#246) creates a file's in one. */
-export async function createCustomerWith(tx: Queryable, actor: Actor, dto: CreateCustomerRequest, auditMeta: Record<string, unknown> = {}): Promise<number> {
+export async function createCustomerWith(
+  tx: Queryable,
+  actor: Actor,
+  dto: CreateCustomerRequest,
+  auditMeta: Record<string, unknown> = {},
+  /** The code it had in another install (#246): kept, and the codes go on after it. */
+  keptCode?: string,
+): Promise<number> {
   const phone = stored(dto.phone);
   const email = stored(dto.email);
   await checkContactFree(tx, 'phone', phone);
   await checkContactFree(tx, 'email', email);
-  const customerCode = policy.customerCode(await nextRunningNumber(tx, 'CUS'));
+  let customerCode: string;
+  const kept = keptCode === undefined ? null : policy.customerCodeNumber(keptCode);
+  if (kept !== null) {
+    await raiseRunningNumber(tx, 'CUS', kept);
+    customerCode = policy.customerCode(kept);
+  } else {
+    customerCode = policy.customerCode(await nextRunningNumber(tx, 'CUS'));
+  }
   const id = await customers.insert(tx, {
     // The home branch is where the customer was registered, never the client's choice.
     branchId: actor.branchId,

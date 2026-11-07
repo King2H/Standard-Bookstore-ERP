@@ -193,7 +193,7 @@ describe('Opening stock and customers import and export (#246)', () => {
         `,${NAME} Almaz,+251911000111,almaz@example.et,Bole,Addis Ababa`,
         `,,+251911000222,,,`,
         `,${NAME} No Contact,,,,`,
-        `CUS-99999,${NAME} Unknown Code,,,,`,
+        `CUSTOMER-99999,${NAME} Unknown Code,,,,`,
         `,${NAME} Same Phone,+251911000111,,,`,
         `,${NAME} Taken,+251911000333,existing@example.et,,`,
       ].join('\r\n');
@@ -202,7 +202,8 @@ describe('Opening stock and customers import and export (#246)', () => {
       const byLine = errorsByLine(res.body);
       expect(byLine[3]).toMatch(/Name/);
       expect(byLine[4]).toMatch(/a Code, a Phone or an Email/);
-      expect(byLine[5]).toMatch(/No customer with code CUS-99999/);
+      // A code in the shop's format from another install is kept (#246 part 4); any other is unknown.
+      expect(byLine[5]).toMatch(/No customer with code CUSTOMER-99999/);
       expect(byLine[6]).toMatch(/line 2/);
       expect(byLine[7]).toBeUndefined();
     });

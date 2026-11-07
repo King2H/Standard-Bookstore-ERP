@@ -19,6 +19,12 @@ export function customerCode(n: number): string {
   return `CUS-${String(n).padStart(4, '0')}`;
 }
 
+/** The number of a code in the shop's format (CUS-0042: 42); null for any other code. */
+export function customerCodeNumber(code: string): number | null {
+  const match = /^CUS-(\d{1,9})$/i.exec(code.trim());
+  return match ? Number(match[1]) : null;
+}
+
 /** A store-credit adjustment must move a positive amount; the direction says which way. */
 export function checkAdjustmentAmount(amount: MoneyInput): Money {
   const money = Money.of(amount);

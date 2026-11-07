@@ -78,4 +78,23 @@ describe('ProcurementPage', () => {
     expect(screen.queryByText('ETB')).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('USD')).not.toBeInTheDocument();
   });
+
+  // #246: what the shop owed a supplier when it started: received, no books, paid like any order.
+  it('shows an opening balance as such, with nothing to receive and no book lines', async () => {
+    const opening = { ...DETAIL, kind: 'opening_balance', poNumber: 'OPB-20261107-0001', status: 'received', totalAmount: 15000, receivedValue: 15000, outstandingAmount: 15000, orderedQuantityTotal: 0, receivedQuantityTotal: 0 };
+    getMock.mockImplementation((path: string) => {
+      if (path === '/staff/me') return Promise.resolve({ id: 5, currentRoles: ['Manager'], currentBranchId: 1 });
+      if (path.startsWith('/purchase-orders?')) return Promise.resolve({ items: [{ ...PO, ...opening }], total: 1, page: 1, totalPages: 1 });
+      if (path.startsWith('/purchase-orders/42')) return Promise.resolve(opening);
+      return Promise.resolve({ items: [] });
+    });
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText('Opening balance')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'View' }));
+    await screen.findByRole('heading', { name: 'OPB-20261107-0001' });
+    expect(screen.getByText('Opening balance')).toBeInTheDocument();
+    expect(screen.queryByText('Receiving Progress')).toBeNull();
+    expect(screen.queryByText('Line Items')).toBeNull();
+  });
 });
