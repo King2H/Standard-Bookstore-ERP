@@ -41,6 +41,8 @@ export interface PurchaseOrderRecord {
   closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** 'opening_balance': what was owed to the supplier at the start (#246), received, no book lines. */
+  kind: 'order' | 'opening_balance';
   receivedValue: Money;
   amountPaid: Money;
   creditNotesTotal: Money;

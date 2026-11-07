@@ -172,6 +172,12 @@ describe('Data consistency check', () => {
       [`${MARK}-SREF`, refundedPo, branchId, supplierId, staffId],
     );
 
+    // An opening balance owed to a supplier (#246) is received, with no books: one left 'ordered'.
+    await client.query(
+      `INSERT INTO purchase_orders (po_number, kind, branch_id, supplier_id, created_by, status, total_amount, currency) VALUES ($1, 'opening_balance', $2, $3, $4, 'ordered', 50, 'ETB')`,
+      [`${MARK}-OPB`, branchId, supplierId, staffId],
+    );
+
     // Transfers between branches (#170): a line counting 2 received with no
     // receipt behind it, on a transfer still "in transit", whose dispatch left
     // no stock history.
@@ -268,6 +274,7 @@ describe('Data consistency check', () => {
     ['supplier-returns.sent-in-history', new RegExp(`^${MARK}-RTS: 3 sent from stock, history 0; credit 30\\.00, credit note 0\\.00$`)],
     ['supplier-returns.within-received', /^purchase order line \d+: 3 sent back of 2 received$/],
     ['procurement.refunds-within-due', /^purchase order \d+: refunded 5\.00, due 0\.00$/],
+    ['procurement.opening-balance-shape', new RegExp(`^purchase order ${MARK}-OPB \\(ordered\\)$`)],
     ['transfers.lines-match-events', new RegExp(`^${MARK}-TRF: book \\d+ counts 2 received, its events 0$`)],
     ['transfers.status-matches-lines', new RegExp(`^${MARK}-TRF \\(in_transit\\): 2 of 3 accounted for$`)],
     ['transfers.stock-history', new RegExp(`^${MARK}-TRF: book \\d+ sent 3 \\(history 0\\), received 2 \\(history 0\\)$`)],
@@ -300,6 +307,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/32 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/33 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

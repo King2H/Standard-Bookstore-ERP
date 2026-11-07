@@ -60,7 +60,7 @@ async function planCatalog(q: Queryable, csv: string): Promise<CatalogPlan> {
   const publishers = await repo.publishers(q);
   const publisherName = (id: number | null) => [...publishers.values()].find((p) => p.id === id)?.name ?? null;
 
-  const newNames = { authors: [] as string[], categories: [] as string[], publishers: [] as string[] };
+  const newNames = { authors: [] as string[], categories: [] as string[], publishers: [] as string[], suppliers: [] as string[] };
   const isNew = (list: string[], name: string) => !list.some((n) => n.toLowerCase() === name.toLowerCase());
   const valid: CatalogPlan['rows'] = [];
   const counts = { toCreate: 0, toUpdate: 0, unchanged: 0 };

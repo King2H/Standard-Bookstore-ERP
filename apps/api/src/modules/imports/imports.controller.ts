@@ -6,6 +6,7 @@ import { holdsPermission } from '../../middleware/rbac.js';
 import { valid } from '../../middleware/validate.js';
 import type { Actor } from '../catalog/catalog.types.js';
 import { usableLocationIds } from '../location/location.service.js';
+import * as balances from './balanceImport.service.js';
 import * as customers from './customerImport.service.js';
 import * as service from './imports.service.js';
 import * as stock from './stockImport.service.js';
@@ -84,4 +85,34 @@ export async function importCustomers(req: Request, res: Response): Promise<void
 
 export async function exportCustomers(req: Request, res: Response): Promise<void> {
   sendCsv(res, `customers-${today()}.csv`, await customers.exportCustomers(actor(req)));
+}
+
+// ── Opening balances (#246 part 3) ─────────────────────────────────────────
+
+export function customerBalanceTemplate(_req: Request, res: Response): void {
+  sendCsv(res, 'customer-balances-template.csv', balances.customerBalanceTemplate());
+}
+
+export async function checkCustomerBalances(req: Request, res: Response): Promise<void> {
+  const body: ImportReport = await balances.checkCustomerBalances(valid(req, schemas.file).body);
+  res.json(body);
+}
+
+export async function importCustomerBalances(req: Request, res: Response): Promise<void> {
+  const body: ImportResult = await balances.importCustomerBalances(actor(req), valid(req, schemas.file).body);
+  res.json(body);
+}
+
+export function supplierBalanceTemplate(_req: Request, res: Response): void {
+  sendCsv(res, 'supplier-balances-template.csv', balances.supplierBalanceTemplate());
+}
+
+export async function checkSupplierBalances(req: Request, res: Response): Promise<void> {
+  const body: ImportReport = await balances.checkSupplierBalances(valid(req, schemas.file).body);
+  res.json(body);
+}
+
+export async function importSupplierBalances(req: Request, res: Response): Promise<void> {
+  const body: ImportResult = await balances.importSupplierBalances(actor(req), valid(req, schemas.file).body);
+  res.json(body);
 }

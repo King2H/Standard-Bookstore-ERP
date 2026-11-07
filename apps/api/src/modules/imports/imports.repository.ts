@@ -1,5 +1,7 @@
 import type { LifecycleStatus } from '@bms/shared';
+import { sql } from 'kysely';
 import type { Queryable } from '../../db/tx.js';
+import { SHOP_CURRENCY } from '../config/config.repository.js';
 
 // Lookups of the catalog import (#246): one query per list, whatever the
 // size of the file.
@@ -105,4 +107,66 @@ export async function customersByKeys(q: Queryable, codes: string[], phoneLookup
   return rows.map((r) => ({
     id: r.id, code: r.customer_code, name: r.full_name, address: r.address, city: r.city, phoneLookup: r.phone_lookup, emailLookup: r.email_lookup,
   }));
+}
+
+/** Whether the shop has sold anything yet: opening balances come in only before (#246). */
+export async function hasSales(q: Queryable): Promise<boolean> {
+  const row = await q
+    .selectNoFrom((eb) => [
+      eb.or([
+        eb.exists(eb.selectFrom('transactions').select('id')),
+        eb.exists(eb.selectFrom('orders').select('id').where(sql`upper(status)`, '<>', 'DRAFT')),
+      ]).as('sold'),
+    ])
+    .executeTakeFirstOrThrow();
+  return Boolean(row.sold);
+}
+
+export interface OpeningCustomerBalances {
+  owed: Map<number, string>;
+  storeCredit: Map<number, string>;
+  points: Map<number, number>;
+}
+
+/** The opening balances these customers already have. */
+export async function openingCustomerBalances(q: Queryable, customerIds: number[]): Promise<OpeningCustomerBalances> {
+  const result: OpeningCustomerBalances = { owed: new Map(), storeCredit: new Map(), points: new Map() };
+  if (customerIds.length === 0) return result;
+  const owed = await q.selectFrom('receivables').select(['customer_id', 'original_amount'])
+    .where('source_type', '=', 'opening_balance').where('customer_id', 'in', customerIds).execute();
+  for (const r of owed) result.owed.set(r.customer_id, String(r.original_amount));
+  const credit = await q.selectFrom('store_credit_history').select(['customer_id', sql<string>`SUM(amount)`.as('amount')])
+    .where('ref_type', '=', 'opening_balance').where('customer_id', 'in', customerIds).groupBy('customer_id').execute();
+  for (const r of credit) result.storeCredit.set(r.customer_id, String(r.amount));
+  const points = await q.selectFrom('loyalty_history').select(['customer_id', sql<string>`SUM(points_delta)`.as('points')])
+    .where('reason', '=', 'OPENING_BALANCE').where('customer_id', 'in', customerIds).groupBy('customer_id').execute();
+  for (const r of points) result.points.set(r.customer_id, Number(r.points));
+  return result;
+}
+
+/** Suppliers by lower-cased name, with the opening balance each already has. */
+export async function suppliersByName(q: Queryable): Promise<Map<string, { id: number; name: string; openingOwed: string | null }>> {
+  const rows = await q
+    .selectFrom('suppliers as s')
+    .leftJoin('purchase_orders as po', (j) => j.onRef('po.supplier_id', '=', 's.id').on('po.kind', '=', 'opening_balance'))
+    .select(['s.id', 's.name', 'po.total_amount'])
+    .execute();
+  return new Map(rows.map((r) => [r.name.toLowerCase(), { id: r.id, name: r.name, openingOwed: r.total_amount === null ? null : String(r.total_amount) }]));
+}
+
+/** What the shop owed a supplier at the start (#246): a received purchase order with no lines. */
+export async function insertOpeningPurchaseOrder(
+  q: Queryable,
+  po: { poNumber: string; supplierId: number; branchId: number; amount: string; createdBy: number; notes: string },
+): Promise<string> {
+  const row = await q
+    .insertInto('purchase_orders')
+    .values({
+      po_number: po.poNumber, kind: 'opening_balance', supplier_id: po.supplierId, branch_id: po.branchId, receiving_branch_id: po.branchId,
+      status: 'received', financial_status: 'unpaid', payment_terms: 'credit', total_amount: po.amount, currency: SHOP_CURRENCY,
+      created_by: po.createdBy, notes: po.notes,
+    })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return String(row.id);
 }

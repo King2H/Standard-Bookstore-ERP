@@ -16,7 +16,13 @@ export const OPENING_STOCK_IMPORT_COLUMNS = ['ISBN', 'Title', 'Location', 'Quant
 /** Customers, found again by code, phone or email (#246 part 2). */
 export const CUSTOMER_IMPORT_COLUMNS = ['Code', 'Name', 'Phone', 'Email', 'Address', 'City'] as const;
 
-export const ImportKindSchema = z.enum(['catalog', 'opening-stock', 'customers']);
+/** What each customer owed, held in store credit and earned in points when the shop started (#246 part 3). */
+export const CUSTOMER_BALANCE_IMPORT_COLUMNS = ['Code', 'Phone', 'Email', 'Amount Owed', 'Due Date', 'Store Credit', 'Loyalty Points'] as const;
+
+/** What the shop owed each supplier when it started (#246 part 3); an unknown supplier is created. */
+export const SUPPLIER_BALANCE_IMPORT_COLUMNS = ['Supplier', 'Phone', 'Email', 'Amount Owed'] as const;
+
+export const ImportKindSchema = z.enum(['catalog', 'opening-stock', 'customers', 'customer-balances', 'supplier-balances']);
 export type ImportKind = z.infer<typeof ImportKindSchema>;
 
 export const ImportRequestSchema = z.object({
@@ -50,8 +56,10 @@ export const ImportReportSchema = z.object({
   moreErrors: z.number().int(),
   /** Rows that are imported but call for a look, e.g. stock at cost 0 to revalue. */
   notices: z.array(ImportRowErrorSchema),
-  /** Names the import would add to the reference lists (catalog). */
-  newNames: z.object({ authors: z.array(z.string()), categories: z.array(z.string()), publishers: z.array(z.string()) }),
+  /** Names the import would add: to the reference lists (catalog), or suppliers (supplier balances). */
+  newNames: z.object({
+    authors: z.array(z.string()), categories: z.array(z.string()), publishers: z.array(z.string()), suppliers: z.array(z.string()),
+  }),
 });
 export type ImportReport = z.infer<typeof ImportReportSchema>;
 

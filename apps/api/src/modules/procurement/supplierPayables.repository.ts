@@ -98,7 +98,7 @@ export async function ledgerEvents(q: Queryable, supplierId: number, branchId: n
   const inBranch = branchId === undefined ? sql`TRUE` : sql`po.branch_id = ${branchId}`;
   const { rows } = await sql<{ day: string; type: LedgerEvent['type']; reference: string; description: string; amount: string }>`
     WITH orders AS (
-      SELECT po.id, po.created_at, po.total_amount, po.po_number
+      SELECT po.id, po.created_at, po.total_amount, po.po_number, po.kind
       FROM purchase_orders po
       WHERE po.supplier_id = ${supplierId}
         AND po.status NOT IN ('draft', 'pending_approval', 'cancelled')
@@ -108,7 +108,11 @@ export async function ledgerEvents(q: Queryable, supplierId: number, branchId: n
       SELECT o.created_at AS at, 1 AS seq, o.id AS ref_id, 'PO' AS type, o.po_number AS reference,
              'Purchase order (ordered value ' || TO_CHAR(o.total_amount, 'FM999999999990.00') || ')' AS description,
              0::numeric AS amount
-      FROM orders o
+      FROM orders o WHERE o.kind = 'order'
+      UNION ALL
+      -- What was owed when the shop started (#246): owed as a whole, from that day.
+      SELECT o.created_at, 1, o.id, 'OPENING_BALANCE', o.po_number, 'Opening balance', o.total_amount
+      FROM orders o WHERE o.kind = 'opening_balance'
       UNION ALL
       SELECT r.received_at, 2, r.id, 'GOODS_RECEIPT', o.po_number || ' / ' || r.receipt_number,
              'Goods received', SUM(ri.quantity_received * li.unit_cost)

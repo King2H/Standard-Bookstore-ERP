@@ -110,7 +110,7 @@ describe('Catalog import and export (#246)', () => {
     expect(byLine[8]).toMatch(/line 2/);
     expect(byLine[9]).toMatch(/Archived Author.*not active/);
     expect(report.newNames).toEqual({
-      authors: [`${NAME} Author A`, `${NAME} Author B`], categories: [`${NAME} Fiction`], publishers: [`${NAME} Press`],
+      authors: [`${NAME} Author A`, `${NAME} Author B`], categories: [`${NAME} Fiction`], publishers: [`${NAME} Press`], suppliers: [],
     });
     expect(await bookCount()).toBe(0);
 

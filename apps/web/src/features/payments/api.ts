@@ -12,7 +12,7 @@ import { api, toQuery } from '../../lib/api.js';
  * session's: the API takes it from there.
  */
 
-export type UnpaidSource = 'order' | 'pos' | 'exchange_difference';
+export type UnpaidSource = 'order' | 'pos' | 'exchange_difference' | 'opening_balance';
 
 export type UnpaidParams = {
   page?: number;

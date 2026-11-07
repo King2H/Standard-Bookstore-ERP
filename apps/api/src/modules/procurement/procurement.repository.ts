@@ -56,7 +56,10 @@ function selectOrders(q: Queryable) {
       'po.closed_at',
       'po.created_at',
       'po.updated_at',
-      sql<string>`COALESCE((SELECT SUM(li.received_quantity * li.unit_cost) FROM po_line_items li WHERE li.po_id = po.id), 0)`.as('received_value'),
+      'po.kind',
+      // An opening balance (#246) is owed as a whole: it has no book lines.
+      sql<string>`CASE WHEN po.kind = 'opening_balance' THEN po.total_amount
+                       ELSE COALESCE((SELECT SUM(li.received_quantity * li.unit_cost) FROM po_line_items li WHERE li.po_id = po.id), 0) END`.as('received_value'),
       sql<string>`COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id AND sp.reversed_at IS NULL), 0)`.as('amount_paid'),
       sql<string>`COALESCE((SELECT SUM(cn.amount) FROM supplier_credit_notes cn WHERE cn.po_id = po.id), 0)`.as('credit_notes_total'),
       sql<string>`COALESCE((SELECT SUM(sr.amount) FROM supplier_refunds sr WHERE sr.po_id = po.id), 0)`.as('refunds_total'),
@@ -496,7 +499,8 @@ export async function insertSupplierPayment(
 export async function settlement(q: Queryable, poId: string): Promise<{ received: Money; settled: Money }> {
   const { rows } = await sql<{ received: string; settled: string }>`
     SELECT
-      COALESCE((SELECT SUM(received_quantity * unit_cost) FROM po_line_items WHERE po_id = ${poId}), 0) AS received,
+      CASE WHEN (SELECT kind FROM purchase_orders WHERE id = ${poId}) = 'opening_balance' THEN (SELECT total_amount FROM purchase_orders WHERE id = ${poId})
+           ELSE COALESCE((SELECT SUM(received_quantity * unit_cost) FROM po_line_items WHERE po_id = ${poId}), 0) END AS received,
       COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE po_id = ${poId} AND reversed_at IS NULL), 0)
         + COALESCE((SELECT SUM(amount) FROM supplier_credit_notes WHERE po_id = ${poId}), 0)
         - COALESCE((SELECT SUM(amount) FROM supplier_refunds WHERE po_id = ${poId}), 0) AS settled`.execute(q);

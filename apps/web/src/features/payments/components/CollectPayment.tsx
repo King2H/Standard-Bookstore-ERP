@@ -20,6 +20,7 @@ const HEADINGS: Record<UnpaidItem['sourceType'], string> = {
   order: 'Collecting Payment For',
   pos: '🏷️ POS Credit Sale — Collecting Payment',
   exchange_difference: '🔁 Exchange Balance — Collecting Payment',
+  opening_balance: 'Opening Balance — Collecting Payment',
 };
 
 /**
@@ -56,8 +57,8 @@ export function CollectPayment({ item, onDone, onCancel }: { item: UnpaidItem; o
     // `method` is one of COLLECT_METHODS[item.sourceType]: that endpoint's own methods.
     const input: CollectInput = item.sourceType === 'pos'
       ? { sourceType: 'pos', id: item.id, body: { payments: [{ method: method as 'cash', amount: value, reference, payerBank, ...account }] } }
-      : item.sourceType === 'exchange_difference'
-        ? { sourceType: 'exchange_difference', id: item.id, body: { amount: value, paymentMethod: method as 'cash', transactionReference: reference, payerBank, ...account } }
+      : item.sourceType === 'exchange_difference' || item.sourceType === 'opening_balance'
+        ? { sourceType: item.sourceType, id: item.id, body: { amount: value, paymentMethod: method as 'cash', transactionReference: reference, payerBank, ...account } }
         : { sourceType: 'order', body: { orderId: Number(item.id), amount: value, paymentMethod: method as 'cash', transactionReference: reference, payerBank, ...account } };
     collect.mutate(input, {
       onSuccess: () => { showToast(`Payment of ${currency} ${money(value)} recorded on ${item.orderNumber}`, 'success'); onDone(); },

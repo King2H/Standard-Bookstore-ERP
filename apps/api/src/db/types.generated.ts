@@ -804,6 +804,7 @@ export interface PurchaseOrders {
   expected_delivery_date: Timestamp | null;
   financial_status: Generated<string>;
   id: Generated<Int8>;
+  kind: Generated<string>;
   notes: string | null;
   payment_terms: Generated<string>;
   po_number: string;

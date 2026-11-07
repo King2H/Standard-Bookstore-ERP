@@ -109,7 +109,7 @@ export const RefundPaymentRequestSchema = z.object({
 });
 export type RefundPaymentRequest = z.infer<typeof RefundPaymentRequestSchema>;
 
-export const UnpaidSourceTypeSchema = z.enum(['order', 'pos', 'exchange_difference']);
+export const UnpaidSourceTypeSchema = z.enum(['order', 'pos', 'exchange_difference', 'opening_balance']);
 
 export const UnpaidListQuerySchema = ListPagingQuerySchema.extend({
   customerId: IdSchema.optional(),

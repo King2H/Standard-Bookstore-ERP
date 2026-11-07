@@ -61,11 +61,11 @@ function useMoneyStep<A, R>(mutationFn: (a: A) => Promise<R>) {
   });
 }
 
-/** A collection goes to the endpoint of what is owed: an order, a POS credit sale, or an exchange difference's receivable. */
+/** A collection goes to the endpoint of what is owed: an order, a POS credit sale, or the receivable of an exchange difference or an opening balance (#246). */
 export type CollectInput =
   | { sourceType: 'order'; body: NewOrderPayment }
   | { sourceType: 'pos'; id: string; body: PosCollectRequest }
-  | { sourceType: 'exchange_difference'; id: string; body: ReceivableCollection };
+  | { sourceType: 'exchange_difference' | 'opening_balance'; id: string; body: ReceivableCollection };
 
 export function useCollectPayment() {
   return useMoneyStep(async (c: CollectInput): Promise<void> => {

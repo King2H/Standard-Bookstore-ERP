@@ -50,6 +50,7 @@ export const COLLECT_METHODS: Record<UnpaidSource, PaymentMethodCode[]> = {
   order: OrderPaymentMethodSchema.options.filter((m) => m !== 'other'),
   pos: [...PosPaymentMethodSchema.options],
   exchange_difference: [...CollectReceivableRequestSchema.shape.paymentMethod.options],
+  opening_balance: [...CollectReceivableRequestSchema.shape.paymentMethod.options],
 };
 
 /** The statuses a payment can have (was: also pending and failed, which nothing writes). */
