@@ -77,3 +77,5 @@ deploy/*.crt
 deploy/extra-ca.pem
 deploy/backups/
 deploy/.upgrade-state
+# The v1 import's files hold customer contacts in clear (#246).
+v1-import-*/

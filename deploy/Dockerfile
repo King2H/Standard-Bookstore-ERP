@@ -33,6 +33,7 @@ RUN VERSION=$(node -p "require('./package.json').version") \
  && npx esbuild apps/api/scripts/first-accounts.ts $BUNDLE --banner:js="$BANNER" --outfile=out/first-accounts.js \
  && npx esbuild apps/api/scripts/db-check.ts $BUNDLE --banner:js="$BANNER" --outfile=out/db-check.js \
  && npx esbuild apps/api/scripts/backup.ts $BUNDLE --banner:js="$BANNER" --outfile=backup/backup.js \
+ && npx esbuild apps/api/scripts/import-v1.ts $BUNDLE --banner:js="$BANNER" --outfile=backup/import-v1.js \
  && echo "$VERSION" > out/VERSION
 
 # ── Production packages only ────────────────────────────────────────────────
@@ -62,11 +63,13 @@ CMD ["node", "server.js"]
 # ── Backup image: PostgreSQL's own pg_dump and pg_restore, and Node ────────
 # (#244). It reads the database, the install's .env and the certificate
 # authority, and writes encrypted backups to the folder chosen at install.
+# It also reads a v1 shop's database into import files (import-v1.js, #246),
+# in a throwaway container whose own PostgreSQL is the temporary database.
 FROM node:24-alpine AS node-runtime
 FROM postgres:18-alpine AS backup
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
-COPY --from=api-build /src/backup/backup.js ./backup.js
+COPY --from=api-build /src/backup/ ./
 CMD ["node", "backup.js", "schedule"]
 
 # ── The screens, built ───────────────────────────────────────────────────────

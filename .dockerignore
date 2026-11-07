@@ -12,6 +12,7 @@ deploy/*.crt
 deploy/extra-ca.pem
 deploy/backups
 deploy/.upgrade-state
+**/v1-import-*
 docs
 *.log
 coverage
