@@ -90,54 +90,61 @@ export async function searchCustomers(
   return paged(result, paging.page, paging.pageSize);
 }
 
-export async function createCustomer(actor: Actor, dto: CreateCustomerRequest): Promise<CustomerRecord> {
+export function createCustomer(actor: Actor, dto: CreateCustomerRequest): Promise<CustomerRecord> {
+  return withTransaction({}, async (tx) => getOrThrow(tx, await createCustomerWith(tx, actor, dto)));
+}
+
+/** A new customer, in the caller's transaction: the customer import (#246) creates a file's in one. */
+export async function createCustomerWith(tx: Queryable, actor: Actor, dto: CreateCustomerRequest, auditMeta: Record<string, unknown> = {}): Promise<number> {
   const phone = stored(dto.phone);
   const email = stored(dto.email);
+  await checkContactFree(tx, 'phone', phone);
+  await checkContactFree(tx, 'email', email);
+  const customerCode = policy.customerCode(await nextRunningNumber(tx, 'CUS'));
+  const id = await customers.insert(tx, {
+    // The home branch is where the customer was registered, never the client's choice.
+    branchId: actor.branchId,
+    customerCode,
+    fullName: dto.fullName,
+    phone,
+    email,
+    gender: dto.gender ?? null,
+    dateOfBirth: dto.dateOfBirth ?? null,
+    address: dto.address ?? null,
+    city: dto.city ?? null,
+    createdBy: actor.staffId,
+  });
+  await audit(tx, actor, 'CREATE', 'customer', id, { customerCode, fullName: dto.fullName, ...auditMeta });
+  return id;
+}
 
+export function updateCustomer(actor: Actor, id: number, dto: UpdateCustomerRequest): Promise<CustomerRecord> {
   return withTransaction({}, async (tx) => {
-    await checkContactFree(tx, 'phone', phone);
-    await checkContactFree(tx, 'email', email);
-    const customerCode = policy.customerCode(await nextRunningNumber(tx, 'CUS'));
-    const id = await customers.insert(tx, {
-      // The home branch is where the customer was registered, never the client's choice.
-      branchId: actor.branchId,
-      customerCode,
-      fullName: dto.fullName,
-      phone,
-      email,
-      gender: dto.gender ?? null,
-      dateOfBirth: dto.dateOfBirth ?? null,
-      address: dto.address ?? null,
-      city: dto.city ?? null,
-      createdBy: actor.staffId,
-    });
-    await audit(tx, actor, 'CREATE', 'customer', id, { customerCode, fullName: dto.fullName });
+    await updateCustomerWith(tx, actor, id, dto);
     return getOrThrow(tx, id);
   });
 }
 
-export async function updateCustomer(actor: Actor, id: number, dto: UpdateCustomerRequest): Promise<CustomerRecord> {
-  return withTransaction({}, async (tx) => {
-    await requireCustomer(tx, id);
-    const phone = dto.phone !== undefined ? stored(dto.phone) : undefined;
-    const email = dto.email !== undefined ? stored(dto.email) : undefined;
-    if (phone) await checkContactFree(tx, 'phone', phone, id);
-    if (email) await checkContactFree(tx, 'email', email, id);
+/** A customer's change, in the caller's transaction (the customer import, #246). */
+export async function updateCustomerWith(tx: Queryable, actor: Actor, id: number, dto: UpdateCustomerRequest, auditMeta: Record<string, unknown> = {}): Promise<void> {
+  await requireCustomer(tx, id);
+  const phone = dto.phone !== undefined ? stored(dto.phone) : undefined;
+  const email = dto.email !== undefined ? stored(dto.email) : undefined;
+  if (phone) await checkContactFree(tx, 'phone', phone, id);
+  if (email) await checkContactFree(tx, 'email', email, id);
 
-    await customers.update(tx, id, {
-      fullName: dto.fullName,
-      phone,
-      email,
-      gender: dto.gender,
-      dateOfBirth: dto.dateOfBirth,
-      address: dto.address,
-      city: dto.city,
-      updatedBy: actor.staffId,
-    });
-    // Field names only: phone and email never reach the audit log in plain text (#90).
-    await audit(tx, actor, 'UPDATE', 'customer', id, { fields: Object.keys(dto) });
-    return getOrThrow(tx, id);
+  await customers.update(tx, id, {
+    fullName: dto.fullName,
+    phone,
+    email,
+    gender: dto.gender,
+    dateOfBirth: dto.dateOfBirth,
+    address: dto.address,
+    city: dto.city,
+    updatedBy: actor.staffId,
   });
+  // Field names only: phone and email never reach the audit log in plain text (#90).
+  await audit(tx, actor, 'UPDATE', 'customer', id, { fields: Object.keys(dto), ...auditMeta });
 }
 
 /** A repeat changes nothing and is not audited; an archived customer must be restored first (#96). */
