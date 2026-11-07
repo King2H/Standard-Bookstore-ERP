@@ -284,7 +284,10 @@ once, against the current versions.
 
 **Branching and releases:** `main` is the v2 line; `release/1.x` maintains v1. Feature PRs
 are squash-merged by the owner. Semantic Versioning; pre-release tags (`-alpha`, `-beta`,
-`-rc`) only for builds handed outside development (ADR, #10).
+`-rc`) only for builds handed outside development (ADR, #10). The version is the root
+`package.json`'s, the one source (#245): built into the API (`/api/v1/health`) and the screens
+(profile page), and read by the on-premise upgrade (`deploy/upgrade.ps1`, `upgrade.sh`). A release
+sets it before its tag is made; the upgrade refuses a folder older than the install.
 
 ---
 

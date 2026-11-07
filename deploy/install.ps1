@@ -13,10 +13,13 @@ Set-Location -Path $PSScriptRoot
 function Say($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
 function Fail($text) { Write-Host "Error: $text" -ForegroundColor Red; exit 1 }
 function Invoke-Docker { & docker @args; if ($LASTEXITCODE -ne 0) { Fail "docker $($args -join ' ') failed" } }
+# Runs docker and returns what it wrote, with its exit code in $script:Code.
+# Windows PowerShell stops at a redirected native error line under 'Stop'.
+function Get-Docker { $ErrorActionPreference = 'Continue'; $lines = & docker @args 2>&1 | ForEach-Object { "$_" }; $script:Code = $LASTEXITCODE; $lines }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { Fail 'Docker Desktop is not installed: https://www.docker.com/products/docker-desktop/' }
-& docker compose version *> $null; if ($LASTEXITCODE -ne 0) { Fail 'Docker Desktop is too old: update it.' }
-& docker info *> $null; if ($LASTEXITCODE -ne 0) { Fail 'Docker Desktop is not running: start it and wait until it says it is running.' }
+$null = Get-Docker compose version; if ($script:Code -ne 0) { Fail 'Docker Desktop is too old: update it.' }
+$null = Get-Docker info; if ($script:Code -ne 0) { Fail 'Docker Desktop is not running: start it and wait until it says it is running.' }
 
 function New-Secret([int]$bytes, [switch]$Hex) {
   $buffer = New-Object byte[] $bytes
@@ -35,6 +38,19 @@ function Read-Password($prompt, [int]$min = 1) {
     elseif ($pa.Length -lt $min) { Write-Host "At least $min characters. Try again." }
     elseif ($pa.Contains("'")) { Write-Host "Without a ' (single quote). Try again." }
     else { return $pa }
+  }
+}
+
+# A new version in this folder goes in with upgrade.ps1 (#245): a backup
+# first, and the running version kept to go back to.
+if (Test-Path .env) {
+  $apiImage = Get-Docker compose config --images | Where-Object { $_ -like 'bookstore-api:*' } | Select-Object -First 1
+  $null = Get-Docker image inspect $apiImage
+  if ($apiImage -and $script:Code -eq 0) {
+    $installed = Get-Docker run --rm --entrypoint cat $apiImage /app/VERSION
+    $installed = if ($script:Code -eq 0) { "$installed".Trim() } else { 'unknown' }
+    $available = (Get-Content (Join-Path $PSScriptRoot '..\package.json') -Raw | ConvertFrom-Json).version
+    if ($installed -ne $available) { Fail "This PC runs version $installed and this folder holds ${available}: upgrade with deploy\upgrade.ps1." }
   }
 }
 
@@ -110,8 +126,8 @@ Invoke-Docker compose up -d --wait
 Say "The shop's certificate authority"
 $root = '/data/caddy/pki/authorities/local/root.crt'
 for ($i = 0; $i -lt 30; $i++) {
-  & docker compose exec -T web test -f $root *> $null
-  if ($LASTEXITCODE -eq 0) { break }
+  $null = Get-Docker compose exec -T web test -f $root
+  if ($script:Code -eq 0) { break }
   try { Invoke-WebRequest -Uri 'https://localhost/' -UseBasicParsing -TimeoutSec 2 *> $null } catch { }
   Start-Sleep -Seconds 1
 }

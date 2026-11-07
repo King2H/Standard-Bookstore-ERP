@@ -4,6 +4,8 @@
 // otherwise keep an admin's temporary password), and every field is labelled.
 // Every mocked answer is checked against its contract.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -101,6 +103,13 @@ describe('Profile', () => {
     const body = sent('PUT', '/staff/me/password')!.body;
     expect(body).toEqual({ currentPassword: 'Temp#2026pass', newPassword: 'Mine#2026pass' });
     expect(() => ChangePasswordRequestSchema.parse(body)).not.toThrow();
+  });
+
+  it('says which version of the bookstore this is, the one in the root package.json (#245, 3a)', async () => {
+    const { version } = JSON.parse(readFileSync(resolve(__dirname, '../../../../package.json'), 'utf8')) as { version: string };
+    me = profile(['Sales']);
+    renderProfile();
+    expect(await screen.findByText(`Bookstore version ${version}`)).toBeInTheDocument();
   });
 
   it('labels its password fields (was: labels not linked to them)', async () => {

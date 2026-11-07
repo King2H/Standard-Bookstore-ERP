@@ -88,10 +88,47 @@ The database is not reachable from the network: only the bookstore's own service
 - The bookstore starts by itself with Docker (Docker Desktop: *Start when you sign in*).
 - Running the installer again rebuilds and restarts the bookstore with the software in the
   folder; it keeps `.env`, the data and the certificate authority. On an install made before
-  backups existed, it asks for the backup folder and passphrase once. Updates and rolling
-  back are #245.
+  backups existed, it asks for the backup folder and passphrase once. When the folder holds
+  another version than the one running, it stops and points to the upgrade (below).
+- The version running shows at the bottom of the **My Profile** page (in the sidebar), and in
+  `https://<server>/api/v1/health`.
 - To stop it: `docker compose -f deploy/compose.yaml stop`; to start it again:
   `docker compose -f deploy/compose.yaml up -d`.
+
+## Upgrading
+
+A new version comes as a new release of this repository. Before, tell the counters to finish
+what they are doing: the bookstore stops for a few minutes.
+
+1. Put the new release in the bookstore folder: with git, `git fetch --tags` then
+   `git checkout v2.0.1` (the release's tag); from a ZIP, extract it over the folder and
+   replace the files. `deploy/.env` and the backups are not in a release and stay as they are.
+2. Run the upgrade. **Windows**, PowerShell as administrator:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File deploy\upgrade.ps1
+   ```
+
+   **Linux:** `bash deploy/upgrade.sh`
+
+It checks the bookstore runs and its data, makes a backup, keeps the running version, builds the
+new one, brings the database up to it, starts it, and checks again that it answers with the new
+version and that the data check finds no new error. **If any of that fails, it goes back by
+itself** to the version before and its data, and says what failed. On success, each counter
+reloads the page once (Ctrl+F5).
+
+**Going back after an upgrade.** If the new version turns out wrong after the shop has used it:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\upgrade.ps1 -Rollback
+```
+
+(**Linux:** `bash deploy/upgrade.sh --rollback`.) It puts back the version before **and the data
+as it was before the upgrade: what was entered since is no longer in the bookstore.** It asks to
+type `ROLLBACK` first, and makes a backup of the data as it is, so nothing is lost for good. Then
+put back the previous release in the folder (`git checkout` of its tag, or its ZIP), before
+running the installer or the upgrade again. Only the last upgrade can be undone this way; before
+that, restore a backup (below).
 
 ## Backups
 
@@ -113,8 +150,8 @@ touched.
 - Admin and Super_Admin see a red warning across the bookstore when there has been no good
   backup for more than a day, with the reason the last attempt failed (a drive unplugged, a
   full disk).
-- To make a backup now (before an update, say):
-  `docker compose -f deploy/compose.yaml run --rm backup node backup.js run`.
+- To make a backup now (the upgrade makes one itself):
+  `docker compose -f deploy/compose.yaml run --rm --no-deps backup node backup.js run`.
 - The time can be changed with `BMS_BACKUP_TIME=HH:MM` in `deploy/.env`, the time zone with
   `BMS_TIMEZONE` (default `Africa/Addis_Ababa`); run the installer again after.
 
@@ -150,5 +187,7 @@ If the server's name or address changed, edit `BMS_SITE_ADDRESSES` and `BMS_ORIG
 | The build fails with `SELF_SIGNED_CERT_IN_CHAIN` | The network inspects HTTPS through a proxy. Copy the proxy's certificate authority to `deploy/extra-ca.pem`, add `BMS_EXTRA_CA_FILE=./extra-ca.pem` to `deploy/.env`, run the installer again. It is used for the build only. |
 | `Choose the passwords again` | A password does not meet the rule above. |
 | The backup warning: no backup for more than a day | Check the backup folder is there (the USB drive plugged in, the share reachable) and has space; `docker compose -f deploy/compose.yaml logs backup` shows why. A backup runs again within the hour, or make one now (above). |
+| `This PC runs version … and this folder holds …` | The folder holds a new release: run the upgrade, not the installer. |
+| `The upgrade to … failed` | The version before runs again, with its data. Keep the output and the `docker compose -f deploy/compose.yaml logs` for support. |
 | `Wrong passphrase, or the backup file was changed or damaged` | Check the passphrase; else try the backup before it. |
 | Anything else | `docker compose -f deploy/compose.yaml logs api` shows what the bookstore reported. |

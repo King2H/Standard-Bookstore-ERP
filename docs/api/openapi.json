@@ -23787,12 +23787,16 @@
                     },
                     "timestamp": {
                       "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "status",
                     "db",
-                    "timestamp"
+                    "timestamp",
+                    "version"
                   ],
                   "additionalProperties": false
                 }
@@ -23832,12 +23836,16 @@
                     },
                     "timestamp": {
                       "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "status",
                     "db",
-                    "timestamp"
+                    "timestamp",
+                    "version"
                   ],
                   "additionalProperties": false
                 }
