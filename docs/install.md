@@ -92,6 +92,36 @@ reason. Fix the file and choose it again, or import only the valid rows. Importi
 again creates nothing twice. **Export** gives the catalog, stock and customers in the same
 columns, for example to bring them into another install.
 
+### From a shop on v1
+
+A shop moving from v1 gets these files from its v1 database with one command, on any PC with
+Docker (it changes no install, and only reads v1):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\import-v1.ps1 -From "<v1 database address>"
+```
+
+```bash
+bash deploy/import-v1.sh '<v1 database address>'
+```
+
+- **What it reads:** the v1 database's external address (on Render: the database, **Connect**,
+  External Database URL), or a copy of it made with `pg_dump` (custom, tar or SQL, or gzipped).
+  With an address, the copy it makes is kept beside the files as `v1-copy.dump`: keep it as the
+  v1 shop's last backup. Stop selling on v1 first, so nothing is missed.
+- **The v1 key:** it asks for `COLUMN_ENCRYPTION_KEY` of the v1 API (on Render: the API service,
+  **Environment**). The key opens the customers' phones and emails; the command stops if it does
+  not open every one.
+- **What it writes:** in a new folder `v1-import-<date and time>`, the five files, numbered in the
+  order above, and `summary.txt`: what came over and what did not (archived books with no stock,
+  damaged copies, a format v2 does not have, whole loyalty points, a supplier paid more than it
+  delivered). What the shop owes a supplier is what v1 shows: received, less paid, less credit
+  notes. Stock comes at v1's average cost.
+- **Then:** create the v1 locations named in `summary.txt` (Organization → Locations), and import the
+  files on **Import / Export** in their numbered order, with the same checks. The files hold the
+  customers' phones and emails in clear: delete the folder once imported. Staff accounts and sales
+  history do not come over: the shop starts its v2 history fresh.
+
 ## What the install keeps, and where
 
 | What | Where | |
