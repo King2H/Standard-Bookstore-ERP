@@ -617,40 +617,51 @@ export async function transferStock(
 }
 
 /** Stock received by hand (procurement receiving books it through its own flow). */
-export async function stockIn(actor: Actor, receipt: StockInRequest): Promise<StockLevelRecord> {
+export function stockIn(actor: Actor, receipt: StockInRequest): Promise<StockLevelRecord> {
+  return withTransaction({}, (tx) => stockInWith(tx, actor, receipt));
+}
+
+/**
+ * Stock received by hand, in the caller's transaction: the opening stock
+ * import (#246) books a file's rows in one. `receipt.version` undefined skips
+ * the optimistic check (the import locks the level itself).
+ */
+export async function stockInWith(
+  tx: Queryable,
+  actor: Actor,
+  receipt: Omit<StockInRequest, 'version'> & { version?: number; costMayBeZero?: boolean },
+): Promise<StockLevelRecord> {
   const { bookId, locationId, quantity } = receipt;
   const referenceType = receipt.referenceType ?? 'manual';
+  await stock.ensureLevel(tx, bookId, locationId);
+  const before = await lockOrThrow(tx, bookId, locationId);
+  if (receipt.version !== undefined) policy.checkVersion(before.version, receipt.version);
 
-  return withTransaction({}, async (tx) => {
-    await stock.ensureLevel(tx, bookId, locationId);
-    const before = await lockOrThrow(tx, bookId, locationId);
-    policy.checkVersion(before.version, receipt.version);
-
-    await receiveStock(tx, {
-      bookId,
-      locationId,
-      quantity,
-      staffCtx: actor,
-      reasonCode: policy.stockInReason(receipt.referenceType),
-      referenceType,
-      referenceId: receipt.referenceId,
-      notes: receipt.notes,
-      unitCost: receipt.unitCost,
-    });
-    await audit(tx, actor, 'inventory_stock_in', receipt, {
-      bookId,
-      locationId,
-      quantity,
-      referenceType,
-      referenceId: receipt.referenceId,
-      unitCost: receipt.unitCost,
-      qtyBefore: before.quantity,
-      qtyAfter: before.quantity + quantity,
-    });
-    const level = await levelOrThrow(tx, bookId, locationId);
-    await insertOutboxEvent(tx, 'inventory.stock_in', { ...where(level), quantity });
-    return level;
+  await receiveStock(tx, {
+    bookId,
+    locationId,
+    quantity,
+    staffCtx: actor,
+    reasonCode: policy.stockInReason(receipt.referenceType),
+    referenceType,
+    referenceId: receipt.referenceId,
+    notes: receipt.notes,
+    unitCost: receipt.unitCost,
+    costMayBeZero: receipt.costMayBeZero,
   });
+  await audit(tx, actor, 'inventory_stock_in', receipt, {
+    bookId,
+    locationId,
+    quantity,
+    referenceType,
+    referenceId: receipt.referenceId,
+    unitCost: receipt.unitCost,
+    qtyBefore: before.quantity,
+    qtyAfter: before.quantity + quantity,
+  });
+  const level = await levelOrThrow(tx, bookId, locationId);
+  await insertOutboxEvent(tx, 'inventory.stock_in', { ...where(level), quantity });
+  return level;
 }
 
 /** Stock issued by hand; sales take stock out through POS and orders. */
@@ -690,13 +701,17 @@ export async function stockOut(actor: Actor, issue: StockOutRequest): Promise<St
   });
 }
 
-export async function setReorderPoint(actor: Actor, change: ReorderPointRequest): Promise<StockLevelRecord> {
+export function setReorderPoint(actor: Actor, change: ReorderPointRequest): Promise<StockLevelRecord> {
+  return withTransaction({}, (tx) => setReorderPointWith(tx, actor, change));
+}
+
+/** The reorder point, in the caller's transaction (the opening stock import, #246, makes the level first). */
+export async function setReorderPointWith(tx: Queryable, actor: Actor, change: ReorderPointRequest, ensure = false): Promise<StockLevelRecord> {
   const { bookId, locationId, reorderPoint } = change;
-  return withTransaction({}, async (tx) => {
-    if (!(await stock.setReorderPoint(tx, bookId, locationId, reorderPoint))) throw new NotFoundError('Inventory record');
-    await audit(tx, actor, 'inventory_reorder', change, { bookId, locationId, reorderPoint });
-    return levelOrThrow(tx, bookId, locationId);
-  });
+  if (ensure) await stock.ensureLevel(tx, bookId, locationId);
+  if (!(await stock.setReorderPoint(tx, bookId, locationId, reorderPoint))) throw new NotFoundError('Inventory record');
+  await audit(tx, actor, 'inventory_reorder', change, { bookId, locationId, reorderPoint });
+  return levelOrThrow(tx, bookId, locationId);
 }
 
 /**

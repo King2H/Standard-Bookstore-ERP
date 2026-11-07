@@ -1,4 +1,5 @@
 import { CATALOG_IMPORT_COLUMNS, Money, type UpdateBookRequest } from '@bms/shared';
+import { readAmount, readColumns } from './importFile.policy.js';
 import { cellText } from '../../lib/csvRead.js';
 import { placeholderIsbn, storedIsbn } from '../catalog/catalog.policy.js';
 import type { BookRecord } from '../catalog/catalog.types.js';
@@ -27,14 +28,7 @@ export interface CatalogRow {
 
 /** Where each column is in the file; unknown or missing columns are file errors. */
 export function readHeader(header: string[]): { index: Partial<Record<CatalogColumn, number>>; errors: string[] } {
-  const index: Partial<Record<CatalogColumn, number>> = {};
-  const errors: string[] = [];
-  header.forEach((name, i) => {
-    const column = CATALOG_IMPORT_COLUMNS.find((c) => c.toLowerCase() === name.toLowerCase());
-    if (!column) errors.push(`Unknown column '${name}': the columns are ${CATALOG_IMPORT_COLUMNS.join(', ')}`);
-    else if (index[column] !== undefined) errors.push(`Column '${column}' appears twice`);
-    else index[column] = i;
-  });
+  const { index, errors } = readColumns(header, CATALOG_IMPORT_COLUMNS);
   if (index.Title === undefined) errors.push('The file has no Title column: start from the template');
   if (index.ISBN === undefined && index.SKU === undefined) errors.push('The file has neither an ISBN nor a SKU column: start from the template');
   return { index, errors };
@@ -45,11 +39,9 @@ function names(cell: string): string[] {
   return cell.split(';').map((n) => n.trim()).filter((n) => n !== '');
 }
 
-/** A price as written: digits, and a decimal point (or comma, in a file using semicolons). */
+/** A price as written: two decimals at most (see readAmount). */
 export function readPrice(cell: string, decimalComma: boolean): string | null {
-  const text = decimalComma ? cell.replace(',', '.') : cell;
-  if (!/^\d+(\.\d{1,2})?$/.test(text)) return null;
-  return Money.of(text).toFixed(2);
+  return readAmount(cell, decimalComma, 2);
 }
 
 /** One data row: the book it describes, or why it cannot be imported. */

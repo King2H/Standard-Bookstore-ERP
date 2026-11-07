@@ -10,6 +10,7 @@ import { createBookIn, updateBookIn } from '../catalog/catalog.service.js';
 import type { Actor, BookRecord } from '../catalog/catalog.types.js';
 import { insertPublisher, lookups } from '../catalogReference/catalogReference.repository.js';
 import { catalogChanges, readCatalogRow, readHeader, type CatalogRow } from './catalogImport.policy.js';
+import { reportOf } from './importFile.policy.js';
 import * as repo from './imports.repository.js';
 
 /**
@@ -18,8 +19,6 @@ import * as repo from './imports.repository.js';
  * Each book is created or changed as on its own screen, audited, and the
  * import itself is audited once.
  */
-
-const MAX_ERRORS_LISTED = 500;
 
 interface CatalogPlan {
   report: ImportReport;
@@ -33,10 +32,8 @@ async function planCatalog(q: Queryable, csv: string): Promise<CatalogPlan> {
   const file = readCsv(csv);
   const errors: ImportRowError[] = [];
   const header = readHeader(file.header);
-  const report = (rows: number, valid: number, counts = { toCreate: 0, toUpdate: 0, unchanged: 0 }, newNames = { authors: [] as string[], categories: [] as string[], publishers: [] as string[] }): ImportReport => ({
-    kind: 'catalog', rows, valid, ...counts,
-    errors: errors.slice(0, MAX_ERRORS_LISTED), moreErrors: Math.max(0, errors.length - MAX_ERRORS_LISTED), newNames,
-  });
+  const report = (rows: number, valid: number, counts = { toCreate: 0, toUpdate: 0, unchanged: 0 }, newNames?: ImportReport['newNames']): ImportReport =>
+    reportOf('catalog', rows, valid, counts, errors, [], newNames);
   if (header.errors.length > 0) {
     errors.push({ line: 1, messages: header.errors });
     return { report: report(file.rows.length, 0), rows: [], publishers: new Map(), formats: new Map() };
@@ -101,7 +98,6 @@ async function planCatalog(q: Queryable, csv: string): Promise<CatalogPlan> {
       if (Object.keys(change).length > 0) counts.toUpdate += 1; else counts.unchanged += 1;
     }
   }
-  errors.sort((a, b) => a.line - b.line);
   return { report: report(file.rows.length, valid.length, counts, newNames), rows: valid, publishers, formats };
 }
 

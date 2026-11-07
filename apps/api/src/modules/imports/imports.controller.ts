@@ -1,9 +1,14 @@
 import type { Request, Response } from 'express';
 import { ImportRequestSchema, type ImportReport, type ImportResult } from '@bms/shared';
 import { sendCsv } from '../../lib/csvBuilder.js';
+import { scopedBranch } from '../../lib/scope.js';
+import { holdsPermission } from '../../middleware/rbac.js';
 import { valid } from '../../middleware/validate.js';
 import type { Actor } from '../catalog/catalog.types.js';
+import { usableLocationIds } from '../location/location.service.js';
+import * as customers from './customerImport.service.js';
 import * as service from './imports.service.js';
+import * as stock from './stockImport.service.js';
 
 /** HTTP side of bulk import and export (#246): validated request -> service -> response. */
 
@@ -34,4 +39,49 @@ export async function importCatalog(req: Request, res: Response): Promise<void> 
 
 export async function exportCatalog(_req: Request, res: Response): Promise<void> {
   sendCsv(res, `catalog-${today()}.csv`, await service.exportCatalog());
+}
+
+// ── Opening stock: the session's branch, and the locations the caller may use ──
+
+async function stockScope(req: Request): Promise<stock.StockScope> {
+  return { branchId: scopedBranch(req), usable: await usableLocationIds(req.staff!) };
+}
+
+export function stockTemplate(_req: Request, res: Response): void {
+  sendCsv(res, 'opening-stock-template.csv', stock.stockTemplate());
+}
+
+export async function checkStock(req: Request, res: Response): Promise<void> {
+  const body: ImportReport = await stock.checkStock(valid(req, schemas.file).body, await stockScope(req));
+  res.json(body);
+}
+
+export async function importStock(req: Request, res: Response): Promise<void> {
+  const body: ImportResult = await stock.importStock(actor(req), valid(req, schemas.file).body, await stockScope(req));
+  res.json(body);
+}
+
+/** The cost column only for who may see costs (VIEW_COST, #234). */
+export async function exportStock(req: Request, res: Response): Promise<void> {
+  sendCsv(res, `opening-stock-${today()}.csv`, await stock.exportStock(scopedBranch(req), holdsPermission(req, 'VIEW_COST')));
+}
+
+// ── Customers ──────────────────────────────────────────────────────────────
+
+export function customerTemplate(_req: Request, res: Response): void {
+  sendCsv(res, 'customers-template.csv', customers.customerTemplate());
+}
+
+export async function checkCustomers(req: Request, res: Response): Promise<void> {
+  const body: ImportReport = await customers.checkCustomers(valid(req, schemas.file).body);
+  res.json(body);
+}
+
+export async function importCustomers(req: Request, res: Response): Promise<void> {
+  const body: ImportResult = await customers.importCustomers(actor(req), valid(req, schemas.file).body);
+  res.json(body);
+}
+
+export async function exportCustomers(req: Request, res: Response): Promise<void> {
+  sendCsv(res, `customers-${today()}.csv`, await customers.exportCustomers(actor(req)));
 }

@@ -166,7 +166,8 @@ export interface StockReceipt extends StockChange {
   unitCost: MoneyInput;
   /**
    * The units truly cost nothing or have no cost: free copies on a purchase
-   * order (owner decision 5a), copies coming back that left at cost 0.
+   * order (owner decision 5a), copies coming back that left at cost 0, and
+   * opening stock imported at cost 0, listed for Revalue (#246, decision 4a).
    */
   costMayBeZero?: boolean;
   /** Copies arriving from another branch on a transfer note (#170); stock_in otherwise. */

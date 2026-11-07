@@ -1,7 +1,7 @@
 import express, { Router } from 'express';
 import { IMPORT_MAX_CHARS } from '@bms/shared';
 import { authenticate } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as imports from './imports.controller.js';
 
@@ -11,6 +11,8 @@ import * as imports from './imports.controller.js';
 const router = Router();
 const { schemas } = imports;
 const canImport = requireRole('Admin', 'Manager');
+// Opening stock: whoever books stock (MANAGE_INVENTORY), in their branch and locations.
+const canStock = requirePermission('MANAGE_INVENTORY');
 // A file of 5,000 titles is about 1 MB: more than the API's default body size
 // (app.ts leaves these paths to this parser). Read only once the caller may import.
 const fileBody = express.json({ limit: IMPORT_MAX_CHARS * 2 });
@@ -19,5 +21,15 @@ router.get('/imports/catalog/template', authenticate, canImport, imports.catalog
 router.post('/imports/catalog/check', authenticate, canImport, fileBody, validate(schemas.file), imports.checkCatalog);
 router.post('/imports/catalog', authenticate, canImport, fileBody, validate(schemas.file), imports.importCatalog);
 router.get('/exports/catalog', authenticate, canImport, imports.exportCatalog);
+
+router.get('/imports/opening-stock/template', authenticate, canStock, imports.stockTemplate);
+router.post('/imports/opening-stock/check', authenticate, canStock, fileBody, validate(schemas.file), imports.checkStock);
+router.post('/imports/opening-stock', authenticate, canStock, fileBody, validate(schemas.file), imports.importStock);
+router.get('/exports/opening-stock', authenticate, canStock, imports.exportStock);
+
+router.get('/imports/customers/template', authenticate, canImport, imports.customerTemplate);
+router.post('/imports/customers/check', authenticate, canImport, fileBody, validate(schemas.file), imports.checkCustomers);
+router.post('/imports/customers', authenticate, canImport, fileBody, validate(schemas.file), imports.importCustomers);
+router.get('/exports/customers', authenticate, canImport, imports.exportCustomers);
 
 export default router;

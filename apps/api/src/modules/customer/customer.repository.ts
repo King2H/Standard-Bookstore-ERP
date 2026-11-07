@@ -70,6 +70,12 @@ async function withGroups(q: Queryable, rows: CustomerRow[]): Promise<CustomerRe
   return rows.map((r) => toCustomerRecord(r, groups.get(r.id) ?? []));
 }
 
+/** Every customer by code, contacts decrypted: the customer export (#246). */
+export async function allCustomers(q: Queryable): Promise<CustomerRecord[]> {
+  const rows = await selectCustomers(q).orderBy('c.customer_code').execute();
+  return withGroups(q, rows as CustomerRow[]);
+}
+
 export async function findById(q: Queryable, id: number): Promise<CustomerRecord | undefined> {
   const row = await selectCustomers(q).where('c.id', '=', id).executeTakeFirst();
   return row && (await withGroups(q, [row as CustomerRow]))[0];

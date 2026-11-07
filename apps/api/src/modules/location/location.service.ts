@@ -128,6 +128,17 @@ export async function assertAssignedLocation(locationId: number | null, staff: S
   }
 }
 
+/**
+ * The locations of the session's branch the staff member may book stock in
+ * (#72); undefined when they may use every one. For lists of rows, such as
+ * the opening stock import (#246), checked one by one without a request each.
+ */
+export async function usableLocationIds(staff: Staff): Promise<number[] | undefined> {
+  if (policy.hasFullLocationAccess(rolesHeld(staff))) return undefined;
+  const assigned = await locations.listAssignedInBranch(kysely, staff.staffId, staff.branchId);
+  return assigned.length === 0 ? undefined : assigned.map((l) => l.id);
+}
+
 /** The staff member's assignments in every branch; empty means no restrictions. */
 export async function getStaffLocations(actor: Actor, staffId: number): Promise<StaffLocationRecord[]> {
   policy.checkCanManageStaff(actor, await locations.staffBranches(kysely, staffId));

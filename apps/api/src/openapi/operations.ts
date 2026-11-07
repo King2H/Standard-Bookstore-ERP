@@ -3282,6 +3282,28 @@ function importOperations(): ApiOperation[] {
       responses: {},
       errors: [401, 403, 500],
     },
+    ...fileOperations('opening-stock', 'OpeningStock', 'opening stock: quantity and unit cost per book and location of the session\'s branch, booked as opening stock where nothing moved yet; a different quantity is a stock count\'s (MANAGE_INVENTORY, in the caller\'s locations; the export\'s cost only with VIEW_COST)'),
+    ...fileOperations('customers', 'Customers', `customers, found again by code, phone or email; the export, contacts in clear, is audited (${roles})`),
+  ];
+}
+
+/** The four operations of an import kind (#246): template, check, import, export. */
+function fileOperations(path: string, name: string, what: string): ApiOperation[] {
+  const tag = 'Import and export';
+  return [
+    { operationId: `get${name}ImportTemplate`, method: 'get', path: `/imports/${path}/template`, summary: `The file's columns and an example row, as CSV: ${what}`, tag, responses: {}, errors: [401, 403, 500] },
+    {
+      operationId: `check${name}Import`, method: 'post', path: `/imports/${path}/check`, summary: `Checks a file, saving nothing: ${what}`, tag,
+      request: { body: ImportRequestSchema },
+      responses: { 200: { description: 'Each invalid row with its reasons, and what the valid ones would do', schema: ImportReportSchema } },
+    },
+    {
+      operationId: `import${name}`, method: 'post', path: `/imports/${path}`, summary: `Imports a file in one transaction, all of it or only its valid rows: ${what}`, tag,
+      request: { body: ImportRequestSchema },
+      responses: { 200: { description: 'What was saved', schema: ImportResultSchema } },
+      errors: [400, 401, 403, 422, 500],
+    },
+    { operationId: `export${name}`, method: 'get', path: `/exports/${path}`, summary: `As CSV, in the import's columns: ${what}`, tag, responses: {}, errors: [401, 403, 500] },
   ];
 }
 
