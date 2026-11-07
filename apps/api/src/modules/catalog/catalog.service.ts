@@ -176,23 +176,29 @@ function fieldsOf(dto: UpdateBookRequest): BookFields {
   };
 }
 
-export async function createBook(actor: Actor, dto: CreateBookRequest): Promise<BookRecord> {
-  const isbn = policy.storedIsbn(dto.isbn) ?? policy.placeholderIsbn(dto.sku, Date.now());
-  return withTransaction({}, async (tx) => {
-    const authorIds = await resolveLinks(tx, 'authors', dto.authorIds, dto.authors, []);
-    const categoryIds = await resolveLinks(tx, 'categories', dto.categoryIds, dto.categories, []);
-    await checkPublisher(tx, dto.publisherId, null);
+export function createBook(actor: Actor, dto: CreateBookRequest): Promise<BookRecord> {
+  return withTransaction({}, async (tx) => bookOrThrow(tx, await createBookIn(tx, actor, dto)));
+}
 
-    const id = await books
-      .insertBook(tx, { ...fieldsOf(dto), isbn, title: dto.title })
-      .catch(duplicateIsbn(dto.isbn));
-    await books.replaceAuthors(tx, id, authorIds);
-    await books.replaceCategories(tx, id, categoryIds);
-    await books.replaceTags(tx, id, dto.tags ?? []);
-    await books.refreshSearch(tx, id);
-    await audit(tx, actor, 'CREATE', 'book', id, { isbn: dto.isbn, title: dto.title });
-    return bookOrThrow(tx, id);
-  });
+/**
+ * A new book, in the caller's transaction: the catalog import (#246) creates
+ * a file's books in one. `auditMeta` adds to the audit entry (the import's file).
+ */
+export async function createBookIn(tx: Queryable, actor: Actor, dto: CreateBookRequest, auditMeta: Record<string, unknown> = {}): Promise<number> {
+  const isbn = policy.storedIsbn(dto.isbn) ?? policy.placeholderIsbn(dto.sku, Date.now());
+  const authorIds = await resolveLinks(tx, 'authors', dto.authorIds, dto.authors, []);
+  const categoryIds = await resolveLinks(tx, 'categories', dto.categoryIds, dto.categories, []);
+  await checkPublisher(tx, dto.publisherId, null);
+
+  const id = await books
+    .insertBook(tx, { ...fieldsOf(dto), isbn, title: dto.title })
+    .catch(duplicateIsbn(dto.isbn));
+  await books.replaceAuthors(tx, id, authorIds);
+  await books.replaceCategories(tx, id, categoryIds);
+  await books.replaceTags(tx, id, dto.tags ?? []);
+  await books.refreshSearch(tx, id);
+  await audit(tx, actor, 'CREATE', 'book', id, { isbn: dto.isbn, title: dto.title, ...auditMeta });
+  return id;
 }
 
 /** A catalog-only entry from the sale screens; the rest is filled in later. */
@@ -205,27 +211,32 @@ export function quickRegister(actor: Actor, dto: QuickRegisterBookRequest): Prom
   });
 }
 
-export async function updateBook(actor: Actor, id: number, dto: UpdateBookRequest): Promise<BookRecord> {
+export function updateBook(actor: Actor, id: number, dto: UpdateBookRequest): Promise<BookRecord> {
   return withTransaction({}, async (tx) => {
-    await lockOrThrow(tx, id);
-    const existing = await bookOrThrow(tx, id);
-
-    await books.insertEdits(tx, id, policy.editsOf({ ...existing }, dto), actor.staffId);
-    await checkPublisher(tx, dto.publisherId, existing.publisherId);
-    await books.updateBook(tx, id, fieldsOf(dto), actor.staffId);
-
-    if (dto.authorIds !== undefined || dto.authors !== undefined) {
-      await books.replaceAuthors(tx, id, await resolveLinks(tx, 'authors', dto.authorIds, dto.authors, existing.authorIds));
-    }
-    if (dto.categoryIds !== undefined || dto.categories !== undefined) {
-      await books.replaceCategories(tx, id, await resolveLinks(tx, 'categories', dto.categoryIds, dto.categories, existing.categoryIds));
-    }
-    if (dto.tags !== undefined) await books.replaceTags(tx, id, dto.tags);
-
-    await books.refreshSearch(tx, id);
-    await audit(tx, actor, 'UPDATE', 'book', id, { updatedFields: Object.keys(dto) });
+    await updateBookIn(tx, actor, id, dto);
     return bookOrThrow(tx, id);
   });
+}
+
+/** A book's change, in the caller's transaction (the catalog import, #246). */
+export async function updateBookIn(tx: Queryable, actor: Actor, id: number, dto: UpdateBookRequest, auditMeta: Record<string, unknown> = {}): Promise<void> {
+  await lockOrThrow(tx, id);
+  const existing = await bookOrThrow(tx, id);
+
+  await books.insertEdits(tx, id, policy.editsOf({ ...existing }, dto), actor.staffId);
+  await checkPublisher(tx, dto.publisherId, existing.publisherId);
+  await books.updateBook(tx, id, fieldsOf(dto), actor.staffId);
+
+  if (dto.authorIds !== undefined || dto.authors !== undefined) {
+    await books.replaceAuthors(tx, id, await resolveLinks(tx, 'authors', dto.authorIds, dto.authors, existing.authorIds));
+  }
+  if (dto.categoryIds !== undefined || dto.categories !== undefined) {
+    await books.replaceCategories(tx, id, await resolveLinks(tx, 'categories', dto.categoryIds, dto.categories, existing.categoryIds));
+  }
+  if (dto.tags !== undefined) await books.replaceTags(tx, id, dto.tags);
+
+  await books.refreshSearch(tx, id);
+  await audit(tx, actor, 'UPDATE', 'book', id, { updatedFields: Object.keys(dto), ...auditMeta });
 }
 
 // ── Lifecycle, delete, prices ─────────────────────────────────────────────────

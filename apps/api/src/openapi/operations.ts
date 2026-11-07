@@ -1,6 +1,9 @@
 import type { z } from 'zod';
 import {
   BackupStatusSchema,
+  ImportReportSchema,
+  ImportRequestSchema,
+  ImportResultSchema,
   UpdateOrderRequestSchema,
   CancelStockCountRequestSchema,
   CancelSupplierReturnRequestSchema,
@@ -335,6 +338,7 @@ export const operations: ApiOperation[] = [
   ...cashSessionOperations(),
   ...businessDayOperations(),
   ...systemOperations(),
+  ...importOperations(),
   ...stockCountOperations(),
   ...supplierReturnOperations(),
   ...configOperations(),
@@ -3233,6 +3237,50 @@ function reportOperations(): ApiOperation[] {
       tag,
       request: query,
       responses: {},
+    },
+  ];
+}
+
+function importOperations(): ApiOperation[] {
+  const tag = 'Import and export';
+  const roles = 'Admin, Manager';
+  return [
+    {
+      operationId: 'getCatalogImportTemplate',
+      method: 'get',
+      path: '/imports/catalog/template',
+      summary: `The catalog file's columns and an example row, as CSV (#246; ${roles})`,
+      tag,
+      responses: {},
+      errors: [401, 403, 500],
+    },
+    {
+      operationId: 'checkCatalogImport',
+      method: 'post',
+      path: '/imports/catalog/check',
+      summary: `Checks a catalog file and says what it would do, saving nothing (#246; ${roles})`,
+      tag,
+      request: { body: ImportRequestSchema },
+      responses: { 200: { description: 'Each invalid row with its reasons, and what the valid ones would do', schema: ImportReportSchema } },
+    },
+    {
+      operationId: 'importCatalog',
+      method: 'post',
+      path: '/imports/catalog',
+      summary: `Imports a catalog file in one transaction: all of it, or only its valid rows (onlyValid); matched by ISBN, else SKU (#246; ${roles})`,
+      tag,
+      request: { body: ImportRequestSchema },
+      responses: { 200: { description: 'What was saved', schema: ImportResultSchema } },
+      errors: [400, 401, 403, 422, 500],
+    },
+    {
+      operationId: 'exportCatalog',
+      method: 'get',
+      path: '/exports/catalog',
+      summary: `The whole catalog as CSV, in the import's columns (#246; ${roles})`,
+      tag,
+      responses: {},
+      errors: [401, 403, 500],
     },
   ];
 }
