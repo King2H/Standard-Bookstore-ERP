@@ -15,7 +15,7 @@ export const AUDIT_ENTITY_TYPES = [
   'inventory_stock_in', 'inventory_stock_out', 'location', 'order', 'payment', 'payment_refund', 'publisher',
   'purchase_order', 'receivable', 'receivable_payment', 'return', 'service', 'service_job', 'staff', 'staff_locations',
   'staff_roles', 'staff_session', 'stock_count', 'supplier', 'supplier_credit_note', 'supplier_payment',
-  'supplier_refund', 'supplier_return', 'system_config', 'transaction',
+  'supplier_refund', 'supplier_return', 'system_config', 'transaction', 'data_import',
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

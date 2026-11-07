@@ -142,6 +142,7 @@ supplier payment); `details.day` names the day. A correction is a new document o
 - `EXCHANGE_HAS_RETURNS`
 - `EXCHANGE_NOT_CANCELLABLE`
 - `FEE_NOT_DISCOUNTABLE`
+- `IMPORT_HAS_ERRORS`
 - `INSUFFICIENT_LOYALTY_POINTS`
 - `INSUFFICIENT_STOCK`
 - `INSUFFICIENT_STORE_CREDIT`

@@ -105,6 +105,19 @@ export async function listBooks(
   return { items: rows.rows.map(toBookRecord), total: Number(count.rows[0].count) };
 }
 
+/** Every book with one of these ISBNs (the stored form), for the catalog import (#246). */
+export async function booksByIsbn(q: Queryable, isbns: string[]): Promise<BookRecord[]> {
+  if (isbns.length === 0) return [];
+  const rows = await sql<BookRow>`${selectBooks(null)} WHERE b.isbn = ANY(${isbns}::text[])`.execute(q);
+  return rows.rows.map(toBookRecord);
+}
+
+/** The whole catalog by title, for its export (#246). */
+export async function allBooks(q: Queryable): Promise<BookRecord[]> {
+  const rows = await sql<BookRow>`${selectBooks(null)} ORDER BY b.title, b.id`.execute(q);
+  return rows.rows.map(toBookRecord);
+}
+
 export async function findBook(q: Queryable, id: number, branchId: number | null): Promise<BookRecord | undefined> {
   const { rows } = await sql<BookRow>`${selectBooks(branchId)} WHERE b.id = ${id}`.execute(q);
   return rows[0] && toBookRecord(rows[0]);

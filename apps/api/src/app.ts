@@ -22,6 +22,7 @@ import supplierReturnsRouter from './modules/supplierReturns/supplierReturns.rou
 import specialOrdersRouter from './modules/specialOrders/specialOrders.routes.js';
 import businessDaysRouter from './modules/businessDays/businessDays.routes.js';
 import systemRouter from './modules/system/system.routes.js';
+import importsRouter from './modules/imports/imports.routes.js';
 import inventoryRouter from './modules/inventory/inventory.routes.js';
 import supplierRouter from './modules/supplier/supplier.routes.js';
 import procurementRouter from './modules/procurement/procurement.routes.js';
@@ -63,7 +64,9 @@ export function createApp() {
   app.use(corsMiddleware(httpConfig));
 
   // ── Core middleware ──────────────────────────────────────────────────
-  app.use(express.json());
+  // Import files (#246) are larger than the default body: their routes parse them, after sign-in.
+  const json = express.json();
+  app.use((req, res, next) => (req.path.startsWith('/api/v1/imports/') ? next() : json(req, res, next)));
   app.use(cookieParser());
   app.use(requestIdMiddleware);
   app.use(loggerMiddleware);
@@ -98,6 +101,7 @@ export function createApp() {
   api.use(specialOrdersRouter);
   api.use(businessDaysRouter);
   api.use(systemRouter);
+  api.use(importsRouter);
   api.use(inventoryRouter);
   api.use(supplierRouter);
   api.use(procurementRouter);
