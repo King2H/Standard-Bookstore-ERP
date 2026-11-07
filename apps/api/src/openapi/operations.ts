@@ -226,6 +226,8 @@ import {
   BookSupplierParamsSchema,
   CreateSupplierRequestSchema,
   HealthResponseSchema,
+  LivenessResponseSchema,
+  ReadinessResponseSchema,
   IdParamsSchema,
   LinkBookSupplierRequestSchema,
   MessageResponseSchema,
@@ -324,6 +326,29 @@ export const operations: ApiOperation[] = [
     responses: {
       200: { description: 'The API and its database are available', schema: HealthResponseSchema },
       503: { description: 'The database is unavailable', schema: HealthResponseSchema },
+    },
+  },
+  {
+    operationId: 'getLiveness',
+    method: 'get',
+    path: '/health/live',
+    summary: 'Liveness: the API process answers (the database is not asked)',
+    tag: 'System',
+    auth: false,
+    responses: {
+      200: { description: 'The process answers', schema: LivenessResponseSchema },
+    },
+  },
+  {
+    operationId: 'getReadiness',
+    method: 'get',
+    path: '/health/ready',
+    summary: 'Readiness: the database answers and the API is not shutting down',
+    tag: 'System',
+    auth: false,
+    responses: {
+      200: { description: 'Ready for requests', schema: ReadinessResponseSchema },
+      503: { description: 'The database is unavailable, or the API is shutting down', schema: ReadinessResponseSchema },
     },
   },
   ...authOperations(),

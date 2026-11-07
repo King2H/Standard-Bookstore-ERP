@@ -1,5 +1,6 @@
 import { Pool, type PoolClient } from 'pg';
 import { currentWork, NoTenantError, runWithoutTenant } from './tenantContext.js';
+import { log } from '../lib/log.js';
 
 // Pool is created lazily — DATABASE_URL is validated at first use, not at import time
 export const db = new Pool({
@@ -41,7 +42,7 @@ db.connect = ((callback?: (err: Error | undefined, client?: PoolClient, done?: (
 }) as typeof db.connect;
 
 db.on('error', (err) => {
-  console.error(JSON.stringify({ level: 'error', msg: 'Unexpected DB pool error', err: err.message }));
+  log.error({ err }, 'Unexpected DB pool error');
 });
 
 export function checkDbConnection(): Promise<boolean> {
@@ -50,7 +51,7 @@ export function checkDbConnection(): Promise<boolean> {
 
 async function checkConnection(): Promise<boolean> {
   if (!process.env.DATABASE_URL) {
-    console.error(JSON.stringify({ level: 'error', msg: 'DATABASE_URL environment variable is not set' }));
+    log.error('DATABASE_URL environment variable is not set');
     return false;
   }
   try {

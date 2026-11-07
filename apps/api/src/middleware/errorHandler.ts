@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { closedPeriodError } from '../db/errors.js';
 import { AppError } from '../lib/errors.js';
+import { log } from '../lib/log.js';
 
 export function errorHandler(
   err: Error,
@@ -21,16 +22,8 @@ export function errorHandler(
     return;
   }
 
-  // Unexpected error — log and return generic 500
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      requestId: req.requestId,
-      msg: 'Unhandled error',
-      error: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    }),
-  );
+  // Unexpected error: logged with its stack (the log stays on the install), a generic 500 answered.
+  log.error({ err }, 'Unhandled error');
 
   res.status(500).json({
     error: 'INTERNAL_SERVER_ERROR',

@@ -5,6 +5,7 @@
  */
 import { db } from '../db/index.js';
 import { getLoyaltyAccrualRate, getLoyaltyMinTransactionAmount } from '../modules/config/config.service.js';
+import { log } from '../lib/log.js';
 
 export interface LoyaltyAccrualPayload {
   customerId: number;
@@ -17,7 +18,7 @@ export async function handleLoyaltyAccrual(payload: Record<string, unknown>): Pr
   const { customerId, transactionRef, subtotal, branchId } = payload as unknown as LoyaltyAccrualPayload;
 
   if (!customerId || !transactionRef || subtotal == null) {
-    console.warn(JSON.stringify({ level: 'warn', msg: 'LoyaltyAccrual: missing payload fields', payload }));
+    log.warn({ payload }, 'LoyaltyAccrual: missing payload fields');
     return;
   }
 
@@ -69,14 +70,7 @@ export async function handleLoyaltyAccrual(payload: Record<string, unknown>): Pr
 
     await client.query('COMMIT');
 
-    console.log(JSON.stringify({
-      level: 'info',
-      msg: 'Loyalty accrual processed',
-      customerId,
-      transactionRef,
-      points,
-      branchId,
-    }));
+    log.info({ customerId, transactionRef, points, branchId }, 'Loyalty accrual processed');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

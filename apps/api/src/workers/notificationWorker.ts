@@ -18,6 +18,7 @@ import { getNotificationPrefs } from '../modules/config/config.service.js';
 import { createNotification } from '../modules/notifications/notifications.service.js';
 import { sseManager, type NotificationPayload } from '../lib/sseManager.js';
 import { currentWork } from '../db/tenantContext.js';
+import { log } from '../lib/log.js';
 
 interface NotificationSpec {
   title: string;
@@ -466,12 +467,7 @@ export async function handleNotification(payload: Record<string, unknown>): Prom
   try {
     spec = mapper(payload);
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      msg: 'NotificationWorker: failed to map event payload',
-      eventType,
-      error: (err as Error).message,
-    }));
+    log.error({ err, eventType }, 'NotificationWorker: failed to map event payload');
     return;
   }
 
@@ -503,12 +499,7 @@ export async function handleNotification(payload: Record<string, unknown>): Prom
     const work = currentWork();
     if (work && 'tenantId' in work) sseManager.broadcast(work.tenantId, branchId, spec.targetRoles, notification);
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      msg: 'NotificationWorker: failed to insert/broadcast notification',
-      eventType,
-      error: (err as Error).message,
-    }));
+    log.error({ err, eventType }, 'NotificationWorker: failed to insert/broadcast notification');
     // Do NOT re-throw — notification failure must never block the poller
   }
 }

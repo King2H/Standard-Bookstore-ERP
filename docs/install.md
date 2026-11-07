@@ -240,4 +240,27 @@ If the server's name or address changed, edit `BMS_SITE_ADDRESSES` and `BMS_ORIG
 | `This PC runs version … and this folder holds …` | The folder holds a new release: run the upgrade, not the installer. |
 | `The upgrade to … failed` | The version before runs again, with its data. Keep the output and the `docker compose -f deploy/compose.yaml logs` for support. |
 | `Wrong passphrase, or the backup file was changed or damaged` | Check the passphrase; else try the backup before it. |
-| Anything else | `docker compose -f deploy/compose.yaml logs api` shows what the bookstore reported. |
+| Anything else | `docker compose -f deploy/compose.yaml logs api` shows what the bookstore reported. For support, save the logs into one file (below). |
+
+### The logs
+
+Every part of the bookstore (the API, the database, the web server, backups and upgrades) writes
+a log that Docker keeps in rotating files: at most about 50 MB each, the oldest lines dropped
+first. Each line of the API's log says when, what happened, and for a request its ID, the staff
+member, branch and shop. Passwords, keys, tokens and customer phones and emails are never
+written.
+
+To send them for support, save the last days into one file (3 unless given), in the folder you
+run it from:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\logs.ps1 -Days 3
+```
+
+```bash
+bash deploy/logs.sh 3
+```
+
+Two addresses answer for monitoring: `/api/v1/health/live` (the API is running) and
+`/api/v1/health/ready` (it is ready: the database answers and it is not shutting down).
+

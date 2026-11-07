@@ -2,8 +2,18 @@
 # which write .env beside this file. Nothing here holds a secret.
 name: bookstore
 
+# Every service's log is kept by Docker in rotating files (#32, owner decision
+# 2a): 5 files of 10 MB each, compressed, so at most about 50 MB a service.
+# `docker compose logs` reads them; deploy/logs.ps1 or logs.sh saves them for support.
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "5"
+
 services:
   postgres:
+    logging: *logging
     image: postgres:18-alpine
     environment:
       POSTGRES_DB: bms
@@ -23,6 +33,7 @@ services:
   # before the API starts (owner decision 4a). The installer also runs the
   # first-accounts step with this image.
   migrate:
+    logging: *logging
     build: { context: .., dockerfile: deploy/Dockerfile, target: api, secrets: [extra_ca] }
     image: bookstore-api:${BMS_VERSION:-local}
     command: ["node", "migrate.js"]
@@ -36,6 +47,7 @@ services:
     restart: "no"
 
   api:
+    logging: *logging
     image: bookstore-api:${BMS_VERSION:-local}
     environment:
       NODE_ENV: production
@@ -57,6 +69,7 @@ services:
   # (#244). Each is one encrypted file: the database, .env and the
   # certificate authority. Kept: 14 daily, 8 weekly.
   backup:
+    logging: *logging
     build: { context: .., dockerfile: deploy/Dockerfile, target: backup, secrets: [extra_ca] }
     image: bookstore-backup:${BMS_VERSION:-local}
     environment:
@@ -73,6 +86,7 @@ services:
     restart: unless-stopped
 
   web:
+    logging: *logging
     build: { context: .., dockerfile: deploy/Dockerfile, target: web, secrets: [extra_ca] }
     image: bookstore-web:${BMS_VERSION:-local}
     environment:

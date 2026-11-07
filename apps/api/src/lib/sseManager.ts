@@ -118,6 +118,14 @@ class SSEManager {
     }
   }
 
+  /** Ends every stream, when the API shuts down (#32): the screens reconnect to the next start. */
+  closeAll(): void {
+    for (const conns of this.connections.values()) {
+      for (const { res } of conns) res.end();
+    }
+    this.connections.clear();
+  }
+
   /**
    * Total number of active SSE connections (for health/metrics).
    */

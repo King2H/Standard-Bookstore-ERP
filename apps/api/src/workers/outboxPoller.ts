@@ -10,6 +10,7 @@ import { db } from '../db/index.js';
 import { forEachTenant } from '../db/tenants.js';
 import { handleLoyaltyAccrual } from './loyaltyWorker.js';
 import { handleNotification } from './notificationWorker.js';
+import { log } from '../lib/log.js';
 
 const POLL_INTERVAL_MS = 1000;
 const BATCH_SIZE = 50;
@@ -112,13 +113,7 @@ async function pollOnce(): Promise<void> {
             `UPDATE outbox SET status = 'failed' WHERE id = $1`,
             [id],
           );
-          console.error(JSON.stringify({
-            level: 'error',
-            msg: 'Outbox handler failed',
-            eventType,
-            outboxId: id,
-            error: (err as Error).message,
-          }));
+          log.error({ err, eventType, outboxId: id }, 'Outbox handler failed');
         }
       } else {
         // No handler registered — mark as published (acknowledged)
@@ -132,7 +127,7 @@ async function pollOnce(): Promise<void> {
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(JSON.stringify({ level: 'error', msg: 'Outbox poll error', error: (err as Error).message }));
+    log.error({ err }, 'Outbox poll error');
   } finally {
     client.release();
   }
@@ -141,7 +136,7 @@ async function pollOnce(): Promise<void> {
 export function startOutboxPoller(): void {
   if (running) return;
   running = true;
-  console.log(JSON.stringify({ level: 'info', msg: 'Outbox poller started' }));
+  log.info('Outbox poller started');
 
   const tick = async () => {
     if (!running) return;
@@ -165,5 +160,5 @@ export function stopOutboxPoller(): void {
     clearTimeout(pollTimer);
     pollTimer = null;
   }
-  console.log(JSON.stringify({ level: 'info', msg: 'Outbox poller stopped' }));
+  log.info('Outbox poller stopped');
 }

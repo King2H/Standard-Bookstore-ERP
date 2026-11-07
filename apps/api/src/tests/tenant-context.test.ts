@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { sql } from 'kysely';
@@ -10,6 +10,7 @@ import { DEFAULT_ADMIN_PASSWORD_HASH, ensureSeedData } from '../db/seed.js';
 import { NoTenantError, runInTenant, runWithoutTenant, setFallbackTenant } from '../db/tenantContext.js';
 import { forEachTenant } from '../db/tenants.js';
 import { withTransaction } from '../db/tx.js';
+import { captureLogs } from '../lib/log.js';
 
 // #13, part 2: the tenant of every piece of work comes from the signed-in
 // account (or the background job's tenant), never from the client, and every
@@ -165,10 +166,9 @@ describe('Tenant context', () => {
     });
 
     it('seeds the default tenant at startup', async () => {
-      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const stop = captureLogs();
       await ensureSeedData();
-      expect(errors).not.toHaveBeenCalled();
-      errors.mockRestore();
+      expect(stop().filter((l) => l.level === 'error')).toEqual([]);
     });
   });
 });

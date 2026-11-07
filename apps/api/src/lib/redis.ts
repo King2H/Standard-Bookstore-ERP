@@ -5,6 +5,7 @@
  * The app works correctly without Redis — config caching just falls back to DB.
  */
 import { Redis } from 'ioredis';
+import { log } from './log.js';
 type RedisInstance = Redis;
 
 let _redis: RedisInstance | null = null;
@@ -28,11 +29,11 @@ function getRedis(): RedisInstance | null {
       });
 
       _redis.on('error', (err: Error) => {
-        console.warn(JSON.stringify({ level: 'warn', msg: 'Redis unavailable — running without cache', error: err.message }));
+        log.warn({ error: err.message }, 'Redis unavailable — running without cache');
       });
 
       _redis.on('connect', () => {
-        console.log(JSON.stringify({ level: 'info', msg: 'Redis connected' }));
+        log.info('Redis connected');
       });
     } catch {
       _redis = null;

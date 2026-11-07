@@ -1,5 +1,6 @@
 import { kysely } from './kysely.js';
 import { runInTenant, runWithoutTenant } from './tenantContext.js';
+import { log } from '../lib/log.js';
 
 /**
  * Runs a background job once for each active tenant, in that tenant (#13):
@@ -14,7 +15,7 @@ export async function forEachTenant(job: string, fn: (tenantId: number) => Promi
     try {
       await runInTenant(id, () => fn(id));
     } catch (err) {
-      console.error(JSON.stringify({ level: 'error', msg: `${job} failed`, tenantId: id, error: (err as Error).message }));
+      log.error({ err, tenantId: id }, `${job} failed`);
     }
   }
 }
