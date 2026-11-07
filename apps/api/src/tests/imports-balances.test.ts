@@ -186,6 +186,27 @@ describe('Opening balances import (#246)', () => {
     });
   });
 
+  // Found by the release gate (#246): a customer export carries each customer's
+  // code; imported into another install, every row was refused as an unknown
+  // code. A code in the shop's format that is free is kept, and new customers
+  // are numbered after it.
+  describe('customers from another install', () => {
+    it('keeps their codes, and numbers new customers after them', async () => {
+      const s = await shop();
+      const csv = 'Code,Name,Phone,Email,Address,City\r\nCUS-0042,Moved Customer,,,,\r\nCUS-0042,Twice,,,,\r\nCUSTOMER-7,Odd Code,,,,';
+      const check = await post('customers/check', csv, s.admin);
+      expect(ImportReportSchema.parse(check.body)).toMatchObject({ valid: 1, toCreate: 1 });
+      expect(errorsByLine(check.body)[3]).toMatch(/The same customer as line 2/);
+      expect(errorsByLine(check.body)[4]).toMatch(/No customer with code CUSTOMER-7/);
+      expect((await post('customers', csv, s.admin, true)).status).toBe(200);
+      expect((await post('customers', 'Code,Name,Phone,Email,Address,City\r\n,Brand New,+251900000001,,,', s.admin)).status).toBe(200);
+      const codes = (await owner().query(`SELECT full_name, customer_code FROM customers WHERE tenant_id = $1 ORDER BY customer_code`, [s.tenant])).rows;
+      expect(codes).toEqual([{ full_name: 'Moved Customer', customer_code: 'CUS-0042' }, { full_name: 'Brand New', customer_code: 'CUS-0043' }]);
+      // Imported again, nothing doubles.
+      expect(ImportReportSchema.parse((await post('customers/check', 'Code,Name\r\nCUS-0042,Moved Customer', s.admin)).body)).toMatchObject({ unchanged: 1 });
+    });
+  });
+
   describe('supplier balances', () => {
     it('checks every row, and lists the suppliers it would add', async () => {
       const s = await shop();

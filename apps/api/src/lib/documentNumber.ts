@@ -32,3 +32,15 @@ export async function nextRunningNumber(q: Queryable, series: string): Promise<n
     RETURNING last_value`.execute(q);
   return rows[0].last_value;
 }
+
+/**
+ * Moves a running series up to at least `atLeast`, never down: a number taken
+ * from elsewhere (a customer code from another install, #246) is never handed
+ * out again.
+ */
+export async function raiseRunningNumber(q: Queryable, series: string, atLeast: number): Promise<void> {
+  await sql`
+    INSERT INTO document_counters (series, period, last_value)
+    VALUES (${series}, '', ${atLeast})
+    ON CONFLICT (tenant_id, series, period) DO UPDATE SET last_value = GREATEST(document_counters.last_value, EXCLUDED.last_value)`.execute(q);
+}

@@ -13,7 +13,7 @@ import { logout } from '../lib/auth.js';
 import { api } from '../lib/api.js';
 import NotificationBell from '../features/notifications/components/NotificationBell.js';
 import {
-  NAV_SECTIONS, canSeeDashboard, canSeeItem, findSectionForPage,
+  NAV_SECTIONS, canSeeDashboard, canSeeItem, findSectionForPage, titleOf,
   type NavLeaf, type NavSection, type Page,
 } from '../app/navigation.js';
 
@@ -198,11 +198,7 @@ export default function Layout({
     onLogout();
   };
 
-  // Page title — prettify hyphenated names
-  const pageTitle = currentPage
-    .split('-')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
+  const pageTitle = titleOf(currentPage);
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">

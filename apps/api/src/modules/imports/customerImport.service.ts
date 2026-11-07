@@ -8,6 +8,7 @@ import { piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import type { Actor } from '../catalog/catalog.types.js';
 import { allCustomers } from '../customer/customer.repository.js';
+import { customerCodeNumber } from '../customer/customer.policy.js';
 import { createCustomerWith, updateCustomerWith } from '../customer/customer.service.js';
 import { readCustomerHeader, readCustomerRow, type CustomerRow } from './customerImport.policy.js';
 import { reportOf } from './importFile.policy.js';
@@ -70,11 +71,15 @@ async function planCustomers(q: Queryable, csv: string): Promise<{ report: Impor
     let existing: repo.CustomerRef | undefined;
     if (row.code) {
       existing = byCode.get(row.code.toLowerCase());
-      if (!existing) messages.push(`No customer with code ${row.code}: leave Code empty for a new customer, who gets a code`);
+      // A code in the shop's format from another install (#246) is kept; any other is refused.
+      if (!existing && customerCodeNumber(row.code) === null) {
+        messages.push(`No customer with code ${row.code}: leave Code empty for a new customer, who gets a code`);
+      }
+      once(existing ? null : `code:${row.code.toLowerCase()}`, 'customer', row.line, messages);
     } else {
       existing = (phone ? byPhone.get(phone) : undefined) ?? (email ? byEmail.get(email) : undefined);
     }
-    if (!existing && !row.code && !row.name) messages.push('Name is empty: a new customer needs one');
+    if (!existing && !row.name) messages.push('Name is empty: a new customer needs one');
     once(existing ? `id:${existing.id}` : null, 'customer', row.line, messages);
     once(phone ? `phone:${phone}` : null, 'phone', row.line, messages);
     once(email ? `email:${email}` : null, 'email', row.line, messages);
@@ -110,7 +115,7 @@ export async function importCustomers(actor: Actor, req: ImportRequest): Promise
     let updated = 0;
     for (const { row, existing, change } of plan.rows) {
       if (!existing) {
-        await createCustomerWith(tx, actor, { fullName: row.name!, phone: row.phone, email: row.email, address: row.address, city: row.city }, meta);
+        await createCustomerWith(tx, actor, { fullName: row.name!, phone: row.phone, email: row.email, address: row.address, city: row.city }, meta, row.code);
         created += 1;
       } else if (Object.keys(change).length > 0) {
         await updateCustomerWith(tx, actor, existing.id, change, meta);

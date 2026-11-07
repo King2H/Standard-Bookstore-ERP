@@ -4,6 +4,7 @@ import BranchesPage from '../features/branches/pages/BranchesPage.js';
 import StaffPage from '../features/staff/pages/StaffPage.js';
 import AuditLogPage from '../features/auditLog/pages/AuditLogPage.js';
 import SettingsPage from '../features/settings/pages/SettingsPage.js';
+import ImportExportPage from '../features/imports/pages/ImportExportPage.js';
 import BankAccountsPage from '../features/bankAccounts/pages/BankAccountsPage.js';
 import LocationsPage from '../features/locations/pages/LocationsPage.js';
 import CatalogPage from '../features/catalog/pages/CatalogPage.js';
@@ -42,6 +43,7 @@ export function AppRoutes({ session, onNavigate }: {
         {page === 'staff'        && <StaffPage />}
         {page === 'audit-log'    && <AuditLogPage />}
         {page === 'settings'     && <SettingsPage />}
+        {page === 'data-import'  && <ImportExportPage />}
         {page === 'bank-accounts'&& <BankAccountsPage />}
         {page === 'locations'    && <LocationsPage />}
         {page === 'catalog'      && <CatalogPage />}
