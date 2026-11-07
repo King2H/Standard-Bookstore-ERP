@@ -6,6 +6,7 @@
  * only when NODE_ENV is explicitly "development" (with a warning) or "test".
  * Any other NODE_ENV, including an unset one, is treated as production.
  */
+import { log } from './log.js';
 
 export interface EnvCheck {
   errors: string[];
@@ -128,7 +129,7 @@ export function checkEnvironment(env: NodeJS.ProcessEnv = process.env): EnvCheck
 export function assertEnvironment(env: NodeJS.ProcessEnv = process.env): void {
   const { errors, warnings } = checkEnvironment(env);
   for (const msg of warnings) {
-    console.warn(JSON.stringify({ level: 'warn', msg }));
+    log.warn(msg);
   }
   if (errors.length > 0) {
     throw new Error(`Unsafe configuration, refusing to start:\n- ${errors.join('\n- ')}`);

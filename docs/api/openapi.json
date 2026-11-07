@@ -23981,6 +23981,146 @@
         }
       }
     },
+    "/health/live": {
+      "get": {
+        "operationId": "getLiveness",
+        "summary": "Liveness: the API process answers (the database is not asked)",
+        "tags": [
+          "System"
+        ],
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The process answers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "version"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "summary": "Readiness: the database answers and the API is not shutting down",
+        "tags": [
+          "System"
+        ],
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Ready for requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "not_ready"
+                      ]
+                    },
+                    "database": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "error"
+                      ]
+                    },
+                    "shuttingDown": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "database",
+                    "shuttingDown"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unavailable, or the API is shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "not_ready"
+                      ]
+                    },
+                    "database": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "error"
+                      ]
+                    },
+                    "shuttingDown": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "database",
+                    "shuttingDown"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/imports/catalog": {
       "post": {
         "operationId": "importCatalog",

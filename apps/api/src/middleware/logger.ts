@@ -1,21 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
+import { log } from '../lib/log.js';
 
+/** One line per request once answered: no query string or body, which can hold customer details (#32). */
 export function loggerMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const start = Date.now();
-
+  const start = process.hrtime.bigint();
   res.on('finish', () => {
-    const log = {
-      level: res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
-      requestId: req.requestId,
+    const path = req.originalUrl.split('?')[0];
+    // Docker checks readiness every 15 seconds: an answered check is not news.
+    const routine = path.startsWith('/api/v1/health') && res.statusCode < 400;
+    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : routine ? 'debug' : 'info';
+    log[level]({
       method: req.method,
-      path: req.path,
+      path,
       statusCode: res.statusCode,
-      durationMs: Date.now() - start,
-      staffId: req.staff?.staffId ?? null,
-      branchId: req.staff?.branchId ?? null,
-    };
-    console.log(JSON.stringify(log));
+      durationMs: Number((process.hrtime.bigint() - start) / 1_000_000n),
+    }, 'request');
   });
-
   next();
 }

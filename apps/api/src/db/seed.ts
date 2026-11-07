@@ -11,6 +11,7 @@
  */
 import { db } from './index.js';
 import { runInTenant } from './tenantContext.js';
+import { log } from '../lib/log.js';
 
 // bcrypt hash (cost 12) of the documented default password 'Admin@1234'.
 export const DEFAULT_ADMIN_PASSWORD_HASH =
@@ -182,11 +183,11 @@ async function seedDefaultTenant(): Promise<void> {
     }
 
     await client.query('COMMIT');
-    console.log(JSON.stringify({ level: 'info', msg: 'Seed data verified/applied' }));
+    log.info('Seed data verified/applied');
   } catch (err) {
     await client.query('ROLLBACK');
     // Log but don't crash — the app can still run if seed partially exists
-    console.error(JSON.stringify({ level: 'error', msg: 'Seed data error', error: (err as Error).message }));
+    log.error({ err }, 'Seed data error');
   } finally {
     client.release();
   }

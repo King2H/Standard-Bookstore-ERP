@@ -56,8 +56,9 @@ COPY --from=api-build /src/out/ ./
 COPY apps/api/src/db/migrations ./migrations
 USER node
 EXPOSE 3000
+# Ready (#32): the database answers and the API is not shutting down.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:3000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:3000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 CMD ["node", "server.js"]
 
 # ── Backup image: PostgreSQL's own pg_dump and pg_restore, and Node ────────
