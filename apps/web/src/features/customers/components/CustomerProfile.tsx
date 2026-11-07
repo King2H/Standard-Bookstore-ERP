@@ -21,6 +21,7 @@ const SOURCE_LABELS: Record<ReceivableSourceType, string> = {
   pos_credit_sale: 'POS Credit Sale',
   order_credit_sale: 'Order Credit Sale',
   exchange_difference: 'Exchange Diff.',
+  opening_balance: 'Opening Balance',
 };
 const REF_TYPE_LABELS: Record<string, string> = {
   pos_credit_sale: '🛒 POS Credit Sale',
@@ -29,6 +30,7 @@ const REF_TYPE_LABELS: Record<string, string> = {
   exchange_refund: '🔁 Exchange Refund',
   exchange_payment: '🔁 Exchange Payment',
   manual: '✏️ Manual Adjustment',
+  opening_balance: 'Opening Balance',
 };
 const STATUS_STYLE: Record<ReceivableStatus, string> = {
   Pending: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',

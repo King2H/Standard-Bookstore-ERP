@@ -24,7 +24,7 @@ const STATUS_LABELS: Record<ReceivableStatus, string> = {
 };
 
 const SOURCE_LABELS: Record<ReceivableSourceType, string> = {
-  pos_credit_sale: 'POS Credit Sale', order_credit_sale: 'Order Credit Sale', exchange_difference: 'Exchange Diff.',
+  pos_credit_sale: 'POS Credit Sale', order_credit_sale: 'Order Credit Sale', exchange_difference: 'Exchange Diff.', opening_balance: 'Opening Balance',
 };
 
 const SELECT = 'px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';

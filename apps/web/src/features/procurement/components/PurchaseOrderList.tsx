@@ -84,7 +84,10 @@ export function PurchaseOrderList({ initialContext, onOpen, onCreate, onEdit, on
                 const steps = stepsFor(po, me);
                 return (
                   <tr key={po.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">{po.poNumber}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">
+                      {po.poNumber}
+                      {po.kind === 'opening_balance' && <span className="ml-1.5 px-1.5 py-0.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[10px] rounded-sm font-semibold">Opening balance</span>}
+                    </td>
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{po.supplierName}</td>
                     <td className="px-4 py-3"><StatusBadge status={po.status} /></td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{po.currency} {amount(po.totalAmount)}</td>

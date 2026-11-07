@@ -9,7 +9,11 @@ import { scopeConditions, where, type ReportScope } from '../reportScope.js';
 // The number printed on the order (#238): stored with it, no longer made from its id.
 const PO_REFERENCE = (column: string) => `(SELECT p.po_number FROM purchase_orders p WHERE p.id = ${column})`;
 
-const RECEIVED_VALUE = `COALESCE((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id), 0)`;
+// An opening balance (#246) is owed as a whole: it has no book lines.
+const RECEIVED_VALUE = `CASE WHEN po.kind = 'opening_balance' THEN po.total_amount
+  ELSE COALESCE((SELECT SUM(pli.received_quantity * pli.unit_cost) FROM po_line_items pli WHERE pli.po_id = po.id), 0) END`;
+// What was owed at the start is never a purchase, nor an order on its way (#246).
+const PURCHASE = `po.kind = 'order'`;
 const PAID = `COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.po_id = po.id AND sp.reversed_at IS NULL), 0)`;
 const CREDITED = `COALESCE((SELECT SUM(cn.amount) FROM supplier_credit_notes cn WHERE cn.po_id = po.id), 0)`;
 const OUTSTANDING = `(${RECEIVED_VALUE} - ${PAID} - ${CREDITED})`;
@@ -52,7 +56,7 @@ export async function openPurchaseOrders(q: Queryable, branchId: number | undefi
             ${OUTSTANDING}::NUMERIC AS outstanding_amount
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
-     ${where([`po.status NOT IN ('closed', 'cancelled')`, ...b.conditions])}
+     ${where([`po.status NOT IN ('closed', 'cancelled')`, PURCHASE, ...b.conditions])}
      ORDER BY po.created_at DESC`,
     b.params,
   );
@@ -95,7 +99,9 @@ export async function payables(q: Queryable, branchId: number | undefined): Prom
             (CURRENT_DATE - lr.last_receipt_at::date)::INTEGER AS days_since_receipt
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
-     LEFT JOIN LATERAL (SELECT MAX(r.received_at) AS last_receipt_at FROM po_receipts r WHERE r.po_id = po.id) lr ON true
+     -- An opening balance has no receipt: it is owed from the day it came in.
+     LEFT JOIN LATERAL (SELECT COALESCE(MAX(r.received_at), CASE WHEN po.kind = 'opening_balance' THEN po.created_at END) AS last_receipt_at
+                        FROM po_receipts r WHERE r.po_id = po.id) lr ON true
      ${where([`po.status NOT IN ('draft', 'cancelled')`, ...b.conditions])}
      ORDER BY po.id`,
     b.params,
@@ -114,7 +120,7 @@ export async function purchasesBySupplier(q: Queryable, scope: ReportScope): Pro
             COALESCE(SUM(${RECEIVED_VALUE}), 0)::NUMERIC AS received_value
      FROM purchase_orders po
      JOIN suppliers s ON s.id = po.supplier_id
-     ${where([`po.status <> 'cancelled'`, ...conditions])}
+     ${where([`po.status <> 'cancelled'`, PURCHASE, ...conditions])}
      GROUP BY s.id, s.name
      ORDER BY ordered_value DESC`,
     params,

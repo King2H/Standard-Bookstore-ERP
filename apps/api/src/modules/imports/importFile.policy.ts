@@ -58,7 +58,7 @@ export function reportOf(
   counts: { toCreate: number; toUpdate: number; unchanged: number },
   errors: ImportRowError[],
   notices: ImportRowError[] = [],
-  newNames: ImportReport['newNames'] = { authors: [], categories: [], publishers: [] },
+  newNames: ImportReport['newNames'] = { authors: [], categories: [], publishers: [], suppliers: [] },
 ): ImportReport {
   const sorted = [...errors].sort((a, b) => a.line - b.line);
   return {

@@ -32,4 +32,12 @@ router.post('/imports/customers/check', authenticate, canImport, fileBody, valid
 router.post('/imports/customers', authenticate, canImport, fileBody, validate(schemas.file), imports.importCustomers);
 router.get('/exports/customers', authenticate, canImport, imports.exportCustomers);
 
+// Opening balances: what customers and suppliers carried when the shop started.
+router.get('/imports/customer-balances/template', authenticate, canImport, imports.customerBalanceTemplate);
+router.post('/imports/customer-balances/check', authenticate, canImport, fileBody, validate(schemas.file), imports.checkCustomerBalances);
+router.post('/imports/customer-balances', authenticate, canImport, fileBody, validate(schemas.file), imports.importCustomerBalances);
+router.get('/imports/supplier-balances/template', authenticate, canImport, imports.supplierBalanceTemplate);
+router.post('/imports/supplier-balances/check', authenticate, canImport, fileBody, validate(schemas.file), imports.checkSupplierBalances);
+router.post('/imports/supplier-balances', authenticate, canImport, fileBody, validate(schemas.file), imports.importSupplierBalances);
+
 export default router;

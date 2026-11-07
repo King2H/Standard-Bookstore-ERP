@@ -62,6 +62,10 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
         <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">← Back to List</button>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{po.poNumber}</h2>
         <StatusBadge status={po.status} />
+        {/* What the shop owed the supplier when it started (#246): no books, paid like any order. */}
+        {po.kind === 'opening_balance' && (
+          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">Opening balance</span>
+        )}
         {canReadLedger(me) && (
           <button onClick={() => onLedger(po.supplierId, po.supplierName)} className="ml-auto text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
             View Supplier Ledger →

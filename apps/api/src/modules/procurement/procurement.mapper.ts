@@ -40,6 +40,7 @@ export interface PurchaseOrderRow {
   closed_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  kind: string;
   received_value: string;
   amount_paid: string;
   credit_notes_total: string;
@@ -76,6 +77,7 @@ export function toPurchaseOrderRecord(row: PurchaseOrderRow): PurchaseOrderRecor
     closedAt: row.closed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    kind: row.kind as PurchaseOrderRecord['kind'],
     receivedValue: Money.of(row.received_value),
     amountPaid: Money.of(row.amount_paid),
     creditNotesTotal: Money.of(row.credit_notes_total),

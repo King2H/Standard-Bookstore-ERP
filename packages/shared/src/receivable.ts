@@ -12,7 +12,8 @@ import { checkPaymentProof, PayerBankSchema, PaymentReferenceSchema } from './pa
 export const ReceivableStatusSchema = z.enum(['Pending', 'PartiallyPaid', 'Settled', 'Overdue', 'WrittenOff', 'Cancelled']);
 export type ReceivableStatus = z.infer<typeof ReceivableStatusSchema>;
 
-export const ReceivableSourceTypeSchema = z.enum(['pos_credit_sale', 'exchange_difference', 'order_credit_sale']);
+/** opening_balance: what the customer owed when the shop started on the system (#246). */
+export const ReceivableSourceTypeSchema = z.enum(['pos_credit_sale', 'exchange_difference', 'order_credit_sale', 'opening_balance']);
 export type ReceivableSourceType = z.infer<typeof ReceivableSourceTypeSchema>;
 
 export const ReceivableSchema = z.object({

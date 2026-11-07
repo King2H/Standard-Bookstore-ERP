@@ -26,10 +26,11 @@ export const OUTSTANDING = 'Pending,PartiallyPaid,Overdue';
 
 /**
  * Where Payments collects it: an order or POS sale by its own id, an exchange
- * difference by the receivable's id (Payments has no exchange row of its own).
+ * difference or an opening balance (#246) by the receivable's id (Payments has
+ * no row of its own for them).
  */
 export function paymentsContext(r: Pick<Receivable, 'id' | 'sourceType' | 'sourceEntityId'>): Record<string, string> {
-  if (r.sourceType === 'exchange_difference') return { orderId: r.id, sourceType: 'exchange_difference' };
+  if (r.sourceType === 'exchange_difference' || r.sourceType === 'opening_balance') return { orderId: r.id, sourceType: r.sourceType };
   return { orderId: r.sourceEntityId, sourceType: r.sourceType === 'pos_credit_sale' ? 'pos' : 'order' };
 }
 

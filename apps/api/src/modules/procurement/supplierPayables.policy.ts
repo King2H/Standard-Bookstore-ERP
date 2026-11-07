@@ -54,7 +54,7 @@ export function checkCanReverse(payment: { reversedAt: Date | null }): void {
 export interface LedgerEvent {
   /** YYYY-MM-DD in the database's calendar. */
   day: string;
-  type: 'PO' | 'GOODS_RECEIPT' | 'PAYMENT' | 'PAYMENT_REVERSAL' | 'CREDIT_NOTE' | 'SUPPLIER_REFUND';
+  type: 'PO' | 'OPENING_BALANCE' | 'GOODS_RECEIPT' | 'PAYMENT' | 'PAYMENT_REVERSAL' | 'CREDIT_NOTE' | 'SUPPLIER_REFUND';
   reference: string;
   description: string;
   /** + adds to what is owed; − settles it. */

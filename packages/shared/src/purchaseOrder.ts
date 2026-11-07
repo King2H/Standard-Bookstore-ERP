@@ -155,7 +155,12 @@ export const PurchaseOrderSchema = z.object({
   closedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  /** What the received goods are worth: the amount owed to the supplier. */
+  /**
+   * 'opening_balance': what the shop owed the supplier when it started on the
+   * system (#246, OPB-): received, no book lines, never a purchase.
+   */
+  kind: z.enum(['order', 'opening_balance']).default('order'),
+  /** What the received goods are worth: the amount owed to the supplier (an opening balance: its total). */
   receivedValue: z.number(),
   amountPaid: z.number(),
   creditNotesTotal: z.number(),
@@ -377,7 +382,8 @@ export type SupplierLedgerQuery = z.infer<typeof SupplierLedgerQuerySchema>;
 export const SupplierLedgerEntrySchema = z.object({
   /** YYYY-MM-DD, in the database's calendar. */
   date: z.string(),
-  type: z.enum(['PO', 'GOODS_RECEIPT', 'PAYMENT', 'PAYMENT_REVERSAL', 'CREDIT_NOTE', 'SUPPLIER_REFUND']),
+  /** OPENING_BALANCE: what was owed to the supplier when the shop started (#246). */
+  type: z.enum(['PO', 'OPENING_BALANCE', 'GOODS_RECEIPT', 'PAYMENT', 'PAYMENT_REVERSAL', 'CREDIT_NOTE', 'SUPPLIER_REFUND']),
   reference: z.string(),
   description: z.string(),
   /** + adds to what is owed (goods received, a reversed payment, a supplier's refund); − settles it. */

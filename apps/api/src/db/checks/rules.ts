@@ -37,6 +37,7 @@ const DAILY_SERIES: Array<[series: string, table: string, column: string]> = [
   ['SREF', 'supplier_refunds', 'refund_number'],
   ['DLV', 'order_deliveries', 'delivery_number'],
   ['DAY', 'business_days', 'day_number'],
+  ['OPB', 'purchase_orders', 'po_number'],
 ];
 
 const dailyNumbers = DAILY_SERIES.map(
@@ -237,7 +238,8 @@ export const CHECKS: readonly Check[] = [
           COALESCE((SELECT SUM(amount) FROM supplier_refunds f WHERE f.po_id = po.id), 0) AS refunded,
           COALESCE((SELECT SUM(amount) FROM supplier_payments p WHERE p.po_id = po.id AND p.reversed_at IS NULL), 0)
           + COALESCE((SELECT SUM(amount) FROM supplier_credit_notes c WHERE c.po_id = po.id), 0)
-          - CASE WHEN po.status IN ('received', 'closed', 'cancelled')
+          - CASE WHEN po.kind = 'opening_balance' THEN po.total_amount
+              WHEN po.status IN ('received', 'closed', 'cancelled')
               THEN COALESCE((SELECT SUM(received_quantity * unit_cost) FROM po_line_items li WHERE li.po_id = po.id), 0)
               ELSE po.total_amount END AS due
         FROM purchase_orders po
@@ -245,6 +247,20 @@ export const CHECKS: readonly Check[] = [
       SELECT tenant_id, 'purchase order ' || id || ': refunded ' || TO_CHAR(refunded, 'FM999999999990.00')
         || ', due ' || TO_CHAR(GREATEST(due, 0), 'FM999999999990.00') AS ref
       FROM m WHERE refunded > GREATEST(due, 0)`,
+  },
+
+  {
+    id: 'procurement.opening-balance-shape',
+    area: 'Purchase orders',
+    // What was owed to a supplier at the start (#246): received or closed, no books, an amount.
+    title: 'An opening balance owed to a supplier has no book lines and is received or closed',
+    severity: 'error',
+    sql: `
+      SELECT po.tenant_id, 'purchase order ' || po.po_number || ' (' || po.status || ')' AS ref
+      FROM purchase_orders po
+      WHERE po.kind = 'opening_balance'
+        AND (po.status NOT IN ('received', 'closed') OR po.total_amount <= 0
+             OR EXISTS (SELECT 1 FROM po_line_items li WHERE li.po_id = po.id))`,
   },
 
   // ── Returns to supplier (#173) ───────────────────────────────────────────

@@ -3284,7 +3284,14 @@ function importOperations(): ApiOperation[] {
     },
     ...fileOperations('opening-stock', 'OpeningStock', 'opening stock: quantity and unit cost per book and location of the session\'s branch, booked as opening stock where nothing moved yet; a different quantity is a stock count\'s (MANAGE_INVENTORY, in the caller\'s locations; the export\'s cost only with VIEW_COST)'),
     ...fileOperations('customers', 'Customers', `customers, found again by code, phone or email; the export, contacts in clear, is audited (${roles})`),
+    ...balanceOperations('customer-balances', 'CustomerBalances', `opening balances of customers: what each owed (an opening receivable with its due date), store credit and loyalty points; once, before the shop's first sale (${roles})`),
+    ...balanceOperations('supplier-balances', 'SupplierBalances', `opening balances owed to suppliers: one opening-balance purchase order (OPB-) each, a supplier not yet known created; once, before the shop's first sale (${roles})`),
   ];
+}
+
+/** An opening balance file (#246 part 3): template, check, import; no export. */
+function balanceOperations(path: string, name: string, what: string): ApiOperation[] {
+  return fileOperations(path, name, what).filter((op) => op.method === 'post' || op.path.endsWith('/template'));
 }
 
 /** The four operations of an import kind (#246): template, check, import, export. */

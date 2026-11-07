@@ -95,7 +95,7 @@ export interface UnpaidFilter {
   branchId: number;
   customerId?: number;
   entityId?: string;
-  sourceType?: 'order' | 'pos' | 'exchange_difference';
+  sourceType?: 'order' | 'pos' | 'exchange_difference' | 'opening_balance';
 }
 
 export interface UnpaidRecord {
@@ -111,7 +111,7 @@ export interface UnpaidRecord {
   status: string;
   channel: string;
   createdAt: Date;
-  sourceType: 'order' | 'pos' | 'exchange_difference';
+  sourceType: 'order' | 'pos' | 'exchange_difference' | 'opening_balance';
 }
 
 export interface OrderBalanceRecord {

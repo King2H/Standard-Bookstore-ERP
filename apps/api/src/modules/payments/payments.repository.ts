@@ -291,7 +291,15 @@ export async function listUnpaid(q: Queryable, filter: UnpaidFilter, page: Page)
     FROM receivables r
     JOIN exchanges e ON e.id = r.source_entity_id
     LEFT JOIN customers c ON c.id = r.customer_id
-    WHERE r.source_type = 'exchange_difference' AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')`;
+    WHERE r.source_type = 'exchange_difference' AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')
+    UNION ALL
+    -- What a customer owed when the shop started (#246): collected by the receivable, like an exchange difference.
+    SELECT r.id::text, 'Opening balance', r.original_amount,
+           CASE WHEN r.status = 'PartiallyPaid' THEN 'partial' ELSE 'unpaid' END, r.status, 'Opening balance', r.created_at,
+           c.full_name, c.customer_code, r.original_amount - r.outstanding_amount, 'opening_balance', r.branch_id, r.customer_id
+    FROM receivables r
+    LEFT JOIN customers c ON c.id = r.customer_id
+    WHERE r.source_type = 'opening_balance' AND r.status IN ('Pending', 'PartiallyPaid', 'Overdue')`;
 
   const [rows, count] = await Promise.all([
     sql<UnpaidRow>`WITH u AS (${unpaid}) SELECT * FROM u ${where} ORDER BY u.created_at DESC, u.source_type, u.id DESC LIMIT ${page.limit} OFFSET ${page.offset}`.execute(q),
