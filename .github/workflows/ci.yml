@@ -32,8 +32,12 @@ jobs:
         run: npx tsc --noEmit -p apps/api
       - name: Typecheck web
         run: npx tsc --noEmit -p apps/web
+      - name: Typecheck E2E journeys
+        run: npx tsc --noEmit -p e2e
       - name: Dependency audit (production, high and critical)
         run: npm audit --omit=dev --audit-level=high
+      - name: Release rules (#33)
+        run: node --test scripts/release.test.mjs
 
   web:
     name: Web tests and build
@@ -92,3 +96,48 @@ jobs:
       - name: Generated database types are up to date
         working-directory: apps/api
         run: npx kysely-codegen --url postgres://bms:bms@localhost:5433/bms_test --verify
+
+  # The key journeys through the screens of the production images (#33,
+  # owner decisions 1a, 2a): built and started as an install does, with test
+  # passwords; each journey sets up its own data; day close runs last; then
+  # the data consistency check must find no error.
+  e2e:
+    name: E2E journeys (production images)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2E_BASE_URL: https://localhost
+      E2E_ADMIN_PASSWORD: "E2e#Admin-2026"
+      COMPOSE_PROJECT_NAME: bookstore-e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Browser
+        run: npx playwright install --with-deps chromium
+      - name: Start a test shop from the production images
+        run: bash e2e/start-shop.sh
+      - name: Journeys
+        run: npx playwright test -c e2e/playwright.config.ts
+      - name: Data consistency after the journeys
+        working-directory: deploy
+        run: docker compose run --rm --no-deps -T migrate node db-check.js
+      - name: The test shop's logs
+        if: failure()
+        working-directory: deploy
+        run: mkdir -p ../e2e/results && docker compose logs --no-color --timestamps > ../e2e/results/shop.log 2>&1 || true
+      - name: Keep the results of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: |
+            e2e/results
+            e2e/report
+          retention-days: 14
+      - name: Remove the test shop
+        if: always()
+        run: bash e2e/stop-shop.sh
