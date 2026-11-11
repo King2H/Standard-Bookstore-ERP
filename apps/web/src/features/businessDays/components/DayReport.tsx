@@ -20,6 +20,8 @@ export function DayReportView({ report }: { report: DayReport }) {
           <Figure label="Orders" value={`${report.sales.orders.count} · ${money(report.sales.orders.total)}`} />
           <Figure label="POS sales" value={`${report.sales.pos.count} · ${money(report.sales.pos.total)}`} />
           <Figure label="Exchanges" value={String(report.sales.exchanges.count)} />
+          {/* Inside the sales above, net of returns (#247, 3a); once there is any. */}
+          {report.sales.tax !== 0 && <Figure label="Tax included" value={money(report.sales.tax)} />}
         </dl>
       </Section>
       <Section title="Money in and out">

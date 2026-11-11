@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import { Money } from '@bms/shared';
 import { PrintSlip, SlipRow } from '../../../components/PrintSlip.js';
+import { TaxLines } from '../../../components/TaxLines.js';
 import { paymentMethodPlainLabel } from '../../../lib/paymentMethods.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useCustomer } from '../../customers/queries.js';
@@ -63,8 +64,8 @@ export function OrderSlip({ orderId, onClose }: { orderId: string; onClose: () =
             {/* The stored subtotal is net of discount; the slip shows it before (#226, P5). */}
             <SlipRow label="Subtotal">{`${currency} ${Money.of(order.subtotal).plus(order.discountTotal).toFixed()}`}</SlipRow>
             {order.discountTotal > 0 && <SlipRow label="Discount">− {money(order.discountTotal)}</SlipRow>}
-            {order.taxAmount > 0 && <SlipRow label="Tax">{money(order.taxAmount)}</SlipRow>}
             <SlipRow label="Total"><span className="font-bold">{money(order.total)}</span></SlipRow>
+            <TaxLines rate={order.taxRate} tax={order.taxAmount} total={order.total} currency={currency} />
             {order.paymentMethod && <SlipRow label="Paid by">{paymentMethodPlainLabel(order.paymentMethod)}</SlipRow>}
             {order.dueDate && <SlipRow label="Due date">{order.dueDate}</SlipRow>}
             <SlipRow label="Payment"><span className="capitalize">{order.paymentStatus}</span></SlipRow>

@@ -145,12 +145,13 @@ export async function findShopCurrency(q: Queryable): Promise<string> {
 
 /**
  * The shop's name, motto and TIN, and the branch's name, address and phone:
- * what heads receipts and slips (#228). A setting not stored reads as empty.
+ * what heads receipts and slips (#228), with the name their tax lines carry
+ * (#247). A setting not stored reads as empty.
  */
 export async function findShopIdentity(
   q: Queryable,
   branchId: number,
-): Promise<{ name: string; motto: string; tin: string; branchName: string; address: string; phone: string } | undefined> {
+): Promise<{ name: string; motto: string; tin: string; taxName: string; branchName: string; address: string; phone: string } | undefined> {
   const setting = (key: string) => sql<string>`COALESCE((SELECT value #>> '{}' FROM system_config WHERE key = ${key}), '')`;
   return q
     .selectFrom('branches')
@@ -158,6 +159,7 @@ export async function findShopIdentity(
       setting('shop_name').as('name'),
       setting('shop_motto').as('motto'),
       setting('shop_tin').as('tin'),
+      setting('tax_name').as('taxName'),
       'name as branchName',
       'address',
       sql<string>`COALESCE(contact_info->>'phone', '')`.as('phone'),

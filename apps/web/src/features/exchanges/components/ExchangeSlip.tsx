@@ -1,5 +1,6 @@
 import { Money } from '@bms/shared';
 import { PrintSlip, SlipRow } from '../../../components/PrintSlip.js';
+import { TaxLines } from '../../../components/TaxLines.js';
 import { paymentMethodPlainLabel } from '../../../lib/paymentMethods.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useCustomer } from '../../customers/queries.js';
@@ -38,6 +39,8 @@ export function ExchangeSlip({ exchangeId, onClose }: { exchangeId: string; onCl
             <SlipRow label="Brought in">{money(exc.totalIncomingValue)}</SlipRow>
             <SlipRow label="Taken">{money(exc.totalOutgoingValue)}</SlipRow>
             <SlipRow label="Difference"><span className="font-bold">{money(exc.netBalance)}</span> ({exc.settlementType.replace('_', ' ')})</SlipRow>
+            {/* The difference is the only part of an exchange that is a sale; its tax is inside it. */}
+            <TaxLines rate={exc.taxRate} tax={exc.taxAmount} total={exc.netBalance} currency={currency} />
             {(exc.settlementEntries ?? []).map((s) => (
               <SlipRow key={s.id} label={s.entryType === 'cash_refund' ? 'Given back' : 'Paid'}>
                 {money(s.amount)}{s.method ? ` · ${paymentMethodPlainLabel(s.method)}` : ''}

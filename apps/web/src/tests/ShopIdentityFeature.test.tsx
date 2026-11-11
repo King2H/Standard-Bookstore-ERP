@@ -23,7 +23,7 @@ function profile(roles: string[]): ProfileResponse {
 }
 
 const identity = (over: Partial<ShopIdentity> = {}): ShopIdentity => contract(ShopIdentitySchema, {
-  name: 'Kuraz Books', motto: 'Read more', tin: '0012345678',
+  name: 'Kuraz Books', motto: 'Read more', tin: '0012345678', taxName: 'VAT',
   branch: { id: 1, name: 'Piassa Branch', address: 'Piassa, Addis Ababa', phone: '+251111000000' },
   ...over,
 });

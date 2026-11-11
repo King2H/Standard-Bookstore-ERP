@@ -1,5 +1,6 @@
 import { Money } from '@bms/shared';
 import { PrintSlip } from '../../../components/PrintSlip.js';
+import { TaxLines } from '../../../components/TaxLines.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useReturn } from '../queries.js';
 import { refundLabel } from '../rules.js';
@@ -37,6 +38,7 @@ export function ReturnSlip({ returnId, onClose }: { returnId: string; onClose: (
           <div className="flex justify-between font-semibold border-t border-gray-200 dark:border-gray-700 pt-2">
             <span>Total</span><span className="tabular-nums">{currency} {Money.of(data.totalRefundAmount).toFixed(2)}</span>
           </div>
+          <TaxLines rate={data.taxRate} tax={data.taxAmount} total={data.totalRefundAmount} currency={currency} />
           {data.reason && <p className="text-gray-600 dark:text-gray-400">Reason: {data.reason}</p>}
         </div>
       )}

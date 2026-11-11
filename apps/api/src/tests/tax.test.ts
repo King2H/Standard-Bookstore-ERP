@@ -100,6 +100,12 @@ describe('Tax (#247)', () => {
       expect((await setting('admin', 'tax_enabled', 'yes')).status).toBe(400);
     });
 
+    it('gives every signed-in staff member the name to print, with the shop\'s details', async () => {
+      await ok(await setting('admin', 'tax_name', 'Turnover Tax'));
+      expect((await ok(await as('manager').get('/config/shop'))).taxName).toBe('Turnover Tax');
+      await ok(await setting('admin', 'tax_name', 'VAT'));
+    });
+
     it('is recorded in the audit log, who and what', async () => {
       await ok(await setting('admin', 'tax_enabled', true));
       const audit = (await ownerDb().query(
