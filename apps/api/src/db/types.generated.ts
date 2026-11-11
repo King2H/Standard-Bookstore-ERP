@@ -447,6 +447,8 @@ export interface Exchanges {
   related_payment_id: Int8 | null;
   settlement_type: Generated<string>;
   status: Generated<string>;
+  tax_amount: Generated<Numeric>;
+  tax_rate: Generated<Numeric>;
   tenant_id: Generated<number>;
   total_incoming_value: Generated<Numeric>;
   total_outgoing_value: Generated<Numeric>;
@@ -890,6 +892,8 @@ export interface Returns {
   refund_method: string;
   return_number: string;
   status: Generated<string>;
+  tax_amount: Generated<Numeric>;
+  tax_rate: Generated<Numeric>;
   tenant_id: Generated<number>;
   total_refund_amount: Numeric;
   transaction_id: Int8 | null;
@@ -1239,6 +1243,7 @@ export interface Transactions {
   staff_id: number;
   status: Generated<string>;
   subtotal: Numeric;
+  tax_rate: Generated<Numeric>;
   tax_total: Generated<Numeric>;
   tenant_id: Generated<number>;
   transaction_number: string;

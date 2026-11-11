@@ -198,7 +198,7 @@ async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLi
   const res = await reportRows(q, 
     `SELECT
        TO_CHAR(ev.sale_at, 'YYYY-MM-DD') AS transaction_date,
-       o.order_number AS reference_number,
+       o.order_number AS reference_number, o.tax_rate::text AS tax_rate,
        br.name AS branch, loc.name AS location_name,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title, b.isbn AS book_isbn,
@@ -242,6 +242,7 @@ async function getOrderRows(q: Queryable, filters: ReportScope): Promise<SalesLi
       transactionType: 'ORDER',
       kind: 'BOOK',
       referenceNumber: row.reference_number as string,
+      taxRate: Number(row.tax_rate ?? 0),
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
       customerName: row.customer_name as string,
@@ -270,7 +271,7 @@ async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLine
   const res = await reportRows(q, 
     `SELECT
        TO_CHAR(t.created_at, 'YYYY-MM-DD') AS transaction_date,
-       t.transaction_number AS reference_number,
+       t.transaction_number AS reference_number, t.tax_rate::text AS tax_rate,
        br.name AS branch, loc.name AS location_name,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title, b.isbn AS book_isbn,
@@ -312,6 +313,7 @@ async function getPosRows(q: Queryable, filters: ReportScope): Promise<SalesLine
       transactionType: 'POS',
       kind: 'BOOK',
       referenceNumber: row.reference_number as string,
+      taxRate: Number(row.tax_rate ?? 0),
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
       customerName: row.customer_name as string,
@@ -356,7 +358,7 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
        sl.line_total * ev.sign AS line_total, sl.standard_cost, ${described}`;
   const [posRes, orderRes, exchangeRes] = await Promise.all([
     reportRows(q,
-      `SELECT TO_CHAR(t.created_at, 'YYYY-MM-DD') AS transaction_date, t.transaction_number AS reference_number, 'POS' AS source,
+      `SELECT TO_CHAR(t.created_at, 'YYYY-MM-DD') AS transaction_date, t.transaction_number AS reference_number, t.tax_rate::text AS tax_rate, 'POS' AS source,
          t.payment_status, tpay.method AS payment_method, tcash.paid AS cash_collected, trec.outstanding_amount AS receivable_balance,
          ${columns}
        FROM sale_service_lines sl
@@ -377,7 +379,7 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
       pos.params,
     ),
     reportRows(q,
-      `SELECT TO_CHAR(ev.sale_at, 'YYYY-MM-DD') AS transaction_date, o.order_number AS reference_number, 'ORDER' AS source,
+      `SELECT TO_CHAR(ev.sale_at, 'YYYY-MM-DD') AS transaction_date, o.order_number AS reference_number, o.tax_rate::text AS tax_rate, 'ORDER' AS source,
          o.payment_status, opay.payment_method, ocash.paid AS cash_collected, orec.outstanding_amount AS receivable_balance,
          ${orderColumns}
        FROM sale_service_lines sl
@@ -401,7 +403,7 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
       ord.params,
     ),
     reportRows(q,
-      `SELECT TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date, e.exchange_reference AS reference_number, 'EXCHANGE' AS source,
+      `SELECT TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date, e.exchange_reference AS reference_number, e.tax_rate::text AS tax_rate, 'EXCHANGE' AS source,
          erecst.status AS payment_status, epay.method AS payment_method, ecash.net_cash AS cash_collected, erec.outstanding_amount AS receivable_balance,
          ${columns}
        FROM sale_service_lines sl
@@ -439,6 +441,7 @@ async function getServiceRows(q: Queryable, filters: ReportScope): Promise<Sales
       transactionType: source,
       kind: 'SERVICE',
       referenceNumber: row.reference_number as string,
+      taxRate: Number(row.tax_rate ?? 0),
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
       customerName: row.customer_name as string,
@@ -473,7 +476,7 @@ async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesL
   const res = await reportRows(q, 
     `SELECT
        TO_CHAR(r.created_at, 'YYYY-MM-DD') AS transaction_date,
-       r.return_number AS reference_number,
+       r.return_number AS reference_number, r.tax_rate::text AS tax_rate,
        br.name AS branch, loc.name AS location_name,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        b.title AS book_title, b.isbn AS book_isbn,
@@ -517,6 +520,7 @@ async function getReturnRows(q: Queryable, filters: ReportScope): Promise<SalesL
       transactionType: 'RETURN',
       kind: 'BOOK',
       referenceNumber: row.reference_number as string,
+      taxRate: Number(row.tax_rate ?? 0),
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
       customerName: row.customer_name as string,
@@ -551,7 +555,7 @@ async function getServiceReturnRows(q: Queryable, filters: ReportScope): Promise
   const res = await reportRows(q,
     `SELECT
        TO_CHAR(r.created_at, 'YYYY-MM-DD') AS transaction_date,
-       r.return_number AS reference_number,
+       r.return_number AS reference_number, r.tax_rate::text AS tax_rate,
        br.name AS branch, loc.name AS location_name,
        COALESCE(c.full_name, 'Walk-in') AS customer_name,
        sv.name AS service_name, b.title AS book_title, b.isbn AS book_isbn,
@@ -586,6 +590,7 @@ async function getServiceReturnRows(q: Queryable, filters: ReportScope): Promise
       transactionType: 'RETURN',
       kind: 'SERVICE',
       referenceNumber: row.reference_number as string,
+      taxRate: Number(row.tax_rate ?? 0),
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
       customerName: row.customer_name as string,
@@ -651,7 +656,7 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
     reportRows(q, 
       `SELECT
          TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date,
-         e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
+         e.exchange_reference AS reference_number, e.tax_rate::text AS tax_rate, br.name AS branch, loc.name AS location_name,
          COALESCE(c.full_name, 'Walk-in') AS customer_name,
          b.title AS book_title, b.isbn AS book_isbn,
          ei.quantity, ei.evaluated_unit_price AS unit_price, ei.total_price, ei.condition,
@@ -669,7 +674,7 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
     reportRows(q, 
       `SELECT
          TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date,
-         e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
+         e.exchange_reference AS reference_number, e.tax_rate::text AS tax_rate, br.name AS branch, loc.name AS location_name,
          COALESCE(c.full_name, 'Walk-in') AS customer_name,
          b.title AS book_title, b.isbn AS book_isbn,
          eo.quantity, eo.selling_unit_price AS unit_price, eo.total_price,
@@ -689,7 +694,7 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
     reportRows(q, 
       `SELECT
          TO_CHAR(e.created_at, 'YYYY-MM-DD') AS transaction_date,
-         e.exchange_reference AS reference_number, br.name AS branch, loc.name AS location_name,
+         e.exchange_reference AS reference_number, e.tax_rate::text AS tax_rate, br.name AS branch, loc.name AS location_name,
          COALESCE(c.full_name, 'Walk-in') AS customer_name,
          b.title AS book_title, b.isbn AS book_isbn,
          ei.quantity, ei.unit_price, ei.total_price, ei.type, ei.condition,
@@ -741,6 +746,7 @@ async function getExchangeRows(q: Queryable, filters: ReportScope): Promise<Sale
       transactionType: 'EXCHANGE',
       kind: 'BOOK',
       referenceNumber: row.reference_number as string,
+      taxRate: Number(row.tax_rate ?? 0),
       branch: row.branch as string,
       locationName: (row.location_name as string | null) ?? '',
       customerName: row.customer_name as string,

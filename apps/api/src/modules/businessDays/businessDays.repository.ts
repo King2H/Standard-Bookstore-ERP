@@ -80,7 +80,8 @@ function toDay(r: DayRow): BusinessDayRecord {
     day: r.day,
     status: r.status as Closing,
     dayNumber: r.day_number,
-    report: r.report as DayReport,
+    // A day closed before #247 kept no tax: it had none.
+    report: { ...(r.report as DayReport), sales: { ...(r.report as DayReport).sales, tax: (r.report as DayReport).sales.tax ?? 0 } },
     closedBy: r.closed_by,
     closedByName: r.closed_by_name,
     closedAt: r.closed_at,
@@ -168,7 +169,7 @@ export async function openCashSessions(q: Queryable, branchId: number, day: stri
 
 /** What the branch did on the day, each part dated when it happened, as the reports date it. */
 export async function dayFigures(q: Queryable, branchId: number, day: string): Promise<DayFigures> {
-  const [orders, pos, exchanges, money, returns, stock, cash] = await Promise.all([
+  const [orders, pos, exchanges, money, returns, stock, cash, tax] = await Promise.all([
     sql<{ count: number; total: string }>`
       SELECT COALESCE(SUM(ev.sign), 0)::integer AS count, COALESCE(SUM(ev.sign * o.total), 0)::text AS total
       FROM order_sale_events ev JOIN orders o ON o.id = ev.order_id
@@ -222,11 +223,25 @@ export async function dayFigures(q: Queryable, branchId: number, day: string): P
       FROM cash_sessions s JOIN staff st ON st.id = s.staff_id
       WHERE s.branch_id = ${branchId} AND s.status = 'closed' AND s.opened_at::date = ${day}::date
       ORDER BY s.id`.execute(q),
+    // The tax inside the day's sales (#247), dated as each part is above: orders and counter sales,
+    // less returns, with exchanges (the tax inside their difference).
+    sql<{ tax: string }>`
+      SELECT (
+          COALESCE((SELECT SUM(ev.sign * o.tax_amount) FROM order_sale_events ev JOIN orders o ON o.id = ev.order_id
+                    WHERE o.branch_id = ${branchId} AND ev.sale_at::date = ${day}::date), 0)
+        + COALESCE((SELECT SUM(t.tax_total) FROM transactions t
+                    WHERE t.branch_id = ${branchId} AND t.status = 'completed' AND t.created_at::date = ${day}::date), 0)
+        - COALESCE((SELECT SUM(r.tax_amount) FROM returns r
+                    WHERE r.branch_id = ${branchId} AND r.status = 'completed' AND r.created_at::date = ${day}::date), 0)
+        + COALESCE((SELECT SUM(e.tax_amount) FROM exchanges e
+                    WHERE e.branch_id = ${branchId} AND e.status IN ('Completed', 'COMPLETED') AND e.created_at::date = ${day}::date), 0)
+      )::text AS tax`.execute(q),
   ]);
   return {
     orders: orders.rows[0],
     pos: pos.rows[0],
     exchanges: exchanges.rows[0].count,
+    tax: tax.rows[0].tax,
     money: money.rows,
     returns: returns.rows[0],
     stock: stock.rows,

@@ -35,6 +35,8 @@ export async function getSalesReport(filters: ReportFilters): Promise<SalesRepor
       totalPosSales: num(pos.total_pos_sales),
       totalPosTransactions: pos.total_pos_transactions,
       netSales: summary.netSalesRevenue,
+      taxIncluded: summary.taxIncluded,
+      netSalesBeforeTax: Money.of(summary.netSalesRevenue).minus(summary.taxIncluded).toNumber(),
       grossProfit: summary.grossProfit,
       grossMarginPct: summary.grossMarginPct,
       costAmount: summary.costAmount,

@@ -15,6 +15,7 @@ export interface PosTransactionRow {
   transaction_number: string;
   subtotal: string;
   discount_total: string;
+  tax_rate: string;
   tax_total: string;
   grand_total: string;
   amount_paid: string;
@@ -68,6 +69,7 @@ export function toTransactionRecord(row: PosTransactionRow): PosTransactionRecor
     transactionNumber: row.transaction_number,
     subtotal: Money.of(row.subtotal),
     discountTotal: Money.of(row.discount_total),
+    taxRate: Number(row.tax_rate),
     taxTotal: Money.of(row.tax_total),
     grandTotal: Money.of(row.grand_total),
     amountPaid: Money.of(row.amount_paid ?? '0'),
@@ -126,6 +128,7 @@ export function toTransactionResponse(t: PosTransactionRecord): PosTransaction {
     transactionNumber: t.transactionNumber,
     subtotal: t.subtotal.toNumber(),
     discountTotal: t.discountTotal.toNumber(),
+    taxRate: t.taxRate,
     taxTotal: t.taxTotal.toNumber(),
     grandTotal: t.grandTotal.toNumber(),
     amountPaid: t.amountPaid.toNumber(),

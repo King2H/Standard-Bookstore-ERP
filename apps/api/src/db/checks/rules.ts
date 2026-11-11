@@ -580,6 +580,27 @@ export const CHECKS: readonly Check[] = [
   },
 
   // ── Currency ───────────────────────────────────────────────────────────────
+  // ── Tax (#247) ─────────────────────────────────────────────────────────────
+  {
+    id: 'tax.document-amounts',
+    area: 'Tax',
+    // Prices include tax: each document keeps its rate and the tax inside its amount, rounded once to the cent.
+    title: "Every sale, order, return and exchange's tax is the tax inside its amount at its rate",
+    severity: 'error',
+    sql: `
+      WITH docs AS (
+        SELECT tenant_id, 'sale ' || transaction_number AS doc, grand_total AS amount, tax_rate, tax_total AS tax FROM transactions
+        UNION ALL SELECT tenant_id, 'order ' || order_number, total, tax_rate, tax_amount FROM orders
+        UNION ALL SELECT tenant_id, 'return ' || return_number, total_refund_amount, tax_rate, tax_amount FROM returns
+        UNION ALL SELECT tenant_id, 'exchange ' || exchange_reference, net_balance, tax_rate, tax_amount FROM exchanges
+      )
+      SELECT tenant_id,
+             doc || ': tax ' || to_char(tax, 'FM9999999990.00') || ', at ' || trim_scale(tax_rate * 100) || '% of '
+               || to_char(amount, 'FM9999999990.00') || ' it is ' || to_char(ROUND(amount * tax_rate / (1 + tax_rate), 2), 'FM9999999990.00') AS ref
+      FROM docs
+      WHERE tax <> ROUND(amount * tax_rate / (1 + tax_rate), 2)`,
+  },
+
   {
     id: 'currency.shop',
     area: 'Currency',

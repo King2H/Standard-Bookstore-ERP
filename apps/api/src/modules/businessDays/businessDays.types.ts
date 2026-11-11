@@ -44,6 +44,8 @@ export interface DayFigures {
   orders: { count: number; total: string };
   pos: { count: number; total: string };
   exchanges: number;
+  /** The tax inside the day's sales, less returns, with exchanges (#247). */
+  tax: string;
   money: Array<{ method: string; in: string; out: string }>;
   returns: { count: number; refunded: string };
   stock: Array<{ reason: string; in: number; out: number }>;

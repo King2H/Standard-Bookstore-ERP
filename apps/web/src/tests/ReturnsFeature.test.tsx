@@ -30,7 +30,7 @@ function profile(roles: string[]): ProfileResponse {
 
 const sale: PosTransaction = contract(PosTransactionSchema, {
   id: '41', branchId: 1, locationId: 7, customerId: null, customerName: null, staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261010-0001',
-  subtotal: 30, discountTotal: 1, taxTotal: 0, grandTotal: 29, amountPaid: 29, amountDue: 0, paymentStatus: 'paid',
+  subtotal: 30, discountTotal: 1, taxRate: 0, taxTotal: 0, grandTotal: 29, amountPaid: 29, amountDue: 0, paymentStatus: 'paid',
   currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: false,
   lineItems: [{
     id: '7', transactionId: '41', bookId: 1, bookTitle: 'Fikir Eske Mekabir', bookIsbn: '1', quantity: 3,
@@ -40,7 +40,7 @@ const sale: PosTransaction = contract(PosTransactionSchema, {
 
 const ret: Return = contract(ReturnSchema, {
   id: '5', returnNumber: 'RET-20261010-0001', transactionId: '41', transactionNumber: 'POS-20261010-0001', branchId: 1,
-  customerId: null, totalRefundAmount: 29, refundMethod: 'mixed', status: 'completed', reason: null,
+  customerId: null, totalRefundAmount: 29, taxRate: 0, taxAmount: 0, refundMethod: 'mixed', status: 'completed', reason: null,
   processedBy: 9, approvedBy: null, undelivered: false, createdAt: CREATED, orderId: null, orderNumber: null, exchangeId: null, exchangeReference: null,
 });
 
@@ -59,7 +59,7 @@ const deliveredOrder = (over: Partial<Order> = {}): Order => contract(OrderSchem
 });
 const orderReturn: Return = contract(ReturnSchema, {
   ...ret, id: '6', returnNumber: 'RET-20261019-0001', transactionId: null, transactionNumber: null,
-  orderId: '30', orderNumber: 'ORD-20261018-0003', totalRefundAmount: 50, refundMethod: 'cash',
+  orderId: '30', orderNumber: 'ORD-20261018-0003', totalRefundAmount: 50, taxRate: 0, taxAmount: 0, refundMethod: 'cash',
 });
 
 type Call = { method: string; path: string; body?: unknown };

@@ -6,7 +6,7 @@ import { AppError, BusinessError, NotFoundError } from '../../lib/errors.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
-import { getMaxReturnValueWithoutAuth } from '../config/config.service.js';
+import { currentTaxRate, getMaxReturnValueWithoutAuth } from '../config/config.service.js';
 import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -141,6 +141,8 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
     );
 
     const reference = await nextDailyNumber(tx, 'EXC');
+    // Its difference is what the sales report counts of it (outgoing less incoming): the tax is inside that (#247).
+    const taxRate = await currentTaxRate(tx);
     const id = await exchanges.insertExchange(tx, {
       reference,
       branchId: input.branchId,
@@ -149,6 +151,8 @@ export async function createExchange(actor: Actor, input: NewExchange): Promise<
       totalIncoming,
       totalOutgoing,
       net,
+      taxRate,
+      taxAmount: net.taxIncluded(taxRate),
       settlementType: type,
       refundMethod: type === 'Store_Refunds' ? input.refundMethod : null,
       notes: input.notes,

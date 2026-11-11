@@ -127,7 +127,7 @@ const posted = (path: string) => calls.filter((c) => c.method === 'POST' && c.pa
 function sale(over: Partial<PosTransaction> = {}): PosTransaction {
   return contract(PosTransactionSchema, {
     id: '77', branchId: 1, locationId: 7, customerId: 1, customerName: 'Abebe Kebede', staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261025-0001',
-    subtotal: 860, discountTotal: 0, taxTotal: 0, grandTotal: 860, amountPaid: 860, amountDue: 0, paymentStatus: 'paid',
+    subtotal: 860, discountTotal: 0, taxRate: 0, taxTotal: 0, grandTotal: 860, amountPaid: 860, amountDue: 0, paymentStatus: 'paid',
     currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: true,
     lineItems: [{
       id: '5', transactionId: '77', bookId: 2, bookTitle: 'Oromay', bookIsbn: '1', quantity: 3, unitPrice: 100, discountPct: 0,

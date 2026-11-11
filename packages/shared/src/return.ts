@@ -53,6 +53,9 @@ export const ReturnSchema = z.object({
   customerId: z.number().int().nullable(),
   /** What the returned books were worth: credited and refunded together. */
   totalRefundAmount: z.number(),
+  /** The rate of the sale, order or exchange returned, and the tax inside the refund (#247). */
+  taxRate: z.number(),
+  taxAmount: z.number(),
   refundMethod: z.union([RefundMethodSchema, z.literal('mixed')]),
   status: z.enum(['completed', 'rejected']),
   reason: z.string().nullable(),

@@ -75,6 +75,7 @@ export function dayReport(f: DayFigures): DayReport {
       orders: { count: f.orders.count, total: amount(f.orders.total) },
       pos: { count: f.pos.count, total: amount(f.pos.total) },
       exchanges: { count: f.exchanges },
+      tax: amount(f.tax),
     },
     money: {
       byMethod: f.money.map((m) => ({ method: m.method, in: amount(m.in), out: amount(m.out) })),

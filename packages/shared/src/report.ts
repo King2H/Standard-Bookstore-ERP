@@ -52,6 +52,9 @@ export const SalesReportSchema = z.object({
      * it. Cash is reported by the Payments report (Money In & Out).
      */
     netSales: z.number(),
+    /** The tax inside net sales (#247): each document's, at the rate it was made at; 0 with tax off. Prices include tax. */
+    taxIncluded: z.number(),
+    netSalesBeforeTax: z.number(),
     grossProfit: z.number(),
     grossMarginPct: z.number(),
     costAmount: z.number(),

@@ -27,6 +27,7 @@ const figures: DayFigures = {
   orders: { count: 2, total: '100.10' },
   pos: { count: 3, total: '0.20' },
   exchanges: 1,
+  tax: '13.06',
   money: [
     { method: 'bank', in: '0', out: '30.00' },
     { method: 'cash', in: '100.10', out: '0.20' },
@@ -73,7 +74,7 @@ describe('closing a day', () => {
 
   it('adds up the day report in exact money', () => {
     const report = dayReport(figures);
-    expect(report.sales).toEqual({ orders: { count: 2, total: 100.1 }, pos: { count: 3, total: 0.2 }, exchanges: { count: 1 } });
+    expect(report.sales).toEqual({ orders: { count: 2, total: 100.1 }, pos: { count: 3, total: 0.2 }, exchanges: { count: 1 }, tax: 13.06 });
     expect(report.money).toEqual({
       byMethod: [{ method: 'bank', in: 0, out: 30 }, { method: 'cash', in: 100.1, out: 0.2 }],
       totalIn: 100.1,

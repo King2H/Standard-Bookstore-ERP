@@ -46,7 +46,7 @@ const customer = (over: Partial<Customer> = {}): Customer => contract(CustomerSc
 function sale(over: Partial<PosTransaction> = {}): PosTransaction {
   return contract(PosTransactionSchema, {
     id: '77', branchId: 1, locationId: 7, customerId: null, customerName: null, staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261018-0001',
-    subtotal: 10, discountTotal: 0, taxTotal: 0, grandTotal: 10, amountPaid: 10, amountDue: 0, paymentStatus: 'paid',
+    subtotal: 10, discountTotal: 0, taxRate: 0, taxTotal: 0, grandTotal: 10, amountPaid: 10, amountDue: 0, paymentStatus: 'paid',
     currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: true, lineItems: [],
     payments: [{ id: '1', transactionId: '77', method: 'cash', amount: 10, reference: null, payerBank: null, bankAccountId: null, tendered: null, createdAt: CREATED }],
     ...over,

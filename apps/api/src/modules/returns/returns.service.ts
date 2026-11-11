@@ -142,6 +142,8 @@ async function recordReturn(
   },
 ): Promise<{ returnId: string; returnNumber: string }> {
   const returnNumber = await nextDailyNumber(q, 'RET');
+  // Tax goes back at the rate of what is returned, whatever the shop's rate is now (#247).
+  const taxRate = await returns.sourceTaxRate(q, r.sale);
   const returnId = await returns.insertReturn(q, {
     returnNumber,
     transactionId: r.sale.transactionId,
@@ -150,6 +152,8 @@ async function recordReturn(
     branchId: r.sale.branchId,
     customerId: r.sale.customerId,
     total: r.total,
+    taxRate,
+    taxAmount: r.total.taxIncluded(taxRate),
     refundMethod: r.refundMethod,
     reason: r.reason,
     processedBy: actor.staffId,

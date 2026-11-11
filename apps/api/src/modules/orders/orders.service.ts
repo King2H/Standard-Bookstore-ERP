@@ -8,7 +8,7 @@ import { piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertOutbox, insertOutboxEvent, type OutboxEventType } from '../../lib/outbox.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
 import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
-import { getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
+import { currentTaxRate, getMaxLineDiscountPct, isNegativeStockAllowed } from '../config/config.service.js';
 import { cancelReceivable, createReceivable } from '../receivables/receivables.service.js';
 import { returnOrderPayments } from '../payments/payments.service.js';
 import type { Permission } from '../../lib/permissions.js';
@@ -116,7 +116,8 @@ type OrderInput = {
  * within the limit of every role held, services at the branch's fee, and
  * enough stock where the branch allows none below zero.
  */
-async function priceOrder(data: OrderInput, staffCtx: StaffCtx) {
+/** Prices an order at a tax rate (#247): the shop's now for a new one, its own for an edited draft. */
+async function priceOrder(data: OrderInput, staffCtx: StaffCtx, taxRate: string) {
   const saleType = data.saleType ?? 'cash_sale';
   policy.checkNewOrder({ ...data, saleType });
 
@@ -142,7 +143,7 @@ async function priceOrder(data: OrderInput, staffCtx: StaffCtx) {
     if (unitPrice === null) throw new BusinessError('PRICE_NOT_SET', 'Price not set for book ' + item.bookId);
     lines.push(policy.priceLine(item, unitPrice, maxDiscountPct));
   }
-  const totals = policy.orderTotals(lines, saleServices.serviceTotals(services));
+  const totals = policy.orderTotals(lines, saleServices.serviceTotals(services), taxRate);
 
   // An early refusal, not a promise: a draft neither reserves nor deducts
   // stock, so the figures may change before it is confirmed. confirm() is
@@ -175,7 +176,7 @@ async function insertLines(tx: Queryable, orderId: string, priced: Awaited<Retur
 }
 
 export async function create(data: OrderInput, staffCtx: StaffCtx): Promise<OrderRow> {
-  const priced = await priceOrder(data, staffCtx);
+  const priced = await priceOrder(data, staffCtx, await currentTaxRate());
   const { saleType, lines, totals } = priced;
 
   const orderId = await withTransaction({}, async (tx, client) => {
@@ -209,7 +210,8 @@ export async function create(data: OrderInput, staffCtx: StaffCtx): Promise<Orde
  * Locked, so an edit and a confirmation take turns.
  */
 export async function update(orderId: string, data: OrderInput, staffCtx: StaffCtx): Promise<OrderRow> {
-  const priced = await priceOrder(data, staffCtx);
+  // A draft keeps the rate it was made at: a change of rate applies to new documents only.
+  const priced = await priceOrder(data, staffCtx, String((await getById(orderId)).taxRate));
   await withTransaction({}, async (tx) => {
     const order = await loadOrder(tx, orderId, { forUpdate: true });
     policy.checkCanEdit(order.status);

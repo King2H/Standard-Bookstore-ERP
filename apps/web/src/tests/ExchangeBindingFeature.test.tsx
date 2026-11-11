@@ -58,7 +58,7 @@ const bound = (status: ServiceJobStatus): SaleServiceLine => ({
 
 const exchange: Exchange = contract(ExchangeSchema, {
   id: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, locationId: 9, customerId: 77, status: 'Completed',
-  lifecycleStatus: null, totalIncomingValue: 0, totalOutgoingValue: 250, netBalance: 250, settlementType: 'Customer_Pays',
+  lifecycleStatus: null, totalIncomingValue: 0, totalOutgoingValue: 250, netBalance: 250, taxRate: 0, taxAmount: 0, settlementType: 'Customer_Pays',
   refundMethod: null, currency: 'ETB', notes: null, createdBy: 9, createdAt: CREATED, updatedAt: CREATED, outstandingAmount: 0,
   dueDate: null, settlementStatus: 'Settled', voidable: true, voidedAt: null, voidedBy: null, voidReason: null,
 });
@@ -123,7 +123,7 @@ function stubApi() {
       return json(contract(ReturnListResponseSchema, {
         items: [contract(ReturnSchema, {
           id: '9', returnNumber: 'RET-20261026-0002', transactionId: null, transactionNumber: null, orderId: null, orderNumber: null,
-          exchangeId: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, customerId: 77, totalRefundAmount: 100,
+          exchangeId: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, customerId: 77, totalRefundAmount: 100, taxRate: 0, taxAmount: 0,
           refundMethod: 'store_credit', status: 'completed', reason: 'Customer changed their mind', processedBy: 9, approvedBy: 9, undelivered: false, createdAt: CREATED,
         })],
         total: 1, page: 1, totalPages: 1,

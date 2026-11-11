@@ -238,6 +238,13 @@ describe('Data consistency check', () => {
       [account],
     );
 
+    // Tax: an order whose tax is not the tax inside its total at its rate (#247).
+    await client.query(
+      `INSERT INTO orders (order_number, branch_id, created_by, status, total, tax_rate, tax_amount, payment_status, currency)
+       VALUES ($1, $2, $3, 'DRAFT', 115, 0.15, 10, 'unpaid', 'ETB')`,
+      [`${MARK}-TAX`, branchId, staffId],
+    );
+
     // Currency: an order kept in a currency that is not the shop's.
     await client.query(
       `INSERT INTO orders (order_number, branch_id, created_by, currency) VALUES ($1, $2, $3, 'XYZ')`,
@@ -288,6 +295,7 @@ describe('Data consistency check', () => {
     ['bank.cleared-one-line', /: 0 matched lines$/],
     ['numbers.daily-counters-ahead', /^ORD-\d{8}: highest used 9999/],
     ['numbers.customer-counter-ahead', /^CUS: highest used 99999/],
+    ['tax.document-amounts', new RegExp(`^order ${MARK}-TAX: tax 10\\.00, at 15% of 115\\.00 it is 15\\.00$`)],
     ['currency.shop', /^orders \d+: XYZ, the shop's is ETB$/],
     ['test-data.branches', new RegExp(`${MARK} Branch$`)],
     ['test-data.staff', /dbcheck_staff$/],
@@ -307,6 +315,6 @@ describe('Data consistency check', () => {
     expect(report).toContain('  ok     Quantity on hand equals the last movement in the history');
     expect(report).toMatch(/warn {3}Stock on hand has a cost .*\[stock\.valued\]/);
     expect(report).toMatch(/tenant 1: \d+ row\(s\)/);
-    expect(report).toMatch(/33 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
+    expect(report).toMatch(/34 rules: 0 error row\(s\), \d+ warning row\(s\)\.$/);
   });
 });

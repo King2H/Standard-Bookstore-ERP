@@ -39,7 +39,7 @@ function profile(roles: string[], id = 9): ProfileResponse {
 }
 
 const REPORT: DayReport = {
-  sales: { orders: { count: 2, total: 300 }, pos: { count: 5, total: 450.5 }, exchanges: { count: 1 } },
+  sales: { orders: { count: 2, total: 300 }, pos: { count: 5, total: 450.5 }, exchanges: { count: 1 }, tax: 0 },
   money: { byMethod: [{ method: 'cash', in: 600.5, out: 20 }, { method: 'bank', in: 150, out: 1000 }], totalIn: 750.5, totalOut: 1020 },
   returns: { count: 1, refunded: 20 },
   stock: [{ reason: 'sale', in: 0, out: 9 }, { reason: 'initial', in: 40, out: 0 }],

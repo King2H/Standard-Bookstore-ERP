@@ -50,6 +50,9 @@ export const ExchangeSchema = z.object({
   totalOutgoingValue: z.number(),
   /** Outgoing less incoming: above zero the customer owes, below zero the store does. */
   netBalance: z.number(),
+  /** The rate the exchange was made at, and the tax inside its difference, the part of it that is a sale (#247). */
+  taxRate: z.number(),
+  taxAmount: z.number(),
   settlementType: z.enum(['Even', 'Customer_Pays', 'Store_Refunds']),
   /** How a store refund went back. */
   refundMethod: z.enum(['store_credit', 'cash']).nullable(),

@@ -301,6 +301,21 @@ export async function setSaleDue(q: Queryable, id: string, due: Money, status: '
 
 // ── Writing a return ──────────────────────────────────────────────────────────
 
+/** The tax rate of the sale, order or exchange returned (#247): a return gives tax back at it. */
+export async function sourceTaxRate(
+  q: Queryable,
+  source: { transactionId: string | null; orderId: string | null; exchangeId?: string | null },
+): Promise<string> {
+  const row = source.transactionId !== null
+    ? await q.selectFrom('transactions').select('tax_rate').where('id', '=', source.transactionId).executeTakeFirst()
+    : source.orderId !== null
+      ? await q.selectFrom('orders').select('tax_rate').where('id', '=', source.orderId).executeTakeFirst()
+      : source.exchangeId
+        ? await q.selectFrom('exchanges').select('tax_rate').where('id', '=', source.exchangeId).executeTakeFirst()
+        : undefined;
+  return row ? String(row.tax_rate) : '0';
+}
+
 export async function insertReturn(
   q: Queryable,
   r: {
@@ -312,6 +327,9 @@ export async function insertReturn(
     branchId: number;
     customerId: number | null;
     total: Money;
+    /** The returned document's rate, and the tax inside the refund (#247). */
+    taxRate: string;
+    taxAmount: Money;
     refundMethod: RefundMethod | 'mixed';
     reason: string | null;
     processedBy: number;
@@ -329,6 +347,8 @@ export async function insertReturn(
       branch_id: r.branchId,
       customer_id: r.customerId,
       total_refund_amount: r.total.toFixed(2),
+      tax_rate: r.taxRate,
+      tax_amount: r.taxAmount.toFixed(2),
       refund_method: r.refundMethod,
       status: 'completed',
       reason: r.reason,
@@ -411,6 +431,8 @@ function selectReturns(q: Queryable) {
       'r.branch_id',
       'r.customer_id',
       'r.total_refund_amount',
+      'r.tax_rate',
+      'r.tax_amount',
       'r.refund_method',
       'r.status',
       'r.reason',

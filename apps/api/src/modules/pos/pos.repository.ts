@@ -40,6 +40,7 @@ function selectTransactions(q: Queryable) {
       't.transaction_number',
       't.subtotal',
       't.discount_total',
+      't.tax_rate',
       't.tax_total',
       't.grand_total',
       't.amount_paid',
@@ -177,6 +178,7 @@ export async function insertTransaction(
     transactionNumber: string;
     subtotal: Money;
     discountTotal: Money;
+    taxRate: string;
     taxTotal: Money;
     grandTotal: Money;
     amountPaid: Money;
@@ -194,6 +196,7 @@ export async function insertTransaction(
       transaction_number: t.transactionNumber,
       subtotal: t.subtotal.toFixed(2),
       discount_total: t.discountTotal.toFixed(2),
+      tax_rate: t.taxRate,
       tax_total: t.taxTotal.toFixed(2),
       grand_total: t.grandTotal.toFixed(2),
       amount_paid: t.amountPaid.toFixed(2),

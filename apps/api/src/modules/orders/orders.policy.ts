@@ -294,18 +294,20 @@ export function priceLine(item: OrderLineInput, unitPrice: number, maxDiscountPc
 
 /**
  * Order totals from its priced lines and the fees of its services (#169).
- * Tax is not charged yet (ADR-0010: default 0%).
+ * Prices include tax (#247, 1a): the total is as priced; the tax is the part
+ * of it at the order's rate ("0" with tax off).
  */
 export function orderTotals(
   lines: PricedLine[],
   services: { subtotal: Money; discountTotal: Money } = { subtotal: Money.ZERO, discountTotal: Money.ZERO },
+  taxRate = '0',
 ): OrderTotals {
   const subtotal = Money.sum(lines.map((l) => l.totalPrice)).plus(services.subtotal);
   return {
     subtotal: subtotal.toFixed(2),
     discountTotal: Money.sum(lines.map((l) => l.discountAmount)).plus(services.discountTotal).toFixed(2),
-    taxRate: '0.0000',
-    taxAmount: '0.00',
+    taxRate: Number(taxRate).toFixed(4),
+    taxAmount: subtotal.taxIncluded(taxRate).toFixed(2),
     total: subtotal.toFixed(2),
   };
 }

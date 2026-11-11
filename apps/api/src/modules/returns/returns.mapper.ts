@@ -14,6 +14,8 @@ export interface ReturnRow {
   branch_id: number;
   customer_id: number | null;
   total_refund_amount: string;
+  tax_rate: string;
+  tax_amount: string;
   refund_method: string;
   status: string;
   reason: string | null;
@@ -58,6 +60,8 @@ export function toReturnRecord(row: ReturnRow): ReturnRecord {
     branchId: row.branch_id,
     customerId: row.customer_id,
     totalRefundAmount: Money.of(row.total_refund_amount),
+    taxRate: Number(row.tax_rate),
+    taxAmount: Money.of(row.tax_amount),
     refundMethod: row.refund_method as ReturnRecord['refundMethod'],
     status: row.status as ReturnRecord['status'],
     reason: row.reason,
@@ -98,6 +102,8 @@ export function toReturnResponse(r: ReturnRecord): Return {
   return {
     ...head,
     totalRefundAmount: r.totalRefundAmount.toNumber(),
+    taxRate: r.taxRate,
+    taxAmount: r.taxAmount.toNumber(),
     createdAt: r.createdAt.toISOString(),
     ...(lineItems && {
       lineItems: lineItems.map((l) => ({ ...l, unitPrice: l.unitPrice.toNumber(), lineRefundAmount: l.lineRefundAmount.toNumber() })),

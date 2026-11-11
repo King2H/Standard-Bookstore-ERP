@@ -93,6 +93,17 @@ export class Money {
     return new Money(divRound(this.units * Money.of(pct).units, FACTOR * 100n));
   }
 
+  /**
+   * The tax included in this tax-inclusive amount at `rate`, a fraction such
+   * as "0.15" for 15% (#247, ADR-0010): amount × rate ÷ (1 + rate), rounded
+   * once, to the cent. Negative for an amount given back.
+   */
+  taxIncluded(rate: number | string): Money {
+    const r = Money.of(rate).units;
+    // Amount and rate are each in 1/10,000; the result is in cents, then back to 1/10,000.
+    return new Money(divRound(this.units * r, (FACTOR + r) * 100n) * 100n);
+  }
+
   /** Rounds to `decimals` places (default 2, the currency's minor unit). */
   round(decimals = 2): Money {
     if (decimals < 0 || decimals > SCALE) throw new RangeError(`Unsupported decimals: ${decimals}`);
