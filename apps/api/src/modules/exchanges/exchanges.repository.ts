@@ -33,6 +33,8 @@ function selectExchanges(q: Queryable) {
       'e.total_incoming_value',
       'e.total_outgoing_value',
       'e.net_balance',
+      'e.tax_rate',
+      'e.tax_amount',
       'e.settlement_type',
       'e.refund_method',
       'e.currency',
@@ -204,6 +206,9 @@ export async function insertExchange(
     totalIncoming: Money;
     totalOutgoing: Money;
     net: Money;
+    /** The shop's rate, and the tax inside the difference, the part of the exchange that is a sale (#247). */
+    taxRate: string;
+    taxAmount: Money;
     settlementType: SettlementType;
     refundMethod: RefundMethod | null;
     notes: string | null;
@@ -221,6 +226,8 @@ export async function insertExchange(
       total_incoming_value: e.totalIncoming.toFixed(2),
       total_outgoing_value: e.totalOutgoing.toFixed(2),
       net_balance: e.net.toFixed(2),
+      tax_rate: e.taxRate,
+      tax_amount: e.taxAmount.toFixed(2),
       settlement_type: e.settlementType,
       refund_method: e.refundMethod,
       currency: SHOP_CURRENCY,

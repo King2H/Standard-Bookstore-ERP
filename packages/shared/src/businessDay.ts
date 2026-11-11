@@ -30,6 +30,8 @@ export const DayReportSchema = z.object({
     orders: z.object({ count: z.number().int(), total: amount }),
     pos: z.object({ count: z.number().int(), total: amount }),
     exchanges: z.object({ count: z.number().int() }),
+    /** The tax inside the day's sales, less returns, with exchanges (#247): 0 with tax off. */
+    tax: amount,
   }),
   /** Customer money in and out, and money paid to or refunded by suppliers, by method. */
   money: z.object({

@@ -26,6 +26,8 @@ export interface ExchangeRecord {
   totalIncomingValue: Money;
   totalOutgoingValue: Money;
   netBalance: Money;
+  taxRate: number;
+  taxAmount: Money;
   settlementType: SettlementType;
   refundMethod: RefundMethod | null;
   currency: string;

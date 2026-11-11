@@ -38,7 +38,7 @@ const bound = (status: ServiceJobStatus): SaleServiceLine => ({
 
 const exchange = (status: ServiceJobStatus | null): Exchange => contract(ExchangeSchema, {
   id: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, locationId: 9, customerId: 77, status: 'Completed',
-  lifecycleStatus: null, totalIncomingValue: 0, totalOutgoingValue: 650, netBalance: 650, settlementType: 'Customer_Pays',
+  lifecycleStatus: null, totalIncomingValue: 0, totalOutgoingValue: 650, netBalance: 650, taxRate: 0, taxAmount: 0, settlementType: 'Customer_Pays',
   refundMethod: null, currency: 'ETB', notes: null, createdBy: 9, createdAt: CREATED, updatedAt: CREATED, outstandingAmount: 0,
   dueDate: null, settlementStatus: 'Settled', voidable: false, voidedAt: null, voidedBy: null, voidReason: null,
   incomingItems: [],
@@ -74,7 +74,7 @@ function stubApi() {
     if (method === 'POST' && u.pathname === '/returns') {
       return json(contract(ReturnSchema, {
         id: '9', returnNumber: 'RET-20261026-0003', transactionId: null, transactionNumber: null, orderId: null, orderNumber: null,
-        exchangeId: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, customerId: 77, totalRefundAmount: 250,
+        exchangeId: '7', exchangeReference: 'EXC-20261026-0001', branchId: 1, customerId: 77, totalRefundAmount: 250, taxRate: 0, taxAmount: 0,
         refundMethod: 'store_credit', status: 'completed', reason: 'Spine cracked', processedBy: 9, approvedBy: 9, undelivered: false, createdAt: CREATED,
       }), 201);
     }

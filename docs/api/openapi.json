@@ -10024,12 +10024,16 @@
                                 "count"
                               ],
                               "additionalProperties": false
+                            },
+                            "tax": {
+                              "type": "number"
                             }
                           },
                           "required": [
                             "orders",
                             "pos",
-                            "exchanges"
+                            "exchanges",
+                            "tax"
                           ],
                           "additionalProperties": false
                         },
@@ -10425,12 +10429,16 @@
                                 "count"
                               ],
                               "additionalProperties": false
+                            },
+                            "tax": {
+                              "type": "number"
                             }
                           },
                           "required": [
                             "orders",
                             "pos",
-                            "exchanges"
+                            "exchanges",
+                            "tax"
                           ],
                           "additionalProperties": false
                         },
@@ -10824,12 +10832,16 @@
                                 "count"
                               ],
                               "additionalProperties": false
+                            },
+                            "tax": {
+                              "type": "number"
                             }
                           },
                           "required": [
                             "orders",
                             "pos",
-                            "exchanges"
+                            "exchanges",
+                            "tax"
                           ],
                           "additionalProperties": false
                         },
@@ -11203,12 +11215,16 @@
                                 "count"
                               ],
                               "additionalProperties": false
+                            },
+                            "tax": {
+                              "type": "number"
                             }
                           },
                           "required": [
                             "orders",
                             "pos",
-                            "exchanges"
+                            "exchanges",
+                            "tax"
                           ],
                           "additionalProperties": false
                         },
@@ -20755,6 +20771,12 @@
                     "netBalance": {
                       "type": "number"
                     },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxAmount": {
+                      "type": "number"
+                    },
                     "settlementType": {
                       "type": "string",
                       "enum": [
@@ -21226,6 +21248,8 @@
                     "totalIncomingValue",
                     "totalOutgoingValue",
                     "netBalance",
+                    "taxRate",
+                    "taxAmount",
                     "settlementType",
                     "refundMethod",
                     "currency",
@@ -21463,6 +21487,12 @@
                             "type": "number"
                           },
                           "netBalance": {
+                            "type": "number"
+                          },
+                          "taxRate": {
+                            "type": "number"
+                          },
+                          "taxAmount": {
                             "type": "number"
                           },
                           "settlementType": {
@@ -21936,6 +21966,8 @@
                           "totalIncomingValue",
                           "totalOutgoingValue",
                           "netBalance",
+                          "taxRate",
+                          "taxAmount",
                           "settlementType",
                           "refundMethod",
                           "currency",
@@ -22102,6 +22134,12 @@
                       "type": "number"
                     },
                     "netBalance": {
+                      "type": "number"
+                    },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxAmount": {
                       "type": "number"
                     },
                     "settlementType": {
@@ -22575,6 +22613,8 @@
                     "totalIncomingValue",
                     "totalOutgoingValue",
                     "netBalance",
+                    "taxRate",
+                    "taxAmount",
                     "settlementType",
                     "refundMethod",
                     "currency",
@@ -22876,6 +22916,12 @@
                     "netBalance": {
                       "type": "number"
                     },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxAmount": {
+                      "type": "number"
+                    },
                     "settlementType": {
                       "type": "string",
                       "enum": [
@@ -23347,6 +23393,8 @@
                     "totalIncomingValue",
                     "totalOutgoingValue",
                     "netBalance",
+                    "taxRate",
+                    "taxAmount",
                     "settlementType",
                     "refundMethod",
                     "currency",
@@ -39881,6 +39929,9 @@
                     "discountTotal": {
                       "type": "number"
                     },
+                    "taxRate": {
+                      "type": "number"
+                    },
                     "taxTotal": {
                       "type": "number"
                     },
@@ -40178,6 +40229,7 @@
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",
+                    "taxRate",
                     "taxTotal",
                     "grandTotal",
                     "amountPaid",
@@ -40435,6 +40487,9 @@
                             "type": "number"
                           },
                           "discountTotal": {
+                            "type": "number"
+                          },
+                          "taxRate": {
                             "type": "number"
                           },
                           "taxTotal": {
@@ -40734,6 +40789,7 @@
                           "transactionNumber",
                           "subtotal",
                           "discountTotal",
+                          "taxRate",
                           "taxTotal",
                           "grandTotal",
                           "amountPaid",
@@ -40891,6 +40947,9 @@
                       "type": "number"
                     },
                     "discountTotal": {
+                      "type": "number"
+                    },
+                    "taxRate": {
                       "type": "number"
                     },
                     "taxTotal": {
@@ -41190,6 +41249,7 @@
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",
+                    "taxRate",
                     "taxTotal",
                     "grandTotal",
                     "amountPaid",
@@ -41407,6 +41467,9 @@
                     "discountTotal": {
                       "type": "number"
                     },
+                    "taxRate": {
+                      "type": "number"
+                    },
                     "taxTotal": {
                       "type": "number"
                     },
@@ -41704,6 +41767,7 @@
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",
+                    "taxRate",
                     "taxTotal",
                     "grandTotal",
                     "amountPaid",
@@ -41868,6 +41932,9 @@
                     "discountTotal": {
                       "type": "number"
                     },
+                    "taxRate": {
+                      "type": "number"
+                    },
                     "taxTotal": {
                       "type": "number"
                     },
@@ -42165,6 +42232,7 @@
                     "transactionNumber",
                     "subtotal",
                     "discountTotal",
+                    "taxRate",
                     "taxTotal",
                     "grandTotal",
                     "amountPaid",
@@ -61926,6 +61994,12 @@
                         "netSales": {
                           "type": "number"
                         },
+                        "taxIncluded": {
+                          "type": "number"
+                        },
+                        "netSalesBeforeTax": {
+                          "type": "number"
+                        },
                         "grossProfit": {
                           "type": "number"
                         },
@@ -61987,6 +62061,8 @@
                         "totalPosSales",
                         "totalPosTransactions",
                         "netSales",
+                        "taxIncluded",
+                        "netSalesBeforeTax",
                         "grossProfit",
                         "grossMarginPct",
                         "costAmount",
@@ -62763,6 +62839,12 @@
                     "totalRefundAmount": {
                       "type": "number"
                     },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxAmount": {
+                      "type": "number"
+                    },
                     "refundMethod": {
                       "anyOf": [
                         {
@@ -62934,6 +63016,8 @@
                     "branchId",
                     "customerId",
                     "totalRefundAmount",
+                    "taxRate",
+                    "taxAmount",
                     "refundMethod",
                     "status",
                     "reason",
@@ -63184,6 +63268,12 @@
                           "totalRefundAmount": {
                             "type": "number"
                           },
+                          "taxRate": {
+                            "type": "number"
+                          },
+                          "taxAmount": {
+                            "type": "number"
+                          },
                           "refundMethod": {
                             "anyOf": [
                               {
@@ -63355,6 +63445,8 @@
                           "branchId",
                           "customerId",
                           "totalRefundAmount",
+                          "taxRate",
+                          "taxAmount",
                           "refundMethod",
                           "status",
                           "reason",
@@ -63523,6 +63615,12 @@
                       ]
                     },
                     "totalRefundAmount": {
+                      "type": "number"
+                    },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxAmount": {
                       "type": "number"
                     },
                     "refundMethod": {
@@ -63696,6 +63794,8 @@
                     "branchId",
                     "customerId",
                     "totalRefundAmount",
+                    "taxRate",
+                    "taxAmount",
                     "refundMethod",
                     "status",
                     "reason",

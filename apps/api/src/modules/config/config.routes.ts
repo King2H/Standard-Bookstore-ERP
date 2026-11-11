@@ -14,7 +14,8 @@ const canRead = requireRole('Super_Admin', 'Admin', 'Manager');
 const { schemas } = config;
 
 router.get('/config/system', authenticate, canRead, config.listSystem);
-router.put('/config/system/:key', authenticate, requireRole('Super_Admin'), validate(schemas.setSystem), config.setSystem);
+// Super_Admin; Admin for the tax settings only (#247): the service checks the key.
+router.put('/config/system/:key', authenticate, requireRole('Super_Admin', 'Admin'), validate(schemas.setSystem), config.setSystem);
 
 // Any signed-in staff member, for their session branch (POS, Orders, ...).
 router.get('/config/currency', authenticate, config.currency);

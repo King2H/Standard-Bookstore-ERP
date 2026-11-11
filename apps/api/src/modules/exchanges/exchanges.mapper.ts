@@ -14,6 +14,8 @@ export interface ExchangeRow {
   total_incoming_value: string;
   total_outgoing_value: string;
   net_balance: string;
+  tax_rate: string;
+  tax_amount: string;
   settlement_type: string;
   refund_method: string | null;
   currency: string;
@@ -45,6 +47,8 @@ export function toExchangeRecord(row: ExchangeRow): ExchangeRecord {
     totalIncomingValue: Money.of(row.total_incoming_value),
     totalOutgoingValue: Money.of(row.total_outgoing_value),
     netBalance: Money.of(row.net_balance),
+    taxRate: Number(row.tax_rate),
+    taxAmount: Money.of(row.tax_amount),
     settlementType: row.settlement_type as SettlementType,
     refundMethod: row.refund_method as RefundMethod | null,
     currency: row.currency,
@@ -100,6 +104,8 @@ export function toExchangeResponse(e: ExchangeRecord): Exchange {
     totalIncomingValue: e.totalIncomingValue.toNumber(),
     totalOutgoingValue: e.totalOutgoingValue.toNumber(),
     netBalance: e.netBalance.toNumber(),
+    taxRate: e.taxRate,
+    taxAmount: e.taxAmount.toNumber(),
     settlementType: e.settlementType,
     refundMethod: e.refundMethod,
     currency: e.currency,

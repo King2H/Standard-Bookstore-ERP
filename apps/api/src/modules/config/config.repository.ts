@@ -9,6 +9,13 @@ import type { ConfigRecord } from './config.types.js';
 
 const COLUMNS = ['key', 'value', 'updated_by', 'updated_at'] as const;
 
+/** The shop's tax settings (#247): missing ones read as a new shop has them. */
+export async function taxSettings(q: Queryable): Promise<{ enabled: unknown; ratePct: unknown }> {
+  const rows = await q.selectFrom('system_config').select(['key', 'value']).where('key', 'in', ['tax_enabled', 'tax_rate_pct']).execute();
+  const value = (key: string) => rows.find((r) => r.key === key)?.value;
+  return { enabled: value('tax_enabled'), ratePct: value('tax_rate_pct') };
+}
+
 export async function findSystemValue(q: Queryable, key: string): Promise<{ value: unknown } | undefined> {
   return q.selectFrom('system_config').select('value').where('key', '=', key).executeTakeFirst();
 }

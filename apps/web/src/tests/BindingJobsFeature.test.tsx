@@ -56,7 +56,7 @@ const bound = (status: ServiceJobStatus): SaleServiceLine => ({
 });
 const sale = (status: ServiceJobStatus): PosTransaction => contract(PosTransactionSchema, {
   id: '77', branchId: 1, locationId: 7, customerId: 1, customerName: 'Abebe Kebede', staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261026-0001',
-  subtotal: 500, discountTotal: 0, taxTotal: 0, grandTotal: 500, amountPaid: 500, amountDue: 0, paymentStatus: 'paid',
+  subtotal: 500, discountTotal: 0, taxRate: 0, taxTotal: 0, grandTotal: 500, amountPaid: 500, amountDue: 0, paymentStatus: 'paid',
   currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: false,
   lineItems: [{
     id: '5', transactionId: '77', bookId: 2, bookTitle: 'Oromay', bookIsbn: '1', quantity: 3, unitPrice: 100, discountPct: 0,
@@ -95,7 +95,7 @@ function stubApi() {
     if (method === 'POST' && u.pathname === '/returns') {
       return json(contract(ReturnSchema, {
         id: '5', returnNumber: 'RET-20261026-0001', transactionId: '77', transactionNumber: 'POS-20261026-0001', branchId: 1,
-        customerId: 1, totalRefundAmount: 200, refundMethod: 'cash', status: 'completed', reason: 'Spine cracked',
+        customerId: 1, totalRefundAmount: 200, taxRate: 0, taxAmount: 0, refundMethod: 'cash', status: 'completed', reason: 'Spine cracked',
         processedBy: 9, approvedBy: 9, undelivered: false, createdAt: CREATED, orderId: null, orderNumber: null, exchangeId: null, exchangeReference: null,
       }), 201);
     }

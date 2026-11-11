@@ -30,7 +30,7 @@ function profile(roles: string[]): ProfileResponse {
 function sale(over: Partial<PosTransaction> = {}): PosTransaction {
   return contract(PosTransactionSchema, {
     id: '77', branchId: 1, locationId: 7, customerId: null, customerName: null, staffId: 9, cashierName: 'Sara Tesfaye', transactionNumber: 'POS-20261018-0001',
-    subtotal: 10, discountTotal: 0, taxTotal: 0, grandTotal: 10, amountPaid: 10, amountDue: 0, paymentStatus: 'paid',
+    subtotal: 10, discountTotal: 0, taxRate: 0, taxTotal: 0, grandTotal: 10, amountPaid: 10, amountDue: 0, paymentStatus: 'paid',
     currency: 'ETB', status: 'completed', createdAt: CREATED, dueDate: null, voidable: true,
     ...over,
   });

@@ -46,7 +46,7 @@ const customer: Customer = contract(CustomerSchema, {
 
 const exchange: Exchange = contract(ExchangeSchema, {
   id: '7', exchangeReference: 'EXC-20261018-0001', branchId: 1, locationId: 9, customerId: null, status: 'Completed',
-  lifecycleStatus: null, totalIncomingValue: 40, totalOutgoingValue: 150, netBalance: 110, settlementType: 'Customer_Pays',
+  lifecycleStatus: null, totalIncomingValue: 40, totalOutgoingValue: 150, netBalance: 110, taxRate: 0, taxAmount: 0, settlementType: 'Customer_Pays',
   refundMethod: null, currency: 'ETB', notes: null, createdBy: 9, createdAt: CREATED, updatedAt: CREATED, outstandingAmount: 0,
   dueDate: null, settlementStatus: 'Settled', voidable: true, voidedAt: null, voidedBy: null, voidReason: null,
 });

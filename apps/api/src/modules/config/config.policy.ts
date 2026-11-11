@@ -1,4 +1,4 @@
-import { CONFIG_VALUE_SCHEMAS, SYSTEM_WIDE_CONFIG_KEYS } from '@bms/shared';
+import { CONFIG_VALUE_SCHEMAS, SYSTEM_WIDE_CONFIG_KEYS, TAX_CONFIG_KEYS } from '@bms/shared';
 import { BusinessError, ForbiddenError, ValidationError } from '../../lib/errors.js';
 import type { ConfigRecord, EffectiveConfigRecord } from './config.types.js';
 
@@ -18,10 +18,13 @@ export function checkConfigValue(key: string, value: unknown): void {
 const holds = (roles: readonly string[], allowed: string[]) => roles.some((r) => allowed.includes(r));
 
 // Any role held in the session branch counts, whatever order the roles were given in.
-export function checkCanChangeSystemConfig(roles: readonly string[]): void {
-  if (!holds(roles, ['Super_Admin'])) {
-    throw new ForbiddenError('Only Super_Admin can modify system configuration');
-  }
+// Tax is also Admin's to set (#247, ADR-0010); every other shop-wide setting is Super_Admin's.
+export function checkCanChangeSystemConfig(roles: readonly string[], key?: string): void {
+  if (holds(roles, ['Super_Admin'])) return;
+  if (key !== undefined && TAX_CONFIG_KEYS.includes(key) && holds(roles, ['Admin'])) return;
+  throw new ForbiddenError(TAX_CONFIG_KEYS.includes(key ?? '')
+    ? 'Only Super_Admin or Admin can change the tax settings'
+    : 'Only Super_Admin can modify system configuration');
 }
 
 export function checkCanChangeBranchConfig(roles: readonly string[]): void {
@@ -34,6 +37,16 @@ export function checkCanRemoveBranchOverride(roles: readonly string[]): void {
   if (!holds(roles, ['Super_Admin', 'Admin'])) {
     throw new ForbiddenError('Only Super_Admin or Admin can delete branch config overrides');
   }
+}
+
+/**
+ * The rate a new sale, order, return or exchange keeps (#247): the shop's
+ * percentage as a fraction to 4 decimals ("0.1500"), or "0" with tax off.
+ */
+export function taxRateOf(settings: { enabled: unknown; ratePct: unknown }): string {
+  const pct = Number(settings.ratePct);
+  if (settings.enabled !== true || !(pct > 0)) return '0';
+  return (Math.round(pct * 100) / 10000).toFixed(4);
 }
 
 /** Whether a branch may set its own value for `key`: not for a system-wide setting such as the currency. */

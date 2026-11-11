@@ -46,15 +46,19 @@ export function checkDiscounts(lines: PricedLine[], maxPct: number): void {
   }
 }
 
-/** The sale's totals: its books, and the fees of its services (#169), each net of its discount. */
+/**
+ * The sale's totals: its books, and the fees of its services (#169), each net
+ * of its discount. Prices include tax (#247, 1a): the total is as priced, and
+ * the tax is the part of it at the shop's rate ("0" with tax off).
+ */
 export function totals(
   lines: PricedLine[],
   services: { subtotal: Money; discountTotal: Money } = { subtotal: Money.ZERO, discountTotal: Money.ZERO },
-): { subtotal: Money; discountTotal: Money; taxTotal: Money; grandTotal: Money } {
+  taxRate = '0',
+): { subtotal: Money; discountTotal: Money; taxRate: string; taxTotal: Money; grandTotal: Money } {
   const subtotal = Money.sum(lines.map((l) => l.lineTotal)).plus(services.subtotal);
   const discountTotal = Money.sum(lines.map((l) => l.discountAmount)).plus(services.discountTotal);
-  // Tax is not charged yet (ADR-0010: default 0%).
-  return { subtotal, discountTotal, taxTotal: Money.ZERO, grandTotal: subtotal };
+  return { subtotal, discountTotal, taxRate, taxTotal: subtotal.taxIncluded(taxRate), grandTotal: subtotal };
 }
 
 export function paymentStatus(grandTotal: Money, paid: Money): PosPaymentStatus {

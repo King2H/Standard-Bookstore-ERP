@@ -1,7 +1,7 @@
 import type { ConfigSource, ShopIdentity } from '@bms/shared';
 import { kysely } from '../../db/kysely.js';
 import { isForeignKeyViolation } from '../../db/errors.js';
-import { withTransaction } from '../../db/tx.js';
+import { withTransaction, type Queryable } from '../../db/tx.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { redisDel, redisGet, redisSet } from '../../lib/redis.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
@@ -96,12 +96,17 @@ export async function getNotificationPrefs(branchId: number | null): Promise<unk
 
 // ── System settings ───────────────────────────────────────────────────────────
 
+/** The tax rate a document made now keeps (#247): "0" with tax off. */
+export async function currentTaxRate(q: Queryable = kysely): Promise<string> {
+  return policy.taxRateOf(await config.taxSettings(q));
+}
+
 export function listSystemConfig(): Promise<ConfigRecord[]> {
   return config.listSystem(kysely);
 }
 
 export async function setSystemConfig(actor: Actor, key: string, value: unknown): Promise<ConfigRecord> {
-  policy.checkCanChangeSystemConfig(actor.roles);
+  policy.checkCanChangeSystemConfig(actor.roles, key);
   policy.checkConfigValue(key, value);
 
   // Cached branch values pick up a new system default when they expire.

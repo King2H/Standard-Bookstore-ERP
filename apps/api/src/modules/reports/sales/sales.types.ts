@@ -16,6 +16,8 @@ export interface SalesLineRecord {
   transactionType: TransactionType;
   kind: LineKind;
   referenceNumber: string;
+  /** The rate its document was made at (#247), a fraction; 0 with tax off. */
+  taxRate: number;
   branch: string;
   locationName: string;
   customerName: string;
@@ -45,6 +47,7 @@ export interface SalesSummary {
   returnsValue: number;         // positive magnitude
   exchangeDifference: number;   // signed: outgoing − incoming across all exchange lines
   netSalesRevenue: number;      // grossSales − discounts − returnsValue + exchangeDifference
+  taxIncluded: number;          // the tax inside netSalesRevenue, each document at its own rate (#247)
   /** Order and POS book lines after discount. */
   bookSales: number;
   /** Service fees after discount (#169): order, POS and, within exchangeDifference, exchange ones (PR 4). */

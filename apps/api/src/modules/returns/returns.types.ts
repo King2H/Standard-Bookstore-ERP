@@ -100,6 +100,8 @@ export interface ReturnRecord {
   branchId: number;
   customerId: number | null;
   totalRefundAmount: Money;
+  taxRate: number;
+  taxAmount: Money;
   refundMethod: RefundMethod | 'mixed';
   status: 'completed' | 'rejected';
   reason: string | null;

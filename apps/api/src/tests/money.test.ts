@@ -84,6 +84,21 @@ describe('Money', () => {
       expect(Money.of('-1').abs().toFixed()).toBe('1.00');
     });
 
+    // #247 (owner decisions 1a, 2a): prices include tax; the tax inside a
+    // price is price × rate ÷ (1 + rate), rounded once, to the cent.
+    it('gives the tax included in a price, at a rate kept as a fraction', () => {
+      expect(Money.of('115.00').taxIncluded('0.1500').toFixed()).toBe('15.00');
+      expect(Money.of('100.00').taxIncluded('0.1500').toFixed()).toBe('13.04');
+      expect(Money.of('115.00').taxIncluded('0.1000').toFixed()).toBe('10.45');
+      // A refund, or an exchange the shop pays back, gives the tax back.
+      expect(Money.of('-100.00').taxIncluded('0.1500').toFixed()).toBe('-13.04');
+      expect(Money.of('115.00').taxIncluded('0').toFixed()).toBe('0.00');
+      // One rounding: 0.07 at 15% is 0.00913…, so 0.01; two roundings (to 4 decimals first) would agree here,
+      // but 1,000,000.03 at 7.5% is 69,767.4441…: 69,767.44, never 69,767.45.
+      expect(Money.of('0.07').taxIncluded('0.15').toFixed()).toBe('0.01');
+      expect(Money.of('1000000.03').taxIncluded('0.075').toFixed()).toBe('69767.44');
+    });
+
     it('serialises as exact strings, and as numbers on request', () => {
       expect(JSON.stringify({ total: Money.of('1234.5') })).toBe('{"total":"1234.50"}');
       expect(Money.of('1234.5').toNumber()).toBe(1234.5);

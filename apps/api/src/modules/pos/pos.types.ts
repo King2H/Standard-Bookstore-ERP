@@ -26,6 +26,8 @@ export interface PosTransactionRecord {
   transactionNumber: string;
   subtotal: Money;
   discountTotal: Money;
+  /** The rate the sale was made at, as a fraction (0.15); 0 with tax off (#247). */
+  taxRate: number;
   taxTotal: Money;
   grandTotal: Money;
   amountPaid: Money;

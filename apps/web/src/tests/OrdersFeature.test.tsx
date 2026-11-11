@@ -76,7 +76,7 @@ function stubApi() {
       return json(contract(ReturnListResponseSchema, {
         items: u.searchParams.get('orderId') === '10' ? [{
           id: '5', returnNumber: 'RET-20261019-0001', transactionId: null, transactionNumber: null, orderId: '10',
-          orderNumber: 'ORD-20261018-0001', branchId: 1, customerId: null, totalRefundAmount: 25, refundMethod: 'cash',
+          orderNumber: 'ORD-20261018-0001', branchId: 1, customerId: null, totalRefundAmount: 25, taxRate: 0, taxAmount: 0, refundMethod: 'cash',
           status: 'completed', reason: null, processedBy: 9, approvedBy: null, undelivered: false, createdAt: CREATED, exchangeId: null, exchangeReference: null,
         }] : [],
         total: 1, page: 1, totalPages: 1,

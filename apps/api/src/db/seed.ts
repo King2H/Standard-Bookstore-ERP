@@ -120,7 +120,10 @@ async function seedDefaultTenant(): Promise<void> {
     // ── 7. System config defaults ─────────────────────────────────────────────
     const configDefaults: Array<[string, string]> = [
       ['base_currency',                    '"ETB"'],
-      // tax_rate omitted — taxation disabled for this phase
+      // Tax off, at 15% named VAT once switched on (#247, ADR-0010).
+      ['tax_enabled',                      'false'],
+      ['tax_rate_pct',                     '15'],
+      ['tax_name',                         '"VAT"'],
       ['fiscal_year_start_month',          '1'],
       ['max_line_discount_pct',            '{"Sales":10,"Manager":25,"Admin":50}'],
       ['max_transaction_discount_pct',     '20'],

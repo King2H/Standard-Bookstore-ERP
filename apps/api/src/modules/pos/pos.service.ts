@@ -7,7 +7,7 @@ import { insertOutboxEvent } from '../../lib/outbox.js';
 import { piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import { accountForPayment, movementNote, recordMovement } from '../bankAccount/bankAccount.service.js';
-import { getMaxLineDiscountPct } from '../config/config.service.js';
+import { currentTaxRate, getMaxLineDiscountPct } from '../config/config.service.js';
 import { recordCounterMoney } from '../cashSessions/cashSessions.service.js';
 import * as customers from '../customer/customer.repository.js';
 import * as inventoryService from '../inventory/inventory.service.js';
@@ -150,7 +150,7 @@ export async function createTransaction(actor: Actor, sale: NewSale): Promise<Po
     policy.checkDiscounts(lines, maxDiscountPct);
     // A service on a line (#169): the branch's fee, kept on its own line under the book.
     const services = await saleServices.priceServices(tx, sale.items, { branchId: sale.branchId, customerId: sale.customerId, maxDiscountPct });
-    const totals = policy.totals(lines, saleServices.serviceTotals(services));
+    const totals = policy.totals(lines, saleServices.serviceTotals(services), await currentTaxRate(tx));
     const paid = sumOf(sale.payments);
     policy.checkSalePayments(
       { grandTotal: totals.grandTotal, paid, allowCredit: sale.allowCredit, customerId: sale.customerId, dueDate: sale.dueDate },

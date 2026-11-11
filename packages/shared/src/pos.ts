@@ -60,6 +60,9 @@ export const PosTransactionSchema = z.object({
   transactionNumber: z.string(),
   subtotal: z.number(),
   discountTotal: z.number(),
+  /** The rate the sale was made at, a fraction (0.15 for 15%); 0 with tax off (#247). Prices include it. */
+  taxRate: z.number(),
+  /** The tax inside grandTotal at that rate. */
   taxTotal: z.number(),
   grandTotal: z.number(),
   amountPaid: z.number(),

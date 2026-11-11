@@ -30,7 +30,12 @@ export function summarizeLines(rows: SalesLineRecord[]): LinesSummary {
   let costAmount = Money.ZERO;
   let bookSales = Money.ZERO;
   let serviceIncome = Money.ZERO;
+  // Each document's lines in the range, at its rate: the tax is worked out per document, as on the document (#247).
+  const documents = new Map<string, { net: Money; rate: number }>();
   for (const row of rows) {
+    const key = `${row.transactionType} ${row.referenceNumber}`;
+    const doc = documents.get(key) ?? { net: Money.ZERO, rate: row.taxRate };
+    documents.set(key, { net: doc.net.plus(row.netAmount), rate: doc.rate });
     if (row.transactionType === 'ORDER' || row.transactionType === 'POS') {
       if (row.kind === 'SERVICE') serviceIncome = serviceIncome.plus(row.netAmount);
       else bookSales = bookSales.plus(row.netAmount);
@@ -48,6 +53,7 @@ export function summarizeLines(rows: SalesLineRecord[]): LinesSummary {
     costAmount = costAmount.plus(row.costAmount);
   }
   const netSalesRevenue = grossSales.minus(discounts).minus(returnsValue).plus(exchangeDifference).round(2);
+  const taxIncluded = Money.sum([...documents.values()].map((d) => d.net.round(2).taxIncluded(String(d.rate))));
   const cost = costAmount.round(2);
   const grossProfit = netSalesRevenue.minus(cost);
   return {
@@ -57,6 +63,7 @@ export function summarizeLines(rows: SalesLineRecord[]): LinesSummary {
     returnsValue: returnsValue.toNumber(),
     exchangeDifference: exchangeDifference.toNumber(),
     netSalesRevenue: netSalesRevenue.toNumber(),
+    taxIncluded: taxIncluded.toNumber(),
     bookSales: bookSales.round(2).toNumber(),
     serviceIncome: serviceIncome.round(2).toNumber(),
     costAmount: cost.toNumber(),
