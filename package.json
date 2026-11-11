@@ -27,6 +27,7 @@
     "format": "prettier --write \"apps/**/*.{ts,tsx}\" \"packages/**/*.ts\""
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.71.0",
     "dotenv-cli": "^7.4.2",

@@ -98,6 +98,47 @@ automatically, as the owner. The tests themselves work as the API's user, under 
 security. To use a different test database, set `TEST_DATABASE_URL`; its name must end
 in `_test`, so the tests can never run against real data by mistake.
 
+## The key journeys, end to end (#33)
+
+`e2e/` holds the journeys a shop does every day, through the screens: a POS sale, a credit
+order delivered then paid, a return, an exchange, a purchase order approved and received, and
+the cash drawer counted then the day closed. Each sets up its own books, stock and people through
+the API; day close runs last. CI runs them on every pull request against the production images
+(the job "E2E journeys"), then the data consistency check, which must find no error.
+
+Against your development servers (`npm run dev:api`, `npm run dev:web`), as `admin` with the
+seed password, on a database where today is not closed yet:
+
+```powershell
+npx playwright install chromium   # once
+npx playwright test -c e2e/playwright.config.ts
+```
+
+Against the production images, as CI does (Docker; ports 80 and 443 free; a checkout with no
+install in `deploy/`):
+
+```bash
+bash e2e/start-shop.sh
+E2E_BASE_URL=https://localhost E2E_ADMIN_PASSWORD='E2e#Admin-2026' npx playwright test -c e2e/playwright.config.ts
+bash e2e/stop-shop.sh
+```
+
+A failed journey leaves its screenshot and trace in `e2e/results` (in CI: the run's
+"e2e-results" artifact); `npx playwright show-trace <trace.zip>` replays it step by step.
+
+## Releases (#33)
+
+The version lives in the root `package.json` only (#245). To release:
+
+1. Set the version in `package.json` (for example `2.0.0`, or `2.0.0-rc.1` for a pre-release)
+   and merge it to `main` like any change.
+2. **Actions → Release → Run workflow**, on `main`, with that version. It checks that the
+   version is `package.json`'s, that it is not released already and that CI passed on the
+   commit, then makes a **draft** release: the notes list the PRs merged since the last release,
+   with the install bundle `bookstore-<version>.zip` and its `SHA256SUMS`.
+3. Review the draft under **Releases**, edit the notes if needed, and **Publish**. GitHub tags
+   the commit `v<version>` then. Nothing is tagged or published before.
+
 ## Database tasks
 
 **Open a SQL shell:**

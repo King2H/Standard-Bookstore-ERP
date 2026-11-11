@@ -50,10 +50,12 @@ npx tsc --noEmit -p apps/api     # typecheck API
 npx tsc --noEmit -p apps/web     # typecheck web
 npm test                         # API integration tests (real database, sequential)
 npm run test:web                 # web component tests (jsdom)
+npx playwright test -c e2e/playwright.config.ts   # E2E journeys on the dev servers (docs/development.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, a dependency audit, web tests and build, and the API tests on
-PostgreSQL 18 for every PR to `main`. Run the same checks locally before asking for a merge.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, a dependency audit, web tests and build, the API tests on
+PostgreSQL 18, and the E2E journeys on the production images for every PR to `main`. Run the same checks locally
+before asking for a merge. Releases are drafted by the Release workflow and published by the owner (`docs/development.md`).
 
 The Bank Accounts module is off unless `FEATURE_BANK_ACCOUNTS=true` (interim switch until feature flags, #27).
 

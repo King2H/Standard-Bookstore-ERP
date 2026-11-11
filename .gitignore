@@ -79,3 +79,7 @@ deploy/backups/
 deploy/.upgrade-state
 # The v1 import's files hold customer contacts in clear (#246).
 v1-import-*/
+# The E2E journeys' output, and their test shop's backups (#33).
+e2e/results/
+e2e/report/
+deploy/backups-e2e/
