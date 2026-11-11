@@ -76,7 +76,7 @@ function stubApi() {
     if (u.pathname === '/config/currency') return json(contract(CurrencyResponseSchema, { currency: shopCurrency }));
     if (u.pathname === '/config/shop') {
       return json(contract(ShopIdentitySchema, {
-        name: 'Kuraz Books', motto: '', tin: '0012345678', branch: { id: 1, name: 'Home', address: 'Bole, Addis Ababa', phone: '+251911000000' },
+        name: 'Kuraz Books', motto: '', tin: '0012345678', taxName: 'VAT', branch: { id: 1, name: 'Home', address: 'Bole, Addis Ababa', phone: '+251911000000' },
       }));
     }
     if (u.pathname === '/branches/1/locations') {
@@ -419,6 +419,30 @@ describe('POS terminal: the sale and its receipt', () => {
     const receipt = document.getElementById('pos-receipt')!;
     await within(receipt).findByText('Kuraz Books');
     for (const text of ['Home', 'Bole, Addis Ababa', '+251911000000', 'TIN 0012345678', 'Cashier: Me']) expect(receipt).toHaveTextContent(text);
+  });
+
+  it('shows under the total the VAT it includes and the net before tax, for a sale made with tax on (#247, 2a; was: neither)', async () => {
+    saleAnswer = sale({ subtotal: 115, grandTotal: 115, amountPaid: 115, taxRate: 0.15, taxTotal: 15 });
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
+    await screen.findByText('POS-20261018-0001');
+    const receipt = document.getElementById('pos-receipt')!;
+    expect((await within(receipt).findByText('Includes VAT 15%')).closest('div')).toHaveTextContent('ETB 15.00');
+    expect(within(receipt).getByText('Net before tax').closest('div')).toHaveTextContent('ETB 100.00');
+  });
+
+  it('shows neither for a sale made with tax off', async () => {
+    const user = await openTerminal();
+    await addBook(user, 'Oromay');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }));
+    await screen.findByText('POS-20261018-0001');
+    const receipt = document.getElementById('pos-receipt')!;
+    await within(receipt).findByText('Kuraz Books');
+    expect(receipt).not.toHaveTextContent('Includes');
+    expect(receipt).not.toHaveTextContent('Net before tax');
   });
 
   it('prints only the receipt (owner decision 2a; was: the whole page)', async () => {

@@ -4,6 +4,7 @@ import { Money, type BookAvailabilityListResponse, type Customer, type PosTransa
 import { getCurrentBranchId } from '../../../lib/api.js';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import { ShopHeader } from '../../../components/ShopHeader.js';
+import { TaxLines } from '../../../components/TaxLines.js';
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import QuickAddCustomer, { type QuickCustomerPayload } from '../../../components/QuickAddCustomer.js';
@@ -534,6 +535,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                 <div className="flex justify-between text-base font-bold text-gray-900 dark:text-white border-t border-gray-100 dark:border-gray-800 pt-2">
                   <span>Total</span><span className="tabular-nums">{currency} {Number(receipt.grandTotal).toFixed(2)}</span>
                 </div>
+                <TaxLines rate={receipt.taxRate} tax={receipt.taxTotal} total={receipt.grandTotal} currency={currency} />
               </div>
               {(receipt.payments ?? []).length > 0 && (
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 space-y-1.5">

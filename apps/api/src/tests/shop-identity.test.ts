@@ -48,7 +48,7 @@ describe('Shop identity (#228)', () => {
     const res = await shop(sales);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      name: '', motto: '', tin: '',
+      name: '', motto: '', tin: '', taxName: 'VAT',
       branch: { id: branchId, name: 'Shop Id Branch', address: '123 Test Street', phone: '555-0000' },
     });
   });

@@ -1,4 +1,4 @@
-import { CONFIG_VALUE_SCHEMAS, type ProfileResponse } from '@bms/shared';
+import { CONFIG_VALUE_SCHEMAS, TAX_CONFIG_KEYS, type ProfileResponse } from '@bms/shared';
 
 /**
  * Who may change which settings: the API's rules (config.policy.ts,
@@ -11,6 +11,13 @@ const holds = (me: Account | undefined, allowed: string[]) => (me?.currentRoles 
 
 /** System defaults: Super_Admin only. */
 export const canChangeSystemSettings = (me: Account | undefined) => holds(me, ['Super_Admin']);
+
+/** The tax settings (#247, owner decision 3a): Super_Admin and Admin. */
+export const canChangeTaxSettings = (me: Account | undefined) => holds(me, ['Super_Admin', 'Admin']);
+
+/** One shop-wide setting: the tax ones for Super_Admin and Admin, every other for Super_Admin. */
+export const canChangeSystemSetting = (me: Account | undefined, key: string) =>
+  (TAX_CONFIG_KEYS as readonly string[]).includes(key) ? canChangeTaxSettings(me) : canChangeSystemSettings(me);
 
 /** Branch overrides: Super_Admin, Admin and Manager. */
 export const canOverrideBranchSettings = (me: Account | undefined) => holds(me, ['Super_Admin', 'Admin', 'Manager']);

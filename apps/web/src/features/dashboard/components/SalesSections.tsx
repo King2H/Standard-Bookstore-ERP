@@ -24,6 +24,13 @@ export function SalesTrend({ params }: { params: ReportParams }) {
             <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Orders</p><p className="text-base font-bold text-gray-900 dark:text-white">{sales.summary.totalOrders}</p></div>
             <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Avg Order</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.averageOrderValue, currency)}</p></div>
           </div>
+          {/* The tax inside net sales (#247, 3a), once a sale carried any. */}
+          {sales.summary.taxIncluded !== 0 && (
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Tax included</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.taxIncluded, currency)}</p></div>
+              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Net sales before tax</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.netSalesBeforeTax, currency)}</p></div>
+            </div>
+          )}
           {/* Book sales and service income apart (#169), once a sale carried a service. */}
           {sales.summary.serviceIncome > 0 && (
             <div className="grid grid-cols-2 gap-3 mb-4">

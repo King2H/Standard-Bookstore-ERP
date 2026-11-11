@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { ROUTINE_NOTIFICATION_EVENTS, SYSTEM_WIDE_CONFIG_KEYS, type ConfigEntry, type EffectiveConfigEntry, type RoutineNotificationEvent } from '@bms/shared';
+import { ActionDialog } from '../../../components/ActionDialog.js';
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useOpenBranches } from '../../branches/queries.js';
 import { useBranchConfig, useBranchConfigChanges, useSetSystemConfig, useSystemConfig } from '../queries.js';
 import {
-  canChangeSystemSettings, canOpenBranchSettings, canOverrideBranchSettings, canRemoveBranchOverrides, readSettingValue,
+  canChangeSystemSetting, canChangeSystemSettings, canChangeTaxSettings, canOpenBranchSettings, canOverrideBranchSettings, canRemoveBranchOverrides, readSettingValue,
   type ValueType,
 } from '../rules.js';
 
@@ -17,7 +18,9 @@ const CONFIG_META: Record<string, { label: string; tab: string; type: ValueType;
   shop_motto:                       { label: 'Shop Motto',                   tab: 'Shop',         type: 'string',  description: 'Shown with the name on the welcome banner' },
   shop_tin:                         { label: 'Shop TIN',                     tab: 'Shop',         type: 'string',  description: 'Tax identification number, 10 digits, on every receipt and slip; empty to leave it off' },
   business_timezone:                { label: 'Business Time Zone',           tab: 'General',      type: 'string',  description: "The shop's local time zone, for every branch: its days are closed and reported in it" },
-  // tax_rate removed — taxation disabled for this phase
+  tax_enabled:                      { label: 'Charge Tax',                   tab: 'Tax',          type: 'boolean', description: 'Off unless the shop must charge tax. Prices include it: turning it on changes no price, and each sale, order, return and exchange keeps the rate it was made at' },
+  tax_rate_pct:                     { label: 'Tax Rate %',                   tab: 'Tax',          type: 'number',  description: 'One rate for the shop, above 0 and at most 100, to two decimals (e.g. 15); applies from the next document' },
+  tax_name:                         { label: 'Tax Name',                     tab: 'Tax',          type: 'string',  description: 'What receipts and slips call it (e.g. VAT), 1 to 20 characters' },
   fiscal_year_start_month:          { label: 'Fiscal Year Start Month',      tab: 'General',      type: 'number',  description: 'Month number 1–12 (1 = January)' },
   max_line_discount_pct:            { label: 'Max Line Discount % (per role)',tab: 'Discounts',    type: 'json',    description: 'JSON object: {"Sales":10,"Manager":25,"Admin":50}' },
   max_transaction_discount_pct:     { label: 'Max Transaction Discount %',   tab: 'Discounts',    type: 'number',  description: 'Maximum total transaction discount allowed' },
@@ -56,7 +59,7 @@ const TIME_ZONES = [
   'Asia/Dubai', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'UTC',
 ];
 
-const TABS = ['General', 'Shop', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Cash', 'Notifications', 'Security'];
+const TABS = ['General', 'Shop', 'Tax', 'Discounts', 'Inventory', 'Procurement', 'Returns', 'Loyalty', 'Exchange', 'Cash', 'Notifications', 'Security'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -85,11 +88,11 @@ function DraftError({ error }: { error: string | null }) {
 
 function ConfigRowItem({
   row,
-  isSuperAdmin,
+  canEdit,
   onSave,
 }: {
   row: ConfigEntry & { source?: 'branch' | 'system' };
-  isSuperAdmin: boolean;
+  canEdit: boolean;
   onSave: (key: string, value: unknown) => void;
 }) {
   const meta = CONFIG_META[row.key];
@@ -187,7 +190,7 @@ function ConfigRowItem({
             <code className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-sm font-mono max-w-[200px] truncate block">
               {formatValue(row.value)}
             </code>
-            {isSuperAdmin && (
+            {canEdit && (
               <button
                 onClick={() => { setDraft(formatValue(row.value)); setEditing(true); }}
                 className="text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -414,6 +417,9 @@ export default function SettingsPage() {
 
   const { data: me } = useMyProfile();
   const isSuperAdmin = canChangeSystemSettings(me);
+  const canChangeTax = canChangeTaxSettings(me);
+  // Turning tax on is confirmed first (#247, 3a): what it does and does not change.
+  const [confirmTaxOn, setConfirmTaxOn] = useState(false);
   const canEditBranch = canOverrideBranchSettings(me);
   const canRemoveOverride = canRemoveBranchOverrides(me);
 
@@ -426,9 +432,14 @@ export default function SettingsPage() {
   const branchChanges = useBranchConfigChanges(selectedBranchId);
   const failed = (fallback: string) => (err: unknown) => showToast((err as { message?: string }).message ?? fallback, 'error');
 
-  const saveSystem = (key: string, value: unknown) => updateSystemMutation.mutate({ key, value }, {
+  const sendSystem = (key: string, value: unknown) => updateSystemMutation.mutate({ key, value }, {
     onSuccess: () => showToast('System config updated'), onError: failed('Failed to update config'),
   });
+  const saveSystem = (key: string, value: unknown) => {
+    if (key === 'tax_enabled' && value === true) setConfirmTaxOn(true);
+    else sendSystem(key, value);
+  };
+  const systemValue = (key: string) => systemData?.items.find(r => r.key === key)?.value;
   const saveBranch = (key: string, value: unknown) => branchChanges.set.mutate({ key, value }, {
     onSuccess: () => showToast('Branch config updated'), onError: failed('Failed to update branch config'),
   });
@@ -479,7 +490,9 @@ export default function SettingsPage() {
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">System Defaults</h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-              {isSuperAdmin ? 'Editable by Super_Admin only' : 'Read-only — contact Super_Admin to change'}
+              {activeTab === 'Tax'
+                ? (canChangeTax ? 'Tax: editable by Super_Admin and Admin' : 'Read-only — contact Super_Admin or Admin to change')
+                : (isSuperAdmin ? 'Editable by Super_Admin only' : 'Read-only — contact Super_Admin to change')}
             </p>
           </div>
           <div className="px-5 py-2">
@@ -495,7 +508,7 @@ export default function SettingsPage() {
                 <ConfigRowItem
                   key={row.key}
                   row={row}
-                  isSuperAdmin={isSuperAdmin}
+                  canEdit={canChangeSystemSetting(me, row.key)}
                   onSave={saveSystem}
                 />
                 )
@@ -548,6 +561,16 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      {confirmTaxOn && (
+        <ActionDialog
+          title="Turn tax on?"
+          message={`Prices stay as they are: they include ${String(systemValue('tax_name') ?? 'tax')} at ${String(systemValue('tax_rate_pct') ?? '')}%. Receipts, slips and reports show it from the next sale, order, return or exchange; those made before keep none.`}
+          confirmLabel="Turn on"
+          busy={updateSystemMutation.isPending}
+          onConfirm={() => { setConfirmTaxOn(false); sendSystem('tax_enabled', true); }}
+          onCancel={() => setConfirmTaxOn(false)}
+        />
+      )}
     </div>
   );
 }

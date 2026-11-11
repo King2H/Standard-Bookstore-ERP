@@ -174,13 +174,15 @@ export const CONFIG_VALUE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
 
 /**
  * GET /config/shop: what heads every receipt and slip, and the welcome
- * banner: the shop's name, motto and TIN (empty when not set), and the
- * session branch's name, address and phone. Any signed-in staff member.
+ * banner: the shop's name, motto and TIN (empty when not set), the name its
+ * tax is printed under (#247), and the session branch's name, address and
+ * phone. Any signed-in staff member.
  */
 export const ShopIdentitySchema = z.object({
   name: z.string(),
   motto: z.string(),
   tin: z.string(),
+  taxName: z.string(),
   branch: z.object({ id: z.number().int(), name: z.string(), address: z.string(), phone: z.string() }),
 });
 export type ShopIdentity = z.infer<typeof ShopIdentitySchema>;

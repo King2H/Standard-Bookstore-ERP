@@ -17732,6 +17732,9 @@
                     "tin": {
                       "type": "string"
                     },
+                    "taxName": {
+                      "type": "string"
+                    },
                     "branch": {
                       "type": "object",
                       "properties": {
@@ -17763,6 +17766,7 @@
                     "name",
                     "motto",
                     "tin",
+                    "taxName",
                     "branch"
                   ],
                   "additionalProperties": false
