@@ -31,6 +31,10 @@ export default defineConfig({
     pool: 'forks',
     fileParallelism: false,
     testTimeout: 30_000,
+    // Setup and cleanup (beforeAll, afterAll) get as long as a test: at
+    // Vitest's 10 s default a file's cleanup failed on a busy PC with every
+    // test passed.
+    hookTimeout: 30_000,
     // Run after-hooks in reverse registration order (the Vitest 2+ default),
     // so the pool cleanup in setup.ts runs after each file's own afterAll.
     sequence: { hooks: 'stack' },
