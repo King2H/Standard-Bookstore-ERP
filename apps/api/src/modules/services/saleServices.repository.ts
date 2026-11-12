@@ -316,9 +316,20 @@ export async function listJobs(q: Queryable, f: JobFilter, page: { limit: number
     .where('j.branch_id', '=', f.branchId);
   if (f.status) query = query.where('j.status', '=', f.status);
   if (f.overdue) query = query.where('j.status', 'in', ['REQUESTED', 'AT_BINDER']).where(sql<boolean>`j.ready_date < CURRENT_DATE`);
+  // The job's number, the customer's name or code, the book, or the sale's
+  // number, in part; the phone, kept encrypted, whole by its lookup hash (#267).
   if (f.q) {
-    const pattern = `%${f.q.toLowerCase()}%`;
-    query = query.where((eb) => eb.or([eb(sql`lower(j.job_number)`, 'like', pattern), eb(sql`lower(c.full_name)`, 'like', pattern)]));
+    const like = `%${f.q}%`;
+    query = query.where((eb) => eb.or([
+      eb('j.job_number', 'ilike', like),
+      eb('c.full_name', 'ilike', like),
+      eb('c.customer_code', 'ilike', like),
+      eb('b.title', 'ilike', like),
+      eb('t.transaction_number', 'ilike', like),
+      eb('o.order_number', 'ilike', like),
+      eb('e.exchange_reference', 'ilike', like),
+      ...(f.qLookup ? [eb('c.phone_lookup', '=', f.qLookup)] : []),
+    ]));
   }
   const [rows, count] = await Promise.all([
     query

@@ -4,7 +4,7 @@ import { kysely } from '../../db/kysely.js';
 import { withTransaction, type Queryable } from '../../db/tx.js';
 import { nextDailyNumber } from '../../lib/documentNumber.js';
 import { BusinessError, NotFoundError } from '../../lib/errors.js';
-import { decryptPii } from '../../lib/piiEncryption.js';
+import { decryptPii, piiLookupHash } from '../../lib/piiEncryption.js';
 import { insertOutboxEvent } from '../../lib/outbox.js';
 import { insertAuditEntry } from '../audit/audit.repository.js';
 import * as policy from './saleServices.policy.js';
@@ -224,7 +224,8 @@ export function feesReturnedOnSale(q: Queryable, transactionId: string): Promise
 
 /** The jobs board (1a): the branch's jobs with the customer's phone, decrypted to be called. */
 export async function listJobs(f: JobFilter, paging: { page: number; pageSize: number }): Promise<{ items: JobBoardRecord[]; total: number }> {
-  const { rows, total } = await repo.listJobs(kysely, f, { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize });
+  const filter = { ...f, qLookup: f.q ? piiLookupHash(f.q) : null };
+  const { rows, total } = await repo.listJobs(kysely, filter, { limit: paging.pageSize, offset: (paging.page - 1) * paging.pageSize });
   return {
     total,
     items: rows.map((r) => ({

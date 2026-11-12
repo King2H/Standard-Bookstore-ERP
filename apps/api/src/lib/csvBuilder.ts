@@ -116,7 +116,7 @@ export const RECEIVABLES_AGING_COLUMNS: CsvColumnDef[] = [
 ];
 
 // Inventory Valuation Report (Prompt 2) — Book/ISBN/Qty On Hand/Average
-// Cost/Inventory Value/Last Movement Date/Last Purchase Cost/Last Selling
+// Cost/Inventory Value/Last Movement Date/Last Purchase Cost/Current Selling
 // Price. The general-purpose inventory export (with author/category/
 // publisher/reserved/available) stays available as INVENTORY_COLUMNS below
 // for the existing Inventory page export button.
@@ -129,7 +129,8 @@ export const INVENTORY_VALUATION_COLUMNS: CsvColumnDef[] = [
   { key: 'inventory_value',     header: 'Inventory Value',      type: 'number'  },
   { key: 'last_movement_date',  header: 'Last Movement Date',   type: 'date'    },
   { key: 'last_purchase_cost',  header: 'Last Purchase Cost',   type: 'number'  },
-  { key: 'last_selling_price',  header: 'Last Selling Price',   type: 'number'  },
+  // The branch's price, else the book's default: what it sells for now, not at its last sale (#267).
+  { key: 'last_selling_price',  header: 'Current Selling Price', type: 'number'  },
 ];
 
 export const INVENTORY_COLUMNS: CsvColumnDef[] = [

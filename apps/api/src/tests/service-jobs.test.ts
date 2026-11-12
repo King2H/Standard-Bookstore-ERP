@@ -168,10 +168,36 @@ describe('Binding jobs after the sale', () => {
       await db.query(`UPDATE service_jobs SET ready_date = CURRENT_DATE + 3 WHERE id = $1`, [job]);
     });
 
+    it('finds a job by the customer\'s code or phone, the book or the sale\'s number (#267; was: job number or name only)', async () => {
+      const ids = async (query: string) => (await as(api().get(`/api/v1/service-jobs?q=${encodeURIComponent(query)}`), sales)).body.items.map((j: { id: number }) => j.id);
+      const { customer_code: code } = await one(`SELECT customer_code FROM customers WHERE id = $1`, [customerId]);
+      expect(await ids(code.toLowerCase())).toContain(job);
+      // The phone is kept encrypted: it is found whole, not in part.
+      expect(await ids('0911223344')).toContain(job);
+      expect(await ids('0911223')).not.toContain(job);
+      const { title } = await one(`SELECT title FROM books WHERE id = $1`, [bookId]);
+      expect(await ids(title.slice(2, 9).toUpperCase())).toContain(job);
+      expect(await ids(saleNumber)).toEqual([job]);
+    });
+
     it('is for the selling roles of the branch', async () => {
       expect((await as(api().get('/api/v1/service-jobs'), clerk)).status).toBe(403);
       const elsewhere = await as(api().get('/api/v1/service-jobs'), otherManager, otherBranch);
       expect(elsewhere.body.items.map((j: { id: number }) => j.id)).not.toContain(job);
+    });
+
+    it('shows staff with access to all branches the board of the branch they choose (#267), and no one else another branch\'s', async () => {
+      const board = (branch?: number) => as(api().get(`/api/v1/service-jobs${branch ? `?branchId=${branch}` : ''}`), otherManager, otherBranch);
+      expect((await board(branchId)).status).toBe(403);
+      await db.query(`UPDATE staff SET is_all_branches = true WHERE username = $1`, [`${STAFF_PREFIX}mgr_b`]);
+      try {
+        const res = await board(branchId);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(res.body.items.map((j: { id: number }) => j.id)).toContain(job);
+        expect((await board()).body.items.map((j: { id: number }) => j.id)).not.toContain(job);
+      } finally {
+        await db.query(`UPDATE staff SET is_all_branches = false WHERE username = $1`, [`${STAFF_PREFIX}mgr_b`]);
+      }
     });
 
     it('tells the selling roles of the branch when a job is ready (2a)', async () => {

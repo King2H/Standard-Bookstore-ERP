@@ -148,6 +148,13 @@ describe('Inventory, customer and receivables reports', () => {
       expect(res.headers['content-type']).toMatch(/text\/csv/);
     });
 
+    it('names the inventory valuation\'s price column for what it is, the current selling price (#267; was: "Last Selling Price")', async () => {
+      const res = await get('/api/v1/reports/inventory-valuation/export');
+      const header = res.text.replace(/^\uFEFF/, '').split(/\r?\n/)[0];
+      expect(header.split(',')).toContain('Current Selling Price');
+      expect(header).not.toContain('Last Selling Price');
+    });
+
     it('refuses an impossible date with 400 (was: 500)', async () => {
       const res = await get('/api/v1/reports/customers?dateTo=2026-02-30');
       expect(res.status).toBe(400);

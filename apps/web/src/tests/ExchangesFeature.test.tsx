@@ -36,7 +36,11 @@ const book = (id: number, title: string, defaultPrice: number | null): Book => c
   tradeValue: null, isActive: true, status: 'ACTIVE', archivedAt: null, createdAt: CREATED, categories: [], categoryIds: [], tags: [],
 });
 
-const BOOKS = [book(1, 'Fikir Eske Mekabir', 100), book(2, 'Oromay', 150), book(5, 'Some Book', null)];
+const BOOKS = [
+  book(1, 'Fikir Eske Mekabir', 100), book(2, 'Oromay', 150), book(5, 'Some Book', null),
+  // Its trade value, what a customer is offered for it (#267).
+  { ...book(6, 'Traded Classic', 100), tradeValue: 60 },
+];
 
 const customer: Customer = contract(CustomerSchema, {
   id: 77, branchId: 1, customerCode: 'CUS-0077', fullName: 'Jane Trader', phone: null, email: null, gender: null,
@@ -193,6 +197,14 @@ describe('Quick Exchange: settling the difference', () => {
 });
 
 describe('Quick Exchange: trade-in values', () => {
+  it('offers a book\'s trade value as its allowance, and the selling price for a book with none (#267; was: always the selling price)', async () => {
+    const user = await openQuickExchange();
+    await addBook(user, 'Incoming', 'Traded', 'Traded Classic');
+    expect(screen.getByLabelText('Allowance for Traded Classic')).toHaveValue(60);
+    await addBook(user, 'Incoming', 'Fikir', 'Fikir Eske Mekabir');
+    expect(screen.getByLabelText('Allowance for Fikir Eske Mekabir')).toHaveValue(100);
+  });
+
   it('blocks a trade-in with no allowance, and sends it once one is entered', async () => {
     me = profile(['Manager']);
     const user = await openQuickExchange();

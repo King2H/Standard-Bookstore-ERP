@@ -251,11 +251,13 @@ export function BookFormDrawer({ book, currency, onClose, onSaved }: {
           <>
             <div>
               <label htmlFor="book-price" className={LABEL}>Default Price ({currency})</label>
-              <input id="book-price" type="number" step="0.01" min="0" {...register('defaultPrice')} aria-invalid={invalid('defaultPrice')} className={INPUT} />
+              <input id="book-price" type="number" step="0.01" min="0" {...register('defaultPrice')} aria-describedby="book-price-hint" aria-invalid={invalid('defaultPrice')} className={INPUT} />
+              <p id="book-price-hint" className="text-xs text-gray-400 dark:text-gray-500 mt-1">What the book sells for, tax included when tax is on; a branch may set its own. Stock is valued at its average cost, not at this price.</p>
             </div>
             <div>
               <label htmlFor="book-trade-value" className={LABEL}>Trade Value ({currency})</label>
-              <input id="book-trade-value" type="number" step="0.01" min="0" {...register('tradeValue')} aria-invalid={invalid('tradeValue')} className={INPUT} />
+              <input id="book-trade-value" type="number" step="0.01" min="0" {...register('tradeValue')} aria-describedby="book-trade-value-hint" aria-invalid={invalid('tradeValue')} className={INPUT} />
+              <p id="book-trade-value-hint" className="text-xs text-gray-400 dark:text-gray-500 mt-1">What a customer is offered for this book when trading it in on an exchange; it can be changed there.</p>
             </div>
           </>
         )}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LifecycleStatusSchema, ListPagingQuerySchema, PaginatedSchema } from './common.js';
+import { IdSchema, LifecycleStatusSchema, ListPagingQuerySchema, PaginatedSchema } from './common.js';
 
 /**
  * Contracts for /api/v1/services (#169): non-stock items a sale carries next
@@ -148,8 +148,10 @@ export const ServiceJobListQuerySchema = ListPagingQuerySchema.extend({
   status: ServiceJobStatusSchema.optional(),
   /** Requested or at the binder past their ready date. */
   overdue: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
-  /** Job number or customer name. */
+  /** The job's number, the customer's name, code or whole phone, the book, or the sale's number (#267). */
   q: z.string().trim().max(100).optional(),
+  /** With access to all branches, the branch whose board is shown (#267); else the session's. */
+  branchId: IdSchema.optional(),
 });
 export type ServiceJobListQuery = z.infer<typeof ServiceJobListQuerySchema>;
 

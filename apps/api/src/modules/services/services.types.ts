@@ -161,4 +161,6 @@ export interface JobFilter {
   status?: ServiceJobStatus;
   overdue?: boolean;
   q?: string;
+  /** The lookup hash of `q`: a customer's phone is found whole (#267). */
+  qLookup?: string | null;
 }

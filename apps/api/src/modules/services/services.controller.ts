@@ -15,6 +15,7 @@ import {
   type ServiceListResponse,
 } from '@bms/shared';
 import { holdsPermission } from '../../middleware/rbac.js';
+import { scopedBranch } from '../../lib/scope.js';
 import { valid } from '../../middleware/validate.js';
 import * as returnsService from '../returns/returns.service.js';
 import { toBoardItemResponse, toJobResponse, toServiceResponse } from './services.mapper.js';
@@ -113,7 +114,8 @@ export async function stepJob(req: Request, res: Response): Promise<void> {
 export async function listJobs(req: Request, res: Response): Promise<void> {
   const { query } = valid(req, schemas.jobs);
   const result = await saleServices.listJobs(
-    { branchId: req.staff!.branchId, status: query.status, overdue: query.overdue, q: query.q || undefined },
+    // The session's branch; with access to all branches, the one asked for (#267).
+    { branchId: scopedBranch(req), status: query.status, overdue: query.overdue, q: query.q || undefined },
     { page: query.page, pageSize: query.pageSize },
   );
   const body: ServiceJobListResponse = {
