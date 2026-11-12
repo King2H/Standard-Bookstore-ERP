@@ -17,6 +17,7 @@ import SettingsPage from '../features/settings/pages/SettingsPage.js';
 import AuditLogPage from '../features/auditLog/pages/AuditLogPage.js';
 import { setAccessToken } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 
 const branch = (id: number, over: Partial<Branch> = {}): Branch => contract(BranchSchema, {
   id, name: `Branch ${String(id).padStart(2, '0')}`, address: `${id} Main St`, contactInfo: {}, operatingHours: {},
@@ -58,10 +59,11 @@ function stubApi() {
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/config/system' && method === 'GET') return json(contract(SystemConfigListResponseSchema, { items: SYSTEM, total: SYSTEM.length }));
     if (u.pathname === '/branches') {
-      const pageSize = Math.min(Number(u.searchParams.get('pageSize') ?? 25), 100);
       const open = u.searchParams.get('isActive') === 'true' ? branches.filter(b => b.isActive) : branches;
-      return json(contract(BranchListResponseSchema, { items: open.slice(0, pageSize), total: open.length, page: 1, pageSize, totalPages: Math.ceil(open.length / pageSize) }));
+      return json(contract(BranchListResponseSchema, pageOf(open, u, (b) => b.name)));
     }
+    const oneBranch = u.pathname.match(/^\/branches\/(\d+)$/);
+    if (oneBranch) return json(contract(BranchSchema, branches.find((b) => b.id === Number(oneBranch[1]))!));
     const branchConfig = u.pathname.match(/^\/config\/branches\/(\d+)$/);
     if (branchConfig && method === 'GET') {
       return json(contract(BranchConfigListResponseSchema, { items: [
@@ -235,18 +237,23 @@ describe('Settings', () => {
     renderPage(<SettingsPage />);
     await screen.findByText('Base Currency');
     await settle();
-    const picker = screen.getByRole('combobox');
+    const picker = screen.getByRole('combobox', { name: 'Branch' });
     expect(within(picker).getAllByRole('option').map(o => o.textContent)).toEqual(['Select a branch...', 'Branch 01']);
-    expect(calls.some(c => c.path === '/branches?isActive=true&pageSize=100')).toBe(true);
+    // Its own branch only, not a list of every branch (#266).
+    expect(calls.some(c => c.path.startsWith('/branches?'))).toBe(false);
   });
 
-  it('offers every open branch with access to all branches', async () => {
+  it('finds any open branch by typing, with access to all branches (#266; was: a dropdown of the first 100)', async () => {
     me = profile(['Admin'], true, 1);
+    const user = userEvent.setup();
     renderPage(<SettingsPage />);
     await screen.findByText('Base Currency');
-    await settle();
-    expect(within(screen.getByRole('combobox')).getAllByRole('option').map(o => o.textContent))
-      .toEqual(['Select a branch...', 'Branch 01', 'Branch 02']);
+    await user.click(screen.getByRole('combobox', { name: 'Branch' }));
+    const list = await screen.findByRole('listbox');
+    expect(await within(list).findByText('Showing 2 of 2')).toBeInTheDocument();
+    expect(within(list).getAllByRole('option').map(o => o.textContent)).toEqual(['Branch 01', 'Branch 02']);
+    await pick(user, 'Branch', '02', 'Branch 02');
+    await waitFor(() => expect(calls.some(c => c.path === '/config/branches/2')).toBe(true));
   });
 
   it('lets a Manager override a branch setting but not remove an override (was: offered, refused by the API)', async () => {
@@ -269,7 +276,7 @@ describe('Settings', () => {
     renderPage(<SettingsPage />);
     await screen.findByText('Base Currency');
     await settle();
-    await user.selectOptions(screen.getByRole('combobox'), '1');
+    await pick(user, 'Branch', '01', 'Branch 01');
     const overrides = (await screen.findByText('Branch Overrides')).closest('div.bg-white')! as HTMLElement;
     await within(overrides).findByText('No settings in this category');
     expect(within(overrides).queryByText('Base Currency')).not.toBeInTheDocument();

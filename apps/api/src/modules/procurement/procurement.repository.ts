@@ -92,6 +92,10 @@ export async function list(q: Queryable, filter: PurchaseOrderFilter, page: Page
   if (filter.dateFrom) query = query.where('po.created_at', '>=', sql<Date>`${filter.dateFrom}::date`);
   // Through the end of that day.
   if (filter.dateTo) query = query.where('po.created_at', '<', sql<Date>`${filter.dateTo}::date + 1`);
+  if (filter.q) {
+    const like = `%${filter.q}%`;
+    query = query.where((eb) => eb.or([eb('po.po_number', 'ilike', like), eb('s.name', 'ilike', like)]));
+  }
 
   const [rows, count] = await Promise.all([
     query.orderBy('po.created_at', 'desc').orderBy('po.id', 'desc').limit(page.limit).offset(page.offset).execute(),

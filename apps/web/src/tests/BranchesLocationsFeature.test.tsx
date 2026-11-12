@@ -14,6 +14,7 @@ import {
 import BranchesPage from '../features/branches/pages/BranchesPage.js';
 import LocationsPage from '../features/locations/pages/LocationsPage.js';
 import { contract } from './contract.js';
+import { pick } from './picker.js';
 
 const branch = (id: number, over: Partial<Branch> = {}): Branch => contract(BranchSchema, {
   id, name: `Branch ${String(id).padStart(2, '0')}`, address: `${id} Main St`, contactInfo: {}, operatingHours: {},
@@ -48,10 +49,13 @@ function stubApi() {
     if (method === 'GET' && u.pathname === '/branches') {
       const page = Number(u.searchParams.get('page') ?? 1);
       const pageSize = Math.min(Number(u.searchParams.get('pageSize') ?? 25), 100);
-      const open = u.searchParams.get('isActive') === 'true' ? branches.filter(b => b.isActive) : branches;
+      const q = (u.searchParams.get('q') ?? '').toLowerCase();
+      const open = (u.searchParams.get('isActive') === 'true' ? branches.filter(b => b.isActive) : branches).filter(b => b.name.toLowerCase().includes(q));
       const items = open.slice((page - 1) * pageSize, page * pageSize);
       return json(contract(BranchListResponseSchema, { items, total: open.length, page, pageSize, totalPages: Math.ceil(open.length / pageSize) }));
     }
+    const oneBranch = u.pathname.match(/^\/branches\/(\d+)$/);
+    if (method === 'GET' && oneBranch) return json(contract(BranchSchema, branches.find(b => b.id === Number(oneBranch[1]))!));
     if (method === 'POST' && u.pathname === '/branches') {
       const created = branch(99, { ...CreateBranchRequestSchema.parse(body), name: body.name });
       return json(created, 201);
@@ -185,7 +189,7 @@ describe('Locations', () => {
     expect(screen.getByRole('button', { name: '+ New Location' })).toBeInTheDocument();
     expect(screen.getByTitle('Delete')).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole('combobox'), '1');
+    await pick(user, /Branch/, '01', 'Branch 01');
     expect(await screen.findByText('Floor of 1')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '+ New Location' })).not.toBeInTheDocument();
     expect(screen.queryByTitle('Delete')).not.toBeInTheDocument();
@@ -196,7 +200,7 @@ describe('Locations', () => {
     const user = userEvent.setup();
     renderPage(<LocationsPage />);
     await screen.findByText('Floor of 3');
-    await user.selectOptions(screen.getByRole('combobox'), '1');
+    await pick(user, /Branch/, '01', 'Branch 01');
     expect(await screen.findByText('Floor of 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ New Location' })).toBeInTheDocument();
   });
@@ -208,12 +212,17 @@ describe('Locations', () => {
     expect(screen.queryByRole('button', { name: '+ New Location' })).not.toBeInTheDocument();
   });
 
-  it('lists the open branches to pick from, up to the API\'s largest page (was: the first 25)', async () => {
+  it('finds any open branch by typing, past the first page (#266; was: a dropdown of the first 100), and no closed one', async () => {
     me = profile(['Admin'], true, 3);
+    branches = [...Array.from({ length: 120 }, (_, i) => branch(i + 1)), branch(200, { name: 'Closed Branch', isActive: false })];
+    const user = userEvent.setup();
     renderPage(<LocationsPage />);
     await screen.findByText('Floor of 3');
-    expect(calls.some(c => c.path === '/branches?isActive=true&pageSize=100')).toBe(true);
-    expect(screen.queryByRole('option', { name: 'Branch 04' })).not.toBeInTheDocument();
+    await pick(user, /Branch/, '115', 'Branch 115');
+    expect(await screen.findByText('Floor of 115')).toBeInTheDocument();
+    await user.clear(screen.getByRole('combobox', { name: /Branch/ }));
+    await user.type(screen.getByRole('combobox', { name: /Branch/ }), 'Closed');
+    expect(await within(await screen.findByRole('listbox')).findByText('No matches')).toBeInTheDocument();
   });
 
   it('adds a location to the branch shown', async () => {

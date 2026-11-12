@@ -49,8 +49,8 @@ function duplicateNumber(err: unknown): never {
 
 // ── Accounts ──────────────────────────────────────────────────────────────────
 
-export function listAccounts(branchId: number, isActive: boolean | undefined, page: Page) {
-  return repo.listAccounts(kysely, { branchId, isActive }, page);
+export function listAccounts(branchId: number, filter: { isActive?: boolean; q?: string }, page: Page) {
+  return repo.listAccounts(kysely, { branchId, ...filter }, page);
 }
 
 export function getAccount(branchId: number, id: number): Promise<BankAccountRecord> {

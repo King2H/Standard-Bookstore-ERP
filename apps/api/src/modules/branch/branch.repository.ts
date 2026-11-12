@@ -16,11 +16,12 @@ export async function findById(q: Queryable, id: number): Promise<BranchRecord |
 
 export async function list(
   q: Queryable,
-  filter: { isActive?: boolean },
+  filter: { isActive?: boolean; q?: string },
   page: { limit: number; offset: number },
 ): Promise<{ items: BranchRecord[]; total: number }> {
   let query = q.selectFrom('branches');
   if (filter.isActive !== undefined) query = query.where('is_active', '=', filter.isActive);
+  if (filter.q) query = query.where('name', 'ilike', `%${filter.q}%`);
 
   const [rows, count] = await Promise.all([
     query.select(COLUMNS).orderBy('name').limit(page.limit).offset(page.offset).execute(),

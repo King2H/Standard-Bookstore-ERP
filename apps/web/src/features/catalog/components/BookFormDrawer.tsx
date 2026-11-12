@@ -170,7 +170,7 @@ export function BookFormDrawer({ book, currency, onClose, onSaved }: {
               <label className={LABEL}>Publisher</label>
               <Controller control={control} name="publisher" render={({ field }) => (
                 <SearchPicker aria-label="Publisher" value={field.value} onChange={field.onChange} queryKey="publishers"
-                  search={async (q) => (await searchPublishers(q)).items.map((p) => ({ id: p.id, label: p.name }))}
+                  search={searchPublishers}
                   placeholder="No publisher — type to search…" className={INPUT} />
               )} />
             </div>
@@ -226,7 +226,7 @@ export function BookFormDrawer({ book, currency, onClose, onSaved }: {
             <p className="text-xs text-gray-500 dark:text-gray-400">Select from master list. Add new authors in the Authors tab.</p>
             <Controller control={control} name="authors" render={({ field }) => (
               <MultiSearchPicker aria-label="Authors" value={field.value} onChange={field.onChange} queryKey="authors" invalid={!!errors.authors}
-                search={async (q) => (await searchAuthors(q)).items.map((a) => ({ id: a.id, label: a.name }))}
+                search={searchAuthors}
                 placeholder="Search authors…" className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-hidden" />
             )} />
           </>
@@ -237,7 +237,7 @@ export function BookFormDrawer({ book, currency, onClose, onSaved }: {
             <p className="text-xs text-gray-500 dark:text-gray-400">Select from master list. Add new categories in the Categories tab.</p>
             <Controller control={control} name="categories" render={({ field }) => (
               <MultiSearchPicker aria-label="Categories" value={field.value} onChange={field.onChange} queryKey="categories"
-                search={async (q) => (await searchCategories(q)).items.map((c) => ({ id: c.id, label: c.name }))}
+                search={searchCategories}
                 placeholder="Search categories…" className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-hidden" />
             )} />
             <div>

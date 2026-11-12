@@ -23,6 +23,7 @@ import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pick } from './picker.js';
 
 const CREATED = '2026-10-31T07:00:00.000Z';
 
@@ -252,7 +253,7 @@ describe('Special orders on screen (#174)', () => {
     const row = (await screen.findByText('ORD-20261031-0030')).closest('tr') as HTMLElement;
     expect(row.textContent).toMatch(/Abebe Kebede.*Yegna Tarik.*2/);
     await user.click(within(row).getByLabelText('Buy Yegna Tarik for ORD-20261031-0030'));
-    await user.selectOptions(screen.getByLabelText('Draft purchase order'), '7');
+    await pick(user, 'Draft purchase order', '', /^PO-.* · /);
     await user.click(screen.getByRole('button', { name: 'Add to purchase order' }));
     await settle();
     expect(sent('POST', '/purchase-orders/7/special-orders')).toEqual([{ lines: [{ orderLineId: 51, quantity: 2 }] }]);

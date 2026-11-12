@@ -11,6 +11,7 @@ import { orderKeys, useOrder, useReserveOrderLine } from '../queries.js';
 import { useStockLevel } from '../../inventory/queries.js';
 import { canCreateOrder } from '../rules.js';
 import { DeliveryNote } from './DeliveryNote.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../components/Pagination.js';
 
 /** The order's stage, from its status, old names included. */
 function stageOf(status: string): 'DRAFT' | 'CONFIRMED' | 'PART' | 'FULFILLED' | 'CANCELLED' | null {
@@ -38,7 +39,9 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const { showToast } = useToast();
   const stage = data ? stageOf(data.status) : null;
   // What came back of a delivered order (#166, owner decision 4a): it stays completed.
-  const { data: returns } = useReturns({ orderId, pageSize: 50 }, stage === 'FULFILLED' || stage === 'PART');
+  const [returnsPage, setReturnsPage] = useState(1);
+  const [returnsPageSize, setReturnsPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const { data: returns } = useReturns({ orderId, page: returnsPage, pageSize: returnsPageSize }, stage === 'FULFILLED' || stage === 'PART');
   if (!data?.lineItems) return <p className="text-xs text-gray-400">Loading...</p>;
   const anyReturned = data.lineItems.some((li) => li.qtyReturned > 0);
   // Copies never delivered, cancelled with the rest (#174).
@@ -173,6 +176,11 @@ export function OrderDetail({ orderId }: { orderId: string }) {
               </li>
             ))}
           </ul>
+          {/* Every return, a page at a time (#266; was: the first 50). */}
+          {returns.totalPages > 1 && (
+            <Pagination page={returnsPage} pageSize={returnsPageSize} total={returns.total} totalPages={returns.totalPages}
+              onPageChange={setReturnsPage} onPageSizeChange={makePageSizeHandler(setReturnsPage, setReturnsPageSize)} itemLabel="return" />
+          )}
         </div>
       )}
     </>

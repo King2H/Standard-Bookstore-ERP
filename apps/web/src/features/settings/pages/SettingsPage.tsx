@@ -3,7 +3,8 @@ import { ROUTINE_NOTIFICATION_EVENTS, SYSTEM_WIDE_CONFIG_KEYS, type ConfigEntry,
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
-import { useOpenBranches } from '../../branches/queries.js';
+import { useBranch } from '../../branches/queries.js';
+import { BranchPicker } from '../../branches/components/BranchPicker.js';
 import { useBranchConfig, useBranchConfigChanges, useSetSystemConfig, useSystemConfig } from '../queries.js';
 import {
   canChangeSystemSetting, canChangeSystemSettings, canChangeTaxSettings, canOpenBranchSettings, canOverrideBranchSettings, canRemoveBranchOverrides, readSettingValue,
@@ -410,6 +411,8 @@ function BranchConfigRowItem({
 
 // ── Main Settings Page ────────────────────────────────────────────────────────
 
+const BRANCH_CHOICE = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
+
 export default function SettingsPage() {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('General');
@@ -424,8 +427,9 @@ export default function SettingsPage() {
   const canRemoveOverride = canRemoveBranchOverrides(me);
 
   const { data: systemData, isLoading: sysLoading } = useSystemConfig();
-  // Open branches whose settings this account may open: its own, or any with access to all branches.
-  const branches = (useOpenBranches().data?.items ?? []).filter(b => canOpenBranchSettings(me, b.id));
+  // A branch's settings are opened from that branch, or from any with access to all branches:
+  // then any open branch is found by typing (#266), else the session's own is offered.
+  const { data: ownBranch } = useBranch(me && !me.isAllBranches ? me.currentBranchId : null);
   const { data: branchConfigData, isLoading: branchConfigLoading } = useBranchConfig(selectedBranchId);
 
   const updateSystemMutation = useSetSystemConfig();
@@ -524,16 +528,18 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Per-branch values take precedence over system defaults</p>
           </div>
           <div className="px-5 pt-3 pb-2">
-            <select
-              value={selectedBranchId ?? ''}
-              onChange={e => setSelectedBranchId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 mb-3 transition-colors"
-            >
-              <option value="">Select a branch...</option>
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+            <div className="mb-3">
+              {me?.isAllBranches ? (
+                <BranchPicker aria-label="Branch" value={selectedBranchId} onChange={setSelectedBranchId}
+                  placeholder="Type a branch to view its config…" className={BRANCH_CHOICE} />
+              ) : (
+                <select aria-label="Branch" value={selectedBranchId ?? ''}
+                  onChange={e => setSelectedBranchId(e.target.value ? parseInt(e.target.value, 10) : null)} className={BRANCH_CHOICE}>
+                  <option value="">Select a branch...</option>
+                  {ownBranch && canOpenBranchSettings(me, ownBranch.id) && ownBranch.isActive && <option value={ownBranch.id}>{ownBranch.name}</option>}
+                </select>
+              )}
+            </div>
 
             {!selectedBranchId ? (
               <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Select a branch to view its config</p>

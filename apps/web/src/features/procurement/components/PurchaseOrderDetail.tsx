@@ -12,6 +12,7 @@ import { useSupplierReturns } from '../../supplierReturns/queries.js';
 import { canReturnOrder } from '../../supplierReturns/rules.js';
 import { StatusBadge as ReturnStatusBadge } from '../../supplierReturns/components/StatusBadge.js';
 import { ProgressBar, StatusBadge, amount, safePct } from './shared.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../components/Pagination.js';
 
 type Asking = 'cancel' | 'closeShort' | null;
 
@@ -33,7 +34,9 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
   const { data: po, isLoading } = usePurchaseOrder(poId);
   const step = usePurchaseOrderStep(poId);
   const [asking, setAsking] = useState<Asking>(null);
-  const { data: returns } = useSupplierReturns({ poId: Number(poId), pageSize: 100 });
+  const [returnsPage, setReturnsPage] = useState(1);
+  const [returnsPageSize, setReturnsPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const { data: returns } = useSupplierReturns({ poId: Number(poId), page: returnsPage, pageSize: returnsPageSize });
 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
   if (!po) return <div className="p-8 text-center text-gray-400">PO not found.</div>;
@@ -206,6 +209,13 @@ export function PurchaseOrderDetail({ poId, onBack, onEdit, onReceive, onLedger,
               </div>
             ))}
           </div>
+          {/* Every return, a page at a time (#266; was: the first 100). */}
+          {returns!.totalPages > 1 && (
+            <div className="px-4 pb-3">
+              <Pagination page={returnsPage} pageSize={returnsPageSize} total={returns!.total} totalPages={returns!.totalPages}
+                onPageChange={setReturnsPage} onPageSizeChange={makePageSizeHandler(setReturnsPage, setReturnsPageSize)} itemLabel="return" />
+            </div>
+          )}
         </div>
       )}
 

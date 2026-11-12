@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useOpenBranches } from '../../branches/queries.js';
+import { BranchPicker } from '../../branches/components/BranchPicker.js';
 
 /** The filters as typed; the page applies them once the dates are in order. */
 export interface Draft { dateFrom: string; dateTo: string; groupBy: 'day' | 'week' | 'month'; branchId: string }
@@ -23,7 +23,6 @@ export function Toolbar({ draft, setDraft, problem, allBranches, kpiUpdatedAt, r
   onExport: (type: string) => void;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
-  const { data: branches } = useOpenBranches(allBranches);
   return (
     <>
       {/* ── Toolbar: Filters + Export + Refresh, all on one line ──
@@ -47,17 +46,12 @@ export function Toolbar({ draft, setDraft, problem, allBranches, kpiUpdatedAt, r
           {problem && <span role="alert" className="shrink-0 text-xs text-red-500">{problem}</span>}
           {/* Branch selector: staff with access to all branches (owner decision 3a: All branches first) */}
           {allBranches && (
-            <select
-              aria-label="Branch"
-              value={draft.branchId}
-              onChange={e => setDraft({ ...draft, branchId: e.target.value })}
-              className="shrink-0 w-28 sm:w-36 px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow truncate"
-            >
-              <option value="">All Branches</option>
-              {(branches?.items ?? []).map(b => (
-                <option key={b.id} value={String(b.id)}>{b.name}</option>
-              ))}
-            </select>
+            // Empty is every branch; a branch is found by typing its name (#266).
+            <div className="shrink-0 w-36 sm:w-44">
+              <BranchPicker aria-label="Branch" value={draft.branchId ? Number(draft.branchId) : null}
+                onChange={(id) => setDraft({ ...draft, branchId: id === null ? '' : String(id) })} placeholder="All Branches"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-900 dark:placeholder:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow" />
+            </div>
           )}
           <button onClick={() => setDraft(EMPTY_DRAFT)}
             className="shrink-0 px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">

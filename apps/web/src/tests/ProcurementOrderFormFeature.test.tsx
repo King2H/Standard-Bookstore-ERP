@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  BookAvailabilityListResponseSchema, BookSchema, BranchListResponseSchema, CatalogSearchResponseSchema, LocationListResponseSchema,
+  BookAvailabilityListResponseSchema, BookSchema, BranchListResponseSchema, BranchSchema, CatalogSearchResponseSchema, LocationListResponseSchema,
   ProfileResponseSchema, PurchaseOrderListResponseSchema, PurchaseOrderSchema, SupplierListResponseSchema,
   type Book, type ProfileResponse, type PurchaseOrder, BooksToOrderResponseSchema,
 } from '@bms/shared';
@@ -18,6 +18,7 @@ import ProcurementPage from '../features/procurement/pages/ProcurementPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 
 const CREATED = '2026-10-01T00:00:00.000Z';
 
@@ -79,11 +80,12 @@ function stubApi() {
         total: 1, page: 1, pageSize: 10, totalPages: 1,
       }));
     }
+    const all = [branch(1, 'Main Branch', true), branch(2, 'Bole Branch', true), branch(3, 'Closed Branch', false)];
     if (u.pathname === '/branches') {
-      const all = [branch(1, 'Main Branch', true), branch(2, 'Bole Branch', true), branch(3, 'Closed Branch', false)];
-      const items = q.get('isActive') === 'true' ? all.filter((b) => b.isActive) : all;
-      return json(contract(BranchListResponseSchema, { items, total: items.length, page: 1, pageSize: 100, totalPages: 1 }));
+      return json(contract(BranchListResponseSchema, pageOf(q.get('isActive') === 'true' ? all.filter((b) => b.isActive) : all, u, (b) => b.name)));
     }
+    const oneBranch = u.pathname.match(/^\/branches\/(\d+)$/);
+    if (oneBranch) return json(contract(BranchSchema, all.find((b) => b.id === Number(oneBranch[1]))!));
     if (/^\/branches\/\d+\/locations$/.test(u.pathname)) {
       const items = [{ id: 1, name: 'Shop Floor', isDefaultFulfillment: true }, { id: 2, name: 'Back Store', isDefaultFulfillment: false }]
         .map((l) => ({ ...l, branchId: 1, createdAt: CREATED }));
@@ -175,11 +177,12 @@ describe('Procurement: the order form', () => {
     expect(calls.some((c) => c.path.startsWith('/suppliers') && new URL(c.path, 'http://x').searchParams.get('pageSize') === '200')).toBe(false);
   });
 
-  it('offers only open branches to receive the goods (was: closed ones too, which the API refused)', async () => {
-    await openNewOrder();
-    await waitFor(() => expect(selectWith('Same as order branch (default)').options.length).toBeGreaterThan(1));
-    const options = [...selectWith('Same as order branch (default)').options].map((o) => o.text);
-    expect(options).toEqual(['Same as order branch (default)', 'Main Branch', 'Bole Branch']);
+  it('offers only open branches to receive the goods, found by typing (was: closed ones too, which the API refused; #266: the first 100)', async () => {
+    const user = await openNewOrder();
+    await user.click(screen.getByRole('combobox', { name: 'Receiving Branch' }));
+    const list = await screen.findByRole('listbox');
+    await within(list).findByText('Showing 2 of 2');
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['Main Branch', 'Bole Branch']);
   });
 
   it('lets the order\'s own branch choose a receiving location (was: only after choosing another branch)', async () => {
@@ -198,7 +201,7 @@ describe('Procurement: the order form', () => {
     const user = await openNewOrder();
     await user.type(screen.getByPlaceholderText('Type to search books…'), 'Anim');
     const list = await screen.findByRole('listbox');
-    expect(within(list).getByText('Stock at Main Branch')).toBeInTheDocument();
+    expect(await within(list).findByText('Stock at Main Branch')).toBeInTheDocument();
     expect(await within(list).findByText('Back Store: 40 on hand · 15 on order')).toBeInTheDocument();
     expect(within(list).getByText('Shop Floor: 6 on hand')).toBeInTheDocument();
     fireEvent.mouseDown(within(list).getByText('Animal Farm'));
@@ -210,18 +213,16 @@ describe('Procurement: the order form', () => {
 
   it('shows another receiving branch\'s stock only to staff with access to all branches; others see their own branch', async () => {
     const user = await openNewOrder();
-    await waitFor(() => expect(selectWith('Same as order branch (default)').options.length).toBe(3));
-    await user.selectOptions(selectWith('Same as order branch (default)'), '2');
+    await pick(user, 'Receiving Branch', 'Bole', 'Bole Branch');
     await user.type(screen.getByPlaceholderText('Type to search books…'), 'Anim');
-    expect(within(await screen.findByRole('listbox')).getByText('Stock at Main Branch')).toBeInTheDocument();
+    expect(await within(await screen.findByRole('listbox')).findByText('Stock at Main Branch')).toBeInTheDocument();
     await within(screen.getByRole('listbox')).findByText('Animal Farm');
     expect(new URL(calls.find((c) => c.path.startsWith('/purchase-orders/books'))!.path, 'http://x').searchParams.get('branchId')).toBeNull();
     cleanup();
 
     me = { ...profile(['Purchasor']), isAllBranches: true };
     const again = await openNewOrder();
-    await waitFor(() => expect(selectWith('Same as order branch (default)').options.length).toBe(3));
-    await again.selectOptions(selectWith('Same as order branch (default)'), '2');
+    await pick(again, 'Receiving Branch', 'Bole', 'Bole Branch');
     calls = [];
     await again.type(screen.getByPlaceholderText('Type to search books…'), 'Anim');
     expect(await within(await screen.findByRole('listbox')).findByText('Stock at Bole Branch')).toBeInTheDocument();

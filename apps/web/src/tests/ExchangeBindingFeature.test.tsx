@@ -22,6 +22,7 @@ import ReturnsPage from '../features/returns/pages/ReturnsPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 
 const CREATED = '2026-10-26T07:00:00.000Z';
 
@@ -87,7 +88,7 @@ function stubApi() {
         total: 1, page: 1, pageSize: 8, totalPages: 1,
       }));
     }
-    if (u.pathname === '/services') return json(contract(ServiceListResponseSchema, { items: [cloth], total: 1, page: 1, pageSize: 100, totalPages: 1 }));
+    if (u.pathname === '/services') return json(contract(ServiceListResponseSchema, pageOf([cloth], u, (s) => `${s.name} ${s.code}`)));
     if (u.pathname === '/customers') {
       return json(contract(CustomerListResponseSchema, {
         items: [contract(CustomerSchema, {
@@ -172,7 +173,7 @@ describe('binding on an outgoing book (2a, 3a)', () => {
     const user = await exchangeWithOromay();
     await user.click(screen.getByRole('button', { name: '+ Binding' }));
     const dialog = screen.getByRole('dialog', { name: 'Binding: Oromay' });
-    await user.selectOptions(within(dialog).getByLabelText('Binding'), 'Cloth binding — ETB 100.00, ready in 3 days');
+    await pick(user, 'Binding', '', 'Cloth binding — ETB 100.00, ready in 3 days', dialog);
     expect(within(dialog).queryByLabelText('Discount (%)')).not.toBeInTheDocument();
     await user.clear(within(dialog).getByLabelText('Copies (of 2)'));
     await user.type(within(dialog).getByLabelText('Copies (of 2)'), '1');
@@ -201,7 +202,7 @@ describe('binding on an outgoing book (2a, 3a)', () => {
     const user = await exchangeWithOromay();
     await user.click(screen.getByRole('button', { name: '+ Binding' }));
     const dialog = screen.getByRole('dialog', { name: 'Binding: Oromay' });
-    await user.selectOptions(within(dialog).getByLabelText('Binding'), 'Cloth binding — ETB 100.00, ready in 3 days');
+    await pick(user, 'Binding', '', 'Cloth binding — ETB 100.00, ready in 3 days', dialog);
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(screen.getByText(/Cloth binding × 2/)).toBeInTheDocument();
     // Down to one copy: the field reads "1" once cleared.

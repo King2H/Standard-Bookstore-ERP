@@ -1,7 +1,18 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { Service } from '@bms/shared';
 import { useCurrency } from '../../../lib/useCurrency.js';
+import { SearchPicker } from '../../../shared/components/SearchPicker.js';
+import { PICKER_PAGE_SIZE } from '../../../shared/picker.js';
+import { listServices } from '../api.js';
 import { bindingTotal, choiceFor, type BindingChoice } from '../binding.js';
-import { useServices } from '../queries.js';
+
+/** The service a binding is for, as the choice keeps it. */
+type Picked = Omit<BindingChoice, 'quantity' | 'discountPct'>;
+
+const pickedOf = (s: Service): Picked => {
+  const c = choiceFor(s, 1);
+  return { serviceId: c.serviceId, code: c.code, name: c.name, unitFee: c.unitFee, discountable: c.discountable };
+};
 
 const INPUT = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 const LABEL = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1';
@@ -25,13 +36,14 @@ export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, 
   onClose: () => void;
 }) {
   const currency = useCurrency();
-  const { data } = useServices({ status: 'active', pageSize: 100 });
-  const services = data?.items ?? [];
-  const [serviceId, setServiceId] = useState(value ? String(value.serviceId) : '');
+  // Any active binding is found by typing its name or code (#266; was: a dropdown of the first 100).
+  const found = useRef(new Map<number, Service>());
+  const [service, setService] = useState<Picked | null>(value ? {
+    serviceId: value.serviceId, code: value.code, name: value.name, unitFee: value.unitFee, discountable: value.discountable,
+  } : null);
   const [quantity, setQuantity] = useState(String(value?.quantity ?? bookQuantity));
   const [discount, setDiscount] = useState(value && value.discountPct > 0 ? String(value.discountPct) : '');
   const [error, setError] = useState('');
-  const service = services.find((s) => String(s.id) === serviceId);
   const discountable = discounts && !!service?.discountable;
 
   function save() {
@@ -41,11 +53,11 @@ export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, 
     const pct = discount.trim() === '' ? 0 : Number(discount);
     if (Number.isNaN(pct) || pct < 0 || pct > 100) { setError('The discount is a percentage, 0 to 100'); return; }
     if (maxDiscountPct !== null && pct > maxDiscountPct) { setError(`The discount is more than your limit of ${maxDiscountPct}%`); return; }
-    onSave({ ...choiceFor(service, qty), discountable, discountPct: discountable ? pct : 0 });
+    onSave({ ...service, quantity: qty, discountable, discountPct: discountable ? pct : 0 });
   }
 
   const preview = service && /^\d+$/.test(quantity.trim()) && Number(quantity) >= 1
-    ? bindingTotal({ ...choiceFor(service, Number(quantity)), discountable, discountPct: discountable ? Number(discount) || 0 : 0 })
+    ? bindingTotal({ ...service, quantity: Number(quantity), discountable, discountPct: discountable ? Number(discount) || 0 : 0 })
     : null;
 
   return (
@@ -56,12 +68,21 @@ export function BindingDialog({ bookTitle, bookQuantity, value, maxDiscountPct, 
         <p className="text-xs text-gray-500 dark:text-gray-400">The book is sold as usual; the binding is its own line, for a named customer, who is called when it is ready.</p>
         <div>
           <label htmlFor="binding-service" className={LABEL}>Binding</label>
-          <select id="binding-service" value={serviceId} onChange={(e) => { setServiceId(e.target.value); setError(''); }} className={INPUT}>
-            <option value="">Pick a binding…</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>{`${s.name} — ${currency} ${s.effectiveFee.toFixed(2)}, ready in ${s.turnaroundDays} ${s.turnaroundDays === 1 ? 'day' : 'days'}`}</option>
-            ))}
-          </select>
+          <SearchPicker id="binding-service" queryKey="services:active" className={INPUT} placeholder="Type a binding…"
+            value={service ? { id: service.serviceId, label: service.name } : null}
+            onChange={(o) => {
+              const s = o ? found.current.get(o.id) : undefined;
+              setService(s ? pickedOf(s) : null);
+              setError('');
+            }}
+            search={async (q, page) => {
+              const res = await listServices({ status: 'active', q: q || undefined, page, pageSize: PICKER_PAGE_SIZE });
+              for (const s of res.items) found.current.set(s.id, s);
+              return {
+                items: res.items.map((s) => ({ id: s.id, label: `${s.name} — ${currency} ${s.effectiveFee.toFixed(2)}, ready in ${s.turnaroundDays} ${s.turnaroundDays === 1 ? 'day' : 'days'}` })),
+                total: res.total,
+              };
+            }} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

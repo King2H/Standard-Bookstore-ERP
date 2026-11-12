@@ -174,6 +174,8 @@ export interface PurchaseOrderFilter {
   supplierId?: number;
   dateFrom?: string;
   dateTo?: string;
+  /** Part of the order's number or its supplier's name (#266). */
+  q?: string;
 }
 
 export type Paging = { page: number; pageSize: number };

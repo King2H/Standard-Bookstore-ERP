@@ -4,6 +4,7 @@ import type {
   Publisher, PublisherListResponse, ReferenceNameRequest, UpdateCategoryRequest,
 } from '@bms/shared';
 import { api, toQuery } from '../../lib/api.js';
+import { PICKER_PAGE_SIZE, pickerPage, type PickerPage } from '../../shared/picker.js';
 
 /** The catalog's reference data (#21): authors, categories and publishers, typed with their @bms/shared contracts. */
 
@@ -38,14 +39,18 @@ export const runReferenceAction = (kind: ReferenceKind, id: number, action: Refe
 
 export const deleteReference = (kind: ReferenceKind, id: number) => api.delete<MessageResponse>(`/${kind}/${id}`);
 
-/** Active publishers whose name starts with `q`, for a picker. */
-export const searchPublishers = (q: string, pageSize = 20) => listReference('publishers', { q, pageSize });
+/** A page of the records of `kind` matching `q`, for a picker (#266). */
+const searchKind = (kind: ReferenceKind) => async (q: string, page = 1): Promise<PickerPage> =>
+  pickerPage(await listReference(kind, { q, page, pageSize: PICKER_PAGE_SIZE }), (r) => ({ id: r.id, label: r.name }));
 
-/** Active categories whose name starts with `q`, for a picker. */
-export const searchCategories = (q: string, pageSize = 20) => listReference('categories', { q, pageSize });
+/** Publishers matching `q`, a page at a time, for a picker. */
+export const searchPublishers = searchKind('publishers');
 
-/** Active authors whose name starts with `q`, for a picker. */
-export const searchAuthors = (q: string, pageSize = 20) => listReference('authors', { q, pageSize });
+/** Categories matching `q`, a page at a time, for a picker. */
+export const searchCategories = searchKind('categories');
+
+/** Authors matching `q`, a page at a time, for a picker. */
+export const searchAuthors = searchKind('authors');
 
 /** The fixed lists a book's format and edition are chosen from. */
 export const listBookFormats = () => api.get<BookLookupListResponse>('/book-formats');

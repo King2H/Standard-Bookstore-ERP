@@ -4,6 +4,7 @@ import type {
 } from '@bms/shared';
 import { api, downloadFile, toQuery } from '../../lib/api.js';
 import { listSuppliers } from '../suppliers/api.js';
+import { PICKER_PAGE_SIZE, pickerPage, type PickerPage } from '../../shared/picker.js';
 
 /** The purchase-order endpoints (#21), typed with their @bms/shared contracts. */
 
@@ -15,6 +16,8 @@ export type PurchaseOrderListParams = {
   dateTo?: string;
   /** Staff with access to all branches, from the Dashboard's drill-down. */
   branchId?: string;
+  /** Part of the order's number or its supplier's name (#266). */
+  q?: string;
   page?: number;
   pageSize?: number;
 };
@@ -39,8 +42,8 @@ export const closePurchaseOrder = (id: string, reason?: string) =>
   api.post<PurchaseOrder>(`/purchase-orders/${id}/close`, reason ? { reason } : {});
 
 /** Suppliers whose name matches, archived and inactive ones too: their orders stay on record. */
-export const searchSuppliers = async (text: string) =>
-  (await listSuppliers({ q: text || undefined, status: 'all', pageSize: 10 })).items.map((s) => ({ id: s.id, label: s.name }));
+export const searchSuppliers = async (text: string, page = 1): Promise<PickerPage> =>
+  pickerPage(await listSuppliers({ q: text || undefined, status: 'all', page, pageSize: PICKER_PAGE_SIZE }), (s) => ({ id: s.id, label: s.name }));
 
 export const createPurchaseOrder = (body: CreatePurchaseOrderRequest) => api.post<PurchaseOrder>('/purchase-orders', body);
 
@@ -52,9 +55,9 @@ export const receivePurchaseOrder = (id: string, body: ReceivePurchaseOrderReque
   api.post<PurchaseOrder>(`/purchase-orders/${id}/receive`, body);
 
 /** Suppliers an order may go to: active and not blacklisted, found by typing (was: the first 200, loaded in full). */
-export const searchSuppliersToBuyFrom = async (text: string) =>
-  (await listSuppliers({ q: text || undefined, status: 'active', isBlacklisted: 'false', pageSize: 10 }))
-    .items.map((s) => ({ id: s.id, label: s.name }));
+export const searchSuppliersToBuyFrom = async (text: string, page = 1): Promise<PickerPage> =>
+  pickerPage(await listSuppliers({ q: text || undefined, status: 'active', isBlacklisted: 'false', page, pageSize: PICKER_PAGE_SIZE }),
+    (s) => ({ id: s.id, label: s.name }));
 
 /**
  * Books to order, found by typing, with the stock of each location of the

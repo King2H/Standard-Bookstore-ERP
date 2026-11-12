@@ -51,11 +51,16 @@ function toAccount(r: Awaited<ReturnType<ReturnType<typeof selectAccounts>['exec
 
 export async function listAccounts(
   q: Queryable,
-  filter: { branchId: number; isActive?: boolean },
+  filter: { branchId: number; isActive?: boolean; q?: string },
   page: Page,
 ): Promise<{ items: BankAccountRecord[]; total: number }> {
   let query = selectAccounts(q).where('a.branch_id', '=', filter.branchId);
   if (filter.isActive !== undefined) query = query.where('a.is_active', '=', filter.isActive);
+  // The account number is encrypted, so the search is by name and bank.
+  if (filter.q) {
+    const like = `%${filter.q}%`;
+    query = query.where((eb) => eb.or([eb('a.account_name', 'ilike', like), eb('a.bank_name', 'ilike', like)]));
+  }
   const [rows, count] = await Promise.all([
     query.orderBy('a.account_name').orderBy('a.id').limit(page.limit).offset(page.offset).execute(),
     query.clearSelect().select((eb) => eb.fn.countAll<string>().as('count')).executeTakeFirstOrThrow(),

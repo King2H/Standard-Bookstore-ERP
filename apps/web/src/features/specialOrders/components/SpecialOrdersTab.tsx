@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import type { SpecialOrderLine } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
-import { SearchPicker, type PickerOption } from '../../../shared/components/SearchPicker.js';
-import { searchSuppliersToBuyFrom } from '../../procurement/api.js';
+import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../components/Pagination.js';
+import { PICKER_PAGE_SIZE, pickerPage, SearchPicker, type PickerOption } from '../../../shared/components/SearchPicker.js';
+import { listPurchaseOrders, searchSuppliersToBuyFrom } from '../../procurement/api.js';
 import { usePurchaseOrders } from '../../procurement/queries.js';
 import { useLinkSpecialOrders, useSpecialOrders, useStartPurchaseOrder } from '../queries.js';
 
 const FIELD = 'border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white';
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
-type Choice = { quantity: string; unitCost: string };
+/** A ticked line, kept with its line so ticks on other pages count too. */
+type Choice = { line: SpecialOrderLine; quantity: string; unitCost: string };
 
 /**
  * The copies customers ordered that no purchase order brings yet (#174,
@@ -26,29 +28,32 @@ function copiesProblem(quantity: string, toOrder: number): string | null {
 
 export function SpecialOrdersTab({ onOpenOrder }: { onOpenOrder: (poId: string) => void }) {
   const { showToast } = useToast();
-  const { data, isLoading } = useSpecialOrders({ toOrder: true, pageSize: 100 });
-  const { data: drafts } = usePurchaseOrders({ status: 'draft', pageSize: 100 });
+  // Every line, a page at a time (#266; was: the first 100).
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const { data, isLoading } = useSpecialOrders({ toOrder: true, page, pageSize });
+  // Whether there is a draft at all; the draft itself is found by typing its number or supplier.
+  const drafts = usePurchaseOrders({ status: 'draft', pageSize: 1 }).data?.total ?? 0;
   const [chosen, setChosen] = useState<Record<string, Choice>>({});
   const [target, setTarget] = useState<'draft' | 'new' | null>(null);
-  const [draftId, setDraftId] = useState('');
+  const [draft, setDraft] = useState<PickerOption | null>(null);
   const [supplier, setSupplier] = useState<PickerOption | null>(null);
   const link = useLinkSpecialOrders();
   const start = useStartPurchaseOrder();
   const lines = data?.items ?? [];
-  const draftList = drafts?.items ?? [];
-  const into = target ?? (draftList.length > 0 ? 'draft' : 'new');
+  const into = target ?? (drafts > 0 ? 'draft' : 'new');
   const busy = link.isPending || start.isPending;
 
   const toggle = (l: SpecialOrderLine, on: boolean) => setChosen((c) => {
     const next = { ...c };
-    if (on) next[l.orderLineId] = { quantity: String(l.toOrder), unitCost: '' };
+    if (on) next[l.orderLineId] = { line: l, quantity: String(l.toOrder), unitCost: '' };
     else delete next[l.orderLineId];
     return next;
   });
   const change = (id: string, patch: Partial<Choice>) => setChosen((c) => ({ ...c, [id]: { ...c[id], ...patch } }));
 
   function submit() {
-    const picked = lines.filter((l) => chosen[l.orderLineId]);
+    const picked = Object.values(chosen).map((c) => c.line);
     if (picked.length === 0) return showToast('Tick the copies to buy', 'error');
     for (const l of picked) {
       const { quantity, unitCost } = chosen[l.orderLineId];
@@ -65,8 +70,8 @@ export function SpecialOrdersTab({ onOpenOrder }: { onOpenOrder: (poId: string) 
     const done = (po: { id: string; poNumber: string }) => { setChosen({}); showToast(`Added to ${po.poNumber}`, 'success'); onOpenOrder(po.id); };
     const failed = (e: Error) => showToast(e.message, 'error');
     if (into === 'draft') {
-      if (!draftId) return showToast('Choose the draft purchase order', 'error');
-      link.mutate({ poId: draftId, body: { lines: body } }, { onSuccess: done, onError: failed });
+      if (!draft) return showToast('Choose the draft purchase order', 'error');
+      link.mutate({ poId: String(draft.id), body: { lines: body } }, { onSuccess: done, onError: failed });
     } else {
       if (!supplier) return showToast('Choose the supplier', 'error');
       start.mutate({ supplierId: supplier.id, specialOrders: body }, { onSuccess: done, onError: failed });
@@ -118,17 +123,23 @@ export function SpecialOrdersTab({ onOpenOrder }: { onOpenOrder: (poId: string) 
           </table>
         )}
       </div>
+      {data && data.total > 0 && (
+        <Pagination page={page} pageSize={pageSize} total={data.total} totalPages={data.totalPages}
+          onPageChange={setPage} onPageSizeChange={makePageSizeHandler(setPage, setPageSize)} itemLabel="line" />
+      )}
       {lines.length > 0 && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <label className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
-            <input type="radio" name="special-target" checked={into === 'draft'} onChange={() => setTarget('draft')} disabled={draftList.length === 0} />
+            <input type="radio" name="special-target" checked={into === 'draft'} onChange={() => setTarget('draft')} disabled={drafts === 0} />
             Add to a draft purchase order
           </label>
           {into === 'draft' && (
-            <select aria-label="Draft purchase order" value={draftId} onChange={(e) => setDraftId(e.target.value)} className={`ml-6 ${FIELD}`}>
-              <option value="">Choose…</option>
-              {draftList.map((po) => <option key={po.id} value={po.id}>{po.poNumber} · {po.supplierName}</option>)}
-            </select>
+            <div className="ml-6 max-w-sm">
+              <SearchPicker aria-label="Draft purchase order" value={draft} onChange={setDraft} queryKey="special-order-drafts"
+                placeholder="Type the order number or supplier…" className={`w-full ${FIELD}`}
+                search={async (q, p) => pickerPage(await listPurchaseOrders({ status: 'draft', q: q || undefined, page: p, pageSize: PICKER_PAGE_SIZE }),
+                  (po) => ({ id: Number(po.id), label: `${po.poNumber} · ${po.supplierName}` }))} />
+            </div>
           )}
           <label className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
             <input type="radio" name="special-target" checked={into === 'new'} onChange={() => setTarget('new')} />
@@ -140,6 +151,7 @@ export function SpecialOrdersTab({ onOpenOrder }: { onOpenOrder: (poId: string) 
                 placeholder="Type to search suppliers…" aria-label="Supplier" className={`w-full ${FIELD}`} />
             </div>
           )}
+          {Object.keys(chosen).length > 0 && <p className="text-xs text-gray-500 dark:text-gray-400">{`${Object.keys(chosen).length} ticked`}</p>}
           <button type="button" onClick={submit} disabled={busy}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50">
             {into === 'draft' ? 'Add to purchase order' : 'Create draft purchase order'}

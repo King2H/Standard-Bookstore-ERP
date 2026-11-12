@@ -15,6 +15,7 @@ import OrdersPage from '../features/orders/pages/OrdersPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-18T07:00:00.000Z';
@@ -93,7 +94,7 @@ function stubApi() {
     }
     if (u.pathname.includes('/bank-accounts')) {
       return bankAccountsOn
-        ? json({ items: [{ id: 3, accountName: 'Main', bankName: 'CBE', accountNumberMasked: '****1234', currency: 'ETB' }] })
+        ? json(pageOf([{ id: 3, accountName: 'Main', bankName: 'CBE', accountNumberMasked: '****1234', currency: 'ETB' }], u, (a) => `${a.accountName} ${a.bankName}`))
         : new Response('{}', { status: 404 });
     }
     return json({ items: [] });
@@ -214,7 +215,7 @@ describe('steps on an order', () => {
     await user.type(within(row).getByLabelText('Transfer reference'), 'FT24001');
     await user.click(ok);
     expect(posted('/orders/10/confirm')).toHaveLength(0);
-    await user.selectOptions(within(row).getByLabelText('Bank account'), '3');
+    await pick(user, 'Bank account', 'CBE', 'CBE — Main (****1234)', row);
     await user.click(ok);
     await waitFor(() => expect(posted('/orders/10/confirm')).toEqual([
       { paymentMethod: 'bank', payerBank: 'Awash Bank', transactionReference: 'FT24001', bankAccountId: 3 },

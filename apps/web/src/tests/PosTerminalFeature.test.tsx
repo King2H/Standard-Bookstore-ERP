@@ -62,6 +62,8 @@ let shopCurrency: string;
 let cashRequired: boolean;
 /** The cashier's open session was opened on an earlier day (#242, M2); null: no session. */
 let staleSession: boolean | null;
+/** How many customers match a search, of which the API sends one page. */
+let customerMatches: number;
 
 function stubApi() {
   calls = [];
@@ -99,7 +101,7 @@ function stubApi() {
       }));
     }
     if (u.pathname === '/customers') {
-      return json(contract(CustomerListResponseSchema, { items: [customer()], total: 1, page: 1, totalPages: 1 }));
+      return json(contract(CustomerListResponseSchema, { items: [customer()], total: customerMatches, page: 1, totalPages: customerMatches }));
     }
     if (u.pathname === '/cash-sessions/current') {
       const session = staleSession === null ? null : contract(CashSessionDetailSchema, {
@@ -150,6 +152,7 @@ beforeEach(() => {
   shopCurrency = 'ETB';
   cashRequired = false;
   staleSession = null;
+  customerMatches = 1;
   stubApi();
 });
 
@@ -310,6 +313,20 @@ describe('POS terminal: customers', () => {
     await screen.findByText('Abebe Kebede');
     const search = calls.find((c) => c.path.startsWith('/customers?'));
     expect(search?.path).toContain('status=active');
+  });
+
+  it('says how many matched when more did than are shown (#266; was: the first few, as if they were all)', async () => {
+    customerMatches = 12;
+    const user = await openTerminal();
+    await user.type(screen.getByPlaceholderText('Search customer… (F9)'), 'Abe');
+    expect(await screen.findByText('Showing 1 of 12 — keep typing to narrow')).toBeInTheDocument();
+  });
+
+  it('says nothing more when every match is shown', async () => {
+    const user = await openTerminal();
+    await user.type(screen.getByPlaceholderText('Search customer… (F9)'), 'Abe');
+    await screen.findByText('Abebe Kebede');
+    expect(screen.queryByText(/keep typing to narrow/)).not.toBeInTheDocument();
   });
 });
 

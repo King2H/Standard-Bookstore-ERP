@@ -6,7 +6,8 @@ import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { SearchPicker } from '../../../shared/components/SearchPicker.js';
 import { useMyProfile } from '../../account/queries.js';
-import { useOpenBranches } from '../../branches/queries.js';
+import { useBranch } from '../../branches/queries.js';
+import { BranchPicker } from '../../branches/components/BranchPicker.js';
 import { useEveryLocation } from '../../locations/queries.js';
 import { searchSuppliersToBuyFrom } from '../api.js';
 import { usePurchaseOrder, useSavePurchaseOrder } from '../queries.js';
@@ -81,7 +82,6 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
   const values = watch();
 
   // Only open branches receive goods (was: closed ones too, which the API refused).
-  const { data: branches } = useOpenBranches();
   const receivingBranchId = values.receivingBranchId ? Number(values.receivingBranchId) : (me?.currentBranchId ?? null);
   // Any location of the receiving branch, its own included (was: only after choosing another branch).
   const { data: locations } = useEveryLocation(receivingBranchId);
@@ -90,7 +90,7 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
   const stockBranchId = receivingBranchId !== null && (me?.isAllBranches || receivingBranchId === me?.currentBranchId)
     ? receivingBranchId
     : (me?.currentBranchId ?? null);
-  const stockBranchName = branches?.items.find((b) => b.id === stockBranchId)?.name ?? null;
+  const stockBranchName = useBranch(stockBranchId).data?.name ?? null;
 
   const totals = values.lines.map(lineTotal);
   const total = Money.sum(totals.map((t) => t ?? Money.ZERO));
@@ -153,10 +153,11 @@ export function PurchaseOrderForm({ editing, onSaved, onCancel }: {
             </div>
             <div className="col-span-2">
               <label htmlFor="po-receiving-branch" className={LABEL}>Receiving Branch</label>
-              <select id="po-receiving-branch" {...register('receivingBranchId', { onChange: () => setValue('receivingLocationId', '') })} className={SELECT}>
-                <option value="">Same as order branch (default)</option>
-                {(branches?.items ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <Controller control={control} name="receivingBranchId" render={({ field }) => (
+                <BranchPicker id="po-receiving-branch" value={field.value ? Number(field.value) : null}
+                  onChange={(id) => { field.onChange(id === null ? '' : String(id)); setValue('receivingLocationId', ''); }}
+                  placeholder="Same as order branch (default) — type to choose another" className={SELECT} />
+              )} />
             </div>
             <div className="col-span-2">
               <label htmlFor="po-receiving-location" className={LABEL}>Receiving Location</label>

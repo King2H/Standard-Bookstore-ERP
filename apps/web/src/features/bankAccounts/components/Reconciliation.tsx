@@ -4,6 +4,9 @@ import Pagination, { DEFAULT_PAGE_SIZE, makePageSizeHandler } from '../../../com
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
 import { useEntries, useImportStatement, useLines, useMatchLine, useUnmatchLine } from '../queries.js';
+import { listEntries } from '../api.js';
+import { SearchPicker } from '../../../shared/components/SearchPicker.js';
+import { PICKER_PAGE_SIZE } from '../../../shared/picker.js';
 import { canReconcile, parseStatement } from '../rules.js';
 
 const INPUT = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
@@ -142,24 +145,24 @@ export function Reconciliation({ branchId, accountId }: { branchId: number; acco
 /** The open movements a statement line can be matched to: its amount and direction, asked of the API. */
 function MatchPicker({ branchId, accountId, line, onDone }: { branchId: number; accountId: number; line: StatementLine; onDone: () => void }) {
   const { showToast } = useToast();
-  const { data, isLoading } = useEntries(branchId, accountId, {
-    status: 'uncleared', amount: Money.of(line.amount).toFixed(2), direction: line.direction, pageSize: 100,
-  });
   const match = useMatchLine(branchId, accountId);
-  const candidates = data?.items ?? [];
+  const amount = Money.of(line.amount).toFixed(2);
+  // Every open movement of that amount and direction, a page at a time (#266; was: the first 100).
   return (
     <span className="inline-flex items-center gap-1">
-      <select aria-label="Movement to match" defaultValue="" disabled={isLoading || match.isPending}
-        onChange={(e) => e.target.value && match.mutate({ lineId: line.id, entryId: e.target.value }, {
-          onSuccess: () => { showToast('Matched'); onDone(); },
-          onError: (err: Error) => showToast(err.message, 'error'),
-        })}
-        className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm px-1 py-0.5 text-xs">
-        <option value="">{isLoading ? 'Loading…' : candidates.length ? 'Choose a movement…' : 'No open movement fits'}</option>
-        {candidates.map((e) => (
-          <option key={e.id} value={e.id}>{new Date(e.createdAt).toLocaleDateString()} · {e.notes ?? e.sourceType}</option>
-        ))}
-      </select>
+      <div className="w-56">
+        <SearchPicker browse aria-label="Movement to match" value={null} queryKey={`bank-entries:${accountId}:${line.id}`}
+          placeholder={match.isPending ? 'Matching…' : 'Choose a movement…'}
+          onChange={(o) => o && match.mutate({ lineId: line.id, entryId: String(o.id) }, {
+            onSuccess: () => { showToast('Matched'); onDone(); },
+            onError: (err: Error) => showToast(err.message, 'error'),
+          })}
+          search={async (_q, page) => {
+            const found = await listEntries(branchId, accountId, { status: 'uncleared', amount, direction: line.direction, page, pageSize: PICKER_PAGE_SIZE });
+            return { items: found.items.map((e) => ({ id: Number(e.id), label: `${new Date(e.createdAt).toLocaleDateString()} · ${e.notes ?? e.sourceType}` })), total: found.total };
+          }}
+          className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm px-1 py-0.5 text-xs" />
+      </div>
       <button onClick={onDone} aria-label="Cancel matching" className="text-gray-400 hover:text-gray-600 px-1">✕</button>
     </span>
   );

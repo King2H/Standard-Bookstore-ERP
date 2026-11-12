@@ -21,6 +21,7 @@ import OrdersPage from '../features/orders/pages/OrdersPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-25T07:00:00.000Z';
@@ -91,7 +92,7 @@ function stubApi() {
       }));
     }
     if (u.pathname === '/services') {
-      return json(contract(ServiceListResponseSchema, { items: SERVICES, total: 2, page: 1, pageSize: 100, totalPages: 1 }));
+      return json(contract(ServiceListResponseSchema, pageOf(SERVICES, u, (s) => `${s.name} ${s.code}`)));
     }
     if (u.pathname === '/customers') {
       return json(contract(CustomerListResponseSchema, {
@@ -184,7 +185,7 @@ describe('binding at the counter (1a, 2a, 3a)', () => {
     const user = await cartWithOromay();
     await user.click(screen.getByRole('button', { name: '+ Binding' }));
     const dialog = screen.getByRole('dialog', { name: 'Binding: Oromay' });
-    await user.selectOptions(within(dialog).getByLabelText('Binding'), 'Leather binding — ETB 280.00, ready in 5 days');
+    await pick(user, 'Binding', '', 'Leather binding — ETB 280.00, ready in 5 days', dialog);
     expect(within(dialog).queryByLabelText('Discount (%)')).not.toBeInTheDocument();
     await user.clear(within(dialog).getByLabelText('Copies (of 3)'));
     await user.type(within(dialog).getByLabelText('Copies (of 3)'), '4');
@@ -203,7 +204,7 @@ describe('binding at the counter (1a, 2a, 3a)', () => {
     const user = await cartWithOromay();
     await user.click(screen.getByRole('button', { name: '+ Binding' }));
     const dialog = screen.getByRole('dialog', { name: 'Binding: Oromay' });
-    await user.selectOptions(within(dialog).getByLabelText('Binding'), 'Leather binding — ETB 280.00, ready in 5 days');
+    await pick(user, 'Binding', '', 'Leather binding — ETB 280.00, ready in 5 days', dialog);
     await user.clear(within(dialog).getByLabelText('Copies (of 3)'));
     await user.type(within(dialog).getByLabelText('Copies (of 3)'), '2');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -228,7 +229,7 @@ describe('binding at the counter (1a, 2a, 3a)', () => {
     const user = await cartWithOromay();
     await user.click(screen.getByRole('button', { name: '+ Binding' }));
     const dialog = screen.getByRole('dialog', { name: 'Binding: Oromay' });
-    await user.selectOptions(within(dialog).getByLabelText('Binding'), 'Cloth binding — ETB 100.00, ready in 5 days');
+    await pick(user, 'Binding', '', 'Cloth binding — ETB 100.00, ready in 5 days', dialog);
     await user.type(within(dialog).getByLabelText('Discount (%)'), '20');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(within(dialog).getByRole('alert').textContent).toBe('The discount is more than your limit of 10%');
@@ -248,7 +249,7 @@ describe('binding on a new order (1a, 2a, 5a)', () => {
     await user.click(await screen.findByText('Oromay'));
     await user.click(screen.getByRole('button', { name: '+ Binding' }));
     const dialog = screen.getByRole('dialog', { name: 'Binding: Oromay' });
-    await user.selectOptions(within(dialog).getByLabelText('Binding'), 'Cloth binding — ETB 100.00, ready in 5 days');
+    await pick(user, 'Binding', '', 'Cloth binding — ETB 100.00, ready in 5 days', dialog);
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(screen.getByText(/Cloth binding × 1/)).toBeInTheDocument();
     // The book's 100 and the binding's 100.

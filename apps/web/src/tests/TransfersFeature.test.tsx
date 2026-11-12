@@ -25,6 +25,7 @@ import { KpiCard } from '../features/dashboard/components/cards.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-27T07:00:00.000Z';
@@ -93,9 +94,10 @@ function stubApi() {
     const list = <T,>(items: T[]) => ({ items, total: items.length, page: 1, totalPages: 1 });
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
-    if (u.pathname === '/branches') {
-      return json(contract(BranchListResponseSchema, { items: [branch(1, 'Home'), branch(2, 'Piassa')], total: 2, page: 1, pageSize: 100, totalPages: 1 }));
-    }
+    const branchList = [branch(1, 'Home'), branch(2, 'Piassa')];
+    if (u.pathname === '/branches') return json(contract(BranchListResponseSchema, pageOf(branchList, u, (b) => b.name)));
+    const oneBranch = u.pathname.match(/^\/branches\/(\d+)$/);
+    if (oneBranch) return json(branchList.find((b) => b.id === Number(oneBranch[1])));
     if (u.pathname === '/branches/1/locations' || u.pathname === '/branches/2/locations') {
       const all = u.pathname === '/branches/1/locations' ? [SHOP, BACK] : [PIASSA];
       const restricted = me.locationAccess.mode === 'restricted' && u.searchParams.get('all') !== 'true';
@@ -187,8 +189,12 @@ describe('a new transfer (2a)', () => {
     const user = await newTransfer();
     const from = screen.getByRole('combobox', { name: 'From location' });
     expect(within(from).getAllByRole('option').map((o) => o.textContent)).toEqual(['Shop Floor (default)']);
-    const to = screen.getByRole('combobox', { name: 'To branch' });
-    expect(within(to).getAllByRole('option').map((o) => o.textContent)).toEqual(['— Select branch —', 'Piassa']);
+    // Any other open branch, found by typing; never the one it leaves from (#266).
+    await user.click(screen.getByRole('combobox', { name: 'To branch' }));
+    const destinations = await screen.findByRole('listbox');
+    await within(destinations).findByText('Showing 1 of 1');
+    expect(within(destinations).getAllByRole('option').map((o) => o.textContent)).toEqual(['Piassa']);
+    await user.click(screen.getByRole('textbox', { name: 'Find a book' }));
 
     await user.type(screen.getByRole('textbox', { name: 'Find a book' }), 'Dune');
     await user.click(await screen.findByRole('button', { name: /Add Dune.*12 on hand/ }));
@@ -199,7 +205,7 @@ describe('a new transfer (2a)', () => {
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
     await user.clear(qty);
     await user.type(qty, '6');
-    await user.selectOptions(to, '2');
+    await pick(user, 'To branch', 'Pia', 'Piassa');
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(posted('/transfers')).toHaveLength(1));
     expect(posted('/transfers')[0]).toEqual({ fromLocationId: 1, toBranchId: 2, lines: [{ bookId: 3, quantity: 6 }], notes: null });
@@ -208,7 +214,7 @@ describe('a new transfer (2a)', () => {
 
   it('is dispatched after a confirmation in the app\'s dialog', async () => {
     const user = await newTransfer();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'To branch' }), '2');
+    await pick(user, 'To branch', 'Pia', 'Piassa');
     await user.type(screen.getByRole('textbox', { name: 'Find a book' }), 'Dune');
     await user.click(await screen.findByRole('button', { name: /Add Dune/ }));
     await user.click(screen.getByRole('button', { name: 'Dispatch' }));

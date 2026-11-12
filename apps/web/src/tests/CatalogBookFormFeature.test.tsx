@@ -114,14 +114,15 @@ function field(form: HTMLElement, label: RegExp): HTMLElement {
 }
 
 /** Chooses `name` in a single-choice control: from its list, or by typing it. */
-async function choose(form: HTMLElement, control: HTMLElement, name: string) {
+async function choose(control: HTMLElement, name: string) {
   const user = userEvent.setup();
   if (control.tagName === 'SELECT') {
     await user.selectOptions(control, name);
     return;
   }
   await user.type(control, name);
-  await user.click(await within(form).findByRole('option', { name }));
+  // The list is drawn over the page, outside the form (#266).
+  await user.click(await screen.findByRole('option', { name }));
 }
 
 /** Types into the authors search and picks `name` from what it offers. */
@@ -129,7 +130,7 @@ async function pickAuthor(form: HTMLElement, name: string) {
   const user = userEvent.setup();
   await user.type(within(form).getByPlaceholderText('Search authors…'), name);
   await settle();
-  await user.click(await within(form).findByText(name, { selector: 'li, span' }));
+  await user.click(await screen.findByRole('option', { name }));
 }
 
 /** Fills what a new book needs, apart from what a test sets itself. */
@@ -167,7 +168,7 @@ describe('Book form: picking authors, categories and publishers (#95)', () => {
     const form = await openForm('add');
     await fillRequired(form);
     await tab(form, 'Basic Info');
-    await choose(form, field(form, /^Publisher/), 'Publisher 140');
+    await choose(field(form, /^Publisher/), 'Publisher 140');
     await userEvent.setup().click(within(form).getByRole('button', { name: 'Create' }));
     await waitFor(() => expect((sent('POST')?.body as { publisherId: number }).publisherId).toBe(140));
   });
@@ -225,7 +226,7 @@ describe('Book form: what is sent', () => {
     await tab(form, 'Categories');
     await user.type(within(form).getByPlaceholderText('Search categories…'), 'Topic 003');
     await settle();
-    await user.click(await within(form).findByText('Topic 003', { selector: 'li, span' }));
+    await user.click(await screen.findByRole('option', { name: 'Topic 003' }));
     await user.type(field(form, /^Tags/), 'bestseller, award');
     await tab(form, 'Pricing');
     await user.type(field(form, /^Default Price/), '12.50');

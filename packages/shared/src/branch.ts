@@ -17,6 +17,8 @@ export type Branch = z.infer<typeof BranchSchema>;
 
 export const BranchListQuerySchema = ListPagingQuerySchema.extend({
   isActive: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  /** Part of the name, any case (#266): pickers search every page. */
+  q: z.string().trim().max(100).optional(),
 });
 export type BranchListQuery = z.infer<typeof BranchListQuerySchema>;
 

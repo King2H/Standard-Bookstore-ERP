@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Money, type BookWithAvailabilitySchema, type Customer, type Order } from '@bms/shared';
 import type { z } from 'zod';
+import { MatchCount } from '../../../components/MatchCount.js';
 import BankAccountSelect from '../../../components/BankAccountSelect.js';
 import PaymentMethodTabs from '../../../components/PaymentMethodTabs.js';
 import PaymentProofFields from '../../../components/PaymentProofFields.js';
@@ -262,6 +263,7 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
                     <span className="text-gray-500 dark:text-gray-400 ml-2 text-xs">{c.customerCode}</span>
                   </button>
                 ))}
+                <MatchCount shown={customers.length} total={customerResults?.total} />
               </div>
             )}
           </div>
@@ -367,6 +369,7 @@ export function NewOrder({ onDone, draftId = null }: { onDone: () => void; draft
                   )}
                 </button>
               ))}
+              <MatchCount shown={books.length} total={bookResults?.total} />
             </div>
           )}
         </div>
