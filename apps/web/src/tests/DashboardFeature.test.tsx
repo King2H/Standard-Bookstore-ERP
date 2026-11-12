@@ -23,6 +23,7 @@ import PaymentsPage from '../features/payments/pages/PaymentsPage.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 import { EMPTY_REPORTS, emptyReport } from './reportFixtures.js';
 
 // jsdom has no layout, so a ResponsiveContainer measures 0 and draws nothing:
@@ -88,9 +89,10 @@ function stubApi() {
     const p = u.pathname;
     if (p === '/staff/me') return json(me);
     if (p === '/config/currency') return json({ currency });
-    if (p === '/branches') {
-      return json({ items: [1, 2].map((id) => ({ id, name: id === 1 ? 'Head Office' : 'Piassa', address: 'Addis Ababa', contactInfo: {}, operatingHours: {}, isActive: true, createdAt: CREATED })), total: 2, page: 1, pageSize: 100, totalPages: 1 });
-    }
+    const branchList = [1, 2].map((id) => ({ id, name: id === 1 ? 'Head Office' : 'Piassa', address: 'Addis Ababa', contactInfo: {}, operatingHours: {}, isActive: true, createdAt: CREATED }));
+    if (p === '/branches') return json(pageOf(branchList, u, (b) => b.name));
+    const oneBranch = p.match(/^\/branches\/(\d+)$/);
+    if (oneBranch) return json(branchList.find((b) => b.id === Number(oneBranch[1])));
     if (p.endsWith('/export')) return exportFails ? json({ error: 'X', message: 'no', details: {} }, 500) : new Response('a\n1\n', { status: 200 });
     if (p === '/reports/kpis/period') return json(PERIOD);
     if (p === '/reports/kpis') return json(KPIS);
@@ -181,10 +183,11 @@ describe('the branch', () => {
     me = profile(['Manager'], true);
     const { user } = await openDashboard();
     await screen.findByText('Sales Performance');
-    const picker = screen.getByLabelText('Branch') as HTMLSelectElement;
+    // Empty is every branch; a branch is found by typing its name (#266).
+    const picker = screen.getByRole('combobox', { name: 'Branch' }) as HTMLInputElement;
     expect(picker.value).toBe('');
-    await screen.findByRole('option', { name: 'Piassa' });
-    await user.selectOptions(picker, '2');
+    expect(picker).toHaveAttribute('placeholder', 'All Branches');
+    await pick(user, 'Branch', 'Pia', 'Piassa');
     await waitFor(() => expect(reportCalls().some((p) => p.startsWith('/reports/kpis?') && p.includes('branchId=2'))).toBe(true));
   });
 });

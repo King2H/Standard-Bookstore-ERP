@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SearchPicker, type PickerOption } from './SearchPicker.js';
+import { SearchPicker, type PickerOption, type PickerPage } from './SearchPicker.js';
 
 /**
  * Pick several records by typing the start of their names (#95). The chosen
@@ -12,7 +12,7 @@ export function MultiSearchPicker({
 }: {
   value: PickerOption[];
   onChange: (options: PickerOption[]) => void;
-  search: (text: string) => Promise<PickerOption[]>;
+  search: (text: string, page: number) => Promise<PickerPage>;
   queryKey: string;
   placeholder?: string;
   invalid?: boolean;
@@ -34,7 +34,11 @@ export function MultiSearchPicker({
           setRound((r) => r + 1);
         }}
         // Leaves out what is already chosen.
-        search={async (q) => (await search(q)).filter((o) => !chosen.has(o.id))}
+        search={async (q, page) => {
+          const found = await search(q, page);
+          const items = found.items.filter((o) => !chosen.has(o.id));
+          return { items, total: found.total - (found.items.length - items.length) };
+        }}
         queryKey={`${queryKey}:${[...chosen].join(',')}`}
         placeholder={placeholder}
         invalid={invalid}

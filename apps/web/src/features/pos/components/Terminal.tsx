@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Money, type BookAvailabilityListResponse, type Customer, type PosTransaction } from '@bms/shared';
 import { getCurrentBranchId } from '../../../lib/api.js';
 import { ActionDialog } from '../../../components/ActionDialog.js';
+import { MatchCount } from '../../../components/MatchCount.js';
 import { ShopHeader } from '../../../components/ShopHeader.js';
 import { TaxLines } from '../../../components/TaxLines.js';
 import { useToast } from '../../../components/Toast.js';
@@ -648,6 +649,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                           <p className="text-xs text-gray-400 mt-0.5">{c.customerCode}</p>
                         </button>
                       ))}
+                      <MatchCount shown={customerResults!.items.length} total={customerResults!.total} />
                     </div>
                   )}
                 </div>
@@ -697,7 +699,7 @@ export function Terminal({ userRole, userPermissions, tabBar, view, history, cas
                       </p>
                     )}
                   </button>
-                ))
+                )).concat(<MatchCount key="match-count" shown={bookResults!.items.length} total={bookResults!.total} />)
               ) : bookSearch.length > 1 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-gray-400"><span className="text-2xl mb-1">📚</span><p className="text-xs">No books found</p></div>
               ) : (

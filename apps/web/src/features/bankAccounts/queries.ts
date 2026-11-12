@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateBankAccountRequest, ImportStatementRequest, UpdateBankAccountRequest } from '@bms/shared';
-import { api } from '../../lib/api.js';
+import { api, toQuery } from '../../lib/api.js';
+import { PICKER_PAGE_SIZE } from '../../shared/picker.js';
 import {
   createAccount, importStatement, listAccounts, listEntries, listLines, matchLine, setAccountActive, unmatchLine, updateAccount,
   type EntriesParams, type LinesParams,
@@ -27,21 +28,32 @@ export interface BankAccountOption {
   currency: string;
 }
 
+/** Which branch's active accounts a bank payment chooses from, and how many it has. */
+export interface BranchAccounts {
+  branchId: number | null;
+  total: number;
+}
+
 /**
- * The branch's active bank accounts, for a bank payment (#21). With the Bank
- * Accounts module off the API has no such endpoint (404): then no account is
- * needed, and `required` is false.
+ * The branch's active bank accounts, for a bank payment (#21): how many there
+ * are; the account itself is found by typing (#266). With the Bank Accounts
+ * module off the API has no such endpoint (404): then no account is needed,
+ * and `required` is false.
  */
-export function useBranchBankAccounts(branchId: number | null, enabled: boolean) {
+export function useBranchBankAccounts(branchId: number | null, enabled: boolean): { accounts: BranchAccounts; required: boolean } {
   const query = useQuery({
     queryKey: bankAccountKeys.active(branchId),
-    queryFn: () => api.get<{ items: BankAccountOption[] }>(`/branches/${branchId}/bank-accounts?isActive=true&pageSize=100`),
+    queryFn: () => api.get<{ total: number }>(`/branches/${branchId}/bank-accounts?isActive=true&pageSize=1`),
     enabled: enabled && branchId !== null,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
-  return { accounts: query.data?.items ?? [], required: query.isSuccess };
+  return { accounts: { branchId, total: query.data?.total ?? 0 }, required: query.isSuccess };
 }
+
+/** A page of the branch's active accounts matching `q` (name or bank), for a picker (#266). */
+export const searchBranchAccounts = (branchId: number, q: string, page: number) =>
+  api.get<{ items: BankAccountOption[]; total: number }>(`/branches/${branchId}/bank-accounts${toQuery({ isActive: 'true', q: q || undefined, page, pageSize: PICKER_PAGE_SIZE })}`);
 
 export function bankAccountLabel(a: BankAccountOption): string {
   return `${a.bankName} — ${a.accountName} (${a.accountNumberMasked})`;

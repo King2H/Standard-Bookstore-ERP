@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { ReferenceNameRequestSchema, type Category } from '@bms/shared';
 import { Drawer } from '../../../shared/components/Drawer.js';
 import { SearchPicker } from '../../../shared/components/SearchPicker.js';
-import { searchCategories, type ReferenceKind } from '../api.js';
+import { listReference, type ReferenceKind } from '../api.js';
+import { PICKER_PAGE_SIZE } from '../../../shared/picker.js';
 import { isParentChoice } from '../rules.js';
 
 /** The form's fields, checked with the rules of the API's contract. */
@@ -68,9 +69,11 @@ export function ReferenceForm({ kind, noun, placeholder, editing, saving, error,
                   onChange={field.onChange}
                   // The choices depend on the category being edited.
                   queryKey={`categories:parent-of-${editingId ?? 'new'}`}
-                  search={async (q) => (await searchCategories(q)).items
-                    .filter((c: Category) => isParentChoice(c, editingId))
-                    .map((c) => ({ id: c.id, label: c.name }))}
+                  search={async (q, page) => {
+                    const found = await listReference('categories', { q, page, pageSize: PICKER_PAGE_SIZE });
+                    const items = found.items.filter((c: Category) => isParentChoice(c, editingId));
+                    return { items: items.map((c) => ({ id: c.id, label: c.name })), total: found.total - (found.items.length - items.length) };
+                  }}
                   placeholder="Top level — type to search…"
                   className={INPUT}
                 />

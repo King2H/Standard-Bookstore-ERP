@@ -34,6 +34,8 @@ export type BankAccount = z.infer<typeof BankAccountSchema>;
 
 export const BankAccountListQuerySchema = ListPagingQuerySchema.extend({
   isActive: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  /** Part of the account's name or its bank's, any case (#266). */
+  q: z.string().trim().max(100).optional(),
 });
 export const BankAccountListResponseSchema = PaginatedSchema(BankAccountSchema);
 export type BankAccountListResponse = z.infer<typeof BankAccountListResponseSchema>;

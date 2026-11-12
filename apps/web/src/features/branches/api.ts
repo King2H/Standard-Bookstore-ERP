@@ -7,11 +7,15 @@ export interface BranchListParams {
   page?: number;
   pageSize?: number;
   isActive?: 'true' | 'false';
+  /** Part of the name (#266). */
+  q?: string;
 }
 
 export type BranchAction = 'deactivate' | 'reactivate';
 
 export const listBranches = (params: BranchListParams) => api.get<BranchListResponse>(`/branches${toQuery({ ...params })}`);
+
+export const getBranch = (id: number) => api.get<Branch>(`/branches/${id}`);
 
 /** The request body leaves the opening hours to the API's default. */
 export const createBranch = (body: Omit<CreateBranchRequest, 'operatingHours'>) => api.post<Branch>('/branches', body);

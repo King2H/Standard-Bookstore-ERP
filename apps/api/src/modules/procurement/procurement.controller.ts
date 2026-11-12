@@ -70,6 +70,7 @@ export async function list(req: Request, res: Response): Promise<void> {
       supplierId: query.supplierId,
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,
+      q: query.q || undefined,
     },
     { page: query.page, pageSize: query.pageSize },
   );

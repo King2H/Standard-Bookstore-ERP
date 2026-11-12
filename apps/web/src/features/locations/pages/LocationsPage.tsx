@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useToast } from '../../../components/Toast.js';
 import { useMyProfile } from '../../account/queries.js';
-import { useOpenBranches } from '../../branches/queries.js';
+import { useBranches } from '../../branches/queries.js';
+import { BranchPicker } from '../../branches/components/BranchPicker.js';
 import { canChangeLocations } from '../../branches/rules.js';
 import { useLocationChanges, useLocations } from '../queries.js';
 
@@ -20,8 +21,8 @@ export default function LocationsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
   const { data: me } = useMyProfile();
-  const { data: branchData } = useOpenBranches();
-  const branches = branchData?.items ?? [];
+  // How many open branches there are: a choice of branch only when more than one.
+  const openBranches = useBranches({ isActive: 'true', pageSize: 1 }).data?.total ?? 0;
   // The session's branch first (was: whichever branch the list started with).
   const activeBranchId = selectedBranchId ?? me?.currentBranchId ?? null;
   // Changes are taken in the session's branch, or in any with access to all
@@ -76,13 +77,14 @@ export default function LocationsPage() {
         )}
       </div>
 
-      {branches.length > 1 && (
-        <div className="mb-4">
-          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-2">Branch:</label>
-          <select value={activeBranchId ?? ''} onChange={e => { setSelectedBranchId(Number(e.target.value)); setShowCreateForm(false); }}
-            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+      {openBranches > 1 && (
+        <div className="mb-4 flex items-center gap-2">
+          <label htmlFor="locations-branch" className="text-xs font-medium text-gray-500 dark:text-gray-400">Branch:</label>
+          <div className="w-64">
+            {/* Emptied, the session's branch again. */}
+            <BranchPicker id="locations-branch" value={activeBranchId} onChange={(id) => { setSelectedBranchId(id); setShowCreateForm(false); }}
+              className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
+          </div>
         </div>
       )}
 

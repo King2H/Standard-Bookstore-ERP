@@ -1,19 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createBranch, deleteBranch, listBranches, runBranchAction, type BranchAction, type BranchListParams } from './api.js';
+import { createBranch, deleteBranch, getBranch, listBranches, runBranchAction, type BranchAction, type BranchListParams } from './api.js';
 
 /** Every key starts with `branchKeys.all`, so a change refreshes branch data and nothing else. */
 export const branchKeys = {
   all: ['branches'] as const,
   list: (params: BranchListParams) => [...branchKeys.all, 'list', params] as const,
+  detail: (id: number) => [...branchKeys.all, 'detail', id] as const,
 };
 
 export function useBranches(params: BranchListParams, enabled = true) {
   return useQuery({ queryKey: branchKeys.list(params), queryFn: () => listBranches(params), enabled });
 }
 
-/** The open branches to pick from: the API's largest page, which covers a chain of any realistic size. */
-export function useOpenBranches(enabled = true) {
-  return useBranches({ isActive: 'true', pageSize: 100 }, enabled);
+/** One branch, e.g. the name of the one a picker holds. */
+export function useBranch(id: number | null) {
+  return useQuery({ queryKey: branchKeys.detail(id ?? 0), queryFn: () => getBranch(id!), enabled: id !== null, staleTime: 300_000 });
 }
 
 function useRefreshBranches() {

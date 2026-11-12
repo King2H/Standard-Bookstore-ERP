@@ -138,7 +138,7 @@ describe('Suppliers', () => {
     await user.click(screen.getByRole('button', { name: 'Create Supplier' }));
 
     await waitFor(() => expect(posts()[0]?.body).toMatchObject({ supplierType: 'publisher', publisherId: 150 }));
-    expect(calls.some(c => c.path === '/publishers?q=Zeta&pageSize=20')).toBe(true);
+    expect(calls.some(c => c.path === '/publishers?q=Zeta&page=1&pageSize=20')).toBe(true);
   });
 
   it('asks for the publisher of a publisher supplier', async () => {

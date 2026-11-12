@@ -1,8 +1,9 @@
-import { useFieldArray, useForm } from 'react-hook-form';
+import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { PasswordSchema, RoleSchema, UsernameSchema, type Branch, type CreateStaffRequest } from '@bms/shared';
+import { PasswordSchema, RoleSchema, UsernameSchema, type CreateStaffRequest } from '@bms/shared';
 import { inputCls } from './styles.js';
+import { BranchChoice } from './BranchChoice.js';
 
 /** The form's fields, checked with the rules of the API's create-staff contract. */
 export const StaffFormSchema = z.object({
@@ -21,17 +22,20 @@ type FormInput = z.input<typeof StaffFormSchema>;
 type FormValues = z.output<typeof StaffFormSchema>;
 
 /** The request the form's values make. With access to all branches the role goes on the first open branch. */
-export function createRequestOf(v: FormValues, allowAllBranches: boolean, branches: Branch[]): CreateStaffRequest {
+export function createRequestOf(v: FormValues, allowAllBranches: boolean, firstOpenBranchId: number | null): CreateStaffRequest {
   const allBranches = allowAllBranches && v.isAllBranches;
   const roles = allBranches
-    ? (branches.length > 0 ? [{ branchId: branches[0].id, role: v.allBranchesRole }] : [])
+    ? (firstOpenBranchId !== null ? [{ branchId: firstOpenBranchId, role: v.allBranchesRole }] : [])
     : v.assignments.filter(a => a.branchId > 0);
   return { username: v.username, password: v.password, fullName: v.fullName, roles, isAllBranches: allBranches };
 }
 
-export function StaffForm({ branches, grantable, allowAllBranches, busy, error, onSubmit, onCancel }: {
-  /** The open branches to pick from. */
-  branches: Branch[];
+export function StaffForm({ reach, managed, firstOpenBranchId, grantable, allowAllBranches, busy, error, onSubmit, onCancel }: {
+  /** The branches whose roles may be granted: every one, or these. */
+  reach: 'all' | number[];
+  managed: Array<{ id: number; name: string }>;
+  /** Where a role with access to all branches is recorded. */
+  firstOpenBranchId: number | null;
   grantable: string[];
   /** Super_Admin only. */
   allowAllBranches: boolean;
@@ -48,7 +52,7 @@ export function StaffForm({ branches, grantable, allowAllBranches, busy, error, 
   const watchIsAllBranches = watch('isAllBranches');
 
   return (
-    <form onSubmit={handleSubmit((v) => onSubmit(createRequestOf(v, allowAllBranches, branches)))}
+    <form onSubmit={handleSubmit((v) => onSubmit(createRequestOf(v, allowAllBranches, firstOpenBranchId)))}
       className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-6 space-y-4 shadow-xs">
       <h2 className="font-semibold text-gray-800 dark:text-gray-100">Create Staff Account</h2>
       {error && (
@@ -110,8 +114,8 @@ export function StaffForm({ branches, grantable, allowAllBranches, busy, error, 
                 <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">(multiple roles per branch allowed)</span>
               </label>
               <button type="button"
-                onClick={() => { const firstBranch = branches[0]; if (firstBranch) append({ branchId: firstBranch.id, role: 'Sales' }); }}
-                disabled={branches.length === 0}
+                onClick={() => append({ branchId: reach === 'all' ? 0 : (managed[0]?.id ?? 0), role: 'Sales' })}
+                disabled={reach !== 'all' && managed.length === 0}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 + Add Role Assignment
               </button>
@@ -122,10 +126,9 @@ export function StaffForm({ branches, grantable, allowAllBranches, busy, error, 
             <div className="space-y-2">
               {fields.map((field, index) => (
                 <div key={field.id} className="flex items-center gap-2">
-                  <select aria-label="Branch" {...register(`assignments.${index}.branchId`)} className={inputCls}>
-                    <option value="0">Select branch...</option>
-                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
+                  <Controller control={control} name={`assignments.${index}.branchId`} render={({ field: f }) => (
+                    <BranchChoice reach={reach} managed={managed} value={Number(f.value) || 0} onChange={f.onChange} className={inputCls} />
+                  )} />
                   <select aria-label="Role" {...register(`assignments.${index}.role`)} className={inputCls}>
                     {grantable.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>

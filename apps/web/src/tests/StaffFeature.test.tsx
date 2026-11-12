@@ -15,6 +15,7 @@ import {
 } from '@bms/shared';
 import StaffPage from '../features/staff/pages/StaffPage.js';
 import { contract } from './contract.js';
+import { pick } from './picker.js';
 
 const branch = (id: number, over: Partial<Branch> = {}): Branch => contract(BranchSchema, {
   id, name: `Branch ${String(id).padStart(2, '0')}`, address: `${id} Main St`, contactInfo: {}, operatingHours: {},
@@ -33,7 +34,7 @@ function profile(roles: string[], { allBranches = false, branchId = 1, held }: {
   return contract(ProfileResponseSchema, {
     id: 500, username: 'me', fullName: 'Me', isActive: true, createdAt: '2026-10-01T00:00:00.000Z', mustChangePassword: false,
     lastLoginAt: null, passwordChangedAt: null, isLocked: false, isAllBranches: allBranches,
-    roles: (held ?? roles.map((role) => ({ branchId, role }))).map((r) => ({ branchName: 'Home', ...r })),
+    roles: (held ?? roles.map((role) => ({ branchId, role }))).map((r) => ({ branchName: `Branch ${String(r.branchId).padStart(2, '0')}`, ...r })),
     currentRole: roles[0], currentRoles: roles, currentBranchId: branchId,
     locationAccess: { mode: 'full', locations: [] },
   });
@@ -64,9 +65,12 @@ function stubApi() {
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (method === 'GET' && u.pathname === '/staff') return json(contract(StaffListResponseSchema, paged(staff)));
     if (method === 'GET' && u.pathname === '/branches') {
-      const open = u.searchParams.get('isActive') === 'true' ? branches.filter(b => b.isActive) : branches;
+      const q = (u.searchParams.get('q') ?? '').toLowerCase();
+      const open = (u.searchParams.get('isActive') === 'true' ? branches.filter(b => b.isActive) : branches).filter(b => b.name.toLowerCase().includes(q));
       return json(contract(BranchListResponseSchema, paged(open)));
     }
+    const oneBranch = u.pathname.match(/^\/branches\/(\d+)$/);
+    if (method === 'GET' && oneBranch) return json(contract(BranchSchema, branches.find(b => b.id === Number(oneBranch[1]))!));
     if (method === 'POST' && u.pathname === '/staff') return json({ staffId: 99 }, 201);
     const staffLoc = u.pathname.match(/^\/staff\/(\d+)\/locations$/);
     if (method === 'GET' && staffLoc) {
@@ -141,7 +145,7 @@ describe('Staff: what each role is offered', () => {
     await user.type(screen.getByPlaceholderText('e.g. john.doe'), 'new.clerk');
     await user.type(screen.getByPlaceholderText('e.g. John Doe'), 'New Clerk');
     await user.type(screen.getByPlaceholderText('Min 10 chars'), 'Temp#2026pass');
-    await user.selectOptions(within(form).getAllByRole('combobox')[0], '1');
+    await user.selectOptions(within(form).getByRole('combobox', { name: 'Branch' }), '1');
     await user.click(screen.getByText('Create Staff'));
 
     await waitFor(() => expect(sent('POST', '/staff')).toBeDefined());
@@ -196,16 +200,20 @@ describe('Staff: the list and the pickers', () => {
     expect(calls.some(c => c.path === '/staff?page=2&pageSize=25')).toBe(true);
   });
 
-  it('offers every open branch to pick, up to the API\'s largest page (was: the first 25)', async () => {
+  it('finds any open branch by typing, past the first page (#266; was: a dropdown of the first 100)', async () => {
     // A Super_Admin manages every branch; others are offered only theirs (#234).
     me = profile(['Super_Admin']);
-    branches = Array.from({ length: 30 }, (_, i) => branch(i + 1));
+    branches = Array.from({ length: 130 }, (_, i) => branch(i + 1));
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByText('+ New Staff'));
     const form = screen.getByText('Create Staff Account').closest('form')!;
-    expect(await within(form).findByRole('option', { name: 'Branch 30' })).toBeInTheDocument();
-    expect(calls.some(c => c.path === '/branches?isActive=true&pageSize=100')).toBe(true);
+    await user.type(screen.getByPlaceholderText('e.g. john.doe'), 'new.clerk');
+    await user.type(screen.getByPlaceholderText('e.g. John Doe'), 'New Clerk');
+    await user.type(screen.getByPlaceholderText('Min 10 chars'), 'Temp#2026pass');
+    await pick(user, 'Branch', '125', 'Branch 125', form);
+    await user.click(screen.getByText('Create Staff'));
+    await waitFor(() => expect(sent('POST', '/staff')?.body).toMatchObject({ roles: [{ branchId: 125, role: 'Sales' }] }));
   });
 
   it('checks the username and password with the API\'s rules and sends nothing (was: sent, then refused)', async () => {
@@ -216,7 +224,7 @@ describe('Staff: the list and the pickers', () => {
     await user.type(screen.getByPlaceholderText('e.g. john.doe'), 'new clerk');
     await user.type(screen.getByPlaceholderText('e.g. John Doe'), 'New Clerk');
     await user.type(screen.getByPlaceholderText('Min 10 chars'), 'longenough1');
-    await user.selectOptions(within(screen.getByText('Create Staff Account').closest('form')!).getAllByRole('combobox')[0], '1');
+    await user.selectOptions(within(screen.getByText('Create Staff Account').closest('form')!).getByRole('combobox', { name: 'Branch' }), '1');
     await user.click(screen.getByText('Create Staff'));
     expect(await screen.findByText('Letters, digits, dots, underscores and hyphens only')).toBeInTheDocument();
     expect(screen.getByText(/contain upper-case, lower-case, digit and special character/)).toBeInTheDocument();
@@ -232,8 +240,7 @@ describe('Staff: editing roles', () => {
     renderPage();
     const clerk = await row('clerk');
     await user.click(within(clerk).getByTitle('Edit branch & role assignments'));
-    const select = within(clerk).getAllByRole('combobox')[0] as HTMLSelectElement;
-    expect(select.selectedOptions[0].textContent).toBe('Branch 03');
+    expect(await within(clerk).findByDisplayValue('Branch 03')).toBeInTheDocument();
     await user.click(within(clerk).getByText('Save'));
     await waitFor(() => expect(sent('PUT', '/staff/2/roles')?.body).toEqual([{ branchId: 3, role: 'Sales' }]));
   });
@@ -248,7 +255,7 @@ describe('Staff: editing roles', () => {
     expect(within(clerk).getByTitle('Not yours to change')).toHaveTextContent('Branch 02 · Sales');
     const pickers = within(clerk).getAllByLabelText('Branch');
     expect(pickers).toHaveLength(1);
-    expect(within(pickers[0]).getAllByRole('option').map(o => o.textContent)).toEqual(['Branch 01']);
+    expect(within(pickers[0]).getAllByRole('option').map(o => o.textContent)).toEqual(['Select branch...', 'Branch 01']);
 
     await user.selectOptions(within(clerk).getByLabelText('Role'), 'Stock_Clerk');
     await user.click(within(clerk).getByText('Save'));

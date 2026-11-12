@@ -197,6 +197,8 @@ export const PurchaseOrderListQuerySchema = ListPagingQuerySchema.extend({
   dateFrom: DateOnlySchema.optional(),
   /** Up to and including this day. */
   dateTo: DateOnlySchema.optional(),
+  /** Part of the order's number or its supplier's name, any case (#266). */
+  q: z.string().trim().max(100).optional(),
 });
 export type PurchaseOrderListQuery = z.infer<typeof PurchaseOrderListQuerySchema>;
 

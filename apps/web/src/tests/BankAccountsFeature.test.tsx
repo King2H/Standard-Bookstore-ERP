@@ -20,6 +20,7 @@ import BankAccountSelect from '../components/BankAccountSelect.js';
 import { ToastProvider } from '../components/Toast.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 
 const CREATED = '2026-10-18T07:00:00.000Z';
 
@@ -69,12 +70,11 @@ function stubApi() {
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/config/currency') return json(contract(CurrencyResponseSchema, { currency: 'USD' }));
-    if (u.pathname === '/branches') {
-      return json(contract(BranchListResponseSchema, page([
-        { id: 1, name: 'Head Office' },
-        { id: 2, name: 'Piassa' },
-      ].map((b) => ({ ...b, address: 'Addis Ababa', contactInfo: {}, operatingHours: {}, isActive: true, createdAt: CREATED })))));
-    }
+    const branchList = [{ id: 1, name: 'Head Office' }, { id: 2, name: 'Piassa' }]
+      .map((b) => ({ ...b, address: 'Addis Ababa', contactInfo: {}, operatingHours: {}, isActive: true, createdAt: CREATED }));
+    if (u.pathname === '/branches') return json(contract(BranchListResponseSchema, pageOf(branchList, u, (b) => b.name)));
+    const oneBranch = u.pathname.match(/^\/branches\/(\d+)$/);
+    if (oneBranch) return json(branchList.find((b) => b.id === Number(oneBranch[1])));
     const m = u.pathname.match(/^\/branches\/(\d+)\/bank-accounts(?:\/(\d+))?(\/.*)?$/);
     if (m) {
       if (!moduleOn) return json({ error: 'NOT_FOUND', message: 'Not found', details: {} }, 404);
@@ -83,14 +83,16 @@ function stubApi() {
         const amount = u.searchParams.get('amount');
         const direction = u.searchParams.get('direction');
         const items = entries.filter((e) => (!amount || e.amount === Number(amount)) && (!direction || e.direction === direction));
-        return json(contract(BankEntryListResponseSchema, page(items)));
+        return json(contract(BankEntryListResponseSchema, pageOf(items, u, () => '')));
       }
       if (rest === '/statement-lines' && method === 'GET') {
         const items = u.searchParams.get('matched') === 'false' ? lines.filter((l) => l.entryId === null) : lines;
         return json(contract(StatementLineListResponseSchema, page(items)));
       }
       if (rest === '/statement-lines') return json(contract(ImportStatementResponseSchema, { imported: 1, matched: 0, duplicates: 0 }), 201);
-      if (method === 'GET') return json(contract(BankAccountListResponseSchema, page(accounts.filter((a) => a.branchId === Number(branch)))));
+      if (method === 'GET') {
+        return json(contract(BankAccountListResponseSchema, pageOf(accounts.filter((a) => a.branchId === Number(branch)), u, (a) => `${a.accountName} ${a.bankName}`)));
+      }
       return json(contract(BankAccountSchema, accounts[0]));
     }
     return json({ items: [] });
@@ -104,7 +106,7 @@ const gets = (prefix: string) => calls.filter((c) => c.method === 'GET' && c.pat
 /** The payment forms' account picker, beside the page in the same cache. */
 function Probe() {
   const { accounts: active, required } = useBranchBankAccounts(1, true);
-  return <p>{required ? `required:${active.length}` : 'not required'}</p>;
+  return <p>{required ? `required:${active.total}` : 'not required'}</p>;
 }
 
 async function openPage(withProbe = false) {
@@ -145,9 +147,9 @@ describe('the branch', () => {
     me = profile(['Admin'], true);
     const user = await openPage();
     await rowOf('Main');
-    const picker = screen.getByLabelText('Branch') as HTMLSelectElement;
-    expect(picker.value).toBe('1');
-    await user.selectOptions(picker, '2');
+    // Any branch, found by typing (#266; was: a dropdown of the first 100).
+    expect(await screen.findByDisplayValue('Head Office')).toBeInTheDocument();
+    await pick(user, 'Branch', 'Pia', 'Piassa');
     expect(await rowOf('Piassa Till')).toBeInTheDocument();
   });
 
@@ -285,12 +287,14 @@ describe('reconciliation', () => {
     const user = await openAccount();
     const row = (await screen.findByText('FT9')).closest('tr') as HTMLElement;
     await user.click(within(row).getByRole('button', { name: 'Match' }));
-    const select = await within(row).findByRole('combobox', { name: 'Movement to match' });
-    await waitFor(() => expect(within(select).getAllByRole('option')).toHaveLength(2));
-    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose a movement…', expect.stringContaining('Sale TXN-1')]);
+    // Every one of them, a page at a time (#266; was: the first 100).
+    await user.click(await within(row).findByRole('combobox', { name: 'Movement to match' }));
+    const list = await screen.findByRole('listbox');
+    await within(list).findByText('Showing 1 of 1');
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringContaining('Sale TXN-1')]);
     expect(gets('/branches/1/bank-accounts/7/entries').some((p) => p.includes('amount=150.00') && p.includes('direction=in') && p.includes('status=uncleared'))).toBe(true);
 
-    await user.selectOptions(select, '81');
+    await user.click(within(list).getByRole('option'));
     await waitFor(() => expect(sent('POST', '/branches/1/bank-accounts/7/statement-lines/31/match')).toEqual([{ entryId: '81' }]));
   });
 });
@@ -309,8 +313,15 @@ describe('bank accounts for a bank payment', () => {
     expect(await screen.findByText('required:1')).toBeInTheDocument();
   });
 
-  it('shows the masked number (was: "undefined")', () => {
-    render(<BankAccountSelect accounts={[account()]} value={null} onChange={vi.fn()} />);
-    expect(screen.getByRole('option', { name: 'CBE — Main (****6789)' })).toBeInTheDocument();
+  it('shows the masked number (was: "undefined"), and finds an account by its name or bank (#266)', async () => {
+    accounts = [account(), ...Array.from({ length: 30 }, (_, i) => account({ id: 100 + i, accountName: `Till ${i + 1}`, bankName: 'Awash' }))];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    render(<QueryClientProvider client={qc}><BankAccountSelect accounts={{ branchId: 1, total: accounts.length }} value={null} onChange={vi.fn()} /></QueryClientProvider>);
+    await user.type(screen.getByRole('combobox', { name: 'Bank account' }), 'cbe');
+    expect(await screen.findByRole('option', { name: 'CBE — Main (****6789)' })).toBeInTheDocument();
+    await user.clear(screen.getByRole('combobox', { name: 'Bank account' }));
+    await user.type(screen.getByRole('combobox', { name: 'Bank account' }), 'Till 30');
+    expect(await screen.findByRole('option', { name: /Till 30/ })).toBeInTheDocument();
   });
 });

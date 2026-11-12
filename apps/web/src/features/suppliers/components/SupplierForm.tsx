@@ -110,7 +110,7 @@ export function SupplierForm({ editing, busy, onSubmit, onClose }: {
                     value={field.value}
                     onChange={field.onChange}
                     queryKey="publishers"
-                    search={async (q) => (await searchPublishers(q)).items.map((p) => ({ id: p.id, label: p.name }))}
+                    search={searchPublishers}
                     placeholder="Type the publisher's name…"
                     invalid={!!errors.publisher}
                     className={INPUT}

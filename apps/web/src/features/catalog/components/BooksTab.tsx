@@ -5,7 +5,7 @@ import Pagination, { makePageSizeHandler } from '../../../components/Pagination.
 import { StatusBadge, StatusFilter, type StatusFilterValue } from '../../../components/StatusFilter.js';
 import { DependencyDialog } from '../../../components/DependencyDialog.js';
 import { Drawer } from '../../../shared/components/Drawer.js';
-import { SearchPicker, type PickerOption } from '../../../shared/components/SearchPicker.js';
+import { PICKER_PAGE_SIZE, pickerPage, SearchPicker, type PickerOption } from '../../../shared/components/SearchPicker.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
 import { listReference } from '../../catalogReference/api.js';
@@ -55,7 +55,7 @@ function NameFilter({ kind, value, onChange, placeholder }: {
         value={option}
         onChange={(o) => onChange(o?.label ?? '')}
         queryKey={kind}
-        search={async (q) => (await listReference(kind, { q, pageSize: 20 })).items.map((r) => ({ id: r.id, label: r.name }))}
+        search={async (q, page) => pickerPage(await listReference(kind, { q, page, pageSize: PICKER_PAGE_SIZE }), (r) => ({ id: r.id, label: r.name }))}
         placeholder={placeholder}
         className={`w-full ${FILTER}`}
       />

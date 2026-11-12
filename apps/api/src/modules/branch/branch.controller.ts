@@ -39,7 +39,7 @@ function message(res: Response, text: string): void {
 
 export async function list(req: Request, res: Response): Promise<void> {
   const { query } = valid(req, schemas.list);
-  const result = await service.listBranches({ isActive: query.isActive }, { page: query.page, pageSize: query.pageSize });
+  const result = await service.listBranches({ isActive: query.isActive, q: query.q || undefined }, { page: query.page, pageSize: query.pageSize });
   const body: BranchListResponse = { ...result, items: result.items.map(toBranchResponse) };
   res.json(body);
 }

@@ -4,7 +4,8 @@ import type { Transfer, TransferRequest } from '@bms/shared';
 import { ActionDialog } from '../../../components/ActionDialog.js';
 import { getCurrentBranchId } from '../../../lib/api.js';
 import { useMyProfile } from '../../account/queries.js';
-import { useOpenBranches } from '../../branches/queries.js';
+import { useBranch } from '../../branches/queries.js';
+import { BranchPicker } from '../../branches/components/BranchPicker.js';
 import { findStockLevel, listStockLevels } from '../../inventory/api.js';
 import { INPUT, LABEL, Messages, isPositiveWhole } from '../../inventory/components/stockChange.js';
 import { inventoryKeys } from '../../inventory/queries.js';
@@ -33,9 +34,7 @@ export function TransferForm({ draft, onDone, onCancel }: { draft: Transfer | nu
   const { data: me } = useMyProfile();
   const branchId = getCurrentBranchId();
   const { data: locationList } = useLocations(branchId);
-  const { data: branchList } = useOpenBranches();
   const locations = (locationList?.items ?? []).filter((l) => canUseLocation(me, l.id));
-  const destinations = (branchList?.items ?? []).filter((b) => b.id !== branchId);
 
   const [chosenFrom, setFrom] = useState<number | null>(draft?.fromLocationId ?? null);
   // Until one is chosen, the branch's default location, else its first.
@@ -84,7 +83,7 @@ export function TransferForm({ draft, onDone, onCancel }: { draft: Transfer | nu
   });
   const ready = fromLocationId !== null && toBranchId !== '' && lines.length > 0 && problems.every((p) => !p);
   const fromName = locations.find((l) => l.id === fromLocationId)?.name ?? '';
-  const toName = destinations.find((b) => String(b.id) === toBranchId)?.name ?? '';
+  const toName = useBranch(toBranchId ? Number(toBranchId) : null).data?.name ?? '';
 
   const body = useMemo((): TransferRequest | null => fromLocationId === null ? null : {
     fromLocationId,
@@ -144,10 +143,9 @@ export function TransferForm({ draft, onDone, onCancel }: { draft: Transfer | nu
           </div>
           <div>
             <label htmlFor="transfer-to-branch" className={LABEL}>To branch</label>
-            <select id="transfer-to-branch" className={INPUT} value={toBranchId} onChange={(e) => setTo(e.target.value)}>
-              <option value="">— Select branch —</option>
-              {destinations.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            {/* Any other open branch, found by typing (#266). */}
+            <BranchPicker id="transfer-to-branch" className={INPUT} value={toBranchId ? Number(toBranchId) : null}
+              exclude={branchId !== null ? [branchId] : []} onChange={(id) => setTo(id === null ? '' : String(id))} placeholder="— Type the branch —" />
           </div>
         </div>
 

@@ -90,9 +90,11 @@ async function parentChoices(form: HTMLElement, typed: string): Promise<string[]
     return within(picker).getAllByRole('option').filter((o) => (o as HTMLOptionElement).value !== '').map((o) => o.textContent ?? '');
   }
   await userEvent.setup().type(picker, typed);
-  await waitFor(() => expect(within(form).queryByText('Searching…')).not.toBeInTheDocument());
+  // The list is drawn over the page, outside the form (#266).
+  await waitFor(() => expect(screen.queryByText('Searching…')).not.toBeInTheDocument());
   await settle();
-  return within(form).queryAllByRole('option').map((o) => o.textContent ?? '');
+  const list = screen.queryByRole('listbox');
+  return list ? within(list).queryAllByRole('option').map((o) => o.textContent ?? '') : [];
 }
 
 /** Chooses `name` as the parent: from the list, or by typing it. */
@@ -104,7 +106,8 @@ async function chooseParent(form: HTMLElement, name: string) {
     return;
   }
   await user.type(picker, name);
-  await user.click(await within(form).findByRole('option', { name }));
+  // The list is drawn over the page, outside the form (#266).
+  await user.click(await screen.findByRole('option', { name }));
 }
 
 beforeEach(() => {

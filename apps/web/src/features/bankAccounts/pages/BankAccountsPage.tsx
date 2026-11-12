@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMyProfile } from '../../account/queries.js';
-import { useOpenBranches } from '../../branches/queries.js';
+import { BranchPicker } from '../../branches/components/BranchPicker.js';
 import { AccountList } from '../components/AccountList.js';
 import { Reconciliation } from '../components/Reconciliation.js';
 
@@ -16,7 +16,6 @@ export default function BankAccountsPage() {
   const [picked, setPicked] = useState<number | null>(null);
   const [accountId, setAccountId] = useState<number | null>(null);
   const allBranches = !!me?.isAllBranches;
-  const { data: branches } = useOpenBranches();
   const branchId = picked ?? me?.currentBranchId ?? null;
 
   return (
@@ -31,10 +30,9 @@ export default function BankAccountsPage() {
       {allBranches && (
         <div className="mb-6">
           <label htmlFor="bank-branch" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Branch</label>
-          <select id="bank-branch" value={branchId ?? ''} className={SELECT}
-            onChange={(e) => { setPicked(Number(e.target.value)); setAccountId(null); }}>
-            {(branches?.items ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          {/* Emptied, the session's branch again. */}
+          <BranchPicker id="bank-branch" value={branchId} className={SELECT}
+            onChange={(id) => { setPicked(id); setAccountId(null); }} />
         </div>
       )}
 

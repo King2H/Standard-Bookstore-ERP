@@ -101,7 +101,7 @@ const pageOf = (query: { page: number; pageSize: number }) => ({ limit: query.pa
 
 export async function list(req: Request, res: Response): Promise<void> {
   const { params, query } = valid(req, schemas.list);
-  res.json(paged(await service.listAccounts(params.branchId, query.isActive, pageOf(query)), query, toAccount));
+  res.json(paged(await service.listAccounts(params.branchId, { isActive: query.isActive, q: query.q || undefined }, pageOf(query)), query, toAccount));
 }
 
 export async function create(req: Request, res: Response): Promise<void> {

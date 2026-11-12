@@ -35,7 +35,7 @@ export async function getBranch(id: number): Promise<BranchRecord> {
 }
 
 export async function listBranches(
-  filter: { isActive?: boolean },
+  filter: { isActive?: boolean; q?: string },
   paging: { page: number; pageSize: number },
 ): Promise<{ items: BranchRecord[]; total: number; page: number; pageSize: number; totalPages: number }> {
   const { page, pageSize } = paging;

@@ -3,11 +3,12 @@ import type { CreateStaffRequest, SetStaffRolesRequest } from '@bms/shared';
 import { useToast } from '../../../components/Toast.js';
 import Pagination, { makePageSizeHandler } from '../../../components/Pagination.js';
 import { useMyProfile } from '../../account/queries.js';
-import { useOpenBranches } from '../../branches/queries.js';
+import { useBranches } from '../../branches/queries.js';
+import { managedBranches } from '../components/BranchChoice.js';
 import {
   useCreateStaff, useResetPassword, useSetAllBranches, useSetStaffLocations, useSetStaffRoles, useStaffAction, useStaffList,
 } from '../queries.js';
-import { canAddStaff, canAdministerAccounts, canChangeLocationsIn, canSetAllBranches, inBranches, roleBranches, rolesToGrant } from '../rules.js';
+import { canAddStaff, canAdministerAccounts, canChangeLocationsIn, canSetAllBranches, roleBranches, rolesToGrant } from '../rules.js';
 import { StaffForm } from '../components/StaffForm.js';
 import { RoleEditor } from '../components/RoleEditor.js';
 import { LocationAccessPanel } from '../components/LocationAccessPanel.js';
@@ -35,9 +36,11 @@ export default function StaffPage() {
 
   const { data: me } = useMyProfile();
   const { data, isLoading } = useStaffList({ page, pageSize });
-  const branches = useOpenBranches().data?.items ?? [];
   const grantable = rolesToGrant(me);
   const reach = roleBranches(me);
+  const managed = managedBranches(me, reach);
+  // Where a role with access to all branches is recorded: the first open branch.
+  const firstOpenBranchId = useBranches({ isActive: 'true', pageSize: 1 }).data?.items[0]?.id ?? null;
   const administers = canAdministerAccounts(me);
   const adds = canAddStaff(me);
   const allBranchesToggle = canSetAllBranches(me);
@@ -115,7 +118,9 @@ export default function StaffPage() {
 
       {showForm && adds && (
         <StaffForm
-          branches={branches.filter((b) => inBranches(reach, b.id))}
+          reach={reach}
+          managed={managed}
+          firstOpenBranchId={firstOpenBranchId}
           grantable={grantable}
           allowAllBranches={allBranchesToggle}
           busy={createMutation.isPending}
@@ -177,7 +182,7 @@ export default function StaffPage() {
                     {editingRoles === staff.id ? (
                       <RoleEditor
                         currentRoles={staff.roles}
-                        branches={branches}
+                        managed={managed}
                         grantable={grantable}
                         reach={reach}
                         onSave={(roles) => setRoles(staff.id, roles)}

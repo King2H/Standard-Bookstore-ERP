@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { Branch, SetStaffRolesRequest } from '@bms/shared';
+import type { SetStaffRolesRequest } from '@bms/shared';
 import { inBranches } from '../rules.js';
+import { BranchChoice } from './BranchChoice.js';
 
 type Assignment = SetStaffRolesRequest[number];
 /** A role as the staff list gives it. */
@@ -13,10 +14,10 @@ const selectCls = 'flex-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dar
  * change (a role at or above their own, or in a branch they do not manage)
  * are shown and sent back as they are, as the API requires.
  */
-export function RoleEditor({ currentRoles, branches, grantable, reach, onSave, onCancel }: {
+export function RoleEditor({ currentRoles, managed, grantable, reach, onSave, onCancel }: {
   currentRoles: Held[];
-  /** The open branches. */
-  branches: Branch[];
+  /** The branches a limited reach covers, with their names. */
+  managed: Array<{ id: number; name: string }>;
   /** The roles the signed-in staff member may grant. */
   grantable: string[];
   /** The branches whose roles they may change. */
@@ -25,13 +26,14 @@ export function RoleEditor({ currentRoles, branches, grantable, reach, onSave, o
   onCancel: () => void;
 }) {
   const editable = (r: Held) => grantable.includes(r.role) && inBranches(reach, r.branchId);
-  const choices = branches.filter(b => inBranches(reach, b.id));
-  const nameOf = (r: Held) => r.branchName ?? branches.find(b => b.id === r.branchId)?.name ?? `Branch ${r.branchId}`;
+  const nameOf = (r: Held) => r.branchName ?? managed.find(b => b.id === r.branchId)?.name ?? `Branch ${r.branchId}`;
+  // A new role starts in the one branch in reach, else waits for one to be chosen.
+  const firstBranchId = reach === 'all' ? 0 : (managed[0]?.id ?? 0);
   const kept = currentRoles.filter(r => !editable(r));
   const firstRole = grantable.includes('Sales') ? 'Sales' : grantable[0] ?? 'Sales';
   const [assignments, setAssignments] = useState<Held[]>(() => {
     const mine = currentRoles.filter(editable);
-    return mine.length > 0 || kept.length > 0 ? mine : [{ branchId: choices[0]?.id ?? 0, branchName: null, role: firstRole }];
+    return mine.length > 0 || kept.length > 0 ? mine : [{ branchId: firstBranchId, branchName: null, role: firstRole }];
   });
 
   const update = (index: number, change: Partial<Held>) => {
@@ -49,13 +51,9 @@ export function RoleEditor({ currentRoles, branches, grantable, reach, onSave, o
       ))}
       {assignments.map((a, i) => (
         <div key={i} className="flex items-center gap-2">
-          <select aria-label="Branch" value={a.branchId} onChange={e => update(i, { branchId: Number(e.target.value), branchName: null })} className={selectCls}>
-            {/* A role in a closed branch keeps its own branch's name. */}
-            {!choices.some(b => b.id === a.branchId) && <option value={a.branchId}>{nameOf(a)}</option>}
-            {choices.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
+          {/* A role in a closed branch keeps its own branch's name. */}
+          <BranchChoice reach={reach} managed={managed} value={a.branchId} currentName={nameOf(a)}
+            onChange={(branchId) => update(i, { branchId, branchName: null })} className={selectCls} />
           <select aria-label="Role" value={a.role} onChange={e => update(i, { role: e.target.value })} className={selectCls}>
             {grantable.map(r => (
               <option key={r} value={r}>{r}</option>
@@ -69,15 +67,12 @@ export function RoleEditor({ currentRoles, branches, grantable, reach, onSave, o
       ))}
       <div className="flex items-center gap-2 pt-1">
         <button type="button"
-          onClick={() => {
-            const firstBranch = choices[0];
-            if (firstBranch) setAssignments(prev => [...prev, { branchId: firstBranch.id, branchName: null, role: firstRole }]);
-          }}
-          disabled={choices.length === 0}
+          onClick={() => setAssignments(prev => [...prev, { branchId: firstBranchId, branchName: null, role: firstRole }])}
+          disabled={reach !== 'all' && managed.length === 0}
           className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 transition-colors">
           + Add Role
         </button>
-        <button type="button" onClick={() => onSave([...kept, ...assignments].map(strip))}
+        <button type="button" onClick={() => onSave([...kept, ...assignments.filter(a => a.branchId > 0)].map(strip))}
           className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg transition-colors">
           Save
         </button>

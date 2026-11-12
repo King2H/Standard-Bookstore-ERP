@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Money, type Customer } from '@bms/shared';
+import { MatchCount } from '../../../components/MatchCount.js';
 import BankAccountSelect from '../../../components/BankAccountSelect.js';
 import PaymentProofFields from '../../../components/PaymentProofFields.js';
 import { useToast } from '../../../components/Toast.js';
@@ -194,6 +195,7 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
                     <span className="text-gray-500 dark:text-gray-400 ml-2 text-xs">{c.customerCode}</span>
                   </button>
                 ))}
+                <MatchCount shown={customers.length} total={customerResults?.total} />
               </div>
             )}
           </div>
@@ -227,6 +229,7 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
                   )}
                 </button>
               ))}
+              <MatchCount shown={books.length} total={bookResults?.total} />
             </div>
           )}
           {/* A book brought in that the shop never had can be registered without leaving the exchange. */}
