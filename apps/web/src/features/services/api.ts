@@ -39,6 +39,8 @@ export type ServiceJobParams = {
   status?: ServiceJobStatus;
   overdue?: 'true';
   q?: string;
+  /** With access to all branches, another branch's board (#267). */
+  branchId?: number;
   page?: number;
   pageSize?: number;
 };

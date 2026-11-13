@@ -83,25 +83,27 @@ export function ServiceForm({ editing, saving, error, onSave, onClose }: {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="service-fee" className={LABEL}>{`Fee (${currency}) *`}</label>
-            <input id="service-fee" inputMode="decimal" {...register('fee')} aria-invalid={!!errors.fee || undefined} className={INPUT} />
+            <input id="service-fee" inputMode="decimal" {...register('fee')} aria-describedby="service-fee-hint" aria-invalid={!!errors.fee || undefined} className={INPUT} />
+            <p id="service-fee-hint" className="text-xs text-gray-400 dark:text-gray-500 mt-1">What the customer pays to bind one copy, on its own line beside the book, whose price does not change. A branch may set its own fee.</p>
             {fieldError('fee')}
           </div>
           <div>
             <label htmlFor="service-cost" className={LABEL}>{`Standard cost (${currency}) *`}</label>
-            <input id="service-cost" inputMode="decimal" {...register('standardCost')} aria-invalid={!!errors.standardCost || undefined} className={INPUT} />
+            <input id="service-cost" inputMode="decimal" {...register('standardCost')} aria-describedby="service-cost-hint" aria-invalid={!!errors.standardCost || undefined} className={INPUT} />
+            <p id="service-cost-hint" className="text-xs text-gray-400 dark:text-gray-500 mt-1">What the binder is expected to charge for one copy: the binding's cost in gross profit when it is sold. The actual cost is entered when the job comes back; any difference shows as the binding cost difference.</p>
             {fieldError('standardCost')}
           </div>
         </div>
         <div>
           <label htmlFor="service-days" className={LABEL}>Turnaround (days) *</label>
-          <input id="service-days" inputMode="numeric" {...register('turnaroundDays')} aria-invalid={!!errors.turnaroundDays || undefined} className={INPUT} />
+          <input id="service-days" inputMode="numeric" {...register('turnaroundDays')} aria-describedby="service-days-hint" aria-invalid={!!errors.turnaroundDays || undefined} className={INPUT} />
+          <p id="service-days-hint" className="text-xs text-gray-400 dark:text-gray-500 mt-1">Days from the sale until it is ready: the ready date the customer is given.</p>
           {fieldError('turnaroundDays')}
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
           <input type="checkbox" {...register('discountable')} className="rounded-sm border-gray-300 dark:border-gray-600" />
           A sale may discount the fee
         </label>
-        <p className="text-xs text-gray-400">The fee is the shop's; a branch may set its own. The standard cost is recorded on each sale.</p>
       </form>
     </Drawer>
   );

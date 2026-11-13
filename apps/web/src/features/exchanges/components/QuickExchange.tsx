@@ -23,7 +23,7 @@ type PayMethod = Extract<PaymentMethodCode, 'cash' | 'bank' | 'mobile' | 'store_
 const PAY_METHODS: PayMethod[] = ['cash', 'bank', 'mobile', 'store_credit', 'loyalty_points'];
 
 type CustomerPick = Pick<Customer, 'id' | 'customerCode' | 'fullName'>;
-type BookPick = { id: number; title: string; defaultPrice: number | null; branchPrice?: number | null };
+type BookPick = { id: number; title: string; defaultPrice: number | null; branchPrice?: number | null; tradeValue?: number | null };
 
 /** The shop's price for a book, or null when it has none yet. */
 const sellingPriceOf = (b: BookPick) => {
@@ -78,8 +78,13 @@ export function QuickExchange({ onDone }: { onDone: () => void }) {
     const bump = <T extends { bookId: number; quantity: number }>(items: T[]) =>
       items.map((i) => (i.bookId === book.id ? { ...i, quantity: i.quantity + 1 } : i));
     if (addingTo === 'incoming') {
+      // What the customer is offered: the book's trade value (#267), never above
+      // its selling price, which caps an allowance; else the selling price.
+      const offered = book.tradeValue != null
+        ? (sellingPrice ? Money.min(book.tradeValue, sellingPrice) : Money.of(book.tradeValue))
+        : sellingPrice;
       setIncomingItems((items) => items.some((i) => i.bookId === book.id) ? bump(items) : [...items, {
-        bookId: book.id, bookTitle: book.title, quantity: 1, allowance: String(sellingPrice?.toNumber() ?? 0), sellingPrice, condition: 'resellable',
+        bookId: book.id, bookTitle: book.title, quantity: 1, allowance: String(offered?.toNumber() ?? 0), sellingPrice, condition: 'resellable',
       }]);
     } else {
       setOutgoingItems((items) => items.some((i) => i.bookId === book.id) ? bump(items) : [...items, {

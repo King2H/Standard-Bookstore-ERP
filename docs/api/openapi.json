@@ -64001,6 +64001,16 @@
               "type": "string",
               "maxLength": 100
             }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
           }
         ],
         "responses": {

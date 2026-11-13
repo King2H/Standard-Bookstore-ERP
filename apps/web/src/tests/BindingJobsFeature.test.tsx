@@ -23,14 +23,15 @@ import { ToastProvider } from '../components/Toast.js';
 import { canOpenPage, NAV_SECTIONS } from '../app/navigation.js';
 import { setAccessToken, setCurrentBranchId } from '../lib/api.js';
 import { contract } from './contract.js';
+import { pageOf, pick } from './picker.js';
 import { SHOP_IDENTITY } from './shop.js';
 
 const CREATED = '2026-10-26T07:00:00.000Z';
 
-function profile(roles: string[]): ProfileResponse {
+function profile(roles: string[], isAllBranches = false): ProfileResponse {
   return contract(ProfileResponseSchema, {
     id: 9, username: 'me', fullName: 'Me', isActive: true, createdAt: CREATED, mustChangePassword: false,
-    lastLoginAt: null, passwordChangedAt: null, isLocked: false, isAllBranches: false,
+    lastLoginAt: null, passwordChangedAt: null, isLocked: false, isAllBranches,
     roles: roles.map((role) => ({ branchId: 1, branchName: 'Home', role })),
     currentRole: roles[0], currentRoles: roles, currentBranchId: 1, locationAccess: { mode: 'full', locations: [] },
   });
@@ -80,6 +81,11 @@ function stubApi() {
     const u = new URL(path, 'http://x');
     if (u.pathname === '/staff/me') return json(contract(ProfileResponseSchema, me));
     if (u.pathname === '/config/shop') return json(SHOP_IDENTITY);
+    const branchList = [{ id: 1, name: 'Home' }, { id: 2, name: 'Piassa' }]
+      .map((b) => ({ ...b, address: '-', contactInfo: {}, operatingHours: {}, isActive: true, createdAt: CREATED }));
+    if (u.pathname === '/branches') return json(pageOf(branchList, u, (b) => b.name));
+    const oneBranch = u.pathname.match(/^\/branches\/(\d+)$/);
+    if (oneBranch) return json(branchList.find((b) => b.id === Number(oneBranch[1])));
     if (u.pathname === '/service-jobs') {
       return json(contract(ServiceJobListResponseSchema, { items: BOARD, total: BOARD.length, page: 1, pageSize: 25, totalPages: 1 }));
     }
@@ -170,8 +176,37 @@ describe('the Binding Jobs page (1a)', () => {
     await waitFor(() => expect(lastBoardRead().get('status')).toBe('READY'));
     await user.click(screen.getByLabelText('Overdue only'));
     await waitFor(() => expect(lastBoardRead().get('overdue')).toBe('true'));
-    await user.type(screen.getByPlaceholderText('Job number or customer…'), 'Abebe');
+    await user.type(screen.getByRole('textbox', { name: 'Search binding jobs' }), 'Abebe');
     await waitFor(() => expect(lastBoardRead().get('q')).toBe('Abebe'));
+  });
+
+  it('searches by job, customer name, code or phone, book or sale number (#267; was: job number or customer name)', async () => {
+    const user = renderWith(<BindingJobsPage />);
+    await row('SVC-20261026-0001');
+    const search = screen.getByRole('textbox', { name: 'Search binding jobs' });
+    expect(search).toHaveAttribute('placeholder', 'Job, customer, code, phone, book or sale number…');
+    await user.type(search, 'POS-20261026');
+    await waitFor(() => expect(lastBoardRead().get('q')).toBe('POS-20261026'));
+  });
+
+  it('is the session\'s board, with no choice of branch, without access to all branches', async () => {
+    renderWith(<BindingJobsPage />);
+    await row('SVC-20261026-0001');
+    expect(screen.queryByRole('combobox', { name: 'Branch' })).not.toBeInTheDocument();
+    expect(lastBoardRead().get('branchId')).toBeNull();
+  });
+
+  it('lets staff with access to all branches look at another branch\'s board, its jobs moved on from that branch (#267)', async () => {
+    me = profile(['Manager'], true);
+    const user = renderWith(<BindingJobsPage />);
+    await row('SVC-20261026-0001');
+    expect(await screen.findByDisplayValue('Home')).toBeInTheDocument();
+    expect(within(await row('SVC-20261026-0001')).getByRole('button', { name: 'Sent to binder' })).toBeInTheDocument();
+
+    await pick(user, 'Branch', 'Pia', 'Piassa');
+    await waitFor(() => expect(lastBoardRead().get('branchId')).toBe('2'));
+    expect(await screen.findByText('Jobs are moved on from their own branch: switch to it to send, ready, collect or cancel them.')).toBeInTheDocument();
+    expect(within(await row('SVC-20261026-0001')).queryByRole('button', { name: 'Sent to binder' })).not.toBeInTheDocument();
   });
 
   it('moves a job on by whoever sells; an order\'s ready job goes with its delivery', async () => {

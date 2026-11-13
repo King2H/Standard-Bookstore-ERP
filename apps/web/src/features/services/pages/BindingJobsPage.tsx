@@ -5,6 +5,7 @@ import Pagination, { makePageSizeHandler } from '../../../components/Pagination.
 import { useToast } from '../../../components/Toast.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import { useMyProfile } from '../../account/queries.js';
+import { BranchPicker } from '../../branches/components/BranchPicker.js';
 import { JOB_STATUS_LABEL, nextStep } from '../binding.js';
 import { STATUS_CLASS } from '../components/ServiceJobLine.js';
 import { BackAndReadyDialog } from '../components/BackAndReadyDialog.js';
@@ -31,7 +32,12 @@ function useDebounce<T>(v: T, ms: number): T {
 export default function BindingJobsPage() {
   const { showToast } = useToast();
   const { data: me } = useMyProfile();
-  const canCancel = canCancelBinding(me);
+  // With access to all branches, another branch's board can be looked at (#267);
+  // its jobs are moved on from that branch, as the API takes them.
+  const [branchId, setBranchId] = useState<number | null>(null);
+  const viewed = branchId ?? me?.currentBranchId ?? null;
+  const elsewhere = viewed !== null && me !== undefined && viewed !== me.currentBranchId;
+  const canCancel = canCancelBinding(me) && !elsewhere;
   const [searchRaw, setSearchRaw] = useState('');
   const q = useDebounce(searchRaw.trim(), 300);
   const [status, setStatus] = useState<ServiceJobStatus | ''>('');
@@ -40,10 +46,11 @@ export default function BindingJobsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [cancelling, setCancelling] = useState<ServiceJobBoardItem | null>(null);
   const [readying, setReadying] = useState<ServiceJobBoardItem | null>(null);
-  useEffect(() => setPage(1), [q, status, overdue]);
+  useEffect(() => setPage(1), [q, status, overdue, branchId]);
 
   const { data, isLoading } = useServiceJobs({
     status: status || undefined, overdue: overdue ? 'true' : undefined, q: q || undefined, page, pageSize,
+    ...(elsewhere && viewed !== null ? { branchId: viewed } : {}),
   });
   const currency = useCurrency();
   const move = useJobStep(REFRESH);
@@ -80,9 +87,16 @@ export default function BindingJobsPage() {
           {data && <p className="text-xs text-gray-400">{data.total} {data.total === 1 ? 'job' : 'jobs'}</p>}
         </div>
         <div className="flex-1 max-w-xs">
-          <input value={searchRaw} onChange={(e) => setSearchRaw(e.target.value)} placeholder="Job number or customer…"
+          <input aria-label="Search binding jobs" value={searchRaw} onChange={(e) => setSearchRaw(e.target.value)}
+            placeholder="Job, customer, code, phone, book or sale number…"
             className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
+        {me?.isAllBranches && (
+          <div className="w-48">
+            <BranchPicker aria-label="Branch" value={viewed} onChange={setBranchId}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+          </div>
+        )}
         <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
           Status
           <select value={status} onChange={(e) => setStatus(e.target.value as ServiceJobStatus | '')}
@@ -96,6 +110,11 @@ export default function BindingJobsPage() {
           Overdue only
         </label>
       </div>
+      {elsewhere && (
+        <p className="px-6 py-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900">
+          Jobs are moved on from their own branch: switch to it to send, ready, collect or cancel them.
+        </p>
+      )}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm border-collapse">
           <thead className="bg-gray-50 dark:bg-gray-800/80 sticky top-0 z-10">
@@ -137,7 +156,7 @@ export default function BindingJobsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex gap-3 justify-end items-center">
-                      {next && (withDelivery
+                      {next && !elsewhere && (withDelivery
                         ? <span className="text-xs italic text-gray-400">goes with the order</span>
                         : <button type="button" disabled={move.isPending} onClick={() => step(job)}
                             className="px-2 py-0.5 text-xs rounded-sm border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50">
