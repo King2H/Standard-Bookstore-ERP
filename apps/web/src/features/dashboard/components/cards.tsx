@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import type { KpiPeriod } from '@bms/shared';
+import { GLOSSARY, type FigureLabel } from '../glossary.js';
 
 // The Dashboard's KPI cards, moved from the legacy page as they were.
 
@@ -11,6 +12,21 @@ export function shortMoney(n: number, currency: string): string {
   if (a >= 1_000_000) return `${currency} ${sign}${(a / 1_000_000).toFixed(1)}M`;
   if (a >= 1_000) return `${currency} ${sign}${(a / 1_000).toFixed(1)}K`;
   return `${currency} ${sign}${a.toFixed(0)}`;
+}
+
+/**
+ * One figure of a section: its label, the value, and under it what the figure
+ * counts, from the glossary (#268), read with it as its description.
+ */
+export function Figure({ label, className = '', children }: { label: FigureLabel; className?: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={`${id}-label`} aria-describedby={`${id}-hint`} data-figure={label} className={`${className} text-center`.trim()}>
+      <p id={`${id}-label`} className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      {children}
+      <p id={`${id}-hint`} className="mt-0.5 text-[11px] leading-snug text-gray-400 dark:text-gray-500">{GLOSSARY[label]}</p>
+    </div>
+  );
 }
 
 export function KpiCard({ label, value, sub, extra, icon, color, onClick }: {

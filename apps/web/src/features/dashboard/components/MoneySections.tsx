@@ -4,7 +4,7 @@ import { formatCurrency } from '../../../lib/currency.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import type { ReportParams } from '../api.js';
 import { useExchangeReport, usePaymentReport, usePeriodKpis, useReceivablesAging, useTopReturnedBooks } from '../queries.js';
-import { PERIOD_LABELS, shortMoney } from './cards.js';
+import { Figure, PERIOD_LABELS, shortMoney } from './cards.js';
 import { CHART_TOOLTIP_PROPS, Empty, methodName, periodLabel, PIE_COLORS, Section, sectionState, axisAmount } from './charts.js';
 
 const BUCKET_COLORS: Record<AgingBucket, string> = {
@@ -29,8 +29,8 @@ export function PaymentMethods({ params, period }: { params: ReportParams; perio
       {payments && payments.byMethod.length > 0 ? (
         <>
           <div className="grid grid-cols-2 gap-2 mb-3 text-center">
-            <div><p className="text-xs text-gray-500 dark:text-gray-400">Collected</p><p className="text-sm font-bold text-green-600 dark:text-green-400">{shortMoney(payments.summary.totalCollected, currency)}</p></div>
-            <div><p className="text-xs text-gray-500 dark:text-gray-400">Refunded</p><p className="text-sm font-bold text-amber-600 dark:text-amber-400">{shortMoney(payments.summary.totalRefunded, currency)}</p></div>
+            <Figure label="Collected"><p className="text-sm font-bold text-green-600 dark:text-green-400">{shortMoney(payments.summary.totalCollected, currency)}</p></Figure>
+            <Figure label="Refunded"><p className="text-sm font-bold text-amber-600 dark:text-amber-400">{shortMoney(payments.summary.totalRefunded, currency)}</p></Figure>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
@@ -87,22 +87,18 @@ export function ExchangeActivity({ params }: { params: ReportParams }) {
       {exchanges ? (
         <>
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Total Exchanges</p>
+            <Figure label="Total Exchanges" className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
               <p className="text-xl font-bold text-gray-900 dark:text-white">{exchanges.summary.totalExchanges}</p>
-            </div>
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Net Impact</p>
+            </Figure>
+            <Figure label="Net Impact" className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
               <p className={`text-xl font-bold ${exchanges.summary.netExchangeImpact >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{shortMoney(Math.abs(exchanges.summary.netExchangeImpact), currency)}</p>
-            </div>
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Incoming Value</p>
+            </Figure>
+            <Figure label="Incoming Value" className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
               <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{shortMoney(exchanges.summary.totalIncomingValue, currency)}</p>
-            </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Outgoing Value</p>
+            </Figure>
+            <Figure label="Outgoing Value" className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
               <p className="text-sm font-bold text-purple-600 dark:text-purple-400">{shortMoney(exchanges.summary.totalOutgoingValue, currency)}</p>
-            </div>
+            </Figure>
           </div>
           {exchanges.bySettlementType.length > 0 && (
             <div className="space-y-1">
