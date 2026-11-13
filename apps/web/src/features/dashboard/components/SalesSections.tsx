@@ -3,7 +3,7 @@ import { formatCurrency } from '../../../lib/currency.js';
 import { useCurrency } from '../../../lib/useCurrency.js';
 import type { ReportParams } from '../api.js';
 import { useGrossProfitTrend, useSalesReport } from '../queries.js';
-import { shortMoney } from './cards.js';
+import { Figure, shortMoney } from './cards.js';
 import { CHART_TOOLTIP_PROPS, Empty, periodLabel, Section, sectionState, axisAmount } from './charts.js';
 
 const DISCOUNT_TYPES = ['Normal', 'Merchant', 'Special'] as const;
@@ -19,32 +19,32 @@ export function SalesTrend({ params }: { params: ReportParams }) {
           {/* Orders only, like the trend line and the branch chart; POS sales
               shown beside them rather than added in. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Order Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.totalSales, currency)}</p></div>
-            <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">POS Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.totalPosSales, currency)}</p></div>
-            <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Orders</p><p className="text-base font-bold text-gray-900 dark:text-white">{sales.summary.totalOrders}</p></div>
-            <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Avg Order</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.averageOrderValue, currency)}</p></div>
+            <Figure label="Order Sales"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.totalSales, currency)}</p></Figure>
+            <Figure label="POS Sales"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.totalPosSales, currency)}</p></Figure>
+            <Figure label="Orders"><p className="text-base font-bold text-gray-900 dark:text-white">{sales.summary.totalOrders}</p></Figure>
+            <Figure label="Avg Order"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.averageOrderValue, currency)}</p></Figure>
           </div>
           {/* The tax inside net sales (#247, 3a), once a sale carried any. */}
           {sales.summary.taxIncluded !== 0 && (
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Tax included</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.taxIncluded, currency)}</p></div>
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Net sales before tax</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.netSalesBeforeTax, currency)}</p></div>
+              <Figure label="Tax included"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.taxIncluded, currency)}</p></Figure>
+              <Figure label="Net sales before tax"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.netSalesBeforeTax, currency)}</p></Figure>
             </div>
           )}
           {/* Book sales and service income apart (#169), once a sale carried a service. */}
           {sales.summary.serviceIncome > 0 && (
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Book Sales</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.bookSales, currency)}</p></div>
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Service Income</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.serviceIncome, currency)}</p></div>
+              <Figure label="Book Sales"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.bookSales, currency)}</p></Figure>
+              <Figure label="Service Income"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.serviceIncome, currency)}</p></Figure>
             </div>
           )}
           {/* The costs below gross profit and net profit (#249), once there are any. */}
           {(sales.summary.bindingCostDifference !== 0 || sales.summary.cashOverShort !== 0) && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Gross Profit</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.grossProfit, currency)}</p></div>
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Binding cost difference</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.bindingCostDifference, currency)}</p></div>
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Cash over/short</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.cashOverShort, currency)}</p></div>
-              <div className="text-center"><p className="text-xs text-gray-500 dark:text-gray-400">Net Profit</p><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.netProfit, currency)}</p></div>
+              <Figure label="Gross Profit"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.grossProfit, currency)}</p></Figure>
+              <Figure label="Binding cost difference"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.bindingCostDifference, currency)}</p></Figure>
+              <Figure label="Cash over/short"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.cashOverShort, currency)}</p></Figure>
+              <Figure label="Net Profit"><p className="text-base font-bold text-gray-900 dark:text-white">{shortMoney(sales.summary.netProfit, currency)}</p></Figure>
             </div>
           )}
           <ResponsiveContainer width="100%" height={200}>
@@ -123,22 +123,18 @@ export function DiscountSummary({ params }: { params: ReportParams }) {
       {summary ? (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Total Discounts</p>
+            <Figure label="Total Discounts" className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
               <p className="text-lg font-bold text-gray-900 dark:text-white">{shortMoney(summary.discounts, currency)}</p>
-            </div>
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Normal</p>
+            </Figure>
+            <Figure label="Normal" className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
               <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{shortMoney(summary.discountsByType.Normal, currency)}</p>
-            </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Merchant</p>
+            </Figure>
+            <Figure label="Merchant" className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
               <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{shortMoney(summary.discountsByType.Merchant, currency)}</p>
-            </div>
-            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Special</p>
+            </Figure>
+            <Figure label="Special" className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
               <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{shortMoney(summary.discountsByType.Special, currency)}</p>
-            </div>
+            </Figure>
           </div>
           {summary.discounts > 0 && (
             <div className="mt-3 space-y-1.5">

@@ -2,7 +2,8 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 import { useCurrency } from '../../../lib/useCurrency.js';
 import type { ReportParams } from '../api.js';
 import { useCustomerReport, useInventoryReport } from '../queries.js';
-import { shortMoney } from './cards.js';
+import type { FigureLabel } from '../glossary.js';
+import { Figure, shortMoney } from './cards.js';
 import { CHART_TOOLTIP_PROPS, Empty, periodLabel, Section, sectionState } from './charts.js';
 
 export function InventoryInsights({ params }: { params: ReportParams }) {
@@ -15,16 +16,15 @@ export function InventoryInsights({ params }: { params: ReportParams }) {
         <>
           {/* Low and out of stock are on the Stock Alerts card and its list, once (#230, 3a). */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-            {[
+            {([
               { label: 'Books', value: inventory.summary.totalBooks, color: 'text-gray-900 dark:text-white' },
               { label: 'Units', value: inventory.summary.totalStockUnits, color: 'text-gray-900 dark:text-white' },
               { label: 'Available', value: inventory.summary.availableStock, color: 'text-emerald-600 dark:text-emerald-400' },
               { label: 'Reserved', value: inventory.summary.reservedStock, color: 'text-blue-600 dark:text-blue-400' },
-            ].map(c => (
-              <div key={c.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">{c.label}</p>
+            ] satisfies Array<{ label: FigureLabel; value: number; color: string }>).map(c => (
+              <Figure key={c.label} label={c.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
                 <p className={`text-base font-bold ${c.color}`}>{c.value}</p>
-              </div>
+              </Figure>
             ))}
           </div>
           {inventory.topSellingBooks.length > 0 && (
@@ -80,16 +80,15 @@ export function CustomerInsights({ params }: { params: ReportParams }) {
       {customers ? (
         <>
           <div className="grid grid-cols-2 gap-2 mb-4">
-            {[
+            {([
               { label: 'Total', value: customers.summary.totalCustomers },
               { label: 'Active', value: customers.summary.activeCustomers },
               { label: 'Repeat', value: customers.summary.repeatCustomers },
               { label: 'New (period)', value: customers.summary.newCustomersInPeriod },
-            ].map(c => (
-              <div key={c.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">{c.label}</p>
+            ] satisfies Array<{ label: FigureLabel; value: number }>).map(c => (
+              <Figure key={c.label} label={c.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
                 <p className="text-base font-bold text-gray-900 dark:text-white">{c.value}</p>
-              </div>
+              </Figure>
             ))}
           </div>
           {customers.topCustomers.length > 0 && (
